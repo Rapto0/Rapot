@@ -1,0 +1,147 @@
+"""
+market_scanner.py için unit testler.
+ScannerState ve yardımcı fonksiyonları test eder.
+"""
+
+import os
+import sys
+
+import pytest
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from market_scanner import (
+    ScannerState,
+    format_combo_debug,
+    format_hunter_debug,
+    generate_manual_report,
+)
+
+
+class TestScannerState:
+    """ScannerState class testleri."""
+
+    @pytest.mark.unit
+    def test_initial_counts_zero(self):
+        """Başlangıç sayaçları sıfır."""
+        state = ScannerState()
+        assert state.scan_count == 0
+        assert state.signal_count == 0
+
+    @pytest.mark.unit
+    def test_increment_scan(self):
+        """Tarama sayacı artırılabilir."""
+        state = ScannerState()
+        result = state.increment_scan()
+        assert result == 1
+        assert state.scan_count == 1
+
+    @pytest.mark.unit
+    def test_increment_signal(self):
+        """Sinyal sayacı artırılabilir."""
+        state = ScannerState()
+        result = state.increment_signal()
+        assert result == 1
+        assert state.signal_count == 1
+
+    @pytest.mark.unit
+    def test_multiple_increments(self):
+        """Birden fazla artırma doğru çalışır."""
+        state = ScannerState()
+        for i in range(5):
+            state.increment_scan()
+        assert state.scan_count == 5
+
+
+class TestFormatFunctions:
+    """Format fonksiyonları testleri."""
+
+    @pytest.fixture
+    def combo_details(self):
+        """Örnek COMBO details verisi."""
+        return {
+            "DATE": "2024-01-15",
+            "PRICE": 100.50,
+            "MACD": 0.0025,
+            "RSI": 35.5,
+            "WR": -75.0,
+            "CCI": -120.5,
+            "Score": "+3/-1",
+        }
+
+    @pytest.fixture
+    def hunter_details(self):
+        """Örnek HUNTER details verisi."""
+        return {
+            "DATE": "2024-01-15",
+            "PRICE": 100.50,
+            "RSI": 30.0,
+            "RSI_Fast": 25.0,
+            "CMO": -55.0,
+            "BOP": -0.8,
+            "MACD": -0.5,
+            "W%R": -85.0,
+            "CCI": -150.0,
+            "ULT": 30.0,
+            "BBP": 10.0,
+            "ROC": -5.0,
+            "DipScore": 8,
+            "TopScore": 2,
+        }
+
+    @pytest.mark.unit
+    def test_format_combo_debug_returns_string(self, combo_details):
+        """format_combo_debug string döndürür."""
+        result = format_combo_debug(combo_details)
+        assert isinstance(result, str)
+        assert "COMBO" in result
+
+    @pytest.mark.unit
+    def test_format_combo_debug_contains_values(self, combo_details):
+        """format_combo_debug değerleri içerir."""
+        result = format_combo_debug(combo_details)
+        assert "MACD" in result
+        assert "RSI" in result
+
+    @pytest.mark.unit
+    def test_format_hunter_debug_returns_string(self, hunter_details):
+        """format_hunter_debug string döndürür."""
+        result = format_hunter_debug(hunter_details)
+        assert isinstance(result, str)
+        assert "HUNTER" in result
+
+
+class TestGenerateManualReport:
+    """generate_manual_report fonksiyonu testleri."""
+
+    @pytest.fixture
+    def combo_result(self):
+        """Örnek COMBO sonucu."""
+        return {
+            "buy": True,
+            "sell": False,
+            "details": {"PRICE": 100.50, "MACD": 0.0025, "RSI": 35.5, "Score": "+4/-1"},
+        }
+
+    @pytest.fixture
+    def hunter_result(self):
+        """Örnek HUNTER sonucu."""
+        return {"buy": True, "sell": False, "details": {"DipScore": 8, "TopScore": 2}}
+
+    @pytest.mark.unit
+    def test_generate_report_returns_string(self, combo_result, hunter_result):
+        """generate_manual_report string döndürür."""
+        result = generate_manual_report("THYAO", "BIST", combo_result, hunter_result)
+        assert isinstance(result, str)
+
+    @pytest.mark.unit
+    def test_generate_report_contains_symbol(self, combo_result, hunter_result):
+        """Rapor sembol adını içerir."""
+        result = generate_manual_report("THYAO", "BIST", combo_result, hunter_result)
+        assert "THYAO" in result
+
+    @pytest.mark.unit
+    def test_generate_report_contains_market(self, combo_result, hunter_result):
+        """Rapor piyasa türünü içerir."""
+        result = generate_manual_report("BTCUSDT", "Kripto", combo_result, hunter_result)
+        assert "Kripto" in result
