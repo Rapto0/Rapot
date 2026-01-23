@@ -1,0 +1,185 @@
+@import "tailwindcss";
+
+/* ===== RAPOT DARK THEME ===== */
+:root {
+  /* Base Colors */
+  --background: #0e1117;
+  --foreground: #e6edf3;
+
+  /* Card/Panel */
+  --card: #161b22;
+  --card-foreground: #e6edf3;
+
+  /* Muted */
+  --muted: #21262d;
+  --muted-foreground: #8b949e;
+
+  /* Primary - TradingView Blue */
+  --primary: #2962ff;
+  --primary-foreground: #ffffff;
+
+  /* Secondary */
+  --secondary: #21262d;
+  --secondary-foreground: #e6edf3;
+
+  /* Accent */
+  --accent: #30363d;
+  --accent-foreground: #e6edf3;
+
+  /* Destructive */
+  --destructive: #ff3d00;
+  --destructive-foreground: #ffffff;
+
+  /* Border & Ring */
+  --border: #30363d;
+  --input: #21262d;
+  --ring: #2962ff;
+
+  /* Trading Colors */
+  --profit: #00c853;
+  --loss: #ff3d00;
+  --long: #00c853;
+  --short: #ff3d00;
+
+  /* Radius */
+  --radius: 0.5rem;
+
+  /* Sidebar */
+  --sidebar: #0d1117;
+  --sidebar-foreground: #e6edf3;
+  --sidebar-accent: #161b22;
+  --sidebar-border: #21262d;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-profit: var(--profit);
+  --color-loss: var(--loss);
+  --color-long: var(--long);
+  --color-short: var(--short);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+* {
+  border-color: var(--border);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+/* ===== SCROLLBAR STYLING ===== */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--muted);
+  border-radius: var(--radius);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent);
+}
+
+/* ===== CUSTOM UTILITIES ===== */
+.glass-panel {
+  background: rgba(22, 27, 34, 0.8);
+  backdrop-filter: blur(10px);
+  border: 1px solid var(--border);
+}
+
+.text-profit {
+  color: var(--profit);
+}
+
+.text-loss {
+  color: var(--loss);
+}
+
+.bg-profit {
+  background-color: var(--profit);
+}
+
+.bg-loss {
+  background-color: var(--loss);
+}
+
+.border-profit {
+  border-color: var(--profit);
+}
+
+.border-loss {
+  border-color: var(--loss);
+}
+
+/* Pulse animation for live data */
+@keyframes pulse-dot {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.animate-pulse-dot {
+  animation: pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Ticker tape animation */
+@keyframes ticker {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-ticker {
+  animation: ticker 30s linear infinite;
+}
+
+/* Bento Grid */
+.bento-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(12, 1fr);
+}
+
+.bento-item {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem;
+}
