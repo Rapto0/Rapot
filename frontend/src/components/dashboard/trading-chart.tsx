@@ -2,12 +2,25 @@
 
 import { useEffect, useRef, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { mockCandlestickData } from "@/lib/mock-data"
 import { Badge } from "@/components/ui/badge"
+import { useQuery } from "@tanstack/react-query"
+import { fetchCandles } from "@/lib/api/client"
 
-export function TradingChart() {
+interface TradingChartProps {
+    symbol?: string
+}
+
+export function TradingChart({ symbol = "THYAO" }: TradingChartProps) {
     const chartContainerRef = useRef<HTMLDivElement>(null)
-    const [isLoading, setIsLoading] = useState(true)
+    const chartInstance = useRef<any>(null)
+    const seriesInstance = useRef<any>(null)
+
+    // Fetch real candle data
+    const { data: candles, isLoading } = useQuery({
+        queryKey: ['candles', symbol],
+        queryFn: (() => fetchCandles(symbol, '1d', 200)),
+        refetchInterval: 60000,
+    })
 
     useEffect(() => {
         if (!chartContainerRef.current) return
@@ -16,55 +29,66 @@ export function TradingChart() {
         import("lightweight-charts").then(({ createChart, ColorType, CandlestickSeries }) => {
             if (!chartContainerRef.current) return
 
-            // Create chart
-            const chart = createChart(chartContainerRef.current, {
-                layout: {
-                    background: { type: ColorType.Solid, color: "#161b22" },
-                    textColor: "#8b949e",
-                },
-                grid: {
-                    vertLines: { color: "#21262d" },
-                    horzLines: { color: "#21262d" },
-                },
-                width: chartContainerRef.current.clientWidth,
-                height: 400,
-                crosshair: {
-                    mode: 1,
-                    vertLine: {
-                        color: "#2962ff",
-                        width: 1,
-                        style: 2,
-                        labelBackgroundColor: "#2962ff",
+            // Create chart if not exists
+            if (!chartInstance.current) {
+                const chart = createChart(chartContainerRef.current, {
+                    layout: {
+                        background: { type: ColorType.Solid, color: "#161b22" },
+                        textColor: "#8b949e",
                     },
-                    horzLine: {
-                        color: "#2962ff",
-                        width: 1,
-                        style: 2,
-                        labelBackgroundColor: "#2962ff",
+                    grid: {
+                        vertLines: { color: "#21262d" },
+                        horzLines: { color: "#21262d" },
                     },
-                },
-                rightPriceScale: {
-                    borderColor: "#30363d",
-                },
-                timeScale: {
-                    borderColor: "#30363d",
-                    timeVisible: true,
-                    secondsVisible: false,
-                },
-            })
+                    width: chartContainerRef.current.clientWidth,
+                    height: 400,
+                    rightPriceScale: {
+                        borderColor: "#30363d",
+                    },
+                    timeScale: {
+                        borderColor: "#30363d",
+                        timeVisible: true,
+                        secondsVisible: false,
+                    },
+                })
 
-            // Add candlestick series - using v5 API
-            const candlestickSeries = chart.addSeries(CandlestickSeries, {
-                upColor: "#00c853",
-                downColor: "#ff3d00",
-                borderDownColor: "#ff3d00",
-                borderUpColor: "#00c853",
-                wickDownColor: "#ff3d00",
-                wickUpColor: "#00c853",
-            })
+                // Add candlestick series
+                const candlestickSeries = chart.addSeries(CandlestickSeries, {
+                    upColor: "#00c853",
+                    downColor: "#ff3d00",
+                    borderDownColor: "#ff3d00",
+                    borderUpColor: "#00c853",
+                    wickDownColor: "#ff3d00",
+                    wickUpColor: "#00c853",
+                })
 
-            // Convert and set data
-            const formattedData = mockCandlestickData.map((item) => ({
+                chartInstance.current = chart
+                seriesInstance.current = candlestickSeries
+
+                // Handle resize
+                const handleResize = () => {
+                    if (chartContainerRef.current && chartInstance.current) {
+                        chartInstance.current.applyOptions({
+                            width: chartContainerRef.current.clientWidth,
+                        })
+                    }
+                }
+                window.addEventListener("resize", handleResize)
+            }
+        })
+
+        // Cleanup not strictly necessary as refs persist, but good practice if component unmounts
+        return () => {
+            if (chartInstance.current) {
+                // chartInstance.current.remove() // Keeping it simple to avoid recreation issues in strict mode
+            }
+        }
+    }, [])
+
+    // Update data when candles change
+    useEffect(() => {
+        if (candles && seriesInstance.current && candles.length > 0) {
+            const formattedData = candles.map((item) => ({
                 time: item.time,
                 open: item.open,
                 high: item.high,
@@ -72,71 +96,57 @@ export function TradingChart() {
                 close: item.close,
             }))
 
-            candlestickSeries.setData(formattedData)
+            // Sort by time just in case
+            formattedData.sort((a, b) => (new Date(a.time).getTime() - new Date(b.time).getTime()))
 
-            // Note: Markers API changed in lightweight-charts v5
-            // Signal markers would require custom primitives implementation
-
-            // Fit content
-            chart.timeScale().fitContent()
-
-            setIsLoading(false)
-
-            // Handle resize
-            const handleResize = () => {
-                if (chartContainerRef.current) {
-                    chart.applyOptions({
-                        width: chartContainerRef.current.clientWidth,
-                    })
-                }
+            try {
+                seriesInstance.current.setData(formattedData)
+                chartInstance.current?.timeScale().fitContent()
+            } catch (e) {
+                console.error("Chart update error", e)
             }
-
-            window.addEventListener("resize", handleResize)
-
-            // Cleanup
-            return () => {
-                window.removeEventListener("resize", handleResize)
-                chart.remove()
-            }
-        })
-    }, [])
-
-    const lastCandle = mockCandlestickData[mockCandlestickData.length - 1]
-    const prevCandle = mockCandlestickData[mockCandlestickData.length - 2]
-    const priceChange = lastCandle.close - prevCandle.close
-    const priceChangePercent = (priceChange / prevCandle.close) * 100
+        }
+    }, [candles])
 
     return (
         <Card className="col-span-full lg:col-span-8">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
                 <div className="flex items-center gap-3">
-                    <CardTitle className="text-base font-semibold">THYAO</CardTitle>
-                    <Badge variant="bist">BIST</Badge>
+                    <CardTitle className="text-base font-semibold">{symbol}</CardTitle>
+                    <Badge variant="outline" className="bg-blue-500/20 text-blue-400 border-transparent">
+                        BIST
+                    </Badge>
                 </div>
-                <div className="flex items-center gap-3">
-                    <span className="text-xl font-bold">
-                        ₺{lastCandle.close.toFixed(2)}
-                    </span>
-                    <span
-                        className={`text-sm font-medium ${priceChange >= 0 ? "text-profit" : "text-loss"
-                            }`}
-                    >
-                        {priceChange >= 0 ? "+" : ""}
-                        {priceChange.toFixed(2)} ({priceChangePercent.toFixed(2)}%)
-                    </span>
-                </div>
+                {isLoading && <div className="text-xs text-muted-foreground animate-pulse">Yükleniyor...</div>}
+                {!isLoading && candles && candles.length > 0 && (
+                    <div className="flex items-center gap-3">
+                        <span className="text-xl font-bold">
+                            ₺{candles[candles.length - 1].close.toFixed(2)}
+                        </span>
+                        {/* Calculate change from previous candle */}
+                        {candles.length > 1 && (() => {
+                            const current = candles[candles.length - 1].close
+                            const prev = candles[candles.length - 2].close
+                            const change = current - prev
+                            const percent = (change / prev) * 100
+                            const isPositive = change >= 0
+
+                            return (
+                                <span className={`text-sm font-medium ${isPositive ? 'text-profit' : 'text-loss'}`}>
+                                    {isPositive ? '+' : ''}{change.toFixed(2)} ({isPositive ? '+' : ''}{percent.toFixed(2)}%)
+                                </span>
+                            )
+                        })()}
+                    </div>
+                )}
             </CardHeader>
             <CardContent className="p-0">
                 <div
                     ref={chartContainerRef}
                     className="relative w-full"
-                    style={{ minHeight: 400 }}
+                    style={{ minHeight: "400px" }}
                 >
-                    {isLoading && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-card">
-                            <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                        </div>
-                    )}
+                    {/* Placeholder or loading state could go here */}
                 </div>
             </CardContent>
         </Card>

@@ -8,6 +8,7 @@ Kullanım:
 
 from datetime import datetime, timedelta
 
+import yfinance as yf
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -398,6 +399,78 @@ async def get_crypto_symbols(request: Request):
 
     symbols = get_all_binance_symbols()
     return {"count": len(symbols), "symbols": symbols}
+
+
+@app.get("/candles/{symbol}", tags=["Market Data"])
+@limiter.limit("20/minute")
+async def get_candles(
+    request: Request,
+    symbol: str,
+    timeframe: str = Query("1d", description="Timeframe (1d, 1wk, 1mo)"),
+    limit: int = Query(100, description="Number of candles"),
+):
+    """
+    Get OHLCV candlestick data for charts.
+    """
+    try:
+        # Normalize symbol
+        yf_symbol = symbol
+        if not symbol.endswith(".IS") and not symbol.endswith("USDT") and len(symbol) <= 5:
+            yf_symbol = symbol + ".IS"
+        elif symbol.endswith("USDT"):
+            yf_symbol = symbol + "-USD"  # Best effort for free crypto data
+
+        # Map timeframe
+        interval_map = {
+            "GÜNLÜK": "1d",
+            "1d": "1d",
+            "D": "1d",
+            "HAFTALIK": "1wk",
+            "1wk": "1wk",
+            "W": "1wk",
+            "AYLIK": "1mo",
+            "1mo": "1mo",
+            "M": "1mo",
+            "4 SAATLİK": "1h",
+            "1h": "1h",
+            "4h": "1h",  # yf restriction
+        }
+        interval = interval_map.get(timeframe, "1d")
+
+        # Period
+        period = "2y" if interval in ["1wk", "1mo"] else "1y"
+        if interval == "1h":
+            period = "1mo"
+
+        ticker = yf.Ticker(yf_symbol)
+        df = ticker.history(period=period, interval=interval)
+
+        if df.empty:
+            raise HTTPException(status_code=404, detail=f"No data for {yf_symbol}")
+
+        # Format for lightweight-charts (needs timestamp in seconds or YYYY-MM-DD string)
+        candles = []
+        for index, row in df.tail(limit).iterrows():
+            # Convert timestamp to YYYY-MM-DD for daily, or unix timestamp for intraday
+            time_val = index.strftime("%Y-%m-%d")
+            # if interval == "1h": time_val = int(index.timestamp()) # Chart component might need update for this
+
+            candles.append(
+                {
+                    "time": time_val,
+                    "open": float(row["Open"]),
+                    "high": float(row["High"]),
+                    "low": float(row["Low"]),
+                    "close": float(row["Close"]),
+                    "volume": int(row["Volume"]),
+                }
+            )
+
+        return candles
+
+    except Exception as e:
+        print(f"Candle error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ==================== STARTUP/SHUTDOWN ====================

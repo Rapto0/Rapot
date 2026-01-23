@@ -183,6 +183,21 @@ export async function fetchCryptoSymbols(): Promise<SymbolsResponse> {
     return fetchApi<SymbolsResponse>(`${API_BASE_URL}/symbols/crypto`);
 }
 
+// ==================== CANDLE API ====================
+
+export interface Candle {
+    time: string;
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+}
+
+export async function fetchCandles(symbol: string, timeframe: string = '1d', limit: number = 100): Promise<Candle[]> {
+    return fetchApi<Candle[]>(`${API_BASE_URL}/candles/${symbol}?timeframe=${timeframe}&limit=${limit}`);
+}
+
 // ==================== ANALYSIS API ====================
 
 export async function analyzeSymbol(symbol: string, marketType: string = 'BIST'): Promise<{ message: string; status: string }> {
