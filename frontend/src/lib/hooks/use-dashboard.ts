@@ -14,16 +14,10 @@ export interface DashboardKPIs {
     todaySignals: number;
 }
 
-// Fetch dashboard KPIs from API or fallback to mock data
+// Fetch dashboard KPIs from API
 async function fetchDashboardKPIs(): Promise<DashboardKPIs> {
-    try {
-        const apiStats = await fetchStats();
-        return transformStats(apiStats);
-    } catch (error) {
-        console.warn('API unavailable, using mock data:', error);
-        // Fallback to mock data
-        return mockKPIStats;
-    }
+    const apiStats = await fetchStats();
+    return transformStats(apiStats);
 }
 
 export function useDashboardKPIs() {

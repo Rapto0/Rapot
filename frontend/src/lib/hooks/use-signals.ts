@@ -21,32 +21,26 @@ interface UseSignalsOptions {
     searchQuery?: string;
 }
 
-// Fetch signals from API or fallback to mock data
+// Fetch signals from API
 async function fetchSignalsData(options: UseSignalsOptions = {}): Promise<Signal[]> {
     const { marketType, strategy, direction } = options;
 
-    try {
-        // Build API params
-        const params: SignalsParams = { limit: 100 };
-        if (strategy && strategy !== 'all') params.strategy = strategy;
-        if (direction && direction !== 'all') params.signal_type = direction;
+    // Build API params
+    const params: SignalsParams = { limit: 100 };
+    if (strategy && strategy !== 'all') params.strategy = strategy;
+    if (direction && direction !== 'all') params.signal_type = direction;
 
-        const apiSignals = await fetchSignals(params);
+    const apiSignals = await fetchSignals(params);
 
-        // Transform and filter
-        let signals = apiSignals.map(transformSignal);
+    // Transform and filter
+    let signals = apiSignals.map(transformSignal);
 
-        // Apply additional filters that API doesn't support
-        if (marketType && marketType !== 'all') {
-            signals = signals.filter(s => s.marketType === marketType);
-        }
-
-        return signals;
-    } catch (error) {
-        console.warn('API unavailable, using mock data:', error);
-        // Fallback to mock data
-        return mockSignals;
+    // Apply additional filters that API doesn't support
+    if (marketType && marketType !== 'all') {
+        signals = signals.filter(s => s.marketType === marketType);
     }
+
+    return signals;
 }
 
 export function useSignals(options: UseSignalsOptions = {}) {

@@ -4,8 +4,11 @@
  */
 
 // API Base URLs
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-const HEALTH_API_URL = process.env.NEXT_PUBLIC_HEALTH_API_URL || 'http://localhost:5000';
+// API Base URLs
+// When running in Nginx (production), /api requests are proxied to localhost:8000
+// When running locally, we need to ensure requests go to port 8000
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
+const HEALTH_API_URL = process.env.NEXT_PUBLIC_HEALTH_API_URL || '/health-api';
 
 // ==================== TYPES ====================
 
