@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { useRecentSignals } from "@/lib/hooks/use-signals"
 import { getTimeAgo, cn } from "@/lib/utils"
+import { useDashboardStore } from "@/lib/stores"
 import { ArrowUpRight, ArrowDownRight, Bell } from "lucide-react"
 import Link from "next/link"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -89,9 +90,19 @@ interface SignalRowProps {
 
 function SignalRow({ signal }: SignalRowProps) {
     const isLong = signal.signalType === "AL"
+    const { selectedSymbol, setSelectedSymbol } = useDashboardStore()
+    const isSelected = selectedSymbol === signal.symbol
 
     return (
-        <div className="flex items-center justify-between px-4 py-3 hover:bg-muted/50 transition-colors cursor-pointer">
+        <div
+            onClick={() => setSelectedSymbol(signal.symbol)}
+            className={cn(
+                "flex items-center justify-between px-4 py-3 transition-colors cursor-pointer border-l-2",
+                isSelected
+                    ? "bg-muted border-l-primary"
+                    : "hover:bg-muted/50 border-l-transparent"
+            )}
+        >
             <div className="flex items-center gap-3">
                 <div
                     className={cn(
@@ -107,7 +118,9 @@ function SignalRow({ signal }: SignalRowProps) {
                 </div>
                 <div>
                     <div className="flex items-center gap-2">
-                        <span className="font-medium text-sm">{signal.symbol}</span>
+                        <span className={cn("font-medium text-sm", isSelected && "text-primary")}>
+                            {signal.symbol}
+                        </span>
                         <Badge
                             variant={signal.strategy === "HUNTER" ? "hunter" : "combo"}
                             className="text-[10px] px-1.5 py-0"

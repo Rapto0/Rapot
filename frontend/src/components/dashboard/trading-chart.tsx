@@ -5,12 +5,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { useQuery } from "@tanstack/react-query"
 import { fetchCandles } from "@/lib/api/client"
+import { useDashboardStore } from "@/lib/stores"
 
 interface TradingChartProps {
     symbol?: string
 }
 
-export function TradingChart({ symbol = "THYAO" }: TradingChartProps) {
+export function TradingChart({ symbol: propSymbol }: TradingChartProps) {
+    const { selectedSymbol } = useDashboardStore()
+    const symbol = propSymbol || selectedSymbol || "THYAO"
+
     const chartContainerRef = useRef<HTMLDivElement>(null)
     const chartInstance = useRef<any>(null)
     const seriesInstance = useRef<any>(null)
