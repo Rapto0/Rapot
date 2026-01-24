@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchSignals, transformSignal, type SignalsParams } from '@/lib/api/client';
-import { mockSignals } from '@/lib/mock-data';
 
 export interface Signal {
     id: number;

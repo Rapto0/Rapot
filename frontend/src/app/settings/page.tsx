@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import {
     Bell,
@@ -278,23 +279,13 @@ export default function SettingsPage() {
                                 Yeni sinyaller için bildirim gönder
                             </p>
                         </div>
-                        <button
-                            type="button"
-                            onClick={() =>
-                                setSettings({ ...settings, notifications: !settings.notifications })
+                        <Switch
+                            checked={settings.notifications}
+                            onCheckedChange={(checked) =>
+                                setSettings({ ...settings, notifications: checked })
                             }
-                            className={cn(
-                                "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
-                                settings.notifications ? "bg-primary" : "bg-muted"
-                            )}
-                        >
-                            <span
-                                className={cn(
-                                    "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
-                                    settings.notifications ? "translate-x-6" : "translate-x-1"
-                                )}
-                            />
-                        </button>
+                            className="data-[state=checked]:bg-blue-600"
+                        />
                     </div>
                 </CardContent>
             </Card>

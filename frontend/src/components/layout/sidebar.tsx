@@ -11,17 +11,23 @@ import {
     Activity,
     Settings,
     TrendingUp,
+    LineChart,
+    CalendarDays,
     ChevronLeft,
     ChevronRight,
+    BarChart3,
 } from "lucide-react"
 import { useState } from "react"
 
 const navigation = [
-    { name: "Dashboard", href: "/", icon: LayoutDashboard },
+    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { name: "Grafik", href: "/chart", icon: BarChart3 },
     { name: "Piyasa Tarayıcı", href: "/scanner", icon: Search },
     { name: "Aktif Sinyaller", href: "/signals", icon: Bell },
     { name: "İşlem Geçmişi", href: "/trades", icon: History },
     { name: "Bot Sağlığı", href: "/health", icon: Activity },
+    { name: "TradingView", href: "/tradingview", icon: LineChart },
+    { name: "Ekonomik Takvim", href: "/calendar", icon: CalendarDays },
     { name: "Ayarlar", href: "/settings", icon: Settings },
 ]
 

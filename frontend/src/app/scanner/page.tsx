@@ -2,7 +2,9 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { mockScanHistory, mockBotHealth } from "@/lib/mock-data"
+import { useBotHealth } from "@/lib/hooks/use-health"
+import { useQuery } from "@tanstack/react-query"
+import { fetchScanHistory } from "@/lib/api/client"
 import { cn } from "@/lib/utils"
 import {
     Search,
@@ -10,14 +12,19 @@ import {
     Clock,
     BarChart3,
     Play,
-    Pause,
     RefreshCw,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 export default function ScannerPage() {
-    const health = mockBotHealth
-    const recentScans = mockScanHistory
+    const health = useBotHealth()
+
+    // Fetch recent scans
+    const { data: recentScans, isLoading: isScansLoading } = useQuery({
+        queryKey: ['scanHistory'],
+        queryFn: () => fetchScanHistory(10),
+        refetchInterval: 30000,
+    })
 
     return (
         <div className="space-y-4">
@@ -50,8 +57,8 @@ export default function ScannerPage() {
                                 <Search className="h-5 w-5" />
                             </div>
                             <div>
-                                <p className="text-2xl font-bold">{health.activeSymbols}</p>
-                                <p className="text-xs text-muted-foreground">Taranacak Sembol</p>
+                                <p className="text-2xl font-bold">{health.isScanning ? "Taranıyor..." : "Hazır"}</p>
+                                <p className="text-xs text-muted-foreground">Bot Durumu</p>
                             </div>
                         </div>
                     </CardContent>
@@ -63,7 +70,7 @@ export default function ScannerPage() {
                                 <TrendingUp className="h-5 w-5" />
                             </div>
                             <div>
-                                <p className="text-2xl font-bold">{health.totalScans}</p>
+                                <p className="text-2xl font-bold">{health.scanCount}</p>
                                 <p className="text-xs text-muted-foreground">Toplam Tarama</p>
                             </div>
                         </div>
@@ -76,8 +83,8 @@ export default function ScannerPage() {
                                 <Clock className="h-5 w-5" />
                             </div>
                             <div>
-                                <p className="text-2xl font-bold">30 dk</p>
-                                <p className="text-xs text-muted-foreground">Tarama Aralığı</p>
+                                <p className="text-2xl font-bold">{health.uptime}</p>
+                                <p className="text-xs text-muted-foreground">Çalışma Süresi</p>
                             </div>
                         </div>
                     </CardContent>
@@ -109,8 +116,8 @@ export default function ScannerPage() {
                             </CardTitle>
                             <div className="flex items-center gap-2">
                                 <div className="relative">
-                                    <div className="h-2 w-2 rounded-full bg-profit" />
-                                    <div className="absolute inset-0 h-2 w-2 animate-ping rounded-full bg-profit opacity-75" />
+                                    <div className={`h-2 w-2 rounded-full ${health.isRunning ? 'bg-profit' : 'bg-loss'}`} />
+                                    {health.isRunning && <div className="absolute inset-0 h-2 w-2 animate-ping rounded-full bg-profit opacity-75" />}
                                 </div>
                                 <span className="text-xs text-muted-foreground">Aktif</span>
                             </div>
@@ -120,24 +127,18 @@ export default function ScannerPage() {
                         <div className="space-y-3">
                             <div className="flex justify-between text-sm">
                                 <span className="text-muted-foreground">Taranan Sembol</span>
-                                <span className="font-medium">595</span>
+                                <span className="font-medium">500+</span>
                             </div>
                             <div className="flex justify-between text-sm">
                                 <span className="text-muted-foreground">Aktif Strateji</span>
                                 <span className="font-medium">COMBO + HUNTER</span>
                             </div>
                             <div className="flex justify-between text-sm">
-                                <span className="text-muted-foreground">Zaman Dilimleri</span>
-                                <span className="font-medium">Günlük, Haftalık, Aylık</span>
+                                <span className="text-muted-foreground">Son Tarama</span>
+                                <span className="font-medium">
+                                    {health.lastScan ? new Date(health.lastScan).toLocaleTimeString('tr-TR') : '-'}
+                                </span>
                             </div>
-                            <div className="flex justify-between text-sm">
-                                <span className="text-muted-foreground">Son Taramada Bulunan</span>
-                                <span className="font-medium text-profit">7 sinyal</span>
-                            </div>
-                            <div className="h-2 w-full rounded-full bg-muted overflow-hidden mt-4">
-                                <div className="h-full w-full rounded-full bg-profit animate-pulse" />
-                            </div>
-                            <p className="text-xs text-center text-muted-foreground">Tarama tamamlandı</p>
                         </div>
                     </CardContent>
                 </Card>
@@ -152,8 +153,8 @@ export default function ScannerPage() {
                             </CardTitle>
                             <div className="flex items-center gap-2">
                                 <div className="relative">
-                                    <div className="h-2 w-2 rounded-full bg-profit" />
-                                    <div className="absolute inset-0 h-2 w-2 animate-ping rounded-full bg-profit opacity-75" />
+                                    <div className={`h-2 w-2 rounded-full ${health.isRunning ? 'bg-profit' : 'bg-loss'}`} />
+                                    {health.isRunning && <div className="absolute inset-0 h-2 w-2 animate-ping rounded-full bg-profit opacity-75" />}
                                 </div>
                                 <span className="text-xs text-muted-foreground">Aktif</span>
                             </div>
@@ -163,24 +164,18 @@ export default function ScannerPage() {
                         <div className="space-y-3">
                             <div className="flex justify-between text-sm">
                                 <span className="text-muted-foreground">Taranan Sembol</span>
-                                <span className="font-medium">150</span>
+                                <span className="font-medium">150+</span>
                             </div>
                             <div className="flex justify-between text-sm">
                                 <span className="text-muted-foreground">Aktif Strateji</span>
                                 <span className="font-medium">COMBO + HUNTER</span>
                             </div>
                             <div className="flex justify-between text-sm">
-                                <span className="text-muted-foreground">Zaman Dilimleri</span>
-                                <span className="font-medium">1H, 4H, 1D</span>
+                                <span className="text-muted-foreground">Son Tarama</span>
+                                <span className="font-medium">
+                                    {health.lastScan ? new Date(health.lastScan).toLocaleTimeString('tr-TR') : '-'}
+                                </span>
                             </div>
-                            <div className="flex justify-between text-sm">
-                                <span className="text-muted-foreground">Son Taramada Bulunan</span>
-                                <span className="font-medium text-profit">6 sinyal</span>
-                            </div>
-                            <div className="h-2 w-full rounded-full bg-muted overflow-hidden mt-4">
-                                <div className="h-full w-full rounded-full bg-profit animate-pulse" />
-                            </div>
-                            <p className="text-xs text-center text-muted-foreground">Tarama tamamlandı</p>
                         </div>
                     </CardContent>
                 </Card>
@@ -192,48 +187,55 @@ export default function ScannerPage() {
                     <CardTitle className="text-base">Son Taramalar</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
-                    <div className="divide-y divide-border">
-                        {recentScans.map((scan) => (
-                            <div
-                                key={scan.id}
-                                className="flex items-center justify-between px-4 py-3"
-                            >
-                                <div className="flex items-center gap-3">
-                                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted text-sm font-bold">
-                                        #{scan.id}
-                                    </div>
-                                    <div>
-                                        <div className="flex items-center gap-2">
-                                            <Badge
-                                                variant={scan.scanType === "BIST" ? "bist" : "crypto"}
-                                            >
-                                                {scan.scanType}
-                                            </Badge>
-                                            <span className="text-sm font-medium">
-                                                {scan.symbolsScanned} sembol tarandı
-                                            </span>
+                    {isScansLoading && <div className="p-4 text-center text-sm text-muted-foreground">Yükleniyor...</div>}
+                    {!isScansLoading && (!recentScans || recentScans.length === 0) && (
+                        <div className="p-4 text-center text-sm text-muted-foreground">Kayıt yok</div>
+                    )}
+
+                    {!isScansLoading && recentScans && recentScans.length > 0 && (
+                        <div className="divide-y divide-border">
+                            {recentScans.map((scan) => (
+                                <div
+                                    key={scan.id}
+                                    className="flex items-center justify-between px-4 py-3"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted text-sm font-bold">
+                                            #{scan.id}
                                         </div>
-                                        <p className="text-xs text-muted-foreground mt-1">
-                                            Süre: {scan.duration.toFixed(1)} saniye
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <Badge
+                                                    variant={scan.scan_type === "BIST" ? "bist" : "crypto"}
+                                                >
+                                                    {scan.scan_type}
+                                                </Badge>
+                                                <span className="text-sm font-medium">
+                                                    {scan.symbols_scanned} sembol tarandı
+                                                </span>
+                                            </div>
+                                            <p className="text-xs text-muted-foreground mt-1">
+                                                Süre: {scan.duration_seconds.toFixed(1)} saniye
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-sm font-medium text-profit">
+                                            {scan.signals_found} sinyal bulundu
+                                        </p>
+                                        <p className="text-xs text-muted-foreground">
+                                            {new Date(scan.created_at).toLocaleString("tr-TR", {
+                                                day: "2-digit",
+                                                month: "2-digit",
+                                                hour: "2-digit",
+                                                minute: "2-digit",
+                                            })}
                                         </p>
                                     </div>
                                 </div>
-                                <div className="text-right">
-                                    <p className="text-sm font-medium text-profit">
-                                        {scan.signalsFound} sinyal bulundu
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">
-                                        {new Date(scan.createdAt).toLocaleString("tr-TR", {
-                                            day: "2-digit",
-                                            month: "2-digit",
-                                            hour: "2-digit",
-                                            minute: "2-digit",
-                                        })}
-                                    </p>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
+                            ))}
+                        </div>
+                    )}
                 </CardContent>
             </Card>
         </div>

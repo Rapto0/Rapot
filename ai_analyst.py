@@ -3,6 +3,7 @@ AI Analyst Modülü
 Google Gemini kullanarak teknik analiz ve haber yorumlama.
 """
 
+import json
 import threading
 from typing import Any
 
@@ -25,6 +26,55 @@ else:
 AI_TIMEOUT = settings.ai_timeout
 
 
+def save_analysis_to_db(
+    symbol: str,
+    market_type: str,
+    scenario_name: str,
+    signal_type: str,
+    analysis_text: str,
+    technical_data: dict[str, Any] | None = None,
+    signal_id: int | None = None,
+) -> int | None:
+    """
+    AI analizini veritabanına kaydeder.
+
+    Args:
+        symbol: Sembol
+        market_type: Piyasa türü (BIST/Kripto)
+        scenario_name: Senaryo adı
+        signal_type: Sinyal türü (AL/SAT)
+        analysis_text: AI tarafından üretilen analiz metni
+        technical_data: Teknik göstergeler (opsiyonel)
+        signal_id: İlişkili sinyal ID'si (opsiyonel)
+
+    Returns:
+        Oluşturulan analiz ID'si veya None
+    """
+    try:
+        import json
+
+        from db_session import get_session
+        from models import AIAnalysis
+
+        with get_session() as session:
+            analysis = AIAnalysis(
+                signal_id=signal_id,
+                symbol=symbol,
+                market_type=market_type,
+                scenario_name=scenario_name,
+                signal_type=signal_type,
+                analysis_text=analysis_text,
+                technical_data=json.dumps(technical_data) if technical_data else None,
+            )
+            session.add(analysis)
+            session.commit()
+            logger.info(f"AI analizi kaydedildi: {symbol} (ID: {analysis.id})")
+            return analysis.id
+    except Exception as e:
+        logger.error(f"AI analizi kaydetme hatası ({symbol}): {e}")
+        return None
+
+
 def analyze_with_gemini(
     symbol: str,
     scenario_name: str,
@@ -32,6 +82,9 @@ def analyze_with_gemini(
     technical_data: dict[str, Any],
     news_context: str | None = None,
     timeout: int = AI_TIMEOUT,
+    market_type: str = "BIST",
+    save_to_db: bool = True,
+    signal_id: int | None = None,
 ) -> str:
     """
     Google Gemini kullanarak teknik verileri VE haber akışını yorumlar.
@@ -43,17 +96,24 @@ def analyze_with_gemini(
         technical_data: Teknik veriler
         news_context: Haber metni
         timeout: Maksimum bekleme süresi (saniye)
+        market_type: Piyasa türü (BIST/Kripto)
+        save_to_db: True ise analizi veritabanına kaydet
+        signal_id: İlişkili sinyal ID'si
 
     Returns:
         AI yorumu veya hata mesajı
     """
     if not api_key:
-        return "⚠️ AI Analizi yapılamadı (API Key eksik)."
+        return json.dumps(
+            {"error": "API Key eksik", "sentiment_score": 50, "summary": ["Analiz yapılamadı."]}
+        )
 
     result = {"text": None, "error": None}
 
     def _generate():
         try:
+            import json
+
             model = genai.GenerativeModel("gemini-2.0-flash")
 
             news_text = "Haber verisi yok veya çekilemedi. Sadece tekniğe odaklan."
@@ -61,31 +121,43 @@ def analyze_with_gemini(
                 news_text = news_context
 
             prompt = f"""
-            Sen uzman bir borsa stratejistisin. Elimde teknik olarak '{signal_type}' sinyali veren bir varlık var ama piyasadaki haber akışından endişeliyim.
-            Bunu bir yatırımcıya hitap eder gibi, samimi, profesyonel ve uyarıcı bir dille yorumla.
+            Sen uzman bir borsa stratejistisin. Elimde teknik olarak '{signal_type}' sinyali veren bir varlık var.
+            Bunu detaylı analiz et ve JSON formatında yanıtla.
 
             Varlık: {symbol}
             Teknik Durum: {scenario_name} (Yön: {signal_type})
 
             📊 GÜNLÜK Teknik Veriler:
             - Fiyat: {technical_data.get("PRICE", "Yok")}
-            - RSI (14): {technical_data.get("RSI", "Yok")} (30 altı ucuz, 70 üstü pahalı)
+            - RSI (14): {technical_data.get("RSI", "Yok")}
             - MACD: {technical_data.get("MACD", "Yok")}
 
-            📰 GÜNCEL HABER AKIŞI / SOSYAL MEDYA ALGISI:
+            📰 GÜNCEL HABER AKIŞI:
             {news_text}
 
             GÖREVİN:
-            1. Teknik göstergeler ile haber akışı uyumlu mu? (Örn: Teknik 'AL' diyor ama haberlerde iflas/hack gibi felaketler var mı?)
-            2. Bu hareket sadece bir düzeltme mi yoksa haber kaynaklı bir trend değişimi mi?
-            3. Yatırımcıya "Fırsat" mı dersin yoksa "Dikkatli ol" mu?
-
-            Yorumun kısa paragraflar halinde olsun. Yatırım tavsiyesi değildir uyarısı ekleme.
-            Cümlelerine emojiler ekle. MAX 200 kelime.
+            Aşağıdaki JSON şemasına birebir uyarak yanıt ver. Markdown kullanma, sadece saf JSON döndür.
+            {{
+                "sentiment_score": (0-100 arası sayı, 0=Ayı/Korku, 50=Nötr, 100=Boğa/Açgözlülük),
+                "sentiment_label": ("GÜÇLÜ AL", "AL", "NÖTR", "SAT", "GÜÇLÜ SAT"),
+                "summary": ["Çarpıcı analiz maddesi 1", "Madde 2", "Madde 3"],
+                "explanation": "Yatırımcıya hitap eden, teknik ve temeli birleştiren detaylı paragraf (max 3 cümle).",
+                "key_levels": {{
+                    "support": ["destek seviyesi 1", "destek seviyesi 2"],
+                    "resistance": ["direnç seviyesi 1", "direnç seviyesi 2"]
+                }},
+                "risk_level": ("Düşük", "Orta", "Yüksek")
+            }}
             """
 
             response = model.generate_content(prompt)
-            result["text"] = response.text
+            # Markdown temizliği (bazı modeller ```json ... ``` ile dönebilir)
+            clean_text = response.text.replace("```json", "").replace("```", "").strip()
+
+            # JSON doğrulama
+            json.loads(clean_text)
+
+            result["text"] = clean_text
 
         except Exception as e:
             result["error"] = str(e)
@@ -98,12 +170,28 @@ def analyze_with_gemini(
 
     if thread.is_alive():
         logger.warning(f"AI analizi timeout ({symbol}, {timeout}s)")
-        return f"⚠️ AI Analizi zaman aşımına uğradı ({timeout}s)."
+        return json.dumps({"error": "Timeout", "sentiment_score": 50, "summary": ["Zaman aşımı."]})
 
     if result["error"]:
-        return f"⚠️ AI Hatası: {result['error'][:100]}"
+        return json.dumps(
+            {"error": result["error"], "sentiment_score": 50, "summary": ["Hata oluştu."]}
+        )
 
-    return result["text"] or "⚠️ AI yanıt vermedi."
+    analysis_text = result["text"] or json.dumps({"error": "Boş yanıt", "sentiment_score": 50})
+
+    # Veritabanına kaydet
+    if save_to_db and result["text"]:
+        save_analysis_to_db(
+            symbol=symbol,
+            market_type=market_type,
+            scenario_name=scenario_name,
+            signal_type=signal_type,
+            analysis_text=analysis_text,
+            technical_data=technical_data,
+            signal_id=signal_id,
+        )
+
+    return analysis_text
 
 
 def analyze_async(

@@ -19,13 +19,18 @@ def _get_binance_client():
     """Binance client'ı lazy olarak başlatır."""
     global _binance_client
     if _binance_client is None:
-        if settings.binance_api_key and settings.binance_secret_key:
-            from binance.client import Client
+        from binance.client import Client
 
-            _binance_client = Client(settings.binance_api_key, settings.binance_secret_key)
-            logger.info("Binance client başlatıldı")
+        # API Key varsa kullan, yoksa anonim bağlan (Public veri için yeterli)
+        api_key = settings.binance_api_key if settings.binance_api_key else None
+        secret_key = settings.binance_secret_key if settings.binance_secret_key else None
+
+        _binance_client = Client(api_key, secret_key)
+
+        if api_key:
+            logger.info("Binance client başlatıldı (Auth mod)")
         else:
-            logger.warning("Binance API key'leri eksik - kripto taraması devre dışı")
+            logger.info("Binance client başlatıldı (Public mod - Sadece veri okuma)")
     return _binance_client
 
 
@@ -177,7 +182,12 @@ def get_crypto_data(symbol: str, start_str: str = "6 years ago") -> pd.DataFrame
         OHLCV verisi iceren DataFrame veya None
     """
     try:
-        klines = binance_client.get_historical_klines(symbol, Client.KLINE_INTERVAL_1DAY, start_str)
+        client = _get_binance_client()
+        if client is None:
+            return None
+        # Client.KLINE_INTERVAL_1DAY için Client import edilmeli veya string kullanılmalı
+        # String '1d' de çalışır
+        klines = client.get_historical_klines(symbol, "1d", start_str)
         df = pd.DataFrame(
             klines,
             columns=[

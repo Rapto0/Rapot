@@ -20,6 +20,10 @@ interface DashboardState {
     isConnected: boolean;
     setIsConnected: (connected: boolean) => void;
 
+    // Sidebar Tabs
+    activeSidebarTab: 'watchlist' | 'signals' | 'news' | 'data' | 'calendar';
+    setActiveSidebarTab: (tab: DashboardState['activeSidebarTab']) => void;
+
     // Last update timestamp
     lastUpdate: Date | null;
     setLastUpdate: (date: Date) => void;
@@ -45,6 +49,10 @@ export const useDashboardStore = create<DashboardState>()(
             isConnected: true,
             setIsConnected: (connected) => set({ isConnected: connected }),
 
+            // Sidebar Tabs
+            activeSidebarTab: 'watchlist',
+            setActiveSidebarTab: (tab) => set({ activeSidebarTab: tab }),
+
             // Last update
             lastUpdate: null,
             setLastUpdate: (date) => set({ lastUpdate: date }),
@@ -55,6 +63,7 @@ export const useDashboardStore = create<DashboardState>()(
                 selectedSymbol: state.selectedSymbol,
                 timeRange: state.timeRange,
                 sidebarCollapsed: state.sidebarCollapsed,
+                activeSidebarTab: state.activeSidebarTab,
             }),
         }
     )

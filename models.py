@@ -248,3 +248,46 @@ class BotStat(Base):
             "stat_value": self.stat_value,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
+
+
+class AIAnalysis(Base):
+    """
+    AI Analiz modeli.
+
+    Gemini AI tarafından üretilen teknik analizleri saklar.
+    """
+
+    __tablename__ = "ai_analyses"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    signal_id = Column(Integer, ForeignKey("signals.id"), nullable=True, index=True)
+    symbol = Column(String(20), nullable=False, index=True)
+    market_type = Column(String(10), nullable=False)  # BIST, Kripto
+    scenario_name = Column(String(50))  # COMBO AL, HUNTER DİP, vb.
+    signal_type = Column(String(5))  # AL, SAT
+    analysis_text = Column(Text, nullable=False)  # AI tarafından üretilen yorum
+    technical_data = Column(Text)  # JSON string - teknik göstergeler
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    # Relationship
+    signal = relationship("Signal", backref="analyses")
+
+    def __repr__(self) -> str:
+        return (
+            f"<AIAnalysis(id={self.id}, symbol='{self.symbol}', "
+            f"scenario='{self.scenario_name}')>"
+        )
+
+    def to_dict(self) -> dict:
+        """Model'i dictionary'ye çevirir."""
+        return {
+            "id": self.id,
+            "signal_id": self.signal_id,
+            "symbol": self.symbol,
+            "market_type": self.market_type,
+            "scenario_name": self.scenario_name,
+            "signal_type": self.signal_type,
+            "analysis_text": self.analysis_text,
+            "technical_data": self.technical_data,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }

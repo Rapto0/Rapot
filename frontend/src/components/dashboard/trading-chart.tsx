@@ -19,12 +19,15 @@ export function TradingChart({ symbol: propSymbol }: TradingChartProps) {
     const chartInstance = useRef<any>(null)
     const seriesInstance = useRef<any>(null)
 
-    // Fetch real candle data
-    const { data: candles, isLoading } = useQuery({
+    // Fetch real candle data from API
+    const { data: candlesResponse, isLoading } = useQuery({
         queryKey: ['candles', symbol],
-        queryFn: (() => fetchCandles(symbol, '1d', 200)),
+        queryFn: () => fetchCandles(symbol, 'BIST', '1d', 500),
         refetchInterval: 60000,
     })
+
+    // Extract candles array from response
+    const candles = candlesResponse?.candles || []
 
     useEffect(() => {
         if (!chartContainerRef.current) return

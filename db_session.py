@@ -203,7 +203,7 @@ def get_table_stats() -> dict:
         Her tablo için kayıt sayısı
     """
     stats = {}
-    tables = ["signals", "trades", "scan_history", "bot_stats"]
+    tables = ["signals", "trades", "scan_history", "bot_stats", "ai_analyses"]
 
     for table in tables:
         try:

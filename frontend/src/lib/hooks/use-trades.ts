@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchTrades, transformTrade, type TradesParams } from '@/lib/api/client';
-import { mockTrades } from '@/lib/mock-data';
 
 export interface Trade {
     id: number;
@@ -25,21 +24,11 @@ interface UseTradesOptions {
 async function fetchTradesData(options: UseTradesOptions = {}): Promise<Trade[]> {
     const { status } = options;
 
-    try {
-        const params: TradesParams = { limit: 100 };
-        if (status && status !== 'all') params.status = status;
+    const params: TradesParams = { limit: 100 };
+    if (status && status !== 'all') params.status = status;
 
-        const apiTrades = await fetchTrades(params);
-        return apiTrades.map(transformTrade);
-    } catch (error) {
-        console.warn('API unavailable, using mock data:', error);
-        // Fallback to mock data
-        let trades = mockTrades;
-        if (status && status !== 'all') {
-            trades = trades.filter(t => t.status === status);
-        }
-        return trades;
-    }
+    const apiTrades = await fetchTrades(params);
+    return apiTrades.map(transformTrade);
 }
 
 export function useTrades(options: UseTradesOptions = {}) {
