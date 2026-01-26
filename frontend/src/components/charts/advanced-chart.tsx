@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState, useCallback } from "react"
+import { useEffect, useRef, useState, useCallback, useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { fetchCandles, fetchBistSymbols } from "@/lib/api/client"
 import { useBinanceTicker } from "@/lib/hooks/use-binance-ticker"
@@ -12,10 +12,20 @@ import {
     Clock,
     BarChart3,
     Maximize2,
-    Settings,
+    Minimize2,
     ChevronDown,
-    X
+    X,
+    Zap
 } from "lucide-react"
+
+// ==================== TYPES ====================
+
+interface SignalMarker {
+    time: string
+    type: 'AL' | 'SAT'
+    price: number
+    label?: string
+}
 
 // Timeframe options
 const TIMEFRAMES = [
@@ -31,22 +41,55 @@ const POPULAR_SYMBOLS = [
     { symbol: "GARAN", name: "Garanti BBVA", market: "BIST" },
     { symbol: "AKBNK", name: "Akbank", market: "BIST" },
     { symbol: "SASA", name: "SASA Polyester", market: "BIST" },
+    { symbol: "ASELS", name: "Aselsan", market: "BIST" },
+    { symbol: "EREGL", name: "Ereğli Demir Çelik", market: "BIST" },
     { symbol: "BTCUSDT", name: "Bitcoin", market: "Kripto" },
     { symbol: "ETHUSDT", name: "Ethereum", market: "Kripto" },
 ]
 
+// ==================== CHART THEME (Cosmic Glass) ====================
+
+const chartColors = {
+    background: "transparent",
+    text: "#8b949e",
+    grid: "rgba(48, 54, 61, 0.3)",
+    crosshair: "rgba(0, 242, 234, 0.5)",
+    crosshairLabel: "#161b22",
+    bullish: "#00c853",
+    bearish: "#ff3d00",
+    volume: {
+        up: "rgba(0, 200, 83, 0.4)",
+        down: "rgba(255, 61, 0, 0.4)"
+    }
+}
+
 interface ChartPageProps {
     initialSymbol?: string
     initialMarket?: "BIST" | "Kripto"
+    signals?: SignalMarker[]
+    showSignals?: boolean
 }
 
-export function AdvancedChartPage({ initialSymbol = "THYAO", initialMarket = "BIST" }: ChartPageProps) {
+export function AdvancedChartPage({
+    initialSymbol = "THYAO",
+    initialMarket = "BIST",
+    signals = [],
+    showSignals = true
+}: ChartPageProps) {
     const [symbol, setSymbol] = useState(initialSymbol)
     const [marketType, setMarketType] = useState<"BIST" | "Kripto">(initialMarket)
     const [timeframe, setTimeframe] = useState("1d")
     const [showSymbolSearch, setShowSymbolSearch] = useState(false)
     const [searchQuery, setSearchQuery] = useState("")
     const [isFullscreen, setIsFullscreen] = useState(false)
+    const [crosshairData, setCrosshairData] = useState<{
+        time: string
+        open: number
+        high: number
+        low: number
+        close: number
+        volume: number
+    } | null>(null)
 
     const chartContainerRef = useRef<HTMLDivElement>(null)
     const chartInstance = useRef<any>(null)
@@ -87,14 +130,14 @@ export function AdvancedChartPage({ initialSymbol = "THYAO", initialMarket = "BI
         ? cryptoPrices[symbol].price
         : currentPrice
 
-    // OHLCV of current candle
-    const currentCandle = candles.length > 0 ? candles[candles.length - 1] : null
+    // OHLCV display data (crosshair or current candle)
+    const displayOHLCV = crosshairData || (candles.length > 0 ? candles[candles.length - 1] : null)
 
     // Create/update chart
     useEffect(() => {
         if (!chartContainerRef.current) return
 
-        import("lightweight-charts").then(({ createChart, ColorType, CandlestickSeries, HistogramSeries }) => {
+        import("lightweight-charts").then(({ createChart, ColorType, CrosshairMode }) => {
             if (!chartContainerRef.current) return
 
             // Destroy existing chart
@@ -106,72 +149,85 @@ export function AdvancedChartPage({ initialSymbol = "THYAO", initialMarket = "BI
             }
 
             const containerWidth = chartContainerRef.current.clientWidth
-            const containerHeight = isFullscreen ? window.innerHeight - 120 : 600
+            const containerHeight = isFullscreen ? window.innerHeight - 160 : 500
 
             const chart = createChart(chartContainerRef.current, {
                 layout: {
-                    background: { type: ColorType.Solid, color: "#131722" },
-                    textColor: "#d1d4dc",
+                    background: { type: ColorType.Solid, color: chartColors.background },
+                    textColor: chartColors.text,
+                    fontSize: 12,
                 },
                 grid: {
-                    vertLines: { color: "#1e222d" },
-                    horzLines: { color: "#1e222d" },
+                    vertLines: { color: chartColors.grid },
+                    horzLines: { color: chartColors.grid },
                 },
                 width: containerWidth,
                 height: containerHeight,
                 rightPriceScale: {
-                    borderColor: "#2a2e39",
-                    scaleMargins: {
-                        top: 0.1,
-                        bottom: 0.2,
-                    },
+                    borderColor: chartColors.grid,
+                    scaleMargins: { top: 0.1, bottom: 0.2 },
                 },
                 timeScale: {
-                    borderColor: "#2a2e39",
+                    borderColor: chartColors.grid,
                     timeVisible: true,
                     secondsVisible: false,
                 },
                 crosshair: {
-                    mode: 1,
+                    mode: CrosshairMode.Normal,
                     vertLine: {
-                        color: "#758696",
+                        color: chartColors.crosshair,
                         width: 1,
-                        style: 2,
-                        labelBackgroundColor: "#2962ff",
+                        style: 0,
+                        labelBackgroundColor: chartColors.crosshairLabel,
                     },
                     horzLine: {
-                        color: "#758696",
+                        color: chartColors.crosshair,
                         width: 1,
-                        style: 2,
-                        labelBackgroundColor: "#2962ff",
+                        style: 0,
+                        labelBackgroundColor: chartColors.crosshairLabel,
                     },
                 },
             })
 
             // Candlestick series
-            const candlestickSeries = chart.addSeries(CandlestickSeries, {
-                upColor: "#089981",
-                downColor: "#f23645",
-                borderDownColor: "#f23645",
-                borderUpColor: "#089981",
-                wickDownColor: "#f23645",
-                wickUpColor: "#089981",
+            const candlestickSeries = chart.addCandlestickSeries({
+                upColor: chartColors.bullish,
+                downColor: chartColors.bearish,
+                borderDownColor: chartColors.bearish,
+                borderUpColor: chartColors.bullish,
+                wickDownColor: chartColors.bearish,
+                wickUpColor: chartColors.bullish,
             })
 
             // Volume series
-            const volumeSeries = chart.addSeries(HistogramSeries, {
-                color: "#26a69a",
-                priceFormat: {
-                    type: "volume",
-                },
+            const volumeSeries = chart.addHistogramSeries({
+                color: chartColors.volume.up,
+                priceFormat: { type: "volume" },
                 priceScaleId: "",
             })
 
             volumeSeries.priceScale().applyOptions({
-                scaleMargins: {
-                    top: 0.85,
-                    bottom: 0,
-                },
+                scaleMargins: { top: 0.85, bottom: 0 },
+            })
+
+            // Crosshair move handler
+            chart.subscribeCrosshairMove((param) => {
+                if (!param.time || !param.seriesData.size) {
+                    setCrosshairData(null)
+                    return
+                }
+
+                const candleData = param.seriesData.get(candlestickSeries)
+                if (candleData && 'open' in candleData) {
+                    setCrosshairData({
+                        time: param.time.toString(),
+                        open: candleData.open,
+                        high: candleData.high,
+                        low: candleData.low,
+                        close: candleData.close,
+                        volume: 0, // Volume from separate series
+                    })
+                }
             })
 
             chartInstance.current = chart
@@ -181,7 +237,7 @@ export function AdvancedChartPage({ initialSymbol = "THYAO", initialMarket = "BI
             // Handle resize
             const handleResize = () => {
                 if (chartContainerRef.current && chartInstance.current) {
-                    const newHeight = isFullscreen ? window.innerHeight - 120 : 600
+                    const newHeight = isFullscreen ? window.innerHeight - 160 : 500
                     chartInstance.current.applyOptions({
                         width: chartContainerRef.current.clientWidth,
                         height: newHeight,
@@ -210,7 +266,7 @@ export function AdvancedChartPage({ initialSymbol = "THYAO", initialMarket = "BI
             const volumeData = candles.map((item) => ({
                 time: item.time,
                 value: item.volume,
-                color: item.close >= item.open ? "#089981" : "#f23645",
+                color: item.close >= item.open ? chartColors.volume.up : chartColors.volume.down,
             }))
 
             candleData.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())
@@ -219,12 +275,26 @@ export function AdvancedChartPage({ initialSymbol = "THYAO", initialMarket = "BI
             try {
                 seriesInstance.current.setData(candleData)
                 volumeSeriesInstance.current.setData(volumeData)
+
+                // Add signal markers
+                if (showSignals && signals.length > 0) {
+                    const markers = signals.map((signal) => ({
+                        time: signal.time,
+                        position: signal.type === 'AL' ? 'belowBar' : 'aboveBar',
+                        shape: signal.type === 'AL' ? 'arrowUp' : 'arrowDown',
+                        color: signal.type === 'AL' ? chartColors.bullish : chartColors.bearish,
+                        text: signal.type,
+                        size: 2,
+                    }))
+                    seriesInstance.current.setMarkers(markers)
+                }
+
                 chartInstance.current?.timeScale().fitContent()
             } catch (e) {
                 console.error("Chart update error:", e)
             }
         }
-    }, [candles])
+    }, [candles, signals, showSignals])
 
     // Symbol selection
     const handleSymbolSelect = (sym: string, market: "BIST" | "Kripto") => {
@@ -235,44 +305,67 @@ export function AdvancedChartPage({ initialSymbol = "THYAO", initialMarket = "BI
     }
 
     // Filter symbols for search
-    const filteredSymbols = searchQuery
-        ? [...POPULAR_SYMBOLS, ...(bistSymbols?.symbols || []).map(s => ({ symbol: s, name: s, market: "BIST" as const }))].filter(s =>
+    const filteredSymbols = useMemo(() => {
+        if (!searchQuery) return POPULAR_SYMBOLS
+
+        const allSymbols = [
+            ...POPULAR_SYMBOLS,
+            ...(bistSymbols?.symbols || []).map(s => ({
+                symbol: s,
+                name: s,
+                market: "BIST" as const
+            }))
+        ]
+
+        return allSymbols.filter(s =>
             s.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
             s.name.toLowerCase().includes(searchQuery.toLowerCase())
         ).slice(0, 20)
-        : POPULAR_SYMBOLS
+    }, [searchQuery, bistSymbols])
 
     return (
         <div className={cn(
-            "flex flex-col bg-[#131722] text-[#d1d4dc]",
-            isFullscreen ? "fixed inset-0 z-50" : "min-h-[calc(100vh-4rem)] -m-4"
+            "flex flex-col rounded-xl overflow-hidden",
+            "glass-panel-intense",
+            isFullscreen ? "fixed inset-4 z-50" : ""
         )}>
             {/* Header */}
-            <div className="flex items-center justify-between px-4 py-2 border-b border-[#2a2e39]">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border/30">
                 {/* Symbol Selector */}
                 <div className="flex items-center gap-4">
                     <div className="relative">
                         <button
                             onClick={() => setShowSymbolSearch(!showSymbolSearch)}
-                            className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[#1e222d] hover:bg-[#2a2e39] transition-colors"
+                            className={cn(
+                                "flex items-center gap-2 px-4 py-2 rounded-lg transition-all",
+                                "bg-card/50 hover:bg-card border border-border/50 hover:border-primary/30"
+                            )}
                         >
+                            <BarChart3 className="h-4 w-4 text-primary" />
                             <span className="text-lg font-bold">{symbol}</span>
-                            <span className="text-sm text-[#787b86]">{marketType}</span>
-                            <ChevronDown className="h-4 w-4 text-[#787b86]" />
+                            <span className={cn(
+                                "text-xs px-2 py-0.5 rounded-full font-medium",
+                                marketType === "BIST"
+                                    ? "bg-primary/20 text-primary"
+                                    : "bg-secondary/20 text-secondary"
+                            )}>
+                                {marketType}
+                            </span>
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
                         </button>
 
                         {/* Symbol Search Dropdown */}
                         {showSymbolSearch && (
-                            <div className="absolute top-full left-0 mt-1 w-80 bg-[#1e222d] border border-[#2a2e39] rounded-lg shadow-xl z-50">
-                                <div className="p-2 border-b border-[#2a2e39]">
+                            <div className="absolute top-full left-0 mt-2 w-80 glass-panel shadow-xl z-50 overflow-hidden">
+                                <div className="p-3 border-b border-border/30">
                                     <div className="relative">
-                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#787b86]" />
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                         <input
                                             type="text"
                                             value={searchQuery}
                                             onChange={(e) => setSearchQuery(e.target.value)}
                                             placeholder="Sembol ara..."
-                                            className="w-full pl-10 pr-4 py-2 bg-[#131722] border border-[#2a2e39] rounded-lg text-sm focus:outline-none focus:border-[#2962ff]"
+                                            className="w-full pl-10 pr-4 py-2 bg-background/50 border border-border/50 rounded-lg text-sm focus:outline-none focus:border-primary/50 placeholder:text-muted-foreground"
                                             autoFocus
                                         />
                                     </div>
@@ -282,15 +375,21 @@ export function AdvancedChartPage({ initialSymbol = "THYAO", initialMarket = "BI
                                         <button
                                             key={`${s.symbol}-${s.market}-${index}`}
                                             onClick={() => handleSymbolSelect(s.symbol, s.market as "BIST" | "Kripto")}
-                                            className="w-full flex items-center justify-between px-3 py-2 hover:bg-[#2a2e39] transition-colors"
+                                            className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors"
                                         >
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-3">
+                                                <span className={cn(
+                                                    "w-2 h-2 rounded-full",
+                                                    s.market === "BIST" ? "bg-primary" : "bg-secondary"
+                                                )} />
                                                 <span className="font-medium">{s.symbol}</span>
-                                                <span className="text-sm text-[#787b86]">{s.name}</span>
+                                                <span className="text-sm text-muted-foreground">{s.name}</span>
                                             </div>
                                             <span className={cn(
-                                                "text-xs px-2 py-0.5 rounded",
-                                                s.market === "BIST" ? "bg-blue-500/20 text-blue-400" : "bg-orange-500/20 text-orange-400"
+                                                "text-xs px-2 py-0.5 rounded-full",
+                                                s.market === "BIST"
+                                                    ? "bg-primary/10 text-primary"
+                                                    : "bg-secondary/10 text-secondary"
                                             )}>
                                                 {s.market}
                                             </span>
@@ -303,35 +402,47 @@ export function AdvancedChartPage({ initialSymbol = "THYAO", initialMarket = "BI
 
                     {/* Price Info */}
                     <div className="flex items-center gap-4">
-                        <span className="text-2xl font-bold">
-                            {marketType === "Kripto" ? "$" : "₺"}
-                            {livePrice.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </span>
-                        <div className={cn(
-                            "flex items-center gap-1 px-2 py-1 rounded",
-                            isPositive ? "bg-[#089981]/20 text-[#089981]" : "bg-[#f23645]/20 text-[#f23645]"
-                        )}>
-                            {isPositive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-                            <span className="font-medium">
-                                {isPositive ? "+" : ""}{priceChange.toFixed(2)} ({isPositive ? "+" : ""}{priceChangePercent.toFixed(2)}%)
+                        <div className="flex flex-col">
+                            <span className="text-2xl font-bold mono-numbers">
+                                {marketType === "Kripto" ? "$" : "₺"}
+                                {livePrice.toLocaleString("tr-TR", {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2
+                                })}
                             </span>
+                            <div className={cn(
+                                "flex items-center gap-1.5 text-sm",
+                                isPositive ? "text-profit" : "text-loss"
+                            )}>
+                                {isPositive ? (
+                                    <TrendingUp className="h-4 w-4" />
+                                ) : (
+                                    <TrendingDown className="h-4 w-4" />
+                                )}
+                                <span className="font-medium mono-numbers">
+                                    {isPositive ? "+" : ""}{priceChange.toFixed(2)}
+                                </span>
+                                <span className="mono-numbers">
+                                    ({isPositive ? "+" : ""}{priceChangePercent.toFixed(2)}%)
+                                </span>
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 {/* Timeframe & Controls */}
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
                     {/* Timeframes */}
-                    <div className="flex items-center bg-[#1e222d] rounded-lg p-1">
+                    <div className="flex items-center bg-muted/30 rounded-lg p-1">
                         {TIMEFRAMES.map((tf) => (
                             <button
                                 key={tf.value}
                                 onClick={() => setTimeframe(tf.value)}
                                 className={cn(
-                                    "px-3 py-1 rounded text-sm font-medium transition-colors",
+                                    "px-3 py-1.5 rounded-md text-sm font-medium transition-all",
                                     timeframe === tf.value
-                                        ? "bg-[#2962ff] text-white"
-                                        : "text-[#787b86] hover:text-[#d1d4dc]"
+                                        ? "bg-primary/20 text-primary neon-text"
+                                        : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                                 )}
                                 title={tf.description}
                             >
@@ -341,58 +452,69 @@ export function AdvancedChartPage({ initialSymbol = "THYAO", initialMarket = "BI
                     </div>
 
                     {/* Data Source */}
-                    <div className="flex items-center gap-2 px-3 py-1 bg-[#1e222d] rounded-lg text-xs text-[#787b86]">
-                        <Clock className="h-3 w-3" />
-                        <span>{dataSource}</span>
+                    <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/30 rounded-lg text-xs">
+                        <Zap className="h-3 w-3 text-primary animate-pulse" />
+                        <span className="text-muted-foreground">{dataSource}</span>
                     </div>
 
                     {/* Fullscreen */}
                     <button
                         onClick={() => setIsFullscreen(!isFullscreen)}
-                        className="p-2 rounded-lg bg-[#1e222d] hover:bg-[#2a2e39] transition-colors"
+                        className={cn(
+                            "p-2 rounded-lg transition-all",
+                            "bg-muted/30 hover:bg-muted/50 hover:text-primary"
+                        )}
+                        title={isFullscreen ? "Küçült" : "Tam Ekran"}
                     >
-                        {isFullscreen ? <X className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+                        {isFullscreen ? (
+                            <Minimize2 className="h-4 w-4" />
+                        ) : (
+                            <Maximize2 className="h-4 w-4" />
+                        )}
                     </button>
                 </div>
             </div>
 
             {/* OHLCV Info Bar */}
-            {currentCandle && (
-                <div className="flex items-center gap-6 px-4 py-2 border-b border-[#2a2e39] text-sm">
-                    <div className="flex items-center gap-2">
-                        <span className="text-[#787b86]">A:</span>
-                        <span className="font-medium">{currentCandle.open.toFixed(2)}</span>
+            {displayOHLCV && (
+                <div className="flex items-center gap-6 px-4 py-2 border-b border-border/30 bg-muted/10">
+                    <div className="flex items-center gap-6 text-sm">
+                        <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground text-xs uppercase">Açılış</span>
+                            <span className="font-medium mono-numbers">{displayOHLCV.open.toFixed(2)}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground text-xs uppercase">Yüksek</span>
+                            <span className="font-medium mono-numbers text-profit">{displayOHLCV.high.toFixed(2)}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground text-xs uppercase">Düşük</span>
+                            <span className="font-medium mono-numbers text-loss">{displayOHLCV.low.toFixed(2)}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground text-xs uppercase">Kapanış</span>
+                            <span className={cn(
+                                "font-medium mono-numbers",
+                                displayOHLCV.close >= displayOHLCV.open ? "text-profit" : "text-loss"
+                            )}>
+                                {displayOHLCV.close.toFixed(2)}
+                            </span>
+                        </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <span className="text-[#787b86]">Y:</span>
-                        <span className="font-medium text-[#089981]">{currentCandle.high.toFixed(2)}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <span className="text-[#787b86]">D:</span>
-                        <span className="font-medium text-[#f23645]">{currentCandle.low.toFixed(2)}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <span className="text-[#787b86]">K:</span>
-                        <span className="font-medium">{currentCandle.close.toFixed(2)}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <span className="text-[#787b86]">H:</span>
-                        <span className="font-medium">{(currentCandle.volume / 1000000).toFixed(2)}M</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <span className="text-[#787b86]">Mum:</span>
-                        <span className="font-medium">{candles.length}</span>
+                    <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+                        <Clock className="h-3 w-3" />
+                        <span>{crosshairData ? crosshairData.time : 'Son Mum'}</span>
                     </div>
                 </div>
             )}
 
             {/* Chart Area */}
-            <div className="flex-1 relative">
+            <div className="flex-1 relative min-h-[400px]">
                 {isLoading && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-[#131722]/80 z-10">
-                        <div className="flex items-center gap-2 text-[#787b86]">
-                            <BarChart3 className="h-5 w-5 animate-pulse" />
-                            <span>Grafik yükleniyor...</span>
+                    <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm z-10">
+                        <div className="flex flex-col items-center gap-3">
+                            <div className="w-10 h-10 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+                            <span className="text-sm text-muted-foreground">Grafik yükleniyor...</span>
                         </div>
                     </div>
                 )}
@@ -400,19 +522,27 @@ export function AdvancedChartPage({ initialSymbol = "THYAO", initialMarket = "BI
             </div>
 
             {/* Status Bar */}
-            <div className="flex items-center justify-between px-4 py-1 border-t border-[#2a2e39] text-xs text-[#787b86]">
+            <div className="flex items-center justify-between px-4 py-2 border-t border-border/30 text-xs text-muted-foreground">
                 <div className="flex items-center gap-4">
-                    <span className="flex items-center gap-1">
-                        <span className="h-2 w-2 rounded-full bg-[#089981]"></span>
-                        Piyasa Açık
+                    <span className="flex items-center gap-1.5">
+                        <span className="h-2 w-2 rounded-full bg-profit animate-pulse" />
+                        Canlı
                     </span>
-                    <span>{candles.length} mum yüklendi</span>
+                    <span>{candles.length} mum</span>
+                    {showSignals && signals.length > 0 && (
+                        <span className="flex items-center gap-1">
+                            <Zap className="h-3 w-3 text-primary" />
+                            {signals.length} sinyal
+                        </span>
+                    )}
                 </div>
                 <div className="flex items-center gap-4">
                     <span>Kaynak: {dataSource}</span>
-                    <span>TradingView Lightweight Charts</span>
+                    <span className="text-primary/60">TradingView Charts</span>
                 </div>
             </div>
         </div>
     )
 }
+
+export default AdvancedChartPage

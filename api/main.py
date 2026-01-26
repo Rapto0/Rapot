@@ -30,6 +30,8 @@ from api.auth import (  # noqa: E402
     get_current_user,
 )
 from api.calendar_service import calendar_service  # noqa: E402
+from api.realtime import router as realtime_router  # noqa: E402
+from api.realtime import broadcast_ticker, broadcast_bist_update, broadcast_signal  # noqa: E402
 
 # Rate Limiter
 limiter = Limiter(key_func=get_remote_address)
@@ -91,6 +93,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include Real-time WebSocket Router
+app.include_router(realtime_router)
 
 # ==================== SCHEMAS ====================
 
@@ -923,10 +928,38 @@ async def startup_event():
     from db_session import init_db
 
     init_db()
+
+    # Start Real-time Services
+    try:
+        from websocket_manager import ws_manager
+        from bist_service import bist_service
+
+        # Register callbacks for broadcasting
+        ws_manager.on("ticker", broadcast_ticker)
+        bist_service.on_update(broadcast_bist_update)
+
+        # Start services
+        await ws_manager.start()
+        await bist_service.start()
+        print("📡 Real-time WebSocket services started")
+    except Exception as e:
+        print(f"⚠️ Real-time services failed to start: {e}")
+
     print("🚀 Otonom Analiz API başlatıldı")
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """API kapanışında çalışır."""
+    # Stop Real-time Services
+    try:
+        from websocket_manager import ws_manager
+        from bist_service import bist_service
+
+        await ws_manager.stop()
+        await bist_service.stop()
+        print("📡 Real-time services stopped")
+    except Exception as e:
+        print(f"⚠️ Error stopping real-time services: {e}")
+
     print("🛑 Otonom Analiz API kapatıldı")
