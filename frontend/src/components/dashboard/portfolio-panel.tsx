@@ -16,7 +16,7 @@ import {
   Zap,
   AlertTriangle,
 } from 'lucide-react';
-import { useTrades, useStats } from '@/lib/hooks';
+import { useTrades, useTradeStats } from '@/lib/hooks';
 import { cn } from '@/lib/utils';
 
 // ==================== TYPES ====================
@@ -259,14 +259,14 @@ export function PortfolioPanel({
 
   // Get trades and stats from API
   const { data: trades } = useTrades({ status: 'OPEN' });
-  const { data: stats } = useStats();
+  const { data: stats } = useTradeStats();
 
   // Calculate portfolio stats
   const portfolioStats = useMemo(() => {
-    const totalPnl = stats?.total_pnl || 0;
-    const winRate = stats?.win_rate || 0;
-    const openTrades = stats?.open_trades || 0;
-    const totalTrades = stats?.total_trades || 0;
+    const totalPnl = stats?.totalPnL || 0;
+    const winRate = stats?.winRate || 0;
+    const openTrades = stats?.open || 0;
+    const totalTrades = stats?.total || 0;
 
     return {
       totalPnl,
@@ -283,12 +283,12 @@ export function PortfolioPanel({
 
     return trades.map((trade) => ({
       symbol: trade.symbol,
-      marketType: trade.market_type,
+      marketType: trade.marketType,
       quantity: trade.quantity,
-      avgPrice: trade.price,
-      currentPrice: trade.price * 1.02, // Placeholder - would come from real-time data
+      avgPrice: trade.entryPrice,
+      currentPrice: trade.currentPrice,
       pnl: trade.pnl,
-      pnlPercent: (trade.pnl / (trade.price * trade.quantity)) * 100,
+      pnlPercent: trade.pnlPercent,
     }));
   }, [trades]);
 
@@ -410,9 +410,9 @@ export function PortfolioPanel({
 // ==================== MINI PORTFOLIO ====================
 
 export function MiniPortfolio() {
-  const { data: stats } = useStats();
+  const { data: stats } = useTradeStats();
 
-  const totalPnl = stats?.total_pnl || 0;
+  const totalPnl = stats?.totalPnL || 0;
   const isProfit = totalPnl >= 0;
 
   return (
@@ -429,7 +429,7 @@ export function MiniPortfolio() {
       </div>
       <div className="text-right">
         <div className="text-xs text-muted-foreground">Açık</div>
-        <div className="font-medium">{stats?.open_trades || 0}</div>
+        <div className="font-medium">{stats?.open || 0}</div>
       </div>
     </div>
   );
