@@ -164,9 +164,8 @@ export function SignalTerminal({
 
   // Get signals from API
   const { data: signalsData, isLoading } = useSignals({
-    limit: 100,
-    strategy: filter.strategy || undefined,
-    signal_type: filter.signalType || undefined,
+    strategy: (filter.strategy as 'COMBO' | 'HUNTER' | 'all') || undefined,
+    direction: (filter.signalType as 'AL' | 'SAT' | 'all') || undefined,
   });
 
   // Get realtime signals from WebSocket
@@ -174,16 +173,16 @@ export function SignalTerminal({
 
   // Combine and filter signals
   const signals = useMemo(() => {
-    const apiSignals = signalsData?.map((s) => ({
+    const apiSignals: Signal[] = signalsData?.map((s) => ({
       id: s.id,
       symbol: s.symbol,
-      marketType: s.market_type,
+      marketType: s.marketType,
       strategy: s.strategy,
-      signalType: s.signal_type as 'AL' | 'SAT',
+      signalType: s.signalType,
       timeframe: s.timeframe,
       score: s.score || '',
       price: s.price,
-      createdAt: s.created_at || new Date().toISOString(),
+      createdAt: s.createdAt,
     })) || [];
 
     // Merge with realtime signals
@@ -399,12 +398,12 @@ interface MiniSignalListProps {
 }
 
 export function MiniSignalList({ limit = 5, className }: MiniSignalListProps) {
-  const { data: signals } = useSignals({ limit });
+  const { data: signals } = useSignals();
 
   return (
     <div className={cn('space-y-2', className)}>
       {signals?.slice(0, limit).map((signal) => {
-        const isBuy = signal.signal_type === 'AL';
+        const isBuy = signal.signalType === 'AL';
         return (
           <div
             key={signal.id}
@@ -428,7 +427,7 @@ export function MiniSignalList({ limit = 5, className }: MiniSignalListProps) {
               'text-xs font-medium px-2 py-1 rounded-full',
               isBuy ? 'bg-profit/10 text-profit' : 'bg-loss/10 text-loss'
             )}>
-              {signal.signal_type}
+              {signal.signalType}
             </span>
           </div>
         );

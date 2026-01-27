@@ -290,22 +290,23 @@ export function useRealtime(options: UseRealtimeOptions = {}) {
 
       ws.onclose = (event) => {
         setConnectionState('disconnected');
-        console.log('[Realtime] WebSocket closed:', event.code, event.reason);
 
-        // Auto-reconnect with exponential backoff
-        if (reconnectAttemptsRef.current < 10) {
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
+        // Auto-reconnect with exponential backoff (max 5 attempts)
+        if (reconnectAttemptsRef.current < 5) {
+          const delay = Math.min(2000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
           setConnectionState('reconnecting');
           reconnectTimeoutRef.current = setTimeout(() => {
             reconnectAttemptsRef.current++;
             connect();
           }, delay);
+        } else if (reconnectAttemptsRef.current === 5) {
+          console.warn('[Realtime] Backend unavailable - real-time features disabled. Data will load via REST API.');
         }
       };
 
-      ws.onerror = (error) => {
+      ws.onerror = () => {
         setConnectionState('error');
-        console.error('[Realtime] WebSocket error:', error);
+        // Suppress verbose error logging - onclose handles reconnection
       };
 
       wsRef.current = ws;

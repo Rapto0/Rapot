@@ -137,7 +137,7 @@ export function AdvancedChartPage({
     useEffect(() => {
         if (!chartContainerRef.current) return
 
-        import("lightweight-charts").then(({ createChart, ColorType, CrosshairMode }) => {
+        import("lightweight-charts").then(({ createChart, ColorType, CrosshairMode, CandlestickSeries, HistogramSeries }) => {
             if (!chartContainerRef.current) return
 
             // Destroy existing chart
@@ -190,7 +190,7 @@ export function AdvancedChartPage({
             })
 
             // Candlestick series
-            const candlestickSeries = chart.addCandlestickSeries({
+            const candlestickSeries = chart.addSeries(CandlestickSeries, {
                 upColor: chartColors.bullish,
                 downColor: chartColors.bearish,
                 borderDownColor: chartColors.bearish,
@@ -200,7 +200,7 @@ export function AdvancedChartPage({
             })
 
             // Volume series
-            const volumeSeries = chart.addHistogramSeries({
+            const volumeSeries = chart.addSeries(HistogramSeries, {
                 color: chartColors.volume.up,
                 priceFormat: { type: "volume" },
                 priceScaleId: "",
