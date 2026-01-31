@@ -95,6 +95,7 @@ export function AdvancedChartPage({
     const chartInstance = useRef<any>(null)
     const seriesInstance = useRef<any>(null)
     const volumeSeriesInstance = useRef<any>(null)
+    const lastCrosshairTimeRef = useRef<string | null>(null)
 
     // Fetch candle data
     const { data: candlesResponse, isLoading, refetch } = useQuery({
@@ -210,17 +211,27 @@ export function AdvancedChartPage({
                 scaleMargins: { top: 0.85, bottom: 0 },
             })
 
-            // Crosshair move handler
+            // Crosshair move handler (throttled to prevent infinite loops)
             chart.subscribeCrosshairMove((param) => {
                 if (!param.time || !param.seriesData.size) {
-                    setCrosshairData(null)
+                    if (lastCrosshairTimeRef.current !== null) {
+                        lastCrosshairTimeRef.current = null
+                        setCrosshairData(null)
+                    }
+                    return
+                }
+
+                const timeStr = param.time.toString()
+                // Only update if time changed to prevent excessive re-renders
+                if (timeStr === lastCrosshairTimeRef.current) {
                     return
                 }
 
                 const candleData = param.seriesData.get(candlestickSeries)
                 if (candleData && 'open' in candleData) {
+                    lastCrosshairTimeRef.current = timeStr
                     setCrosshairData({
-                        time: param.time.toString(),
+                        time: timeStr,
                         open: candleData.open,
                         high: candleData.high,
                         low: candleData.low,
