@@ -18,14 +18,15 @@ interface UseSignalsOptions {
     strategy?: 'all' | 'COMBO' | 'HUNTER';
     direction?: 'all' | 'AL' | 'SAT';
     searchQuery?: string;
+    limit?: number;
 }
 
 // Fetch signals from API
 async function fetchSignalsData(options: UseSignalsOptions = {}): Promise<Signal[]> {
-    const { marketType, strategy, direction } = options;
+    const { marketType, strategy, direction, limit = 500 } = options;
 
-    // Build API params
-    const params: SignalsParams = { limit: 100 };
+    // Build API params - fetch more for pagination
+    const params: SignalsParams = { limit };
     if (strategy && strategy !== 'all') params.strategy = strategy;
     if (direction && direction !== 'all') params.signal_type = direction;
 
