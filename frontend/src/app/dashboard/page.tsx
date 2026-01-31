@@ -83,9 +83,9 @@ export default function DashboardPage() {
                     {/* Signal Terminal - Side Panel */}
                     <div className="col-span-12 lg:col-span-4 row-span-2 bento-item p-0 overflow-hidden terminal">
                         <SignalTerminal
-                            maxItems={15}
                             showFilters={true}
                             onSignalSelect={handleSignalSelect}
+                            defaultTimeRange="24h"
                         />
                     </div>
 

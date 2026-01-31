@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn, formatCurrency } from "@/lib/utils"
 import { useQuery } from "@tanstack/react-query"
 import { fetchMarketOverview, fetchTrades } from "@/lib/api/client"
-import { TrendingUp, TrendingDown, Loader2 } from "lucide-react"
+import { useBinanceTicker } from "@/lib/hooks/use-binance-ticker"
+import { TrendingUp, TrendingDown, Loader2, Zap } from "lucide-react"
 import {
     AreaChart,
     Area,
@@ -12,13 +13,19 @@ import {
 } from "recharts"
 
 export function MarketOverview() {
+    // Live BTC price from Binance WebSocket
+    const cryptoPrices = useBinanceTicker(["BTCUSDT"])
+
     const { data: marketData, isLoading } = useQuery({
         queryKey: ['marketOverview'],
         queryFn: fetchMarketOverview,
         refetchInterval: 60000,
     })
 
-    if (isLoading || !marketData) {
+    // Get live BTC price if available
+    const liveBTC = cryptoPrices["BTCUSDT"]
+
+    if (isLoading && !liveBTC) {
         return (
             <div className="grid gap-4 md:grid-cols-2">
                 <SkeletonChart title="BIST 100" />
@@ -27,22 +34,33 @@ export function MarketOverview() {
         )
     }
 
+    // Use live BTC data if available, otherwise use API data
+    const btcValue = liveBTC?.price || marketData?.crypto?.currentValue || 0
+    const btcChange = liveBTC?.change || marketData?.crypto?.change || 0
+    const btcHistory = marketData?.crypto?.history || []
+
+    // BIST data from API
+    const bistValue = marketData?.bist?.currentValue || 0
+    const bistChange = marketData?.bist?.change || 0
+    const bistHistory = marketData?.bist?.history || []
+
     return (
         <div className="grid gap-4 md:grid-cols-2">
             <MarketMiniChart
                 title="BIST 100"
-                data={marketData.bist.history}
-                currentValue={marketData.bist.currentValue}
-                change={marketData.bist.change}
+                data={bistHistory}
+                currentValue={bistValue}
+                change={bistChange}
                 color="#2962ff"
             />
             <MarketMiniChart
                 title="BTC/USDT"
-                data={marketData.crypto.history}
-                currentValue={marketData.crypto.currentValue}
-                change={marketData.crypto.change}
+                data={btcHistory}
+                currentValue={btcValue}
+                change={btcChange}
                 color="#f7931a"
                 prefix="$"
+                isLive={!!liveBTC}
             />
         </div>
     )
@@ -69,6 +87,7 @@ interface MarketMiniChartProps {
     change: number
     color: string
     prefix?: string
+    isLive?: boolean
 }
 
 function MarketMiniChart({
@@ -78,14 +97,23 @@ function MarketMiniChart({
     change,
     color,
     prefix = "₺",
+    isLive = false,
 }: MarketMiniChartProps) {
     const isPositive = change >= 0
 
     return (
-        <Card>
+        <Card className="glass-panel">
             <CardHeader className="pb-2">
                 <div className="flex items-center justify-between">
-                    <CardTitle className="text-sm font-medium">{title}</CardTitle>
+                    <div className="flex items-center gap-2">
+                        <CardTitle className="text-sm font-medium">{title}</CardTitle>
+                        {isLive && (
+                            <span className="flex items-center gap-1 text-[10px] text-primary bg-primary/10 px-1.5 py-0.5 rounded">
+                                <Zap className="h-2.5 w-2.5" />
+                                CANLI
+                            </span>
+                        )}
+                    </div>
                     <div
                         className={cn(
                             "flex items-center gap-1 text-xs font-medium",
@@ -101,33 +129,39 @@ function MarketMiniChart({
                         {change.toFixed(2)}%
                     </div>
                 </div>
-                <div className="text-xl font-bold">
+                <div className="text-xl font-bold mono-numbers">
                     {prefix}
                     {currentValue.toLocaleString("tr-TR", {
                         minimumFractionDigits: 2,
-                        maximumFractionDigits: 2,
+                        maximumFractionDigits: prefix === "$" ? 2 : 2,
                     })}
                 </div>
             </CardHeader>
             <CardContent className="pb-2">
                 <div className="h-16">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={data}>
-                            <defs>
-                                <linearGradient id={`gradient-${title}`} x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor={color} stopOpacity={0.3} />
-                                    <stop offset="100%" stopColor={color} stopOpacity={0} />
-                                </linearGradient>
-                            </defs>
-                            <Area
-                                type="monotone"
-                                dataKey="value"
-                                stroke={color}
-                                fill={`url(#gradient-${title})`}
-                                strokeWidth={2}
-                            />
-                        </AreaChart>
-                    </ResponsiveContainer>
+                    {data.length > 0 ? (
+                        <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={data}>
+                                <defs>
+                                    <linearGradient id={`gradient-${title}`} x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="0%" stopColor={color} stopOpacity={0.3} />
+                                        <stop offset="100%" stopColor={color} stopOpacity={0} />
+                                    </linearGradient>
+                                </defs>
+                                <Area
+                                    type="monotone"
+                                    dataKey="value"
+                                    stroke={color}
+                                    fill={`url(#gradient-${title})`}
+                                    strokeWidth={2}
+                                />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    ) : (
+                        <div className="flex items-center justify-center h-full text-xs text-muted-foreground">
+                            Grafik verisi yükleniyor...
+                        </div>
+                    )}
                 </div>
             </CardContent>
         </Card>

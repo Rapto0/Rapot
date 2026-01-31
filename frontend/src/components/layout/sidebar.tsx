@@ -22,7 +22,7 @@ import { useSidebar } from "./sidebar-context"
 
 const navigation = [
     { name: "Ana Sayfa", href: "/", icon: Home },
-    { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { name: "Gösterge Paneli", href: "/dashboard", icon: LayoutDashboard },
     { name: "Grafik", href: "/chart", icon: BarChart3 },
     { name: "Piyasa Tarayıcı", href: "/scanner", icon: Search },
     { name: "Aktif Sinyaller", href: "/signals", icon: Bell },
