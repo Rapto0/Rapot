@@ -160,6 +160,7 @@ export function SignalTerminal({
   const [showFilterMenu, setShowFilterMenu] = useState(false);
   const [notifications, setNotifications] = useState(true);
   const [newSignalIds, setNewSignalIds] = useState<Set<number>>(new Set());
+  const [lastUpdateTime, setLastUpdateTime] = useState<string>("");
   const prevSignalsRef = useRef<Signal[]>([]);
 
   // Get signals from API
@@ -232,6 +233,16 @@ export function SignalTerminal({
     }
     prevSignalsRef.current = signals;
   }, [signals, notifications]);
+
+  // Update time only on client side (avoid hydration mismatch)
+  useEffect(() => {
+    const updateTime = () => {
+      setLastUpdateTime(new Date().toLocaleTimeString('tr-TR'));
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // Stats
   const stats = useMemo(() => {
@@ -384,7 +395,7 @@ export function SignalTerminal({
           <span className="w-2 h-2 rounded-full bg-profit animate-pulse" />
           Canlı bağlantı aktif
         </span>
-        <span>Son güncelleme: {new Date().toLocaleTimeString('tr-TR')}</span>
+        <span>Son güncelleme: {lastUpdateTime || '--:--:--'}</span>
       </div>
     </div>
   );
