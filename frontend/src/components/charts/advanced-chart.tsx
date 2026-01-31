@@ -95,6 +95,7 @@ export function AdvancedChartPage({
     const chartInstance = useRef<any>(null)
     const seriesInstance = useRef<any>(null)
     const volumeSeriesInstance = useRef<any>(null)
+    const lastCrosshairTimeRef = useRef<string | null>(null)
 
     // Fetch candle data
     const { data: candlesResponse, isLoading, refetch } = useQuery({
@@ -137,7 +138,7 @@ export function AdvancedChartPage({
     useEffect(() => {
         if (!chartContainerRef.current) return
 
-        import("lightweight-charts").then(({ createChart, ColorType, CrosshairMode }) => {
+        import("lightweight-charts").then(({ createChart, ColorType, CrosshairMode, CandlestickSeries, HistogramSeries }) => {
             if (!chartContainerRef.current) return
 
             // Destroy existing chart
@@ -190,7 +191,7 @@ export function AdvancedChartPage({
             })
 
             // Candlestick series
-            const candlestickSeries = chart.addCandlestickSeries({
+            const candlestickSeries = chart.addSeries(CandlestickSeries, {
                 upColor: chartColors.bullish,
                 downColor: chartColors.bearish,
                 borderDownColor: chartColors.bearish,
@@ -200,7 +201,7 @@ export function AdvancedChartPage({
             })
 
             // Volume series
-            const volumeSeries = chart.addHistogramSeries({
+            const volumeSeries = chart.addSeries(HistogramSeries, {
                 color: chartColors.volume.up,
                 priceFormat: { type: "volume" },
                 priceScaleId: "",
@@ -210,17 +211,27 @@ export function AdvancedChartPage({
                 scaleMargins: { top: 0.85, bottom: 0 },
             })
 
-            // Crosshair move handler
+            // Crosshair move handler (throttled to prevent infinite loops)
             chart.subscribeCrosshairMove((param) => {
                 if (!param.time || !param.seriesData.size) {
-                    setCrosshairData(null)
+                    if (lastCrosshairTimeRef.current !== null) {
+                        lastCrosshairTimeRef.current = null
+                        setCrosshairData(null)
+                    }
+                    return
+                }
+
+                const timeStr = param.time.toString()
+                // Only update if time changed to prevent excessive re-renders
+                if (timeStr === lastCrosshairTimeRef.current) {
                     return
                 }
 
                 const candleData = param.seriesData.get(candlestickSeries)
                 if (candleData && 'open' in candleData) {
+                    lastCrosshairTimeRef.current = timeStr
                     setCrosshairData({
-                        time: param.time.toString(),
+                        time: timeStr,
                         open: candleData.open,
                         high: candleData.high,
                         low: candleData.low,

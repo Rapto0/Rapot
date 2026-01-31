@@ -200,20 +200,19 @@ export function useRealtime(options: UseRealtimeOptions = {}) {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptsRef = useRef(0);
+  const onSignalRef = useRef(onSignal);
 
-  const {
-    connectionState,
-    setConnectionState,
-    updateTicker,
-    updateBistStocks,
-    addSignal,
-    updateKline,
-    addTrade,
-    tickers,
-    bistStocks,
-    priceChanges,
-    realtimeSignals,
-  } = useRealtimeStore();
+  // Keep onSignal ref updated
+  useEffect(() => {
+    onSignalRef.current = onSignal;
+  }, [onSignal]);
+
+  // Subscribe to store state (read-only)
+  const connectionState = useRealtimeStore((state) => state.connectionState);
+  const tickers = useRealtimeStore((state) => state.tickers);
+  const bistStocks = useRealtimeStore((state) => state.bistStocks);
+  const priceChanges = useRealtimeStore((state) => state.priceChanges);
+  const realtimeSignals = useRealtimeStore((state) => state.realtimeSignals);
 
   const getWebSocketUrl = useCallback(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -226,13 +225,14 @@ export function useRealtime(options: UseRealtimeOptions = {}) {
       return;
     }
 
-    setConnectionState('connecting');
+    const store = useRealtimeStore.getState();
+    store.setConnectionState('connecting');
 
     try {
       const ws = new WebSocket(getWebSocketUrl());
 
       ws.onopen = () => {
-        setConnectionState('connected');
+        useRealtimeStore.getState().setConnectionState('connected');
         reconnectAttemptsRef.current = 0;
         console.log('[Realtime] Connected to WebSocket');
       };
@@ -240,40 +240,41 @@ export function useRealtime(options: UseRealtimeOptions = {}) {
       ws.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data);
+          const store = useRealtimeStore.getState();
 
           switch (message.type) {
             case 'init':
               // Initial data load
               if (message.crypto) {
                 Object.values(message.crypto).forEach((ticker) => {
-                  updateTicker(ticker as TickerData);
+                  store.updateTicker(ticker as TickerData);
                 });
               }
               if (message.bist) {
-                updateBistStocks(message.bist as BISTStock[]);
+                store.updateBistStocks(message.bist as BISTStock[]);
               }
               break;
 
             case 'ticker':
-              updateTicker(message.data as TickerData);
+              store.updateTicker(message.data as TickerData);
               break;
 
             case 'bist':
-              updateBistStocks(message.data as BISTStock[]);
+              store.updateBistStocks(message.data as BISTStock[]);
               break;
 
             case 'kline':
-              updateKline(message.data as KlineData);
+              store.updateKline(message.data as KlineData);
               break;
 
             case 'trade':
-              addTrade(message.data as TradeData);
+              store.addTrade(message.data as TradeData);
               break;
 
             case 'signal':
               const signal = message.data as SignalData;
-              addSignal(signal);
-              onSignal?.(signal);
+              store.addSignal(signal);
+              onSignalRef.current?.(signal);
               break;
 
             case 'heartbeat':
@@ -288,32 +289,33 @@ export function useRealtime(options: UseRealtimeOptions = {}) {
         }
       };
 
-      ws.onclose = (event) => {
-        setConnectionState('disconnected');
-        console.log('[Realtime] WebSocket closed:', event.code, event.reason);
+      ws.onclose = () => {
+        useRealtimeStore.getState().setConnectionState('disconnected');
 
-        // Auto-reconnect with exponential backoff
-        if (reconnectAttemptsRef.current < 10) {
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
-          setConnectionState('reconnecting');
+        // Auto-reconnect with exponential backoff (max 5 attempts)
+        if (reconnectAttemptsRef.current < 5) {
+          const delay = Math.min(2000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
+          useRealtimeStore.getState().setConnectionState('reconnecting');
           reconnectTimeoutRef.current = setTimeout(() => {
             reconnectAttemptsRef.current++;
             connect();
           }, delay);
+        } else if (reconnectAttemptsRef.current === 5) {
+          console.warn('[Realtime] Backend unavailable - real-time features disabled. Data will load via REST API.');
         }
       };
 
-      ws.onerror = (error) => {
-        setConnectionState('error');
-        console.error('[Realtime] WebSocket error:', error);
+      ws.onerror = () => {
+        useRealtimeStore.getState().setConnectionState('error');
+        // Suppress verbose error logging - onclose handles reconnection
       };
 
       wsRef.current = ws;
     } catch (error) {
-      setConnectionState('error');
+      useRealtimeStore.getState().setConnectionState('error');
       console.error('[Realtime] Connection error:', error);
     }
-  }, [getWebSocketUrl, setConnectionState, updateTicker, updateBistStocks, addSignal, updateKline, addTrade, onSignal]);
+  }, [getWebSocketUrl]);
 
   const disconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {
@@ -323,8 +325,8 @@ export function useRealtime(options: UseRealtimeOptions = {}) {
       wsRef.current.close();
       wsRef.current = null;
     }
-    setConnectionState('disconnected');
-  }, [setConnectionState]);
+    useRealtimeStore.getState().setConnectionState('disconnected');
+  }, []);
 
   const subscribe = useCallback((type: 'ticker' | 'kline' | 'trade', symbol: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -344,7 +346,8 @@ export function useRealtime(options: UseRealtimeOptions = {}) {
     return () => {
       disconnect();
     };
-  }, [autoConnect, connect, disconnect]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoConnect]);
 
   return {
     connectionState,

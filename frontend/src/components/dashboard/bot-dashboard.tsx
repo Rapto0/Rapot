@@ -2,7 +2,6 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
 import { Bot, Play, Pause, Activity, TrendingUp, DollarSign, Clock } from "lucide-react"
@@ -35,7 +34,7 @@ export function BotDashboard() {
     const uptime = botStatus?.bot.uptime_human || "0s"
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 h-full">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Status Card */}
             <Card className="bg-[#1e222d] border-[#2a2e39] col-span-1">
                 <CardHeader className="pb-2">
@@ -113,7 +112,7 @@ export function BotDashboard() {
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
-                    <ScrollArea className="h-[180px]">
+                    <div className="max-h-[180px] overflow-y-auto">
                         <div className="divide-y divide-[#2a2e39]">
                             {trades?.map((trade) => (
                                 <div key={trade.id} className="p-3 hover:bg-[#2a2e39] transition-colors flex items-center justify-between text-xs">
@@ -140,7 +139,7 @@ export function BotDashboard() {
                                 </div>
                             )}
                         </div>
-                    </ScrollArea>
+                    </div>
                 </CardContent>
             </Card>
         </div>

@@ -4,6 +4,7 @@ import "./globals.css";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { MobileNav, MobileHeader } from "@/components/layout/mobile-nav";
+import { MainContent } from "@/components/layout/main-content";
 import { Providers } from "@/components/providers";
 
 const geistSans = Geist({
@@ -42,9 +43,9 @@ export default function RootLayout({
           <MobileNav />
 
           {/* Main Content - Responsive margins */}
-          <main className="pt-14 pb-20 md:pb-4 md:ml-56 min-h-screen p-4">
+          <MainContent>
             {children}
-          </main>
+          </MainContent>
         </Providers>
       </body>
     </html>
