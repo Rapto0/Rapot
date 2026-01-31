@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils"
 import { Bell, RefreshCw, TrendingUp, TrendingDown, X } from "lucide-react"
 import { useEffect, useState, useRef } from "react"
 import Link from "next/link"
+import { useSidebar } from "./sidebar-context"
 
 // Crypto symbols to track via WebSocket
 const CRYPTO_SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT"]
@@ -20,6 +21,7 @@ export function Header() {
     const [showNotificationPanel, setShowNotificationPanel] = useState(false)
     const [readSignalIds, setReadSignalIds] = useState<Set<number>>(new Set())
     const notificationRef = useRef<HTMLDivElement>(null)
+    const { isPinned } = useSidebar()
 
     // Live Binance WebSocket prices
     const cryptoPrices = useBinanceTicker(CRYPTO_SYMBOLS)
@@ -126,7 +128,10 @@ export function Header() {
     }
 
     return (
-        <header className="fixed top-0 right-0 left-0 md:left-56 z-30 h-14 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 hidden md:block">
+        <header className={cn(
+            "fixed top-0 right-0 left-0 z-30 h-14 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 hidden md:block transition-all duration-300",
+            isPinned ? "md:left-56" : "md:left-16"
+        )}>
             <div className="flex h-full items-center justify-between px-4">
                 {/* Ticker Tape */}
                 <div className="relative flex-1 overflow-hidden">
