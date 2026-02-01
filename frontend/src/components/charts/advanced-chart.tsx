@@ -171,6 +171,9 @@ export function AdvancedChartPage({
     // Drawing tools state
     const [activeTool, setActiveTool] = useState<'none' | 'ruler' | 'pencil' | 'text'>('none')
 
+    // Chart ready state
+    const [chartReady, setChartReady] = useState(false)
+
     // Crosshair data
     const [crosshairData, setCrosshairData] = useState<{
         time: string
@@ -278,6 +281,7 @@ export function AdvancedChartPage({
                 chartInstance.current = null
                 seriesInstance.current = null
                 volumeSeriesInstance.current = null
+                setChartReady(false)
             }
 
             const containerWidth = chartContainerRef.current.clientWidth
@@ -385,6 +389,7 @@ export function AdvancedChartPage({
             chartInstance.current = chart
             seriesInstance.current = candlestickSeries
             volumeSeriesInstance.current = volumeSeries
+            setChartReady(true)
 
             // Handle resize
             const handleResize = () => {
@@ -406,7 +411,7 @@ export function AdvancedChartPage({
 
     // Update chart data
     useEffect(() => {
-        if (candles.length > 0 && seriesInstance.current && volumeSeriesInstance.current) {
+        if (!chartReady || candles.length === 0 || !seriesInstance.current || !volumeSeriesInstance.current) return
             const candleData = candles.map((item) => ({
                 time: item.time,
                 open: item.open,
@@ -479,16 +484,18 @@ export function AdvancedChartPage({
                     })
                 }
 
-                if (markers.length > 0) {
+                if (markers.length > 0 && typeof seriesInstance.current.setMarkers === 'function') {
                     seriesInstance.current.setMarkers(markers)
+                } else if (markers.length === 0 && typeof seriesInstance.current.setMarkers === 'function') {
+                    // Clear markers if none
+                    seriesInstance.current.setMarkers([])
                 }
 
                 chartInstance.current?.timeScale().fitContent()
             } catch (e) {
                 console.error("Chart update error:", e)
             }
-        }
-    }, [candles, signals, showSignals, activeIndicators])
+    }, [candles, signals, showSignals, activeIndicators, chartReady])
 
     // Add indicator
     const addIndicator = useCallback((indicatorId: string) => {
@@ -532,7 +539,7 @@ export function AdvancedChartPage({
         const bistList = (bistSymbols?.symbols || []).map(s => ({
             symbol: s, name: s, market: "BIST" as const
         }))
-        const cryptoList = (binanceSymbols || CRYPTO_WATCHLIST).map(s => ({
+        const cryptoList = (binanceSymbols || CRYPTO_WATCHLIST).map((s: string) => ({
             symbol: s, name: s.replace('USDT', ''), market: "Kripto" as const
         }))
         const allSymbols = [...bistList, ...cryptoList]
