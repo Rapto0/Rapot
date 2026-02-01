@@ -129,7 +129,7 @@ export function Header() {
 
     return (
         <header className={cn(
-            "fixed top-0 right-0 left-0 z-30 h-14 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 hidden md:block transition-all duration-300",
+            "fixed top-0 right-0 left-0 z-50 h-14 border-b border-border bg-background backdrop-blur supports-[backdrop-filter]:bg-background/95 hidden md:block transition-all duration-300",
             isPinned ? "md:left-56" : "md:left-16"
         )}>
             <div className="flex h-full items-center justify-between px-4">
