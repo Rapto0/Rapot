@@ -763,7 +763,7 @@ async def get_candles(
     request: Request,
     symbol: str,
     market_type: str = Query("BIST", description="Piyasa türü (BIST/Kripto)"),
-    timeframe: str = Query("1d", description="Timeframe (1d, 1wk, 1mo)"),
+    timeframe: str = Query("1d", description="Timeframe (15m, 30m, 1h, 2h, 4h, 8h, 12h, 1d, 1wk, 1mo)"),
     limit: int = Query(500, description="Number of candles (max 2000)"),
 ):
     """
@@ -776,80 +776,142 @@ async def get_candles(
     symbol = symbol.upper()
     limit = min(limit, 2000)  # Max limit
 
-    # Timeframe mapping for resample
-    timeframe_map = {
+    # Extended timeframe mapping
+    # For resample (daily data -> larger timeframes)
+    resample_map = {
         "GÜNLÜK": "1D",
         "1d": "1D",
         "D": "1D",
+        "2d": "2D",
+        "3d": "3D",
+        "4d": "4D",
+        "5d": "5D",
+        "6d": "6D",
         "HAFTALIK": "W-FRI",
         "1wk": "W-FRI",
         "W": "W-FRI",
-        "2 HAFTALIK": "2W-FRI",
         "2wk": "2W-FRI",
-        "3 HAFTALIK": "3W-FRI",
+        "2 HAFTALIK": "2W-FRI",
         "3wk": "3W-FRI",
+        "3 HAFTALIK": "3W-FRI",
         "AYLIK": "ME",
         "1mo": "ME",
+        "2mo": "2ME",
+        "3mo": "3ME",
         "M": "ME",
     }
-    resample_tf = timeframe_map.get(timeframe, "1D")
+
+    # Binance interval mapping for intraday crypto data
+    binance_interval_map = {
+        "15m": "15m",
+        "30m": "30m",
+        "1h": "1h",
+        "2h": "2h",
+        "4h": "4h",
+        "8h": "8h",
+        "12h": "12h",
+        "18h": "12h",  # Binance doesn't have 18h, use 12h
+        "1d": "1d",
+        "2d": "1d",  # Will resample from daily
+        "3d": "3d",
+        "1wk": "1w",
+        "2wk": "1w",  # Will resample
+        "3wk": "1w",  # Will resample
+        "1mo": "1M",
+        "2mo": "1M",  # Will resample
+        "3mo": "1M",  # Will resample
+    }
+
+    # Check if this is an intraday timeframe
+    is_intraday = timeframe in ["15m", "30m", "1h", "2h", "4h", "8h", "12h", "18h"]
+    resample_tf = resample_map.get(timeframe, "1D")
+    binance_interval = binance_interval_map.get(timeframe, "1d")
 
     df = None
     source = "cache"
 
     try:
-        # 1. Try price_cache first (hibrit yaklaşım)
-        try:
-            from price_cache import price_cache
+        # For Crypto with intraday: Fetch directly from Binance with the interval
+        if market_type in ["Kripto", "CRYPTO"] and is_intraday:
+            try:
+                from binance.client import Client
+                import pandas as pd
 
-            df = price_cache.get(symbol, market_type)
-            if df is not None and not df.empty:
-                source = "cache"
-        except Exception as cache_err:
-            print(f"Cache error for {symbol}: {cache_err}")
-            df = None
+                client = Client()
+                klines = client.get_klines(
+                    symbol=symbol,
+                    interval=binance_interval,
+                    limit=limit
+                )
 
-        # 2. If cache miss, fetch from source
-        if df is None or df.empty:
-            if market_type == "BIST":
-                # BIST: Use İşyatırım via data_loader
-                try:
-                    from data_loader import get_bist_data
-
-                    df = get_bist_data(symbol, start_date="01-01-2010")
-                    source = "isyatirim"
-
-                    # Save to cache for next time
-                    if df is not None and not df.empty:
-                        try:
-                            from price_cache import price_cache as pc
-
-                            pc.set(symbol, market_type, df)
-                        except Exception:
-                            pass
-                except Exception as bist_err:
-                    print(f"BIST data error for {symbol}: {bist_err}")
-                    df = None
-
-            elif market_type in ["Kripto", "CRYPTO"]:
-                # Crypto: Use Binance via data_loader
-                try:
-                    from data_loader import get_crypto_data
-
-                    df = get_crypto_data(symbol, start_str="10 years ago")
+                if klines:
+                    df = pd.DataFrame(klines, columns=[
+                        'timestamp', 'Open', 'High', 'Low', 'Close', 'Volume',
+                        'close_time', 'quote_volume', 'trades', 'taker_buy_base',
+                        'taker_buy_quote', 'ignore'
+                    ])
+                    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+                    df.set_index('timestamp', inplace=True)
+                    df = df[['Open', 'High', 'Low', 'Close', 'Volume']].astype(float)
                     source = "binance"
+            except Exception as binance_err:
+                print(f"Binance intraday error for {symbol}: {binance_err}")
+                df = None
 
-                    # Save to cache
-                    if df is not None and not df.empty:
-                        try:
-                            from price_cache import price_cache as pc
+        # For non-intraday or if intraday failed, use standard approach
+        if df is None or df.empty:
+            # 1. Try price_cache first (hibrit yaklaşım)
+            try:
+                from price_cache import price_cache
 
-                            pc.set(symbol, "Kripto", df)
-                        except Exception:
-                            pass
-                except Exception as crypto_err:
-                    print(f"Crypto data error for {symbol}: {crypto_err}")
-                    df = None
+                df = price_cache.get(symbol, market_type)
+                if df is not None and not df.empty:
+                    source = "cache"
+            except Exception as cache_err:
+                print(f"Cache error for {symbol}: {cache_err}")
+                df = None
+
+            # 2. If cache miss, fetch from source
+            if df is None or df.empty:
+                if market_type == "BIST":
+                    # BIST: Use İşyatırım via data_loader
+                    try:
+                        from data_loader import get_bist_data
+
+                        df = get_bist_data(symbol, start_date="01-01-2010")
+                        source = "isyatirim"
+
+                        # Save to cache for next time
+                        if df is not None and not df.empty:
+                            try:
+                                from price_cache import price_cache as pc
+
+                                pc.set(symbol, market_type, df)
+                            except Exception:
+                                pass
+                    except Exception as bist_err:
+                        print(f"BIST data error for {symbol}: {bist_err}")
+                        df = None
+
+                elif market_type in ["Kripto", "CRYPTO"]:
+                    # Crypto: Use Binance via data_loader (daily data)
+                    try:
+                        from data_loader import get_crypto_data
+
+                        df = get_crypto_data(symbol, start_str="10 years ago")
+                        source = "binance"
+
+                        # Save to cache
+                        if df is not None and not df.empty:
+                            try:
+                                from price_cache import price_cache as pc
+
+                                pc.set(symbol, "Kripto", df)
+                            except Exception:
+                                pass
+                    except Exception as crypto_err:
+                        print(f"Crypto data error for {symbol}: {crypto_err}")
+                        df = None
 
         # 3. Final fallback: yfinance
         if df is None or df.empty:
@@ -866,8 +928,8 @@ async def get_candles(
             if df.empty:
                 raise HTTPException(status_code=404, detail=f"{symbol} için veri bulunamadı")
 
-        # 4. Resample if needed
-        if resample_tf != "1D" and df is not None and not df.empty:
+        # 4. Resample if needed (only for daily+ data, not for intraday)
+        if not is_intraday and resample_tf != "1D" and df is not None and not df.empty:
             try:
                 from data_loader import resample_data
 
@@ -884,7 +946,11 @@ async def get_candles(
             df_tail = df.tail(limit)
 
             for index, row in df_tail.iterrows():
-                time_val = index.strftime("%Y-%m-%d")
+                # For intraday, include time. For daily+, just date
+                if is_intraday:
+                    time_val = index.strftime("%Y-%m-%d %H:%M")
+                else:
+                    time_val = index.strftime("%Y-%m-%d")
 
                 candles.append(
                     {
