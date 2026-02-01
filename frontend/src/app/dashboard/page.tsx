@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { KPICards } from "@/components/dashboard/kpi-cards"
 import { AdvancedChartPage } from "@/components/charts/advanced-chart"
-import { GlobalTicker } from "@/components/dashboard/global-ticker"
 import { SignalTerminal } from "@/components/dashboard/signal-terminal"
 import { PortfolioPanel } from "@/components/dashboard/portfolio-panel"
 import { MarketOverview } from "@/components/dashboard/market-overview"
@@ -33,9 +32,6 @@ export default function DashboardPage() {
 
     return (
         <div className="flex flex-col min-h-screen -m-4">
-            {/* Global Ticker Strip */}
-            <GlobalTicker />
-
             {/* Main Content */}
             <div className="flex-1 p-4 space-y-4">
                 {/* Page Header */}
