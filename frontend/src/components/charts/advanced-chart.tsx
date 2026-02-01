@@ -412,8 +412,18 @@ export function AdvancedChartPage({
     // Update chart data
     useEffect(() => {
         if (!chartReady || candles.length === 0 || !seriesInstance.current || !volumeSeriesInstance.current) return
+
+            // Helper to format date for Lightweight Charts (yyyy-mm-dd only)
+            const formatTime = (timeStr: string): string => {
+                // Handle "2025-12-21 23:00" format - extract just the date part
+                if (timeStr.includes(' ')) {
+                    return timeStr.split(' ')[0]
+                }
+                return timeStr
+            }
+
             const candleData = candles.map((item) => ({
-                time: item.time,
+                time: formatTime(item.time),
                 open: item.open,
                 high: item.high,
                 low: item.low,
@@ -421,7 +431,7 @@ export function AdvancedChartPage({
             }))
 
             const volumeData = candles.map((item) => ({
-                time: item.time,
+                time: formatTime(item.time),
                 value: item.volume,
                 color: item.close >= item.open ? chartColors.volume.up : chartColors.volume.down,
             }))
@@ -440,7 +450,7 @@ export function AdvancedChartPage({
                 if (showSignals && signals.length > 0) {
                     signals.forEach((signal) => {
                         markers.push({
-                            time: signal.time,
+                            time: formatTime(signal.time),
                             position: signal.type === 'AL' ? 'belowBar' : 'aboveBar',
                             shape: signal.type === 'AL' ? 'arrowUp' : 'arrowDown',
                             color: signal.type === 'AL' ? chartColors.bullish : chartColors.bearish,
@@ -456,7 +466,7 @@ export function AdvancedChartPage({
                     comboSignals.forEach((sig) => {
                         if (sig.signal) {
                             markers.push({
-                                time: sig.time,
+                                time: formatTime(sig.time),
                                 position: sig.signal === 'AL' ? 'belowBar' : 'aboveBar',
                                 shape: sig.signal === 'AL' ? 'arrowUp' : 'arrowDown',
                                 color: sig.signal === 'AL' ? '#00e676' : '#ff5252',
@@ -473,7 +483,7 @@ export function AdvancedChartPage({
                     hunterSignals.forEach((sig) => {
                         if (sig.signal) {
                             markers.push({
-                                time: sig.time,
+                                time: formatTime(sig.time),
                                 position: sig.signal === 'AL' ? 'belowBar' : 'aboveBar',
                                 shape: 'circle',
                                 color: sig.signal === 'AL' ? '#76ff03' : '#ff1744',
