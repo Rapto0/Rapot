@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Search, ArrowRight, TrendingUp, Globe, BarChart3, Newspaper } from "lucide-react"
 import { useBinanceTicker } from "@/lib/hooks/use-binance-ticker"
 import { getMarketData, MarketData } from "@/lib/actions/market-data"
+import { GlobalTicker } from "@/components/dashboard/global-ticker"
 import { useEffect, useState, KeyboardEvent } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
@@ -57,7 +58,12 @@ export default function LandingPage() {
   }
 
   return (
-    <div className="flex flex-col min-h-[calc(100vh-4rem)] bg-[#131722] text-[#d1d4dc] -m-4 p-4 md:p-8">
+    <div className="flex flex-col min-h-[calc(100vh-4rem)] bg-[#131722] text-[#d1d4dc] -m-4">
+      {/* Global Ticker - Only on Homepage */}
+      <GlobalTicker />
+
+      {/* Main Content */}
+      <div className="p-4 md:p-8">
       {/* Hero Section */}
       <section className="flex flex-col items-center justify-center py-20 md:py-32 text-center relative overflow-hidden min-h-[600px]">
         {/* Background Image - Rapot.png */}
@@ -167,6 +173,7 @@ export default function LandingPage() {
           />
         </div>
       </section>
+      </div>
     </div>
   )
 }

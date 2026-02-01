@@ -8,7 +8,7 @@ export function MainContent({ children }: { children: React.ReactNode }) {
 
     return (
         <main className={cn(
-            "pt-14 pb-20 md:pb-4 min-h-screen p-4 transition-all duration-300",
+            "min-h-screen px-4 pb-20 md:pb-4 pt-[72px] transition-all duration-300",
             isPinned ? "md:ml-56" : "md:ml-16"
         )}>
             {children}

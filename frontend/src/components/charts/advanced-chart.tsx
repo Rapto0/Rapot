@@ -2,9 +2,20 @@
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { fetchCandles, fetchBistSymbols } from "@/lib/api/client"
+import { fetchCandles, fetchBistSymbols, fetchTicker } from "@/lib/api/client"
 import { useBinanceTicker } from "@/lib/hooks/use-binance-ticker"
 import { cn } from "@/lib/utils"
+import {
+    calculateRSI,
+    calculateMACD,
+    calculateWilliamsR,
+    calculateCCI,
+    calculateCombo,
+    calculateHunter,
+    AVAILABLE_INDICATORS,
+    type Candle,
+    type IndicatorMeta,
+} from "@/lib/indicators"
 import {
     Search,
     TrendingUp,
@@ -22,8 +33,10 @@ import {
     Ruler,
     Pencil,
     Type,
-    Settings2,
-    ChevronRight,
+    Plus,
+    RefreshCw,
+    MoreHorizontal,
+    Trash2,
 } from "lucide-react"
 
 // ==================== TYPES ====================
@@ -33,6 +46,12 @@ interface SignalMarker {
     type: 'AL' | 'SAT'
     price: number
     label?: string
+}
+
+interface ActiveIndicator {
+    id: string
+    meta: IndicatorMeta
+    params: Record<string, number>
 }
 
 // Extended Timeframe options organized by category
@@ -52,7 +71,6 @@ const TIMEFRAME_CATEGORIES = [
             { label: "4S", value: "4h", description: "4 Saat" },
             { label: "8S", value: "8h", description: "8 Saat" },
             { label: "12S", value: "12h", description: "12 Saat" },
-            { label: "18S", value: "18h", description: "18 Saat" },
         ]
     },
     {
@@ -61,9 +79,6 @@ const TIMEFRAME_CATEGORIES = [
             { label: "1G", value: "1d", description: "1 Gün" },
             { label: "2G", value: "2d", description: "2 Gün" },
             { label: "3G", value: "3d", description: "3 Gün" },
-            { label: "4G", value: "4d", description: "4 Gün" },
-            { label: "5G", value: "5d", description: "5 Gün" },
-            { label: "6G", value: "6d", description: "6 Gün" },
         ]
     },
     {
@@ -97,24 +112,6 @@ const QUICK_TIMEFRAMES = [
 const CRYPTO_WATCHLIST = [
     "BTCUSDT", "ETHUSDT", "BNBUSDT", "XRPUSDT", "ADAUSDT",
     "DOGEUSDT", "SOLUSDT", "DOTUSDT", "MATICUSDT", "LTCUSDT",
-    "AVAXUSDT", "LINKUSDT", "ATOMUSDT", "UNIUSDT", "XLMUSDT",
-    "VETUSDT", "FILUSDT", "ICPUSDT", "ETCUSDT", "TRXUSDT",
-    "NEARUSDT", "ALGOUSDT", "FTMUSDT", "SANDUSDT", "MANAUSDT",
-    "AAVEUSDT", "GRTUSDT", "XTZUSDT", "EOSUSDT", "AXSUSDT",
-]
-
-// Popular BIST symbols
-const BIST_WATCHLIST = [
-    { symbol: "THYAO", name: "Türk Hava Yolları" },
-    { symbol: "GARAN", name: "Garanti BBVA" },
-    { symbol: "AKBNK", name: "Akbank" },
-    { symbol: "SASA", name: "SASA Polyester" },
-    { symbol: "ASELS", name: "Aselsan" },
-    { symbol: "EREGL", name: "Ereğli Demir Çelik" },
-    { symbol: "KCHOL", name: "Koç Holding" },
-    { symbol: "TUPRS", name: "Tüpraş" },
-    { symbol: "SAHOL", name: "Sabancı Holding" },
-    { symbol: "BIMAS", name: "BİM Mağazalar" },
 ]
 
 // ==================== CHART THEME (Cosmic Glass) ====================
@@ -130,6 +127,14 @@ const chartColors = {
     volume: {
         up: "rgba(0, 200, 83, 0.4)",
         down: "rgba(255, 61, 0, 0.4)"
+    },
+    indicators: {
+        rsi: "#2962ff",
+        macd: "#f23645",
+        macdSignal: "#089981",
+        macdHistogram: "#787b86",
+        wr: "#9c27b0",
+        cci: "#ff9800",
     }
 }
 
@@ -148,6 +153,7 @@ export function AdvancedChartPage({
     showSignals = true,
     showWatchlist = true,
 }: ChartPageProps) {
+    // Basic state
     const [symbol, setSymbol] = useState(initialSymbol)
     const [marketType, setMarketType] = useState<"BIST" | "Kripto">(initialMarket)
     const [timeframe, setTimeframe] = useState("1d")
@@ -156,7 +162,16 @@ export function AdvancedChartPage({
     const [searchQuery, setSearchQuery] = useState("")
     const [isFullscreen, setIsFullscreen] = useState(false)
     const [showRightPanel, setShowRightPanel] = useState(showWatchlist)
-    const [rightPanelTab, setRightPanelTab] = useState<"bist" | "kripto">("bist")
+
+    // Indicator state
+    const [showIndicatorSearch, setShowIndicatorSearch] = useState(false)
+    const [indicatorSearchQuery, setIndicatorSearchQuery] = useState("")
+    const [activeIndicators, setActiveIndicators] = useState<ActiveIndicator[]>([])
+
+    // Drawing tools state
+    const [activeTool, setActiveTool] = useState<'none' | 'ruler' | 'pencil' | 'text'>('none')
+
+    // Crosshair data
     const [crosshairData, setCrosshairData] = useState<{
         time: string
         open: number
@@ -166,6 +181,7 @@ export function AdvancedChartPage({
         volume: number
     } | null>(null)
 
+    // Refs
     const chartContainerRef = useRef<HTMLDivElement>(null)
     const chartInstance = useRef<any>(null)
     const seriesInstance = useRef<any>(null)
@@ -174,7 +190,7 @@ export function AdvancedChartPage({
     const fullscreenContainerRef = useRef<HTMLDivElement>(null)
 
     // Fetch candle data
-    const { data: candlesResponse, isLoading, refetch } = useQuery({
+    const { data: candlesResponse, isLoading } = useQuery({
         queryKey: ['chart-candles', symbol, marketType, timeframe],
         queryFn: () => fetchCandles(symbol, marketType, timeframe, 1000),
         refetchInterval: 60000,
@@ -198,20 +214,20 @@ export function AdvancedChartPage({
                 .map((s: any) => s.symbol)
                 .sort()
         },
-        staleTime: 3600000, // 1 hour
+        staleTime: 3600000,
+    })
+
+    // Fetch BIST tickers for watchlist
+    const { data: bistTickers, refetch: refetchTickers } = useQuery({
+        queryKey: ['watchlist-ticker'],
+        queryFn: fetchTicker,
+        refetchInterval: 30000,
     })
 
     // Live crypto prices for watchlist
-    const watchlistCryptoSymbols = useMemo(() => {
-        if (rightPanelTab === "kripto") {
-            return CRYPTO_WATCHLIST.slice(0, 20)
-        }
-        return marketType === "Kripto" ? [symbol] : []
-    }, [rightPanelTab, marketType, symbol])
+    const cryptoPrices = useBinanceTicker(CRYPTO_WATCHLIST)
 
-    const cryptoPrices = useBinanceTicker(watchlistCryptoSymbols)
-
-    const candles = candlesResponse?.candles || []
+    const candles: Candle[] = candlesResponse?.candles || []
     const dataSource = candlesResponse?.source || "loading"
 
     // Calculate price info
@@ -226,10 +242,10 @@ export function AdvancedChartPage({
         ? cryptoPrices[symbol].price
         : currentPrice
 
-    // OHLCV display data (crosshair or current candle)
+    // OHLCV display data
     const displayOHLCV = crosshairData || (candles.length > 0 ? candles[candles.length - 1] : null)
 
-    // Handle fullscreen toggle with browser API
+    // Handle fullscreen toggle
     const toggleFullscreen = useCallback(() => {
         if (!document.fullscreenElement) {
             fullscreenContainerRef.current?.requestFullscreen?.()
@@ -337,7 +353,7 @@ export function AdvancedChartPage({
                 scaleMargins: { top: 0.85, bottom: 0 },
             })
 
-            // Crosshair move handler (throttled to prevent infinite loops)
+            // Crosshair move handler
             chart.subscribeCrosshairMove((param) => {
                 if (!param.time || !param.seriesData.size) {
                     if (lastCrosshairTimeRef.current !== null) {
@@ -412,16 +428,58 @@ export function AdvancedChartPage({
                 seriesInstance.current.setData(candleData)
                 volumeSeriesInstance.current.setData(volumeData)
 
-                // Add signal markers
+                // Add signal markers (including Combo/Hunter overlays)
+                const markers: any[] = []
+
+                // Original signals
                 if (showSignals && signals.length > 0) {
-                    const markers = signals.map((signal) => ({
-                        time: signal.time,
-                        position: signal.type === 'AL' ? 'belowBar' : 'aboveBar',
-                        shape: signal.type === 'AL' ? 'arrowUp' : 'arrowDown',
-                        color: signal.type === 'AL' ? chartColors.bullish : chartColors.bearish,
-                        text: signal.type,
-                        size: 2,
-                    }))
+                    signals.forEach((signal) => {
+                        markers.push({
+                            time: signal.time,
+                            position: signal.type === 'AL' ? 'belowBar' : 'aboveBar',
+                            shape: signal.type === 'AL' ? 'arrowUp' : 'arrowDown',
+                            color: signal.type === 'AL' ? chartColors.bullish : chartColors.bearish,
+                            text: signal.type,
+                            size: 2,
+                        })
+                    })
+                }
+
+                // Combo overlay markers
+                if (activeIndicators.some(i => i.id === 'combo')) {
+                    const comboSignals = calculateCombo(candles)
+                    comboSignals.forEach((sig) => {
+                        if (sig.signal) {
+                            markers.push({
+                                time: sig.time,
+                                position: sig.signal === 'AL' ? 'belowBar' : 'aboveBar',
+                                shape: sig.signal === 'AL' ? 'arrowUp' : 'arrowDown',
+                                color: sig.signal === 'AL' ? '#00e676' : '#ff5252',
+                                text: `COMBO`,
+                                size: 2,
+                            })
+                        }
+                    })
+                }
+
+                // Hunter overlay markers
+                if (activeIndicators.some(i => i.id === 'hunter')) {
+                    const hunterSignals = calculateHunter(candles)
+                    hunterSignals.forEach((sig) => {
+                        if (sig.signal) {
+                            markers.push({
+                                time: sig.time,
+                                position: sig.signal === 'AL' ? 'belowBar' : 'aboveBar',
+                                shape: 'circle',
+                                color: sig.signal === 'AL' ? '#76ff03' : '#ff1744',
+                                text: `HUNTER`,
+                                size: 2,
+                            })
+                        }
+                    })
+                }
+
+                if (markers.length > 0) {
                     seriesInstance.current.setMarkers(markers)
                 }
 
@@ -430,7 +488,27 @@ export function AdvancedChartPage({
                 console.error("Chart update error:", e)
             }
         }
-    }, [candles, signals, showSignals])
+    }, [candles, signals, showSignals, activeIndicators])
+
+    // Add indicator
+    const addIndicator = useCallback((indicatorId: string) => {
+        const meta = AVAILABLE_INDICATORS.find(i => i.id === indicatorId)
+        if (!meta) return
+        if (activeIndicators.some(i => i.id === indicatorId)) return
+
+        setActiveIndicators(prev => [...prev, {
+            id: indicatorId,
+            meta,
+            params: { ...meta.defaultParams }
+        }])
+        setShowIndicatorSearch(false)
+        setIndicatorSearchQuery("")
+    }, [activeIndicators])
+
+    // Remove indicator
+    const removeIndicator = useCallback((indicatorId: string) => {
+        setActiveIndicators(prev => prev.filter(i => i.id !== indicatorId))
+    }, [])
 
     // Symbol selection
     const handleSymbolSelect = (sym: string, market: "BIST" | "Kripto") => {
@@ -452,35 +530,52 @@ export function AdvancedChartPage({
     // Filter symbols for search
     const filteredSymbols = useMemo(() => {
         const bistList = (bistSymbols?.symbols || []).map(s => ({
-            symbol: s,
-            name: s,
-            market: "BIST" as const
+            symbol: s, name: s, market: "BIST" as const
         }))
-
         const cryptoList = (binanceSymbols || CRYPTO_WATCHLIST).map(s => ({
-            symbol: s,
-            name: s.replace('USDT', ''),
-            market: "Kripto" as const
+            symbol: s, name: s.replace('USDT', ''), market: "Kripto" as const
         }))
-
         const allSymbols = [...bistList, ...cryptoList]
-
-        if (!searchQuery) {
-            return allSymbols.slice(0, 30)
-        }
-
+        if (!searchQuery) return allSymbols.slice(0, 30)
         return allSymbols.filter(s =>
             s.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
             s.name.toLowerCase().includes(searchQuery.toLowerCase())
         ).slice(0, 30)
     }, [searchQuery, bistSymbols, binanceSymbols])
 
+    // Filter indicators for search
+    const filteredIndicators = useMemo(() => {
+        if (!indicatorSearchQuery) return AVAILABLE_INDICATORS
+        return AVAILABLE_INDICATORS.filter(i =>
+            i.name.toLowerCase().includes(indicatorSearchQuery.toLowerCase()) ||
+            i.shortName.toLowerCase().includes(indicatorSearchQuery.toLowerCase())
+        )
+    }, [indicatorSearchQuery])
+
+    // Merged watchlist data
+    const watchlistData = useMemo(() => {
+        const cryptoData = CRYPTO_WATCHLIST.map(sym => ({
+            symbol: sym.replace("USDT", "/USD"),
+            rawSymbol: sym,
+            price: cryptoPrices[sym]?.price?.toFixed(2) || "---",
+            change: cryptoPrices[sym]?.change || 0,
+            type: "Kripto" as const
+        }))
+        const bistData = (bistTickers || []).map(t => ({
+            symbol: t.symbol,
+            rawSymbol: t.symbol,
+            price: t.price?.toFixed(2) || "---",
+            change: t.changePercent || 0,
+            type: "BIST" as const
+        }))
+        return [...cryptoData, ...bistData]
+    }, [cryptoPrices, bistTickers])
+
     return (
         <div
             ref={fullscreenContainerRef}
             className={cn(
-                "flex rounded-xl overflow-hidden bg-background",
-                "glass-panel-intense",
+                "flex rounded-xl overflow-hidden bg-background glass-panel-intense",
                 isFullscreen ? "fixed inset-0 z-50 rounded-none" : ""
             )}
         >
@@ -493,25 +588,17 @@ export function AdvancedChartPage({
                         <div className="relative">
                             <button
                                 onClick={() => setShowSymbolSearch(!showSymbolSearch)}
-                                className={cn(
-                                    "flex items-center gap-2 px-4 py-2 rounded-lg transition-all",
-                                    "bg-card/50 hover:bg-card border border-border/50 hover:border-primary/30"
-                                )}
+                                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card/50 hover:bg-card border border-border/50 hover:border-primary/30 transition-all"
                             >
                                 <BarChart3 className="h-4 w-4 text-primary" />
                                 <span className="text-lg font-bold">{symbol}</span>
                                 <span className={cn(
                                     "text-xs px-2 py-0.5 rounded-full font-medium",
-                                    marketType === "BIST"
-                                        ? "bg-primary/20 text-primary"
-                                        : "bg-orange-500/20 text-orange-400"
-                                )}>
-                                    {marketType}
-                                </span>
+                                    marketType === "BIST" ? "bg-primary/20 text-primary" : "bg-orange-500/20 text-orange-400"
+                                )}>{marketType}</span>
                                 <ChevronDown className="h-4 w-4 text-muted-foreground" />
                             </button>
 
-                            {/* Symbol Search Dropdown */}
                             {showSymbolSearch && (
                                 <div className="absolute top-full left-0 mt-2 w-96 glass-panel shadow-xl z-50 overflow-hidden">
                                     <div className="p-3 border-b border-border/30">
@@ -521,8 +608,8 @@ export function AdvancedChartPage({
                                                 type="text"
                                                 value={searchQuery}
                                                 onChange={(e) => setSearchQuery(e.target.value)}
-                                                placeholder="Sembol ara... (BTCUSDT, THYAO, vb.)"
-                                                className="w-full pl-10 pr-4 py-2 bg-background/50 border border-border/50 rounded-lg text-sm focus:outline-none focus:border-primary/50 placeholder:text-muted-foreground"
+                                                placeholder="Sembol ara..."
+                                                className="w-full pl-10 pr-4 py-2 bg-background/50 border border-border/50 rounded-lg text-sm focus:outline-none focus:border-primary/50"
                                                 autoFocus
                                             />
                                         </div>
@@ -535,21 +622,10 @@ export function AdvancedChartPage({
                                                 className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors"
                                             >
                                                 <div className="flex items-center gap-3">
-                                                    <span className={cn(
-                                                        "w-2 h-2 rounded-full",
-                                                        s.market === "BIST" ? "bg-primary" : "bg-orange-500"
-                                                    )} />
+                                                    <span className={cn("w-2 h-2 rounded-full", s.market === "BIST" ? "bg-primary" : "bg-orange-500")} />
                                                     <span className="font-medium">{s.symbol}</span>
-                                                    <span className="text-sm text-muted-foreground">{s.name}</span>
                                                 </div>
-                                                <span className={cn(
-                                                    "text-xs px-2 py-0.5 rounded-full",
-                                                    s.market === "BIST"
-                                                        ? "bg-primary/10 text-primary"
-                                                        : "bg-orange-500/10 text-orange-400"
-                                                )}>
-                                                    {s.market}
-                                                </span>
+                                                <span className={cn("text-xs px-2 py-0.5 rounded-full", s.market === "BIST" ? "bg-primary/10 text-primary" : "bg-orange-500/10 text-orange-400")}>{s.market}</span>
                                             </button>
                                         ))}
                                     </div>
@@ -558,31 +634,15 @@ export function AdvancedChartPage({
                         </div>
 
                         {/* Price Info */}
-                        <div className="flex items-center gap-4">
-                            <div className="flex flex-col">
-                                <span className="text-2xl font-bold mono-numbers">
-                                    {marketType === "Kripto" ? "$" : "₺"}
-                                    {livePrice.toLocaleString("tr-TR", {
-                                        minimumFractionDigits: 2,
-                                        maximumFractionDigits: marketType === "Kripto" ? 4 : 2
-                                    })}
-                                </span>
-                                <div className={cn(
-                                    "flex items-center gap-1.5 text-sm",
-                                    isPositive ? "text-profit" : "text-loss"
-                                )}>
-                                    {isPositive ? (
-                                        <TrendingUp className="h-4 w-4" />
-                                    ) : (
-                                        <TrendingDown className="h-4 w-4" />
-                                    )}
-                                    <span className="font-medium mono-numbers">
-                                        {isPositive ? "+" : ""}{priceChange.toFixed(2)}
-                                    </span>
-                                    <span className="mono-numbers">
-                                        ({isPositive ? "+" : ""}{priceChangePercent.toFixed(2)}%)
-                                    </span>
-                                </div>
+                        <div className="flex flex-col">
+                            <span className="text-2xl font-bold mono-numbers">
+                                {marketType === "Kripto" ? "$" : "₺"}
+                                {livePrice.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: marketType === "Kripto" ? 4 : 2 })}
+                            </span>
+                            <div className={cn("flex items-center gap-1.5 text-sm", isPositive ? "text-profit" : "text-loss")}>
+                                {isPositive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+                                <span className="font-medium mono-numbers">{isPositive ? "+" : ""}{priceChange.toFixed(2)}</span>
+                                <span className="mono-numbers">({isPositive ? "+" : ""}{priceChangePercent.toFixed(2)}%)</span>
                             </div>
                         </div>
                     </div>
@@ -597,52 +657,27 @@ export function AdvancedChartPage({
                                     onClick={() => setTimeframe(tf.value)}
                                     className={cn(
                                         "px-3 py-1.5 rounded-md text-sm font-medium transition-all",
-                                        timeframe === tf.value
-                                            ? "bg-primary/20 text-primary neon-text"
-                                            : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                                        timeframe === tf.value ? "bg-primary/20 text-primary neon-text" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                                     )}
-                                >
-                                    {tf.label}
-                                </button>
+                                >{tf.label}</button>
                             ))}
-
-                            {/* More Timeframes Dropdown */}
                             <div className="relative">
-                                <button
-                                    onClick={() => setShowTimeframeMenu(!showTimeframeMenu)}
-                                    className={cn(
-                                        "px-2 py-1.5 rounded-md text-sm font-medium transition-all",
-                                        "text-muted-foreground hover:text-foreground hover:bg-muted/50"
-                                    )}
-                                >
+                                <button onClick={() => setShowTimeframeMenu(!showTimeframeMenu)} className="px-2 py-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50">
                                     <ChevronDown className="h-4 w-4" />
                                 </button>
-
                                 {showTimeframeMenu && (
                                     <div className="absolute top-full right-0 mt-2 w-64 glass-panel shadow-xl z-50 overflow-hidden">
                                         {TIMEFRAME_CATEGORIES.map((cat) => (
                                             <div key={cat.category}>
-                                                <div className="px-3 py-2 text-xs font-semibold text-muted-foreground bg-muted/30">
-                                                    {cat.category}
-                                                </div>
+                                                <div className="px-3 py-2 text-xs font-semibold text-muted-foreground bg-muted/30">{cat.category}</div>
                                                 <div className="grid grid-cols-3 gap-1 p-2">
                                                     {cat.items.map((tf) => (
                                                         <button
                                                             key={tf.value}
-                                                            onClick={() => {
-                                                                setTimeframe(tf.value)
-                                                                setShowTimeframeMenu(false)
-                                                            }}
-                                                            className={cn(
-                                                                "px-2 py-1.5 rounded text-sm font-medium transition-all",
-                                                                timeframe === tf.value
-                                                                    ? "bg-primary/20 text-primary"
-                                                                    : "hover:bg-muted/50"
-                                                            )}
+                                                            onClick={() => { setTimeframe(tf.value); setShowTimeframeMenu(false) }}
+                                                            className={cn("px-2 py-1.5 rounded text-sm font-medium transition-all", timeframe === tf.value ? "bg-primary/20 text-primary" : "hover:bg-muted/50")}
                                                             title={tf.description}
-                                                        >
-                                                            {tf.label}
-                                                        </button>
+                                                        >{tf.label}</button>
                                                     ))}
                                                 </div>
                                             </div>
@@ -652,71 +687,70 @@ export function AdvancedChartPage({
                             </div>
                         </div>
 
-                        {/* Tools - Coming Soon */}
+                        {/* Tools */}
                         <div className="flex items-center gap-1 bg-muted/30 rounded-lg p-1">
-                            <button
-                                className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all"
-                                title="İndikatörler (Yakında)"
-                            >
-                                <LineChart className="h-4 w-4" />
-                            </button>
-                            <button
-                                className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all"
-                                title="Ölçüm Cetveli (Yakında)"
-                            >
-                                <Ruler className="h-4 w-4" />
-                            </button>
-                            <button
-                                className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all"
-                                title="Çizim Araçları (Yakında)"
-                            >
-                                <Pencil className="h-4 w-4" />
-                            </button>
-                            <button
-                                className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-all"
-                                title="Metin Ekle (Yakında)"
-                            >
-                                <Type className="h-4 w-4" />
-                            </button>
+                            <div className="relative">
+                                <button
+                                    onClick={() => setShowIndicatorSearch(!showIndicatorSearch)}
+                                    className={cn("p-2 rounded-md transition-all", activeIndicators.length > 0 ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/50")}
+                                    title="İndikatörler"
+                                >
+                                    <LineChart className="h-4 w-4" />
+                                </button>
+                                {showIndicatorSearch && (
+                                    <div className="absolute top-full right-0 mt-2 w-80 glass-panel shadow-xl z-50 overflow-hidden">
+                                        <div className="p-3 border-b border-border/30">
+                                            <div className="relative">
+                                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                                <input type="text" value={indicatorSearchQuery} onChange={(e) => setIndicatorSearchQuery(e.target.value)} placeholder="İndikatör ara..." className="w-full pl-10 pr-4 py-2 bg-background/50 border border-border/50 rounded-lg text-sm focus:outline-none focus:border-primary/50" autoFocus />
+                                            </div>
+                                        </div>
+                                        {activeIndicators.length > 0 && (
+                                            <div className="p-2 border-b border-border/30">
+                                                <div className="text-xs text-muted-foreground mb-2 px-2">Aktif İndikatörler</div>
+                                                {activeIndicators.map((ind) => (
+                                                    <div key={ind.id} className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-muted/30">
+                                                        <span className="text-sm font-medium">{ind.meta.shortName}</span>
+                                                        <button onClick={() => removeIndicator(ind.id)} className="text-muted-foreground hover:text-loss"><Trash2 className="h-4 w-4" /></button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                        <div className="max-h-60 overflow-y-auto p-2">
+                                            {filteredIndicators.map((ind) => (
+                                                <button
+                                                    key={ind.id}
+                                                    onClick={() => addIndicator(ind.id)}
+                                                    disabled={activeIndicators.some(i => i.id === ind.id)}
+                                                    className={cn("w-full flex items-center justify-between px-3 py-2 rounded-lg transition-colors text-left", activeIndicators.some(i => i.id === ind.id) ? "opacity-50 cursor-not-allowed bg-muted/20" : "hover:bg-muted/30")}
+                                                >
+                                                    <div>
+                                                        <div className="font-medium text-sm">{ind.shortName}</div>
+                                                        <div className="text-xs text-muted-foreground">{ind.description}</div>
+                                                    </div>
+                                                    {ind.isOverlay && <span className="text-xs px-2 py-0.5 rounded bg-secondary/20 text-secondary">Overlay</span>}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                            <button onClick={() => setActiveTool(activeTool === 'ruler' ? 'none' : 'ruler')} className={cn("p-2 rounded-md transition-all", activeTool === 'ruler' ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/50")} title="Ölçüm Cetveli"><Ruler className="h-4 w-4" /></button>
+                            <button onClick={() => setActiveTool(activeTool === 'pencil' ? 'none' : 'pencil')} className={cn("p-2 rounded-md transition-all", activeTool === 'pencil' ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/50")} title="Çizim Araçları"><Pencil className="h-4 w-4" /></button>
+                            <button onClick={() => setActiveTool(activeTool === 'text' ? 'none' : 'text')} className={cn("p-2 rounded-md transition-all", activeTool === 'text' ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/50")} title="Metin Ekle"><Type className="h-4 w-4" /></button>
                         </div>
 
-                        {/* Data Source */}
                         <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/30 rounded-lg text-xs">
                             <Zap className="h-3 w-3 text-primary animate-pulse" />
                             <span className="text-muted-foreground">{dataSource}</span>
                         </div>
 
-                        {/* Watchlist Toggle */}
-                        <button
-                            onClick={() => setShowRightPanel(!showRightPanel)}
-                            className={cn(
-                                "p-2 rounded-lg transition-all",
-                                "bg-muted/30 hover:bg-muted/50",
-                                showRightPanel && "text-primary"
-                            )}
-                            title={showRightPanel ? "Paneli Gizle" : "Paneli Göster"}
-                        >
-                            {showRightPanel ? (
-                                <PanelRightClose className="h-4 w-4" />
-                            ) : (
-                                <PanelRightOpen className="h-4 w-4" />
-                            )}
+                        <button onClick={() => setShowRightPanel(!showRightPanel)} className={cn("p-2 rounded-lg transition-all bg-muted/30 hover:bg-muted/50", showRightPanel && "text-primary")} title={showRightPanel ? "Paneli Gizle" : "Paneli Göster"}>
+                            {showRightPanel ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
                         </button>
 
-                        {/* Fullscreen */}
-                        <button
-                            onClick={toggleFullscreen}
-                            className={cn(
-                                "p-2 rounded-lg transition-all",
-                                "bg-muted/30 hover:bg-muted/50 hover:text-primary"
-                            )}
-                            title={isFullscreen ? "Küçült" : "Tam Ekran"}
-                        >
-                            {isFullscreen ? (
-                                <Minimize2 className="h-4 w-4" />
-                            ) : (
-                                <Maximize2 className="h-4 w-4" />
-                            )}
+                        <button onClick={toggleFullscreen} className="p-2 rounded-lg bg-muted/30 hover:bg-muted/50 hover:text-primary transition-all" title={isFullscreen ? "Küçült" : "Tam Ekran"}>
+                            {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
                         </button>
                     </div>
                 </div>
@@ -739,18 +773,23 @@ export function AdvancedChartPage({
                             </div>
                             <div className="flex items-center gap-2">
                                 <span className="text-muted-foreground text-xs uppercase">Kapanış</span>
-                                <span className={cn(
-                                    "font-medium mono-numbers",
-                                    displayOHLCV.close >= displayOHLCV.open ? "text-profit" : "text-loss"
-                                )}>
-                                    {displayOHLCV.close.toFixed(2)}
-                                </span>
+                                <span className={cn("font-medium mono-numbers", displayOHLCV.close >= displayOHLCV.open ? "text-profit" : "text-loss")}>{displayOHLCV.close.toFixed(2)}</span>
                             </div>
                         </div>
                         <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
                             <Clock className="h-3 w-3" />
                             <span>{crosshairData ? crosshairData.time : 'Son Mum'}</span>
                         </div>
+                    </div>
+                )}
+
+                {/* Active Tool Info */}
+                {activeTool !== 'none' && (
+                    <div className="flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary text-sm">
+                        {activeTool === 'ruler' && "Ölçüm modu aktif. Grafikte iki nokta seçin."}
+                        {activeTool === 'pencil' && "Çizim modu aktif. Grafikte serbest çizim yapabilirsiniz."}
+                        {activeTool === 'text' && "Metin modu aktif. Grafikte bir noktaya tıklayarak metin ekleyin."}
+                        <button onClick={() => setActiveTool('none')} className="ml-auto hover:text-white"><X className="h-4 w-4" /></button>
                     </div>
                 )}
 
@@ -767,21 +806,18 @@ export function AdvancedChartPage({
                     <div ref={chartContainerRef} className="w-full h-full" />
                 </div>
 
+                {/* Indicator Panels */}
+                {activeIndicators.filter(i => !i.meta.isOverlay).map((ind) => (
+                    <IndicatorPane key={ind.id} indicator={ind} candles={candles} onRemove={() => removeIndicator(ind.id)} />
+                ))}
+
                 {/* Status Bar */}
                 <div className="flex items-center justify-between px-4 py-2 border-t border-border/30 text-xs text-muted-foreground">
                     <div className="flex items-center gap-4">
-                        <span className="flex items-center gap-1.5">
-                            <span className="h-2 w-2 rounded-full bg-profit animate-pulse" />
-                            Canlı
-                        </span>
+                        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-profit animate-pulse" />Canlı</span>
                         <span>{candles.length} mum</span>
                         <span>Periyot: {currentTimeframeLabel}</span>
-                        {showSignals && signals.length > 0 && (
-                            <span className="flex items-center gap-1">
-                                <Zap className="h-3 w-3 text-primary" />
-                                {signals.length} sinyal
-                            </span>
-                        )}
+                        {activeIndicators.length > 0 && <span className="flex items-center gap-1"><LineChart className="h-3 w-3 text-primary" />{activeIndicators.length} indikatör</span>}
                     </div>
                     <div className="flex items-center gap-4">
                         <span>Kaynak: {dataSource}</span>
@@ -790,98 +826,116 @@ export function AdvancedChartPage({
                 </div>
             </div>
 
-            {/* Right Panel - Watchlist */}
+            {/* Right Panel - Watchlist (TradingView Style) */}
             {showRightPanel && (
-                <div className="w-64 border-l border-border/30 flex flex-col bg-card/30">
-                    {/* Panel Header */}
-                    <div className="flex items-center border-b border-border/30">
-                        <button
-                            onClick={() => setRightPanelTab("bist")}
-                            className={cn(
-                                "flex-1 px-4 py-3 text-sm font-medium transition-all",
-                                rightPanelTab === "bist"
-                                    ? "text-primary border-b-2 border-primary bg-primary/5"
-                                    : "text-muted-foreground hover:text-foreground"
-                            )}
-                        >
-                            BIST
-                        </button>
-                        <button
-                            onClick={() => setRightPanelTab("kripto")}
-                            className={cn(
-                                "flex-1 px-4 py-3 text-sm font-medium transition-all",
-                                rightPanelTab === "kripto"
-                                    ? "text-orange-400 border-b-2 border-orange-400 bg-orange-500/5"
-                                    : "text-muted-foreground hover:text-foreground"
-                            )}
-                        >
-                            Kripto
-                        </button>
+                <div className="w-[280px] border-l border-border/30 flex flex-col bg-[#131722]">
+                    <div className="flex items-center justify-between px-3 py-2 border-b border-border/30">
+                        <span className="text-sm font-medium">İzleme Listesi</span>
+                        <div className="flex items-center gap-1">
+                            <button onClick={() => refetchTickers()} className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted/30 text-muted-foreground"><RefreshCw className="h-4 w-4" /></button>
+                            <button className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted/30 text-muted-foreground"><Plus className="h-4 w-4" /></button>
+                            <button className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted/30 text-muted-foreground"><MoreHorizontal className="h-4 w-4" /></button>
+                        </div>
                     </div>
-
-                    {/* Panel Content */}
                     <div className="flex-1 overflow-y-auto">
-                        {rightPanelTab === "bist" ? (
-                            <div className="divide-y divide-border/20">
-                                {BIST_WATCHLIST.map((item) => (
-                                    <button
-                                        key={item.symbol}
-                                        onClick={() => handleSymbolSelect(item.symbol, "BIST")}
-                                        className={cn(
-                                            "w-full flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors",
-                                            symbol === item.symbol && marketType === "BIST" && "bg-primary/10"
-                                        )}
-                                    >
-                                        <div className="text-left">
-                                            <div className="font-medium text-sm">{item.symbol}</div>
-                                            <div className="text-xs text-muted-foreground truncate max-w-[120px]">{item.name}</div>
-                                        </div>
-                                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                                    </button>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="divide-y divide-border/20">
-                                {CRYPTO_WATCHLIST.map((sym) => {
-                                    const price = cryptoPrices[sym]
-                                    return (
-                                        <button
-                                            key={sym}
-                                            onClick={() => handleSymbolSelect(sym, "Kripto")}
-                                            className={cn(
-                                                "w-full flex items-center justify-between px-4 py-3 hover:bg-muted/30 transition-colors",
-                                                symbol === sym && marketType === "Kripto" && "bg-orange-500/10"
-                                            )}
-                                        >
-                                            <div className="text-left">
-                                                <div className="font-medium text-sm">{sym.replace('USDT', '')}</div>
-                                                <div className="text-xs text-muted-foreground">{sym}</div>
-                                            </div>
-                                            <div className="text-right">
-                                                {price ? (
-                                                    <>
-                                                        <div className="font-medium text-sm mono-numbers">
-                                                            ${price.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
-                                                        </div>
-                                                        <div className={cn(
-                                                            "text-xs mono-numbers",
-                                                            price.change >= 0 ? "text-profit" : "text-loss"
-                                                        )}>
-                                                            {price.change >= 0 ? "+" : ""}{price.change.toFixed(2)}%
-                                                        </div>
-                                                    </>
-                                                ) : (
-                                                    <div className="text-xs text-muted-foreground">--</div>
-                                                )}
-                                            </div>
-                                        </button>
-                                    )
-                                })}
-                            </div>
-                        )}
+                        {watchlistData.map((item, index) => (
+                            <button
+                                key={`${item.symbol}-${index}`}
+                                onClick={() => handleSymbolSelect(item.rawSymbol, item.type)}
+                                className={cn("w-full flex items-center justify-between px-3 py-2 hover:bg-muted/30 transition-colors", symbol === item.rawSymbol && "bg-primary/10")}
+                            >
+                                <div className="flex flex-col text-left">
+                                    <span className="text-sm font-medium">{item.symbol}</span>
+                                    <span className="text-xs text-muted-foreground">{item.type}</span>
+                                </div>
+                                <div className="text-right">
+                                    <div className="text-sm font-mono tabular-nums">{item.price}</div>
+                                    <div className={cn("text-xs font-mono tabular-nums", item.change >= 0 ? "text-profit" : "text-loss")}>{item.change >= 0 ? "+" : ""}{item.change.toFixed(2)}%</div>
+                                </div>
+                            </button>
+                        ))}
                     </div>
                 </div>
             )}
+        </div>
+    )
+}
+
+// ==================== INDICATOR PANE COMPONENT ====================
+
+interface IndicatorPaneProps {
+    indicator: ActiveIndicator
+    candles: Candle[]
+    onRemove: () => void
+}
+
+function IndicatorPane({ indicator, candles, onRemove }: IndicatorPaneProps) {
+    const containerRef = useRef<HTMLDivElement>(null)
+    const chartRef = useRef<any>(null)
+
+    useEffect(() => {
+        if (!containerRef.current || candles.length === 0) return
+
+        import("lightweight-charts").then(({ createChart, ColorType, LineSeries, HistogramSeries }) => {
+            if (!containerRef.current) return
+
+            if (chartRef.current) {
+                chartRef.current.remove()
+            }
+
+            const chart = createChart(containerRef.current, {
+                layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: '#8b949e', fontSize: 10 },
+                grid: { vertLines: { color: 'rgba(48, 54, 61, 0.3)' }, horzLines: { color: 'rgba(48, 54, 61, 0.3)' } },
+                width: containerRef.current.clientWidth,
+                height: 100,
+                rightPriceScale: { borderColor: 'rgba(48, 54, 61, 0.3)' },
+                timeScale: { visible: false },
+                handleScroll: { mouseWheel: true, pressedMouseMove: true },
+                handleScale: { mouseWheel: true },
+            })
+
+            if (indicator.id === 'rsi') {
+                const rsiData = calculateRSI(candles, indicator.params.period || 14)
+                const series = chart.addSeries(LineSeries, { color: chartColors.indicators.rsi, lineWidth: 2, priceScaleId: 'right' })
+                series.setData(rsiData.filter(d => !isNaN(d.value)).map(d => ({ time: d.time, value: d.value })))
+            } else if (indicator.id === 'macd') {
+                const macdData = calculateMACD(candles)
+                const macdSeries = chart.addSeries(LineSeries, { color: chartColors.indicators.macd, lineWidth: 2 })
+                macdSeries.setData(macdData.filter(d => !isNaN(d.macd)).map(d => ({ time: d.time, value: d.macd })))
+                const signalSeries = chart.addSeries(LineSeries, { color: chartColors.indicators.macdSignal, lineWidth: 2 })
+                signalSeries.setData(macdData.filter(d => !isNaN(d.signal)).map(d => ({ time: d.time, value: d.signal })))
+                const histSeries = chart.addSeries(HistogramSeries, { color: chartColors.indicators.macdHistogram })
+                histSeries.setData(macdData.filter(d => !isNaN(d.histogram)).map(d => ({ time: d.time, value: d.histogram, color: d.histogram >= 0 ? 'rgba(0, 200, 83, 0.5)' : 'rgba(255, 61, 0, 0.5)' })))
+            } else if (indicator.id === 'wr') {
+                const wrData = calculateWilliamsR(candles, indicator.params.period || 14)
+                const series = chart.addSeries(LineSeries, { color: chartColors.indicators.wr, lineWidth: 2 })
+                series.setData(wrData.filter(d => !isNaN(d.value)).map(d => ({ time: d.time, value: d.value })))
+            } else if (indicator.id === 'cci') {
+                const cciData = calculateCCI(candles, indicator.params.period || 20)
+                const series = chart.addSeries(LineSeries, { color: chartColors.indicators.cci, lineWidth: 2 })
+                series.setData(cciData.filter(d => !isNaN(d.value)).map(d => ({ time: d.time, value: d.value })))
+            }
+
+            chart.timeScale().fitContent()
+            chartRef.current = chart
+
+            const handleResize = () => {
+                if (containerRef.current && chartRef.current) {
+                    chartRef.current.applyOptions({ width: containerRef.current.clientWidth })
+                }
+            }
+            window.addEventListener('resize', handleResize)
+            return () => window.removeEventListener('resize', handleResize)
+        })
+    }, [indicator, candles])
+
+    return (
+        <div className="border-t border-border/30">
+            <div className="flex items-center justify-between px-4 py-1 bg-muted/10">
+                <span className="text-xs font-medium text-muted-foreground">{indicator.meta.shortName}</span>
+                <button onClick={onRemove} className="text-muted-foreground hover:text-loss"><X className="h-3 w-3" /></button>
+            </div>
+            <div ref={containerRef} className="w-full h-[100px]" />
         </div>
     )
 }
