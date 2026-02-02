@@ -138,12 +138,29 @@ const chartColors = {
     }
 }
 
-// Helper to format date for Lightweight Charts (yyyy-mm-dd only)
-const formatTime = (timeStr: string): string => {
-    if (timeStr.includes(' ')) {
-        return timeStr.split(' ')[0]
+// Helper to format date for Lightweight Charts
+// For daily data: returns yyyy-mm-dd string
+// For intraday data: returns Unix timestamp (seconds)
+const formatTime = (timeStr: string): string | number => {
+    if (timeStr.includes(' ') || timeStr.includes('T')) {
+        // Intraday data - convert to Unix timestamp (seconds)
+        return Math.floor(new Date(timeStr).getTime() / 1000)
     }
+    // Daily data - keep as yyyy-mm-dd string
     return timeStr
+}
+
+// Helper to deduplicate and sort candle data by time
+const deduplicateByTime = <T extends { time: string | number }>(data: T[]): T[] => {
+    const seen = new Map<string | number, T>()
+    for (const item of data) {
+        seen.set(item.time, item) // Later items override earlier ones
+    }
+    return Array.from(seen.values()).sort((a, b) => {
+        const timeA = typeof a.time === 'number' ? a.time : new Date(a.time).getTime()
+        const timeB = typeof b.time === 'number' ? b.time : new Date(b.time).getTime()
+        return timeA - timeB
+    })
 }
 
 interface ChartPageProps {
@@ -421,7 +438,7 @@ export function AdvancedChartPage({
     useEffect(() => {
         if (!chartReady || candles.length === 0 || !seriesInstance.current || !volumeSeriesInstance.current) return
 
-            const candleData = candles.map((item) => ({
+            const rawCandleData = candles.map((item) => ({
                 time: formatTime(item.time),
                 open: item.open,
                 high: item.high,
@@ -429,14 +446,15 @@ export function AdvancedChartPage({
                 close: item.close,
             }))
 
-            const volumeData = candles.map((item) => ({
+            const rawVolumeData = candles.map((item) => ({
                 time: formatTime(item.time),
                 value: item.volume,
                 color: item.close >= item.open ? chartColors.volume.up : chartColors.volume.down,
             }))
 
-            candleData.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())
-            volumeData.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())
+            // Deduplicate and sort data
+            const candleData = deduplicateByTime(rawCandleData)
+            const volumeData = deduplicateByTime(rawVolumeData)
 
             try {
                 seriesInstance.current.setData(candleData)
@@ -913,23 +931,23 @@ function IndicatorPane({ indicator, candles, onRemove }: IndicatorPaneProps) {
             if (indicator.id === 'rsi') {
                 const rsiData = calculateRSI(candles, indicator.params.period || 14)
                 const series = chart.addSeries(LineSeries, { color: chartColors.indicators.rsi, lineWidth: 2, priceScaleId: 'right' })
-                series.setData(rsiData.filter(d => !isNaN(d.value)).map(d => ({ time: formatTime(d.time), value: d.value })))
+                series.setData(deduplicateByTime(rsiData.filter(d => !isNaN(d.value)).map(d => ({ time: formatTime(d.time), value: d.value }))) as any)
             } else if (indicator.id === 'macd') {
                 const macdData = calculateMACD(candles)
                 const macdSeries = chart.addSeries(LineSeries, { color: chartColors.indicators.macd, lineWidth: 2 })
-                macdSeries.setData(macdData.filter(d => !isNaN(d.macd)).map(d => ({ time: formatTime(d.time), value: d.macd })))
+                macdSeries.setData(deduplicateByTime(macdData.filter(d => !isNaN(d.macd)).map(d => ({ time: formatTime(d.time), value: d.macd }))) as any)
                 const signalSeries = chart.addSeries(LineSeries, { color: chartColors.indicators.macdSignal, lineWidth: 2 })
-                signalSeries.setData(macdData.filter(d => !isNaN(d.signal)).map(d => ({ time: formatTime(d.time), value: d.signal })))
+                signalSeries.setData(deduplicateByTime(macdData.filter(d => !isNaN(d.signal)).map(d => ({ time: formatTime(d.time), value: d.signal }))) as any)
                 const histSeries = chart.addSeries(HistogramSeries, { color: chartColors.indicators.macdHistogram })
-                histSeries.setData(macdData.filter(d => !isNaN(d.histogram)).map(d => ({ time: formatTime(d.time), value: d.histogram, color: d.histogram >= 0 ? 'rgba(0, 200, 83, 0.5)' : 'rgba(255, 61, 0, 0.5)' })))
+                histSeries.setData(deduplicateByTime(macdData.filter(d => !isNaN(d.histogram)).map(d => ({ time: formatTime(d.time), value: d.histogram, color: d.histogram >= 0 ? 'rgba(0, 200, 83, 0.5)' : 'rgba(255, 61, 0, 0.5)' }))) as any)
             } else if (indicator.id === 'wr') {
                 const wrData = calculateWilliamsR(candles, indicator.params.period || 14)
                 const series = chart.addSeries(LineSeries, { color: chartColors.indicators.wr, lineWidth: 2 })
-                series.setData(wrData.filter(d => !isNaN(d.value)).map(d => ({ time: formatTime(d.time), value: d.value })))
+                series.setData(deduplicateByTime(wrData.filter(d => !isNaN(d.value)).map(d => ({ time: formatTime(d.time), value: d.value }))) as any)
             } else if (indicator.id === 'cci') {
                 const cciData = calculateCCI(candles, indicator.params.period || 20)
                 const series = chart.addSeries(LineSeries, { color: chartColors.indicators.cci, lineWidth: 2 })
-                series.setData(cciData.filter(d => !isNaN(d.value)).map(d => ({ time: formatTime(d.time), value: d.value })))
+                series.setData(deduplicateByTime(cciData.filter(d => !isNaN(d.value)).map(d => ({ time: formatTime(d.time), value: d.value }))) as any)
             }
 
             chart.timeScale().fitContent()
