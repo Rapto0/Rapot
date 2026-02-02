@@ -138,6 +138,14 @@ const chartColors = {
     }
 }
 
+// Helper to format date for Lightweight Charts (yyyy-mm-dd only)
+const formatTime = (timeStr: string): string => {
+    if (timeStr.includes(' ')) {
+        return timeStr.split(' ')[0]
+    }
+    return timeStr
+}
+
 interface ChartPageProps {
     initialSymbol?: string
     initialMarket?: "BIST" | "Kripto"
@@ -412,15 +420,6 @@ export function AdvancedChartPage({
     // Update chart data
     useEffect(() => {
         if (!chartReady || candles.length === 0 || !seriesInstance.current || !volumeSeriesInstance.current) return
-
-            // Helper to format date for Lightweight Charts (yyyy-mm-dd only)
-            const formatTime = (timeStr: string): string => {
-                // Handle "2025-12-21 23:00" format - extract just the date part
-                if (timeStr.includes(' ')) {
-                    return timeStr.split(' ')[0]
-                }
-                return timeStr
-            }
 
             const candleData = candles.map((item) => ({
                 time: formatTime(item.time),
@@ -914,23 +913,23 @@ function IndicatorPane({ indicator, candles, onRemove }: IndicatorPaneProps) {
             if (indicator.id === 'rsi') {
                 const rsiData = calculateRSI(candles, indicator.params.period || 14)
                 const series = chart.addSeries(LineSeries, { color: chartColors.indicators.rsi, lineWidth: 2, priceScaleId: 'right' })
-                series.setData(rsiData.filter(d => !isNaN(d.value)).map(d => ({ time: d.time, value: d.value })))
+                series.setData(rsiData.filter(d => !isNaN(d.value)).map(d => ({ time: formatTime(d.time), value: d.value })))
             } else if (indicator.id === 'macd') {
                 const macdData = calculateMACD(candles)
                 const macdSeries = chart.addSeries(LineSeries, { color: chartColors.indicators.macd, lineWidth: 2 })
-                macdSeries.setData(macdData.filter(d => !isNaN(d.macd)).map(d => ({ time: d.time, value: d.macd })))
+                macdSeries.setData(macdData.filter(d => !isNaN(d.macd)).map(d => ({ time: formatTime(d.time), value: d.macd })))
                 const signalSeries = chart.addSeries(LineSeries, { color: chartColors.indicators.macdSignal, lineWidth: 2 })
-                signalSeries.setData(macdData.filter(d => !isNaN(d.signal)).map(d => ({ time: d.time, value: d.signal })))
+                signalSeries.setData(macdData.filter(d => !isNaN(d.signal)).map(d => ({ time: formatTime(d.time), value: d.signal })))
                 const histSeries = chart.addSeries(HistogramSeries, { color: chartColors.indicators.macdHistogram })
-                histSeries.setData(macdData.filter(d => !isNaN(d.histogram)).map(d => ({ time: d.time, value: d.histogram, color: d.histogram >= 0 ? 'rgba(0, 200, 83, 0.5)' : 'rgba(255, 61, 0, 0.5)' })))
+                histSeries.setData(macdData.filter(d => !isNaN(d.histogram)).map(d => ({ time: formatTime(d.time), value: d.histogram, color: d.histogram >= 0 ? 'rgba(0, 200, 83, 0.5)' : 'rgba(255, 61, 0, 0.5)' })))
             } else if (indicator.id === 'wr') {
                 const wrData = calculateWilliamsR(candles, indicator.params.period || 14)
                 const series = chart.addSeries(LineSeries, { color: chartColors.indicators.wr, lineWidth: 2 })
-                series.setData(wrData.filter(d => !isNaN(d.value)).map(d => ({ time: d.time, value: d.value })))
+                series.setData(wrData.filter(d => !isNaN(d.value)).map(d => ({ time: formatTime(d.time), value: d.value })))
             } else if (indicator.id === 'cci') {
                 const cciData = calculateCCI(candles, indicator.params.period || 20)
                 const series = chart.addSeries(LineSeries, { color: chartColors.indicators.cci, lineWidth: 2 })
-                series.setData(cciData.filter(d => !isNaN(d.value)).map(d => ({ time: d.time, value: d.value })))
+                series.setData(cciData.filter(d => !isNaN(d.value)).map(d => ({ time: formatTime(d.time), value: d.value })))
             }
 
             chart.timeScale().fitContent()
