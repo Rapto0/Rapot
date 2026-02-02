@@ -191,7 +191,15 @@ export function AdvancedChartPage({
     // Indicator state
     const [showIndicatorSearch, setShowIndicatorSearch] = useState(false)
     const [indicatorSearchQuery, setIndicatorSearchQuery] = useState("")
-    const [activeIndicators, setActiveIndicators] = useState<ActiveIndicator[]>([])
+    // Default active indicators: COMBO and HUNTER overlays
+    const [activeIndicators, setActiveIndicators] = useState<ActiveIndicator[]>(() => {
+        const comboMeta = AVAILABLE_INDICATORS.find(i => i.id === 'combo')
+        const hunterMeta = AVAILABLE_INDICATORS.find(i => i.id === 'hunter')
+        const defaults: ActiveIndicator[] = []
+        if (comboMeta) defaults.push({ id: 'combo', meta: comboMeta, params: {} })
+        if (hunterMeta) defaults.push({ id: 'hunter', meta: hunterMeta, params: {} })
+        return defaults
+    })
 
     // Drawing tools state
     const [activeTool, setActiveTool] = useState<'none' | 'ruler' | 'pencil' | 'text'>('none')
@@ -213,7 +221,6 @@ export function AdvancedChartPage({
     const chartContainerRef = useRef<HTMLDivElement>(null)
     const chartInstance = useRef<any>(null)
     const seriesInstance = useRef<any>(null)
-    const volumeSeriesInstance = useRef<any>(null)
     const lastCrosshairTimeRef = useRef<string | null>(null)
     const fullscreenContainerRef = useRef<HTMLDivElement>(null)
 
@@ -297,7 +304,7 @@ export function AdvancedChartPage({
     useEffect(() => {
         if (!chartContainerRef.current) return
 
-        import("lightweight-charts").then(({ createChart, ColorType, CrosshairMode, CandlestickSeries, HistogramSeries }) => {
+        import("lightweight-charts").then(({ createChart, ColorType, CrosshairMode, CandlestickSeries }) => {
             if (!chartContainerRef.current) return
 
             // Destroy existing chart
@@ -305,7 +312,6 @@ export function AdvancedChartPage({
                 chartInstance.current.remove()
                 chartInstance.current = null
                 seriesInstance.current = null
-                volumeSeriesInstance.current = null
                 setChartReady(false)
             }
 
@@ -326,12 +332,15 @@ export function AdvancedChartPage({
                 height: containerHeight,
                 rightPriceScale: {
                     borderColor: chartColors.grid,
-                    scaleMargins: { top: 0.1, bottom: 0.2 },
+                    scaleMargins: { top: 0.05, bottom: 0.05 },
                 },
                 timeScale: {
                     borderColor: chartColors.grid,
                     timeVisible: true,
                     secondsVisible: false,
+                    rightOffset: 12,
+                    barSpacing: 6,
+                    minBarSpacing: 2,
                 },
                 crosshair: {
                     mode: CrosshairMode.Normal,
@@ -359,6 +368,10 @@ export function AdvancedChartPage({
                     mouseWheel: true,
                     pinch: true,
                 },
+                kineticScroll: {
+                    mouse: true,
+                    touch: true,
+                },
             })
 
             // Candlestick series
@@ -369,17 +382,6 @@ export function AdvancedChartPage({
                 borderUpColor: chartColors.bullish,
                 wickDownColor: chartColors.bearish,
                 wickUpColor: chartColors.bullish,
-            })
-
-            // Volume series
-            const volumeSeries = chart.addSeries(HistogramSeries, {
-                color: chartColors.volume.up,
-                priceFormat: { type: "volume" },
-                priceScaleId: "",
-            })
-
-            volumeSeries.priceScale().applyOptions({
-                scaleMargins: { top: 0.85, bottom: 0 },
             })
 
             // Crosshair move handler
@@ -413,7 +415,6 @@ export function AdvancedChartPage({
 
             chartInstance.current = chart
             seriesInstance.current = candlestickSeries
-            volumeSeriesInstance.current = volumeSeries
             setChartReady(true)
 
             // Handle resize
@@ -436,7 +437,7 @@ export function AdvancedChartPage({
 
     // Update chart data
     useEffect(() => {
-        if (!chartReady || candles.length === 0 || !seriesInstance.current || !volumeSeriesInstance.current) return
+        if (!chartReady || candles.length === 0 || !seriesInstance.current) return
 
             const rawCandleData = candles.map((item) => ({
                 time: formatTime(item.time),
@@ -446,19 +447,11 @@ export function AdvancedChartPage({
                 close: item.close,
             }))
 
-            const rawVolumeData = candles.map((item) => ({
-                time: formatTime(item.time),
-                value: item.volume,
-                color: item.close >= item.open ? chartColors.volume.up : chartColors.volume.down,
-            }))
-
             // Deduplicate and sort data
             const candleData = deduplicateByTime(rawCandleData)
-            const volumeData = deduplicateByTime(rawVolumeData)
 
             try {
                 seriesInstance.current.setData(candleData)
-                volumeSeriesInstance.current.setData(volumeData)
 
                 // Add signal markers (including Combo/Hunter overlays)
                 const markers: any[] = []

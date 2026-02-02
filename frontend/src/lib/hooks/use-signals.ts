@@ -49,6 +49,8 @@ export function useSignals(options: UseSignalsOptions = {}) {
     return useQuery({
         queryKey: ['signals', marketType, strategy, direction],
         queryFn: () => fetchSignalsData({ marketType, strategy, direction }),
+        refetchInterval: 30000, // Refresh every 30 seconds for live signals
+        staleTime: 10000, // Consider data stale after 10 seconds
         select: (data) => {
             // Client-side search filter
             if (searchQuery) {
