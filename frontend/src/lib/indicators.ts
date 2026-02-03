@@ -249,8 +249,9 @@ export function calculateCombo(candles: Candle[]): ComboSignal[] {
         if (!isNaN(cciVal) && cciVal > 200) sellScore++
 
         let signal: 'AL' | 'SAT' | null = null
-        if (buyScore >= 4) signal = 'AL'
-        if (sellScore >= 3) signal = 'SAT'
+        // Pine Script logic: AL needs 3+ OS conditions, SAT needs 4 OB conditions
+        if (buyScore >= 3) signal = 'AL'
+        if (sellScore >= 4) signal = 'SAT'
 
         result.push({
             time: candles[i].time,
@@ -270,80 +271,354 @@ export function calculateCombo(candles: Candle[]): ComboSignal[] {
 }
 
 // ==================== HUNTER INDICATOR (Overlay) ====================
+// Uses 15 oscillators with N-of-M logic based on Pine Script
 
 export interface HunterSignal {
     time: string
-    dipScore: number
-    topScore: number
+    dipScore: number  // Number of oversold (OS) conditions met
+    topScore: number  // Number of overbought (OB) conditions met
     signal: 'AL' | 'SAT' | null
-    rsiConfirm: boolean
+    details: {
+        rsi: number
+        rsiFast: number
+        wr: number
+        cci: number
+        cmo: number
+        ultimate: number
+        bbPercent: number
+        roc: number
+        bop: number
+        demarker: number
+        psy: number
+        zscore: number
+        keltnerPercent: number
+        macd: number
+        rsi2: number
+    }
 }
 
-export function calculateHunter(candles: Candle[]): HunterSignal[] {
-    if (candles.length < 15) return []
+// Helper: Calculate CMO (Chande Momentum Oscillator)
+function calculateCMO(candles: Candle[], period: number = 14): number[] {
+    const result: number[] = []
+    const closes = candles.map(c => c.close)
 
-    const rsi = calculateRSI(candles, 14)
-    const result: HunterSignal[] = []
-
-    const REQ_DIP = 7
-    const REQ_TOP = 10
-
-    for (let i = 0; i < candles.length; i++) {
-        if (i < 14) {
-            result.push({
-                time: candles[i].time,
-                dipScore: 0,
-                topScore: 0,
-                signal: null,
-                rsiConfirm: false
-            })
+    for (let i = 0; i < closes.length; i++) {
+        if (i < period) {
+            result.push(NaN)
             continue
         }
 
-        // Count consecutive down/up days
+        let sumUp = 0
+        let sumDown = 0
+        for (let j = i - period + 1; j <= i; j++) {
+            const change = closes[j] - closes[j - 1]
+            if (change > 0) sumUp += change
+            else sumDown += Math.abs(change)
+        }
+
+        const cmo = (sumUp + sumDown) === 0 ? 0 : ((sumUp - sumDown) / (sumUp + sumDown)) * 100
+        result.push(cmo)
+    }
+    return result
+}
+
+// Helper: Calculate Ultimate Oscillator
+function calculateUltimate(candles: Candle[], p1: number = 7, p2: number = 14, p3: number = 28): number[] {
+    const result: number[] = []
+
+    for (let i = 0; i < candles.length; i++) {
+        if (i < p3) {
+            result.push(NaN)
+            continue
+        }
+
+        const bp: number[] = []
+        const tr: number[] = []
+
+        for (let j = i - p3 + 1; j <= i; j++) {
+            const prevClose = candles[j - 1].close
+            const low = Math.min(candles[j].low, prevClose)
+            const high = Math.max(candles[j].high, prevClose)
+            bp.push(candles[j].close - low)
+            tr.push(high - low)
+        }
+
+        const avg1 = bp.slice(-p1).reduce((a, b) => a + b, 0) / tr.slice(-p1).reduce((a, b) => a + b, 0) || 0
+        const avg2 = bp.slice(-p2).reduce((a, b) => a + b, 0) / tr.slice(-p2).reduce((a, b) => a + b, 0) || 0
+        const avg3 = bp.reduce((a, b) => a + b, 0) / tr.reduce((a, b) => a + b, 0) || 0
+
+        const uo = ((avg1 * 4) + (avg2 * 2) + avg3) / 7 * 100
+        result.push(uo)
+    }
+    return result
+}
+
+// Helper: Calculate Bollinger %B
+function calculateBBPercent(candles: Candle[], period: number = 20, mult: number = 2): number[] {
+    const result: number[] = []
+    const closes = candles.map(c => c.close)
+    const smaValues = sma(closes, period)
+
+    for (let i = 0; i < closes.length; i++) {
+        if (i < period - 1) {
+            result.push(NaN)
+            continue
+        }
+
+        const slice = closes.slice(i - period + 1, i + 1)
+        const mean = smaValues[i]
+        const variance = slice.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / period
+        const stdDev = Math.sqrt(variance)
+
+        const upper = mean + mult * stdDev
+        const lower = mean - mult * stdDev
+
+        const percentB = (upper - lower) === 0 ? 0.5 : (closes[i] - lower) / (upper - lower)
+        result.push(percentB * 100)
+    }
+    return result
+}
+
+// Helper: Calculate ROC%
+function calculateROC(candles: Candle[], period: number = 14): number[] {
+    const result: number[] = []
+    const closes = candles.map(c => c.close)
+
+    for (let i = 0; i < closes.length; i++) {
+        if (i < period) {
+            result.push(NaN)
+            continue
+        }
+        const roc = ((closes[i] - closes[i - period]) / closes[i - period]) * 100
+        result.push(roc)
+    }
+    return result
+}
+
+// Helper: Calculate BOP (Balance of Power)
+function calculateBOP(candles: Candle[]): number[] {
+    return candles.map(c => {
+        const range = c.high - c.low
+        return range === 0 ? 0 : (c.close - c.open) / range
+    })
+}
+
+// Helper: Calculate DeMarker
+function calculateDeMarker(candles: Candle[], period: number = 14): number[] {
+    const result: number[] = []
+
+    for (let i = 0; i < candles.length; i++) {
+        if (i < period) {
+            result.push(NaN)
+            continue
+        }
+
+        let sumDeMax = 0
+        let sumDeMin = 0
+
+        for (let j = i - period + 1; j <= i; j++) {
+            const deMax = candles[j].high > candles[j - 1].high ? candles[j].high - candles[j - 1].high : 0
+            const deMin = candles[j].low < candles[j - 1].low ? candles[j - 1].low - candles[j].low : 0
+            sumDeMax += deMax
+            sumDeMin += deMin
+        }
+
+        const demarker = (sumDeMax + sumDeMin) === 0 ? 0.5 : sumDeMax / (sumDeMax + sumDeMin)
+        result.push(demarker * 100)
+    }
+    return result
+}
+
+// Helper: Calculate PSY (Psychological Line)
+function calculatePSY(candles: Candle[], period: number = 12): number[] {
+    const result: number[] = []
+    const closes = candles.map(c => c.close)
+
+    for (let i = 0; i < closes.length; i++) {
+        if (i < period) {
+            result.push(NaN)
+            continue
+        }
+
+        let upDays = 0
+        for (let j = i - period + 1; j <= i; j++) {
+            if (closes[j] > closes[j - 1]) upDays++
+        }
+
+        result.push((upDays / period) * 100)
+    }
+    return result
+}
+
+// Helper: Calculate Z-Score
+function calculateZScore(candles: Candle[], period: number = 20): number[] {
+    const result: number[] = []
+    const closes = candles.map(c => c.close)
+    const smaValues = sma(closes, period)
+
+    for (let i = 0; i < closes.length; i++) {
+        if (i < period - 1) {
+            result.push(NaN)
+            continue
+        }
+
+        const slice = closes.slice(i - period + 1, i + 1)
+        const mean = smaValues[i]
+        const variance = slice.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / period
+        const stdDev = Math.sqrt(variance)
+
+        const zscore = stdDev === 0 ? 0 : (closes[i] - mean) / stdDev
+        result.push(zscore)
+    }
+    return result
+}
+
+// Helper: Calculate Keltner Channel %B
+function calculateKeltnerPercent(candles: Candle[], period: number = 20, mult: number = 2): number[] {
+    const result: number[] = []
+    const closes = candles.map(c => c.close)
+    const emaValues = ema(closes, period)
+
+    // ATR calculation
+    const atrValues: number[] = []
+    for (let i = 0; i < candles.length; i++) {
+        if (i === 0) {
+            atrValues.push(candles[i].high - candles[i].low)
+            continue
+        }
+        const tr = Math.max(
+            candles[i].high - candles[i].low,
+            Math.abs(candles[i].high - candles[i - 1].close),
+            Math.abs(candles[i].low - candles[i - 1].close)
+        )
+        atrValues.push(tr)
+    }
+    const atrEma = ema(atrValues, period)
+
+    for (let i = 0; i < closes.length; i++) {
+        if (i < period - 1) {
+            result.push(NaN)
+            continue
+        }
+
+        const upper = emaValues[i] + mult * atrEma[i]
+        const lower = emaValues[i] - mult * atrEma[i]
+
+        const percentK = (upper - lower) === 0 ? 0.5 : (closes[i] - lower) / (upper - lower)
+        result.push(percentK * 100)
+    }
+    return result
+}
+
+export function calculateHunter(candles: Candle[]): HunterSignal[] {
+    if (candles.length < 30) return []
+
+    // Calculate all 15 oscillators
+    const rsi14 = calculateRSI(candles, 14)
+    const rsi7 = calculateRSI(candles, 7)  // RSI Fast
+    const rsi2 = calculateRSI(candles, 2)  // RSI(2)
+    const wr = calculateWilliamsR(candles, 14)
+    const cci = calculateCCI(candles, 20)
+    const cmo = calculateCMO(candles, 14)
+    const ultimate = calculateUltimate(candles, 7, 14, 28)
+    const bbPercent = calculateBBPercent(candles, 20, 2)
+    const roc = calculateROC(candles, 14)
+    const bop = calculateBOP(candles)
+    const demarker = calculateDeMarker(candles, 14)
+    const psy = calculatePSY(candles, 12)
+    const zscore = calculateZScore(candles, 20)
+    const keltnerPercent = calculateKeltnerPercent(candles, 20, 2)
+    const macd = calculateMACD(candles)
+
+    const result: HunterSignal[] = []
+
+    // Required counts for signals (from Pine Script)
+    const REQ_DIP = 7   // Need at least 7 oversold conditions for DIP (buy)
+    const REQ_TOP = 10  // Need at least 10 overbought conditions for TEPE (sell)
+
+    for (let i = 0; i < candles.length; i++) {
+        // Get all indicator values at this index
+        const rsiVal = rsi14[i]?.value ?? 50
+        const rsiFastVal = rsi7[i]?.value ?? 50
+        const rsi2Val = rsi2[i]?.value ?? 50
+        const wrVal = wr[i]?.value ?? -50
+        const cciVal = cci[i]?.value ?? 0
+        const cmoVal = cmo[i] ?? 0
+        const ultimateVal = ultimate[i] ?? 50
+        const bbPercentVal = bbPercent[i] ?? 50
+        const rocVal = roc[i] ?? 0
+        const bopVal = bop[i] ?? 0
+        const demarkerVal = demarker[i] ?? 50
+        const psyVal = psy[i] ?? 50
+        const zscoreVal = zscore[i] ?? 0
+        const keltnerPercentVal = keltnerPercent[i] ?? 50
+        const macdVal = macd[i]?.macd ?? 0
+
+        // Count oversold (OS) conditions - DIP
         let dipScore = 0
+        if (!isNaN(rsiVal) && rsiVal < 30) dipScore++
+        if (!isNaN(rsiFastVal) && rsiFastVal < 20) dipScore++
+        if (!isNaN(wrVal) && wrVal < -80) dipScore++
+        if (!isNaN(cciVal) && cciVal < -100) dipScore++
+        if (!isNaN(cmoVal) && cmoVal < -50) dipScore++
+        if (!isNaN(ultimateVal) && ultimateVal < 30) dipScore++
+        if (!isNaN(bbPercentVal) && bbPercentVal < 0) dipScore++
+        if (!isNaN(rocVal) && rocVal < -5) dipScore++
+        if (!isNaN(bopVal) && bopVal < -0.5) dipScore++
+        if (!isNaN(demarkerVal) && demarkerVal < 30) dipScore++
+        if (!isNaN(psyVal) && psyVal < 25) dipScore++
+        if (!isNaN(zscoreVal) && zscoreVal < -2) dipScore++
+        if (!isNaN(keltnerPercentVal) && keltnerPercentVal < 0) dipScore++
+        if (!isNaN(macdVal) && macdVal < 0) dipScore++
+        if (!isNaN(rsi2Val) && rsi2Val < 10) dipScore++
+
+        // Count overbought (OB) conditions - TEPE
         let topScore = 0
-
-        // Look back for dips (lower lows)
-        for (let j = i; j > Math.max(0, i - 14); j--) {
-            if (j > 0 && candles[j].low < candles[j - 1].low) {
-                dipScore++
-            } else {
-                break
-            }
-        }
-
-        // Look back for tops (higher highs)
-        for (let j = i; j > Math.max(0, i - 14); j--) {
-            if (j > 0 && candles[j].high > candles[j - 1].high) {
-                topScore++
-            } else {
-                break
-            }
-        }
-
-        const rsiVal = rsi[i]?.value || 50
-        const rsiDipConfirm = rsiVal < 30
-        const rsiTopConfirm = rsiVal > 70
+        if (!isNaN(rsiVal) && rsiVal > 70) topScore++
+        if (!isNaN(rsiFastVal) && rsiFastVal > 80) topScore++
+        if (!isNaN(wrVal) && wrVal > -20) topScore++
+        if (!isNaN(cciVal) && cciVal > 100) topScore++
+        if (!isNaN(cmoVal) && cmoVal > 50) topScore++
+        if (!isNaN(ultimateVal) && ultimateVal > 70) topScore++
+        if (!isNaN(bbPercentVal) && bbPercentVal > 100) topScore++
+        if (!isNaN(rocVal) && rocVal > 5) topScore++
+        if (!isNaN(bopVal) && bopVal > 0.5) topScore++
+        if (!isNaN(demarkerVal) && demarkerVal > 70) topScore++
+        if (!isNaN(psyVal) && psyVal > 75) topScore++
+        if (!isNaN(zscoreVal) && zscoreVal > 2) topScore++
+        if (!isNaN(keltnerPercentVal) && keltnerPercentVal > 100) topScore++
+        if (!isNaN(macdVal) && macdVal > 0) topScore++
+        if (!isNaN(rsi2Val) && rsi2Val > 90) topScore++
 
         let signal: 'AL' | 'SAT' | null = null
-        let rsiConfirm = false
 
-        if (dipScore >= REQ_DIP && rsiDipConfirm) {
-            signal = 'AL'
-            rsiConfirm = true
-        }
-        if (topScore >= REQ_TOP && rsiTopConfirm) {
-            signal = 'SAT'
-            rsiConfirm = true
-        }
+        // DIP signal when at least 7 oscillators are oversold
+        if (dipScore >= REQ_DIP) signal = 'AL'
+        // TEPE signal when at least 10 oscillators are overbought
+        if (topScore >= REQ_TOP) signal = 'SAT'
 
         result.push({
             time: candles[i].time,
             dipScore,
             topScore,
             signal,
-            rsiConfirm
+            details: {
+                rsi: rsiVal,
+                rsiFast: rsiFastVal,
+                wr: wrVal,
+                cci: cciVal,
+                cmo: cmoVal,
+                ultimate: ultimateVal,
+                bbPercent: bbPercentVal,
+                roc: rocVal,
+                bop: bopVal,
+                demarker: demarkerVal,
+                psy: psyVal,
+                zscore: zscoreVal,
+                keltnerPercent: keltnerPercentVal,
+                macd: macdVal,
+                rsi2: rsi2Val
+            }
         })
     }
 
