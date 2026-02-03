@@ -223,6 +223,9 @@ export function AdvancedChartPage({
     const seriesInstance = useRef<any>(null)
     const lastCrosshairTimeRef = useRef<string | null>(null)
     const fullscreenContainerRef = useRef<HTMLDivElement>(null)
+    const isInitialLoadRef = useRef<boolean>(true)
+    const lastSymbolRef = useRef<string>(initialSymbol)
+    const lastTimeframeRef = useRef<string>("1d")
 
     // Fetch candle data
     const { data: candlesResponse, isLoading } = useQuery({
@@ -511,11 +514,21 @@ export function AdvancedChartPage({
                     seriesInstance.current.setMarkers([])
                 }
 
-                chartInstance.current?.timeScale().fitContent()
+                // Only fit content on initial load or when symbol/timeframe changes
+                // This preserves user's zoom/pan position during data refreshes
+                const symbolChanged = lastSymbolRef.current !== symbol
+                const timeframeChanged = lastTimeframeRef.current !== timeframe
+
+                if (isInitialLoadRef.current || symbolChanged || timeframeChanged) {
+                    chartInstance.current?.timeScale().fitContent()
+                    isInitialLoadRef.current = false
+                    lastSymbolRef.current = symbol
+                    lastTimeframeRef.current = timeframe
+                }
             } catch (e) {
                 console.error("Chart update error:", e)
             }
-    }, [candles, signals, showSignals, activeIndicators, chartReady])
+    }, [candles, signals, showSignals, activeIndicators, chartReady, symbol, timeframe])
 
     // Add indicator
     const addIndicator = useCallback((indicatorId: string) => {
@@ -821,16 +834,20 @@ export function AdvancedChartPage({
                 )}
 
                 {/* Chart Area */}
-                <div className="flex-1 relative min-h-[400px]">
+                <div className="flex-1 relative" style={{ minHeight: isFullscreen ? 'calc(100vh - 200px)' : '500px' }}>
                     {isLoading && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm z-10">
+                        <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm z-10 pointer-events-none">
                             <div className="flex flex-col items-center gap-3">
                                 <div className="w-10 h-10 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
                                 <span className="text-sm text-muted-foreground">Grafik yükleniyor...</span>
                             </div>
                         </div>
                     )}
-                    <div ref={chartContainerRef} className="w-full h-full" />
+                    <div
+                        ref={chartContainerRef}
+                        className="w-full h-full cursor-crosshair"
+                        style={{ touchAction: 'none', minHeight: 'inherit' }}
+                    />
                 </div>
 
                 {/* Indicator Panels */}
