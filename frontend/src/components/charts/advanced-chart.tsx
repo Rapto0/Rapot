@@ -482,6 +482,8 @@ export function AdvancedChartPage({
                 // Combo overlay markers
                 if (activeIndicators.some(i => i.id === 'combo')) {
                     const comboSignals = calculateCombo(candles)
+                    const comboWithSignals = comboSignals.filter(s => s.signal !== null)
+                    console.log(`COMBO: ${comboWithSignals.length} signals out of ${comboSignals.length} candles`)
                     comboSignals.forEach((sig) => {
                         if (sig.signal) {
                             markers.push({
@@ -499,6 +501,8 @@ export function AdvancedChartPage({
                 // Hunter overlay markers
                 if (activeIndicators.some(i => i.id === 'hunter')) {
                     const hunterSignals = calculateHunter(candles)
+                    const hunterWithSignals = hunterSignals.filter(s => s.signal !== null)
+                    console.log(`HUNTER: ${hunterWithSignals.length} signals out of ${hunterSignals.length} candles`)
                     hunterSignals.forEach((sig) => {
                         if (sig.signal) {
                             markers.push({
@@ -513,8 +517,11 @@ export function AdvancedChartPage({
                     })
                 }
 
+                console.log(`Total markers to add: ${markers.length}`, markers.slice(0, 3))
+
                 if (markers.length > 0 && typeof seriesInstance.current.setMarkers === 'function') {
                     seriesInstance.current.setMarkers(markers)
+                    console.log('Markers set successfully')
                 } else if (markers.length === 0 && typeof seriesInstance.current.setMarkers === 'function') {
                     // Clear markers if none
                     seriesInstance.current.setMarkers([])
