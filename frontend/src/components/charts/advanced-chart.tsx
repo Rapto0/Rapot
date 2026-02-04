@@ -489,7 +489,7 @@ export function AdvancedChartPage({
                                 position: sig.signal === 'AL' ? 'belowBar' : 'aboveBar',
                                 shape: sig.signal === 'AL' ? 'arrowUp' : 'arrowDown',
                                 color: sig.signal === 'AL' ? '#00e676' : '#ff5252',
-                                text: `COMBO`,
+                                text: sig.signal === 'AL' ? 'DİP' : 'SAT',
                                 size: 2,
                             })
                         }
@@ -504,9 +504,9 @@ export function AdvancedChartPage({
                             markers.push({
                                 time: formatTime(sig.time),
                                 position: sig.signal === 'AL' ? 'belowBar' : 'aboveBar',
-                                shape: 'circle',
+                                shape: sig.signal === 'AL' ? 'arrowUp' : 'arrowDown',
                                 color: sig.signal === 'AL' ? '#76ff03' : '#ff1744',
-                                text: `HUNTER`,
+                                text: sig.signal === 'AL' ? 'DİP' : 'TEPE',
                                 size: 2,
                             })
                         }
