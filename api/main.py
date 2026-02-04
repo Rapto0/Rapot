@@ -268,12 +268,13 @@ async def get_signals(
     symbol: str | None = Query(None, description="Sembol filtresi"),
     strategy: str | None = Query(None, description="Strateji filtresi (COMBO/HUNTER)"),
     signal_type: str | None = Query(None, description="Sinyal türü (AL/SAT)"),
-    limit: int = Query(50, ge=1, le=500, description="Maksimum kayıt sayısı"),
+    market_type: str | None = Query(None, description="Piyasa türü (BIST/Kripto)"),
+    limit: int = Query(50, ge=1, le=1000, description="Maksimum kayıt sayısı"),
 ):
     """
     Sinyal listesini döndürür.
 
-    Opsiyonel filtreler: symbol, strategy, signal_type
+    Opsiyonel filtreler: symbol, strategy, signal_type, market_type
     """
     from db_session import get_session
     from models import Signal
@@ -287,6 +288,8 @@ async def get_signals(
             query = query.filter(Signal.strategy == strategy.upper())
         if signal_type:
             query = query.filter(Signal.signal_type == signal_type.upper())
+        if market_type:
+            query = query.filter(Signal.market_type == market_type)
 
         signals = query.order_by(Signal.created_at.desc()).limit(limit).all()
 
@@ -300,7 +303,7 @@ async def get_signals(
                 timeframe=s.timeframe,
                 score=s.score,
                 price=s.price,
-                created_at=s.created_at.isoformat() if s.created_at else None,
+                created_at=s.created_at.isoformat() + "Z" if s.created_at else None,
             )
             for s in signals
         ]
@@ -827,12 +830,60 @@ async def get_candles(
     resample_tf = resample_map.get(timeframe, "1D")
     binance_interval = binance_interval_map.get(timeframe, "1d")
 
+    # yfinance interval mapping for intraday
+    yf_interval_map = {
+        "15m": "15m",
+        "30m": "30m",
+        "1h": "1h",
+        "2h": "1h",  # yfinance doesn't have 2h, will resample
+        "4h": "1h",  # will resample
+        "8h": "1h",  # will resample
+        "12h": "1h",  # will resample
+        "1d": "1d",
+        "1wk": "1wk",
+        "1mo": "1mo",
+    }
+
     df = None
     source = "cache"
 
     try:
+        # For BIST with intraday: Use yfinance
+        if market_type == "BIST" and is_intraday:
+            try:
+                import pandas as pd
+
+                yf_symbol = symbol + ".IS" if not symbol.endswith(".IS") else symbol
+                yf_interval = yf_interval_map.get(timeframe, "1h")
+
+                ticker = yf.Ticker(yf_symbol)
+                # For intraday, yfinance requires period instead of start date
+                # Max 60 days for 15m/30m, 730 days for 1h
+                if yf_interval in ["15m", "30m"]:
+                    period = "60d"
+                else:
+                    period = "730d"
+
+                df = ticker.history(period=period, interval=yf_interval)
+
+                if df is not None and not df.empty:
+                    # Resample if needed (2h, 4h, 8h, 12h)
+                    if timeframe in ["2h", "4h", "8h", "12h"]:
+                        hours = int(timeframe.replace("h", ""))
+                        df = df.resample(f"{hours}h").agg({
+                            'Open': 'first',
+                            'High': 'max',
+                            'Low': 'min',
+                            'Close': 'last',
+                            'Volume': 'sum'
+                        }).dropna()
+                    source = "yfinance_intraday"
+            except Exception as yf_err:
+                print(f"yfinance intraday error for {symbol}: {yf_err}")
+                df = None
+
         # For Crypto with intraday: Fetch directly from Binance with the interval
-        if market_type in ["Kripto", "CRYPTO"] and is_intraday:
+        elif market_type in ["Kripto", "CRYPTO"] and is_intraday:
             try:
                 from binance.client import Client
                 import pandas as pd
@@ -939,18 +990,29 @@ async def get_candles(
             except Exception as resample_err:
                 print(f"Resample error: {resample_err}")
 
-        # 5. Format output
+        # 5. Format output with Turkey timezone conversion
+        import pytz
+        turkey_tz = pytz.timezone("Europe/Istanbul")
         candles = []
         if df is not None and not df.empty:
             # Take last N candles
             df_tail = df.tail(limit)
 
             for index, row in df_tail.iterrows():
-                # For intraday, include time. For daily+, just date
+                # Convert index to Turkey timezone if it's timezone-aware
+                ts = index
                 if is_intraday:
-                    time_val = index.strftime("%Y-%m-%d %H:%M")
+                    # Convert UTC to Turkey timezone for intraday data
+                    if hasattr(ts, 'tzinfo') and ts.tzinfo is not None:
+                        ts = ts.astimezone(turkey_tz)
+                    elif hasattr(ts, 'tz_localize'):
+                        try:
+                            ts = ts.tz_localize('UTC').tz_convert(turkey_tz)
+                        except Exception:
+                            pass
+                    time_val = ts.strftime("%Y-%m-%d %H:%M")
                 else:
-                    time_val = index.strftime("%Y-%m-%d")
+                    time_val = ts.strftime("%Y-%m-%d")
 
                 candles.append(
                     {

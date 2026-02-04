@@ -23,24 +23,32 @@ interface UseSignalsOptions {
 
 // Fetch signals from API
 async function fetchSignalsData(options: UseSignalsOptions = {}): Promise<Signal[]> {
-    const { marketType, strategy, direction, limit = 500 } = options;
+    const { marketType, strategy, direction, limit = 1000 } = options;
 
     // Build API params - fetch more for pagination
     const params: SignalsParams = { limit };
     if (strategy && strategy !== 'all') params.strategy = strategy;
     if (direction && direction !== 'all') params.signal_type = direction;
 
-    const apiSignals = await fetchSignals(params);
-
-    // Transform and filter
-    let signals = apiSignals.map(transformSignal);
-
-    // Apply additional filters that API doesn't support
+    // If specific market type requested, use API filter
     if (marketType && marketType !== 'all') {
-        signals = signals.filter(s => s.marketType === marketType);
+        params.market_type = marketType;
+        const apiSignals = await fetchSignals(params);
+        return apiSignals.map(transformSignal);
     }
 
-    return signals;
+    // For 'all' markets, fetch both BIST and Kripto separately to ensure balanced results
+    const [bistSignals, kriptoSignals] = await Promise.all([
+        fetchSignals({ ...params, market_type: 'BIST', limit: Math.floor(limit / 2) }),
+        fetchSignals({ ...params, market_type: 'Kripto', limit: Math.floor(limit / 2) }),
+    ]);
+
+    // Combine and sort by date
+    const allSignals = [...bistSignals, ...kriptoSignals]
+        .map(transformSignal)
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    return allSignals;
 }
 
 export function useSignals(options: UseSignalsOptions = {}) {
@@ -49,6 +57,8 @@ export function useSignals(options: UseSignalsOptions = {}) {
     return useQuery({
         queryKey: ['signals', marketType, strategy, direction],
         queryFn: () => fetchSignalsData({ marketType, strategy, direction }),
+        refetchInterval: 30000, // Refresh every 30 seconds for live signals
+        staleTime: 10000, // Consider data stale after 10 seconds
         select: (data) => {
             // Client-side search filter
             if (searchQuery) {

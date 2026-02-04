@@ -42,7 +42,7 @@ export function Sidebar() {
             onMouseEnter={() => !isPinned && setIsHovered(true)}
             onMouseLeave={() => !isPinned && setIsHovered(false)}
             className={cn(
-                "fixed left-0 top-0 z-40 h-screen border-r border-sidebar-border bg-sidebar/95 backdrop-blur-xl hidden md:flex flex-col",
+                "fixed left-0 top-0 z-[60] h-screen border-r border-sidebar-border bg-sidebar/95 backdrop-blur-xl hidden md:flex flex-col",
                 "transition-all duration-300 ease-out",
                 isExpanded ? "w-56" : "w-16"
             )}

@@ -124,6 +124,7 @@ export interface SignalsParams {
     symbol?: string;
     strategy?: 'COMBO' | 'HUNTER';
     signal_type?: 'AL' | 'SAT';
+    market_type?: 'BIST' | 'Kripto';
     limit?: number;
 }
 
@@ -132,6 +133,7 @@ export async function fetchSignals(params: SignalsParams = {}): Promise<ApiSigna
     if (params.symbol) searchParams.set('symbol', params.symbol);
     if (params.strategy) searchParams.set('strategy', params.strategy);
     if (params.signal_type) searchParams.set('signal_type', params.signal_type);
+    if (params.market_type) searchParams.set('market_type', params.market_type);
     if (params.limit) searchParams.set('limit', params.limit.toString());
 
     const query = searchParams.toString();

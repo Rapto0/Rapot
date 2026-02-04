@@ -138,6 +138,31 @@ const chartColors = {
     }
 }
 
+// Helper to format date for Lightweight Charts
+// For daily data: returns yyyy-mm-dd string
+// For intraday data: returns Unix timestamp (seconds)
+const formatTime = (timeStr: string): string | number => {
+    if (timeStr.includes(' ') || timeStr.includes('T')) {
+        // Intraday data - convert to Unix timestamp (seconds)
+        return Math.floor(new Date(timeStr).getTime() / 1000)
+    }
+    // Daily data - keep as yyyy-mm-dd string
+    return timeStr
+}
+
+// Helper to deduplicate and sort candle data by time
+const deduplicateByTime = <T extends { time: string | number }>(data: T[]): T[] => {
+    const seen = new Map<string | number, T>()
+    for (const item of data) {
+        seen.set(item.time, item) // Later items override earlier ones
+    }
+    return Array.from(seen.values()).sort((a, b) => {
+        const timeA = typeof a.time === 'number' ? a.time : new Date(a.time).getTime()
+        const timeB = typeof b.time === 'number' ? b.time : new Date(b.time).getTime()
+        return timeA - timeB
+    })
+}
+
 interface ChartPageProps {
     initialSymbol?: string
     initialMarket?: "BIST" | "Kripto"
@@ -166,10 +191,21 @@ export function AdvancedChartPage({
     // Indicator state
     const [showIndicatorSearch, setShowIndicatorSearch] = useState(false)
     const [indicatorSearchQuery, setIndicatorSearchQuery] = useState("")
-    const [activeIndicators, setActiveIndicators] = useState<ActiveIndicator[]>([])
+    // Default active indicators: COMBO and HUNTER overlays
+    const [activeIndicators, setActiveIndicators] = useState<ActiveIndicator[]>(() => {
+        const comboMeta = AVAILABLE_INDICATORS.find(i => i.id === 'combo')
+        const hunterMeta = AVAILABLE_INDICATORS.find(i => i.id === 'hunter')
+        const defaults: ActiveIndicator[] = []
+        if (comboMeta) defaults.push({ id: 'combo', meta: comboMeta, params: {} })
+        if (hunterMeta) defaults.push({ id: 'hunter', meta: hunterMeta, params: {} })
+        return defaults
+    })
 
     // Drawing tools state
     const [activeTool, setActiveTool] = useState<'none' | 'ruler' | 'pencil' | 'text'>('none')
+
+    // Chart ready state
+    const [chartReady, setChartReady] = useState(false)
 
     // Crosshair data
     const [crosshairData, setCrosshairData] = useState<{
@@ -185,9 +221,17 @@ export function AdvancedChartPage({
     const chartContainerRef = useRef<HTMLDivElement>(null)
     const chartInstance = useRef<any>(null)
     const seriesInstance = useRef<any>(null)
-    const volumeSeriesInstance = useRef<any>(null)
     const lastCrosshairTimeRef = useRef<string | null>(null)
     const fullscreenContainerRef = useRef<HTMLDivElement>(null)
+    const isInitialLoadRef = useRef<boolean>(true)
+    const lastSymbolRef = useRef<string>(initialSymbol)
+    const lastTimeframeRef = useRef<string>("1d")
+    const indicatorChartsRef = useRef<Map<string, any>>(new Map())
+
+    // Register indicator chart for crosshair sync
+    const registerIndicatorChart = useCallback((id: string, chart: any) => {
+        indicatorChartsRef.current.set(id, chart)
+    }, [])
 
     // Fetch candle data
     const { data: candlesResponse, isLoading } = useQuery({
@@ -269,7 +313,7 @@ export function AdvancedChartPage({
     useEffect(() => {
         if (!chartContainerRef.current) return
 
-        import("lightweight-charts").then(({ createChart, ColorType, CrosshairMode, CandlestickSeries, HistogramSeries }) => {
+        import("lightweight-charts").then(({ createChart, ColorType, CrosshairMode, CandlestickSeries }) => {
             if (!chartContainerRef.current) return
 
             // Destroy existing chart
@@ -277,7 +321,7 @@ export function AdvancedChartPage({
                 chartInstance.current.remove()
                 chartInstance.current = null
                 seriesInstance.current = null
-                volumeSeriesInstance.current = null
+                setChartReady(false)
             }
 
             const containerWidth = chartContainerRef.current.clientWidth
@@ -297,12 +341,15 @@ export function AdvancedChartPage({
                 height: containerHeight,
                 rightPriceScale: {
                     borderColor: chartColors.grid,
-                    scaleMargins: { top: 0.1, bottom: 0.2 },
+                    scaleMargins: { top: 0.05, bottom: 0.05 },
                 },
                 timeScale: {
                     borderColor: chartColors.grid,
                     timeVisible: true,
                     secondsVisible: false,
+                    rightOffset: 12,
+                    barSpacing: 6,
+                    minBarSpacing: 2,
                 },
                 crosshair: {
                     mode: CrosshairMode.Normal,
@@ -330,6 +377,10 @@ export function AdvancedChartPage({
                     mouseWheel: true,
                     pinch: true,
                 },
+                kineticScroll: {
+                    mouse: true,
+                    touch: true,
+                },
             })
 
             // Candlestick series
@@ -340,17 +391,6 @@ export function AdvancedChartPage({
                 borderUpColor: chartColors.bullish,
                 wickDownColor: chartColors.bearish,
                 wickUpColor: chartColors.bullish,
-            })
-
-            // Volume series
-            const volumeSeries = chart.addSeries(HistogramSeries, {
-                color: chartColors.volume.up,
-                priceFormat: { type: "volume" },
-                priceScaleId: "",
-            })
-
-            volumeSeries.priceScale().applyOptions({
-                scaleMargins: { top: 0.85, bottom: 0 },
             })
 
             // Crosshair move handler
@@ -384,7 +424,7 @@ export function AdvancedChartPage({
 
             chartInstance.current = chart
             seriesInstance.current = candlestickSeries
-            volumeSeriesInstance.current = volumeSeries
+            setChartReady(true)
 
             // Handle resize
             const handleResize = () => {
@@ -406,27 +446,21 @@ export function AdvancedChartPage({
 
     // Update chart data
     useEffect(() => {
-        if (candles.length > 0 && seriesInstance.current && volumeSeriesInstance.current) {
-            const candleData = candles.map((item) => ({
-                time: item.time,
+        if (!chartReady || candles.length === 0 || !seriesInstance.current) return
+
+            const rawCandleData = candles.map((item) => ({
+                time: formatTime(item.time),
                 open: item.open,
                 high: item.high,
                 low: item.low,
                 close: item.close,
             }))
 
-            const volumeData = candles.map((item) => ({
-                time: item.time,
-                value: item.volume,
-                color: item.close >= item.open ? chartColors.volume.up : chartColors.volume.down,
-            }))
-
-            candleData.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())
-            volumeData.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())
+            // Deduplicate and sort data
+            const candleData = deduplicateByTime(rawCandleData)
 
             try {
                 seriesInstance.current.setData(candleData)
-                volumeSeriesInstance.current.setData(volumeData)
 
                 // Add signal markers (including Combo/Hunter overlays)
                 const markers: any[] = []
@@ -435,7 +469,7 @@ export function AdvancedChartPage({
                 if (showSignals && signals.length > 0) {
                     signals.forEach((signal) => {
                         markers.push({
-                            time: signal.time,
+                            time: formatTime(signal.time),
                             position: signal.type === 'AL' ? 'belowBar' : 'aboveBar',
                             shape: signal.type === 'AL' ? 'arrowUp' : 'arrowDown',
                             color: signal.type === 'AL' ? chartColors.bullish : chartColors.bearish,
@@ -451,7 +485,7 @@ export function AdvancedChartPage({
                     comboSignals.forEach((sig) => {
                         if (sig.signal) {
                             markers.push({
-                                time: sig.time,
+                                time: formatTime(sig.time),
                                 position: sig.signal === 'AL' ? 'belowBar' : 'aboveBar',
                                 shape: sig.signal === 'AL' ? 'arrowUp' : 'arrowDown',
                                 color: sig.signal === 'AL' ? '#00e676' : '#ff5252',
@@ -468,7 +502,7 @@ export function AdvancedChartPage({
                     hunterSignals.forEach((sig) => {
                         if (sig.signal) {
                             markers.push({
-                                time: sig.time,
+                                time: formatTime(sig.time),
                                 position: sig.signal === 'AL' ? 'belowBar' : 'aboveBar',
                                 shape: 'circle',
                                 color: sig.signal === 'AL' ? '#76ff03' : '#ff1744',
@@ -479,16 +513,28 @@ export function AdvancedChartPage({
                     })
                 }
 
-                if (markers.length > 0) {
+                if (markers.length > 0 && typeof seriesInstance.current.setMarkers === 'function') {
                     seriesInstance.current.setMarkers(markers)
+                } else if (markers.length === 0 && typeof seriesInstance.current.setMarkers === 'function') {
+                    // Clear markers if none
+                    seriesInstance.current.setMarkers([])
                 }
 
-                chartInstance.current?.timeScale().fitContent()
+                // Only fit content on initial load or when symbol/timeframe changes
+                // This preserves user's zoom/pan position during data refreshes
+                const symbolChanged = lastSymbolRef.current !== symbol
+                const timeframeChanged = lastTimeframeRef.current !== timeframe
+
+                if (isInitialLoadRef.current || symbolChanged || timeframeChanged) {
+                    chartInstance.current?.timeScale().fitContent()
+                    isInitialLoadRef.current = false
+                    lastSymbolRef.current = symbol
+                    lastTimeframeRef.current = timeframe
+                }
             } catch (e) {
                 console.error("Chart update error:", e)
             }
-        }
-    }, [candles, signals, showSignals, activeIndicators])
+    }, [candles, signals, showSignals, activeIndicators, chartReady, symbol, timeframe])
 
     // Add indicator
     const addIndicator = useCallback((indicatorId: string) => {
@@ -532,7 +578,7 @@ export function AdvancedChartPage({
         const bistList = (bistSymbols?.symbols || []).map(s => ({
             symbol: s, name: s, market: "BIST" as const
         }))
-        const cryptoList = (binanceSymbols || CRYPTO_WATCHLIST).map(s => ({
+        const cryptoList = (binanceSymbols || CRYPTO_WATCHLIST).map((s: string) => ({
             symbol: s, name: s.replace('USDT', ''), market: "Kripto" as const
         }))
         const allSymbols = [...bistList, ...cryptoList]
@@ -794,21 +840,35 @@ export function AdvancedChartPage({
                 )}
 
                 {/* Chart Area */}
-                <div className="flex-1 relative min-h-[400px]">
+                <div className="flex-1 relative" style={{ minHeight: isFullscreen ? 'calc(100vh - 200px)' : '500px' }}>
                     {isLoading && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm z-10">
+                        <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm z-10 pointer-events-none">
                             <div className="flex flex-col items-center gap-3">
                                 <div className="w-10 h-10 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
                                 <span className="text-sm text-muted-foreground">Grafik yükleniyor...</span>
                             </div>
                         </div>
                     )}
-                    <div ref={chartContainerRef} className="w-full h-full" />
+                    <div
+                        ref={chartContainerRef}
+                        className="w-full h-full cursor-crosshair"
+                        style={{ touchAction: 'none', minHeight: 'inherit' }}
+                    />
                 </div>
 
                 {/* Indicator Panels */}
                 {activeIndicators.filter(i => !i.meta.isOverlay).map((ind) => (
-                    <IndicatorPane key={ind.id} indicator={ind} candles={candles} onRemove={() => removeIndicator(ind.id)} />
+                    <IndicatorPane
+                        key={ind.id}
+                        indicator={ind}
+                        candles={candles}
+                        onRemove={() => {
+                            removeIndicator(ind.id)
+                            indicatorChartsRef.current.delete(ind.id)
+                        }}
+                        mainChartRef={chartInstance}
+                        onChartReady={(chart) => registerIndicatorChart(ind.id, chart)}
+                    />
                 ))}
 
                 {/* Status Bar */}
@@ -867,20 +927,31 @@ interface IndicatorPaneProps {
     indicator: ActiveIndicator
     candles: Candle[]
     onRemove: () => void
+    mainChartRef: React.MutableRefObject<any>
+    onChartReady?: (chart: any) => void
 }
 
-function IndicatorPane({ indicator, candles, onRemove }: IndicatorPaneProps) {
+function IndicatorPane({ indicator, candles, onRemove, mainChartRef, onChartReady }: IndicatorPaneProps) {
     const containerRef = useRef<HTMLDivElement>(null)
     const chartRef = useRef<any>(null)
+    const isSyncingRef = useRef(false)
+    const isDisposedRef = useRef(false)
 
     useEffect(() => {
         if (!containerRef.current || candles.length === 0) return
 
-        import("lightweight-charts").then(({ createChart, ColorType, LineSeries, HistogramSeries }) => {
-            if (!containerRef.current) return
+        isDisposedRef.current = false
+
+        import("lightweight-charts").then(({ createChart, ColorType, LineSeries, HistogramSeries, CrosshairMode }) => {
+            if (!containerRef.current || isDisposedRef.current) return
 
             if (chartRef.current) {
-                chartRef.current.remove()
+                try {
+                    chartRef.current.remove()
+                } catch (e) {
+                    // Chart already disposed
+                }
+                chartRef.current = null
             }
 
             const chart = createChart(containerRef.current, {
@@ -889,45 +960,128 @@ function IndicatorPane({ indicator, candles, onRemove }: IndicatorPaneProps) {
                 width: containerRef.current.clientWidth,
                 height: 100,
                 rightPriceScale: { borderColor: 'rgba(48, 54, 61, 0.3)' },
-                timeScale: { visible: false },
+                timeScale: {
+                    visible: true,
+                    borderColor: 'rgba(48, 54, 61, 0.3)',
+                    timeVisible: true,
+                    secondsVisible: false,
+                },
+                crosshair: {
+                    mode: CrosshairMode.Normal,
+                    vertLine: { color: 'rgba(0, 242, 234, 0.5)', width: 1, style: 0 },
+                    horzLine: { color: 'rgba(0, 242, 234, 0.5)', width: 1, style: 0 },
+                },
                 handleScroll: { mouseWheel: true, pressedMouseMove: true },
                 handleScale: { mouseWheel: true },
             })
 
+            let series: any = null
             if (indicator.id === 'rsi') {
                 const rsiData = calculateRSI(candles, indicator.params.period || 14)
-                const series = chart.addSeries(LineSeries, { color: chartColors.indicators.rsi, lineWidth: 2, priceScaleId: 'right' })
-                series.setData(rsiData.filter(d => !isNaN(d.value)).map(d => ({ time: d.time, value: d.value })))
+                series = chart.addSeries(LineSeries, { color: chartColors.indicators.rsi, lineWidth: 2, priceScaleId: 'right' })
+                series.setData(deduplicateByTime(rsiData.filter(d => !isNaN(d.value)).map(d => ({ time: formatTime(d.time), value: d.value }))) as any)
             } else if (indicator.id === 'macd') {
                 const macdData = calculateMACD(candles)
                 const macdSeries = chart.addSeries(LineSeries, { color: chartColors.indicators.macd, lineWidth: 2 })
-                macdSeries.setData(macdData.filter(d => !isNaN(d.macd)).map(d => ({ time: d.time, value: d.macd })))
+                macdSeries.setData(deduplicateByTime(macdData.filter(d => !isNaN(d.macd)).map(d => ({ time: formatTime(d.time), value: d.macd }))) as any)
                 const signalSeries = chart.addSeries(LineSeries, { color: chartColors.indicators.macdSignal, lineWidth: 2 })
-                signalSeries.setData(macdData.filter(d => !isNaN(d.signal)).map(d => ({ time: d.time, value: d.signal })))
+                signalSeries.setData(deduplicateByTime(macdData.filter(d => !isNaN(d.signal)).map(d => ({ time: formatTime(d.time), value: d.signal }))) as any)
                 const histSeries = chart.addSeries(HistogramSeries, { color: chartColors.indicators.macdHistogram })
-                histSeries.setData(macdData.filter(d => !isNaN(d.histogram)).map(d => ({ time: d.time, value: d.histogram, color: d.histogram >= 0 ? 'rgba(0, 200, 83, 0.5)' : 'rgba(255, 61, 0, 0.5)' })))
+                histSeries.setData(deduplicateByTime(macdData.filter(d => !isNaN(d.histogram)).map(d => ({ time: formatTime(d.time), value: d.histogram, color: d.histogram >= 0 ? 'rgba(0, 200, 83, 0.5)' : 'rgba(255, 61, 0, 0.5)' }))) as any)
+                series = macdSeries
             } else if (indicator.id === 'wr') {
                 const wrData = calculateWilliamsR(candles, indicator.params.period || 14)
-                const series = chart.addSeries(LineSeries, { color: chartColors.indicators.wr, lineWidth: 2 })
-                series.setData(wrData.filter(d => !isNaN(d.value)).map(d => ({ time: d.time, value: d.value })))
+                series = chart.addSeries(LineSeries, { color: chartColors.indicators.wr, lineWidth: 2 })
+                series.setData(deduplicateByTime(wrData.filter(d => !isNaN(d.value)).map(d => ({ time: formatTime(d.time), value: d.value }))) as any)
             } else if (indicator.id === 'cci') {
                 const cciData = calculateCCI(candles, indicator.params.period || 20)
-                const series = chart.addSeries(LineSeries, { color: chartColors.indicators.cci, lineWidth: 2 })
-                series.setData(cciData.filter(d => !isNaN(d.value)).map(d => ({ time: d.time, value: d.value })))
+                series = chart.addSeries(LineSeries, { color: chartColors.indicators.cci, lineWidth: 2 })
+                series.setData(deduplicateByTime(cciData.filter(d => !isNaN(d.value)).map(d => ({ time: formatTime(d.time), value: d.value }))) as any)
             }
 
-            chart.timeScale().fitContent()
             chartRef.current = chart
+            onChartReady?.(chart)
+
+            // Sync time scale with main chart (with safety checks)
+            const syncWithMain = () => {
+                if (isDisposedRef.current || !mainChartRef.current || isSyncingRef.current) return
+                try {
+                    const mainTimeScale = mainChartRef.current.timeScale()
+                    const range = mainTimeScale.getVisibleLogicalRange()
+                    if (range && chartRef.current) {
+                        isSyncingRef.current = true
+                        chartRef.current.timeScale().setVisibleLogicalRange(range)
+                        isSyncingRef.current = false
+                    }
+                } catch (e) {
+                    // Chart disposed or not ready
+                }
+            }
+
+            // Subscribe to main chart's visible range changes
+            let unsubscribeMain: (() => void) | null = null
+            let unsubscribeLocal: (() => void) | null = null
+
+            if (mainChartRef.current) {
+                try {
+                    const mainTimeScale = mainChartRef.current.timeScale()
+                    unsubscribeMain = mainTimeScale.subscribeVisibleLogicalRangeChange(syncWithMain)
+
+                    // Also sync this chart's changes back to main
+                    unsubscribeLocal = chart.timeScale().subscribeVisibleLogicalRangeChange((range: any) => {
+                        if (isDisposedRef.current || !mainChartRef.current || isSyncingRef.current || !range) return
+                        try {
+                            isSyncingRef.current = true
+                            mainChartRef.current.timeScale().setVisibleLogicalRange(range)
+                            isSyncingRef.current = false
+                        } catch (e) {
+                            // Main chart disposed
+                        }
+                    })
+
+                    // Initial sync
+                    syncWithMain()
+                } catch (e) {
+                    // Main chart not ready
+                }
+            }
 
             const handleResize = () => {
-                if (containerRef.current && chartRef.current) {
-                    chartRef.current.applyOptions({ width: containerRef.current.clientWidth })
+                if (containerRef.current && chartRef.current && !isDisposedRef.current) {
+                    try {
+                        chartRef.current.applyOptions({ width: containerRef.current.clientWidth })
+                    } catch (e) {
+                        // Chart disposed
+                    }
                 }
             }
             window.addEventListener('resize', handleResize)
-            return () => window.removeEventListener('resize', handleResize)
+
+            // Cleanup function
+            return () => {
+                isDisposedRef.current = true
+                window.removeEventListener('resize', handleResize)
+
+                // Unsubscribe from events
+                if (unsubscribeMain) {
+                    try { unsubscribeMain() } catch (e) { /* ignore */ }
+                }
+                if (unsubscribeLocal) {
+                    try { unsubscribeLocal() } catch (e) { /* ignore */ }
+                }
+
+                // Remove chart
+                if (chartRef.current) {
+                    try {
+                        chartRef.current.remove()
+                    } catch (e) {
+                        // Already disposed
+                    }
+                    chartRef.current = null
+                }
+            }
         })
-    }, [indicator, candles])
+    }, [indicator, candles, mainChartRef, onChartReady])
 
     return (
         <div className="border-t border-border/30">
