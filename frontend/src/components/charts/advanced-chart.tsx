@@ -935,15 +935,23 @@ function IndicatorPane({ indicator, candles, onRemove, mainChartRef, onChartRead
     const containerRef = useRef<HTMLDivElement>(null)
     const chartRef = useRef<any>(null)
     const isSyncingRef = useRef(false)
+    const isDisposedRef = useRef(false)
 
     useEffect(() => {
         if (!containerRef.current || candles.length === 0) return
 
+        isDisposedRef.current = false
+
         import("lightweight-charts").then(({ createChart, ColorType, LineSeries, HistogramSeries, CrosshairMode }) => {
-            if (!containerRef.current) return
+            if (!containerRef.current || isDisposedRef.current) return
 
             if (chartRef.current) {
-                chartRef.current.remove()
+                try {
+                    chartRef.current.remove()
+                } catch (e) {
+                    // Chart already disposed
+                }
+                chartRef.current = null
             }
 
             const chart = createChart(containerRef.current, {
@@ -994,42 +1002,84 @@ function IndicatorPane({ indicator, candles, onRemove, mainChartRef, onChartRead
             chartRef.current = chart
             onChartReady?.(chart)
 
-            // Sync time scale with main chart
+            // Sync time scale with main chart (with safety checks)
             const syncWithMain = () => {
-                if (!mainChartRef.current || isSyncingRef.current) return
-                const mainTimeScale = mainChartRef.current.timeScale()
-                const range = mainTimeScale.getVisibleLogicalRange()
-                if (range) {
-                    isSyncingRef.current = true
-                    chart.timeScale().setVisibleLogicalRange(range)
-                    isSyncingRef.current = false
+                if (isDisposedRef.current || !mainChartRef.current || isSyncingRef.current) return
+                try {
+                    const mainTimeScale = mainChartRef.current.timeScale()
+                    const range = mainTimeScale.getVisibleLogicalRange()
+                    if (range && chartRef.current) {
+                        isSyncingRef.current = true
+                        chartRef.current.timeScale().setVisibleLogicalRange(range)
+                        isSyncingRef.current = false
+                    }
+                } catch (e) {
+                    // Chart disposed or not ready
                 }
             }
 
             // Subscribe to main chart's visible range changes
+            let unsubscribeMain: (() => void) | null = null
+            let unsubscribeLocal: (() => void) | null = null
+
             if (mainChartRef.current) {
-                const mainTimeScale = mainChartRef.current.timeScale()
-                mainTimeScale.subscribeVisibleLogicalRangeChange(syncWithMain)
+                try {
+                    const mainTimeScale = mainChartRef.current.timeScale()
+                    unsubscribeMain = mainTimeScale.subscribeVisibleLogicalRangeChange(syncWithMain)
 
-                // Also sync this chart's changes back to main
-                chart.timeScale().subscribeVisibleLogicalRangeChange((range: any) => {
-                    if (!mainChartRef.current || isSyncingRef.current || !range) return
-                    isSyncingRef.current = true
-                    mainChartRef.current.timeScale().setVisibleLogicalRange(range)
-                    isSyncingRef.current = false
-                })
+                    // Also sync this chart's changes back to main
+                    unsubscribeLocal = chart.timeScale().subscribeVisibleLogicalRangeChange((range: any) => {
+                        if (isDisposedRef.current || !mainChartRef.current || isSyncingRef.current || !range) return
+                        try {
+                            isSyncingRef.current = true
+                            mainChartRef.current.timeScale().setVisibleLogicalRange(range)
+                            isSyncingRef.current = false
+                        } catch (e) {
+                            // Main chart disposed
+                        }
+                    })
 
-                // Initial sync
-                syncWithMain()
+                    // Initial sync
+                    syncWithMain()
+                } catch (e) {
+                    // Main chart not ready
+                }
             }
 
             const handleResize = () => {
-                if (containerRef.current && chartRef.current) {
-                    chartRef.current.applyOptions({ width: containerRef.current.clientWidth })
+                if (containerRef.current && chartRef.current && !isDisposedRef.current) {
+                    try {
+                        chartRef.current.applyOptions({ width: containerRef.current.clientWidth })
+                    } catch (e) {
+                        // Chart disposed
+                    }
                 }
             }
             window.addEventListener('resize', handleResize)
-            return () => window.removeEventListener('resize', handleResize)
+
+            // Cleanup function
+            return () => {
+                isDisposedRef.current = true
+                window.removeEventListener('resize', handleResize)
+
+                // Unsubscribe from events
+                if (unsubscribeMain) {
+                    try { unsubscribeMain() } catch (e) { /* ignore */ }
+                }
+                if (unsubscribeLocal) {
+                    try { unsubscribeLocal() } catch (e) { /* ignore */ }
+                }
+
+                // Remove chart
+                if (chartRef.current) {
+                    try {
+                        chartRef.current.remove()
+                    } catch (e) {
+                        // Already disposed
+                    }
+                    chartRef.current = null
+                }
+            }
         })
     }, [indicator, candles, mainChartRef, onChartReady])
 
