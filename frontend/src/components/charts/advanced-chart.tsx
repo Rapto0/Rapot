@@ -226,6 +226,12 @@ export function AdvancedChartPage({
     const isInitialLoadRef = useRef<boolean>(true)
     const lastSymbolRef = useRef<string>(initialSymbol)
     const lastTimeframeRef = useRef<string>("1d")
+    const indicatorChartsRef = useRef<Map<string, any>>(new Map())
+
+    // Register indicator chart for crosshair sync
+    const registerIndicatorChart = useCallback((id: string, chart: any) => {
+        indicatorChartsRef.current.set(id, chart)
+    }, [])
 
     // Fetch candle data
     const { data: candlesResponse, isLoading } = useQuery({
@@ -852,7 +858,17 @@ export function AdvancedChartPage({
 
                 {/* Indicator Panels */}
                 {activeIndicators.filter(i => !i.meta.isOverlay).map((ind) => (
-                    <IndicatorPane key={ind.id} indicator={ind} candles={candles} onRemove={() => removeIndicator(ind.id)} />
+                    <IndicatorPane
+                        key={ind.id}
+                        indicator={ind}
+                        candles={candles}
+                        onRemove={() => {
+                            removeIndicator(ind.id)
+                            indicatorChartsRef.current.delete(ind.id)
+                        }}
+                        mainChartRef={chartInstance}
+                        onChartReady={(chart) => registerIndicatorChart(ind.id, chart)}
+                    />
                 ))}
 
                 {/* Status Bar */}
@@ -911,16 +927,19 @@ interface IndicatorPaneProps {
     indicator: ActiveIndicator
     candles: Candle[]
     onRemove: () => void
+    mainChartRef: React.MutableRefObject<any>
+    onChartReady?: (chart: any) => void
 }
 
-function IndicatorPane({ indicator, candles, onRemove }: IndicatorPaneProps) {
+function IndicatorPane({ indicator, candles, onRemove, mainChartRef, onChartReady }: IndicatorPaneProps) {
     const containerRef = useRef<HTMLDivElement>(null)
     const chartRef = useRef<any>(null)
+    const isSyncingRef = useRef(false)
 
     useEffect(() => {
         if (!containerRef.current || candles.length === 0) return
 
-        import("lightweight-charts").then(({ createChart, ColorType, LineSeries, HistogramSeries }) => {
+        import("lightweight-charts").then(({ createChart, ColorType, LineSeries, HistogramSeries, CrosshairMode }) => {
             if (!containerRef.current) return
 
             if (chartRef.current) {
@@ -933,14 +952,25 @@ function IndicatorPane({ indicator, candles, onRemove }: IndicatorPaneProps) {
                 width: containerRef.current.clientWidth,
                 height: 100,
                 rightPriceScale: { borderColor: 'rgba(48, 54, 61, 0.3)' },
-                timeScale: { visible: false },
+                timeScale: {
+                    visible: true,
+                    borderColor: 'rgba(48, 54, 61, 0.3)',
+                    timeVisible: true,
+                    secondsVisible: false,
+                },
+                crosshair: {
+                    mode: CrosshairMode.Normal,
+                    vertLine: { color: 'rgba(0, 242, 234, 0.5)', width: 1, style: 0 },
+                    horzLine: { color: 'rgba(0, 242, 234, 0.5)', width: 1, style: 0 },
+                },
                 handleScroll: { mouseWheel: true, pressedMouseMove: true },
                 handleScale: { mouseWheel: true },
             })
 
+            let series: any = null
             if (indicator.id === 'rsi') {
                 const rsiData = calculateRSI(candles, indicator.params.period || 14)
-                const series = chart.addSeries(LineSeries, { color: chartColors.indicators.rsi, lineWidth: 2, priceScaleId: 'right' })
+                series = chart.addSeries(LineSeries, { color: chartColors.indicators.rsi, lineWidth: 2, priceScaleId: 'right' })
                 series.setData(deduplicateByTime(rsiData.filter(d => !isNaN(d.value)).map(d => ({ time: formatTime(d.time), value: d.value }))) as any)
             } else if (indicator.id === 'macd') {
                 const macdData = calculateMACD(candles)
@@ -950,18 +980,48 @@ function IndicatorPane({ indicator, candles, onRemove }: IndicatorPaneProps) {
                 signalSeries.setData(deduplicateByTime(macdData.filter(d => !isNaN(d.signal)).map(d => ({ time: formatTime(d.time), value: d.signal }))) as any)
                 const histSeries = chart.addSeries(HistogramSeries, { color: chartColors.indicators.macdHistogram })
                 histSeries.setData(deduplicateByTime(macdData.filter(d => !isNaN(d.histogram)).map(d => ({ time: formatTime(d.time), value: d.histogram, color: d.histogram >= 0 ? 'rgba(0, 200, 83, 0.5)' : 'rgba(255, 61, 0, 0.5)' }))) as any)
+                series = macdSeries
             } else if (indicator.id === 'wr') {
                 const wrData = calculateWilliamsR(candles, indicator.params.period || 14)
-                const series = chart.addSeries(LineSeries, { color: chartColors.indicators.wr, lineWidth: 2 })
+                series = chart.addSeries(LineSeries, { color: chartColors.indicators.wr, lineWidth: 2 })
                 series.setData(deduplicateByTime(wrData.filter(d => !isNaN(d.value)).map(d => ({ time: formatTime(d.time), value: d.value }))) as any)
             } else if (indicator.id === 'cci') {
                 const cciData = calculateCCI(candles, indicator.params.period || 20)
-                const series = chart.addSeries(LineSeries, { color: chartColors.indicators.cci, lineWidth: 2 })
+                series = chart.addSeries(LineSeries, { color: chartColors.indicators.cci, lineWidth: 2 })
                 series.setData(deduplicateByTime(cciData.filter(d => !isNaN(d.value)).map(d => ({ time: formatTime(d.time), value: d.value }))) as any)
             }
 
-            chart.timeScale().fitContent()
             chartRef.current = chart
+            onChartReady?.(chart)
+
+            // Sync time scale with main chart
+            const syncWithMain = () => {
+                if (!mainChartRef.current || isSyncingRef.current) return
+                const mainTimeScale = mainChartRef.current.timeScale()
+                const range = mainTimeScale.getVisibleLogicalRange()
+                if (range) {
+                    isSyncingRef.current = true
+                    chart.timeScale().setVisibleLogicalRange(range)
+                    isSyncingRef.current = false
+                }
+            }
+
+            // Subscribe to main chart's visible range changes
+            if (mainChartRef.current) {
+                const mainTimeScale = mainChartRef.current.timeScale()
+                mainTimeScale.subscribeVisibleLogicalRangeChange(syncWithMain)
+
+                // Also sync this chart's changes back to main
+                chart.timeScale().subscribeVisibleLogicalRangeChange((range: any) => {
+                    if (!mainChartRef.current || isSyncingRef.current || !range) return
+                    isSyncingRef.current = true
+                    mainChartRef.current.timeScale().setVisibleLogicalRange(range)
+                    isSyncingRef.current = false
+                })
+
+                // Initial sync
+                syncWithMain()
+            }
 
             const handleResize = () => {
                 if (containerRef.current && chartRef.current) {
@@ -971,7 +1031,7 @@ function IndicatorPane({ indicator, candles, onRemove }: IndicatorPaneProps) {
             window.addEventListener('resize', handleResize)
             return () => window.removeEventListener('resize', handleResize)
         })
-    }, [indicator, candles])
+    }, [indicator, candles, mainChartRef, onChartReady])
 
     return (
         <div className="border-t border-border/30">

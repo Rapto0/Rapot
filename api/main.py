@@ -268,12 +268,13 @@ async def get_signals(
     symbol: str | None = Query(None, description="Sembol filtresi"),
     strategy: str | None = Query(None, description="Strateji filtresi (COMBO/HUNTER)"),
     signal_type: str | None = Query(None, description="Sinyal türü (AL/SAT)"),
-    limit: int = Query(50, ge=1, le=500, description="Maksimum kayıt sayısı"),
+    market_type: str | None = Query(None, description="Piyasa türü (BIST/Kripto)"),
+    limit: int = Query(50, ge=1, le=1000, description="Maksimum kayıt sayısı"),
 ):
     """
     Sinyal listesini döndürür.
 
-    Opsiyonel filtreler: symbol, strategy, signal_type
+    Opsiyonel filtreler: symbol, strategy, signal_type, market_type
     """
     from db_session import get_session
     from models import Signal
@@ -287,6 +288,8 @@ async def get_signals(
             query = query.filter(Signal.strategy == strategy.upper())
         if signal_type:
             query = query.filter(Signal.signal_type == signal_type.upper())
+        if market_type:
+            query = query.filter(Signal.market_type == market_type)
 
         signals = query.order_by(Signal.created_at.desc()).limit(limit).all()
 
@@ -300,7 +303,7 @@ async def get_signals(
                 timeframe=s.timeframe,
                 score=s.score,
                 price=s.price,
-                created_at=s.created_at.isoformat() if s.created_at else None,
+                created_at=s.created_at.isoformat() + "Z" if s.created_at else None,
             )
             for s in signals
         ]
@@ -987,18 +990,29 @@ async def get_candles(
             except Exception as resample_err:
                 print(f"Resample error: {resample_err}")
 
-        # 5. Format output
+        # 5. Format output with Turkey timezone conversion
+        import pytz
+        turkey_tz = pytz.timezone("Europe/Istanbul")
         candles = []
         if df is not None and not df.empty:
             # Take last N candles
             df_tail = df.tail(limit)
 
             for index, row in df_tail.iterrows():
-                # For intraday, include time. For daily+, just date
+                # Convert index to Turkey timezone if it's timezone-aware
+                ts = index
                 if is_intraday:
-                    time_val = index.strftime("%Y-%m-%d %H:%M")
+                    # Convert UTC to Turkey timezone for intraday data
+                    if hasattr(ts, 'tzinfo') and ts.tzinfo is not None:
+                        ts = ts.astimezone(turkey_tz)
+                    elif hasattr(ts, 'tz_localize'):
+                        try:
+                            ts = ts.tz_localize('UTC').tz_convert(turkey_tz)
+                        except Exception:
+                            pass
+                    time_val = ts.strftime("%Y-%m-%d %H:%M")
                 else:
-                    time_val = index.strftime("%Y-%m-%d")
+                    time_val = ts.strftime("%Y-%m-%d")
 
                 candles.append(
                     {
