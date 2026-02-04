@@ -517,14 +517,31 @@ export function AdvancedChartPage({
                     })
                 }
 
-                console.log(`Total markers to add: ${markers.length}`, markers.slice(0, 3))
+                console.log(`Total markers to add: ${markers.length}`)
+                console.log('seriesInstance.current:', seriesInstance.current)
+                console.log('setMarkers type:', typeof seriesInstance.current?.setMarkers)
 
-                if (markers.length > 0 && typeof seriesInstance.current.setMarkers === 'function') {
-                    seriesInstance.current.setMarkers(markers)
-                    console.log('Markers set successfully')
-                } else if (markers.length === 0 && typeof seriesInstance.current.setMarkers === 'function') {
-                    // Clear markers if none
-                    seriesInstance.current.setMarkers([])
+                if (markers.length > 0 && seriesInstance.current) {
+                    try {
+                        // In Lightweight Charts v5, setMarkers might need different approach
+                        if (typeof seriesInstance.current.setMarkers === 'function') {
+                            seriesInstance.current.setMarkers(markers)
+                            console.log('Markers set via setMarkers()')
+                        } else {
+                            // Try alternative v5 approach - markers on chart
+                            console.log('setMarkers not found, trying chart.setMarkers')
+                            // Markers might need to be sorted by time
+                            const sortedMarkers = [...markers].sort((a, b) => {
+                                const timeA = typeof a.time === 'number' ? a.time : new Date(a.time).getTime()
+                                const timeB = typeof b.time === 'number' ? b.time : new Date(b.time).getTime()
+                                return timeA - timeB
+                            })
+                            seriesInstance.current.setMarkers(sortedMarkers)
+                            console.log('Markers set with sorted data')
+                        }
+                    } catch (e) {
+                        console.error('Error setting markers:', e)
+                    }
                 }
 
                 // Only fit content on initial load or when symbol/timeframe changes
