@@ -221,6 +221,7 @@ export function AdvancedChartPage({
     const chartContainerRef = useRef<HTMLDivElement>(null)
     const chartInstance = useRef<any>(null)
     const seriesInstance = useRef<any>(null)
+    const markersInstance = useRef<any>(null) // v5 markers primitive
     const lastCrosshairTimeRef = useRef<string | null>(null)
     const fullscreenContainerRef = useRef<HTMLDivElement>(null)
     const isInitialLoadRef = useRef<boolean>(true)
@@ -313,7 +314,7 @@ export function AdvancedChartPage({
     useEffect(() => {
         if (!chartContainerRef.current) return
 
-        import("lightweight-charts").then(({ createChart, ColorType, CrosshairMode, CandlestickSeries }) => {
+        import("lightweight-charts").then(({ createChart, ColorType, CrosshairMode, CandlestickSeries, createSeriesMarkers }) => {
             if (!chartContainerRef.current) return
 
             // Destroy existing chart
@@ -321,6 +322,7 @@ export function AdvancedChartPage({
                 chartInstance.current.remove()
                 chartInstance.current = null
                 seriesInstance.current = null
+                markersInstance.current = null
                 setChartReady(false)
             }
 
@@ -440,6 +442,15 @@ export function AdvancedChartPage({
 
             return () => {
                 window.removeEventListener("resize", handleResize)
+                // Clean up markers primitive
+                if (markersInstance.current) {
+                    try {
+                        markersInstance.current.detach()
+                    } catch (e) {
+                        // Ignore
+                    }
+                    markersInstance.current = null
+                }
             }
         })
     }, [isFullscreen])
@@ -447,6 +458,10 @@ export function AdvancedChartPage({
     // Update chart data
     useEffect(() => {
         if (!chartReady || candles.length === 0 || !seriesInstance.current) return
+
+        // Dynamic import for v5 markers API
+        import("lightweight-charts").then(({ createSeriesMarkers }) => {
+            if (!seriesInstance.current) return
 
             const rawCandleData = candles.map((item) => ({
                 time: formatTime(item.time),
@@ -518,26 +533,31 @@ export function AdvancedChartPage({
                 }
 
                 console.log(`Total markers to add: ${markers.length}`)
-                console.log('seriesInstance.current:', seriesInstance.current)
-                console.log('setMarkers type:', typeof seriesInstance.current?.setMarkers)
 
-                if (markers.length > 0 && seriesInstance.current) {
+                // Set markers using v5 API (createSeriesMarkers)
+                if (seriesInstance.current) {
                     try {
-                        // In Lightweight Charts v5, setMarkers might need different approach
-                        if (typeof seriesInstance.current.setMarkers === 'function') {
-                            seriesInstance.current.setMarkers(markers)
-                            console.log('Markers set via setMarkers()')
-                        } else {
-                            // Try alternative v5 approach - markers on chart
-                            console.log('setMarkers not found, trying chart.setMarkers')
-                            // Markers might need to be sorted by time
-                            const sortedMarkers = [...markers].sort((a, b) => {
-                                const timeA = typeof a.time === 'number' ? a.time : new Date(a.time).getTime()
-                                const timeB = typeof b.time === 'number' ? b.time : new Date(b.time).getTime()
-                                return timeA - timeB
-                            })
-                            seriesInstance.current.setMarkers(sortedMarkers)
-                            console.log('Markers set with sorted data')
+                        // Sort markers by time (required for v5)
+                        const sortedMarkers = [...markers].sort((a, b) => {
+                            const timeA = typeof a.time === 'number' ? a.time : new Date(a.time).getTime()
+                            const timeB = typeof b.time === 'number' ? b.time : new Date(b.time).getTime()
+                            return timeA - timeB
+                        })
+
+                        // Remove existing markers primitive if any
+                        if (markersInstance.current) {
+                            try {
+                                markersInstance.current.detach()
+                            } catch (e) {
+                                // Ignore detach errors
+                            }
+                            markersInstance.current = null
+                        }
+
+                        // Create new markers primitive (v5 API)
+                        if (sortedMarkers.length > 0) {
+                            markersInstance.current = createSeriesMarkers(seriesInstance.current, sortedMarkers)
+                            console.log(`Markers set via createSeriesMarkers(): ${sortedMarkers.length} markers`)
                         }
                     } catch (e) {
                         console.error('Error setting markers:', e)
@@ -558,6 +578,7 @@ export function AdvancedChartPage({
             } catch (e) {
                 console.error("Chart update error:", e)
             }
+        })
     }, [candles, signals, showSignals, activeIndicators, chartReady, symbol, timeframe])
 
     // Add indicator
@@ -1043,16 +1064,17 @@ function IndicatorPane({ indicator, candles, onRemove, mainChartRef, onChartRead
             }
 
             // Subscribe to main chart's visible range changes
-            let unsubscribeMain: (() => void) | null = null
-            let unsubscribeLocal: (() => void) | null = null
+            let unsubscribeMain: (() => void) | undefined
+            let unsubscribeLocal: (() => void) | undefined
 
             if (mainChartRef.current) {
                 try {
                     const mainTimeScale = mainChartRef.current.timeScale()
-                    unsubscribeMain = mainTimeScale.subscribeVisibleLogicalRangeChange(syncWithMain)
+                    const subMain = mainTimeScale.subscribeVisibleLogicalRangeChange(syncWithMain)
+                    if (typeof subMain === 'function') unsubscribeMain = subMain
 
                     // Also sync this chart's changes back to main
-                    unsubscribeLocal = chart.timeScale().subscribeVisibleLogicalRangeChange((range: any) => {
+                    const subLocal = chart.timeScale().subscribeVisibleLogicalRangeChange((range: any) => {
                         if (isDisposedRef.current || !mainChartRef.current || isSyncingRef.current || !range) return
                         try {
                             isSyncingRef.current = true
@@ -1062,6 +1084,7 @@ function IndicatorPane({ indicator, candles, onRemove, mainChartRef, onChartRead
                             // Main chart disposed
                         }
                     })
+                    if (typeof subLocal === 'function') unsubscribeLocal = subLocal
 
                     // Initial sync
                     syncWithMain()
