@@ -1093,8 +1093,51 @@ def main():
     engine = BacktestEngine(start_date="2006-01-01")
 
     # Test sembolleri
-    bist_symbols = ["THYAO", "GARAN", "ASELS"]
-    crypto_symbols = ["BTCUSDT", "ETHUSDT"]
+    bist_symbols = [
+        "THYAO",
+        "GARAN",
+        "ASELS",
+        "KRDMD",
+        "SISE",
+        "TUPRS",
+        "VESTL",
+        "EREGL",
+        "PETKM",
+        "AKBNK",
+        "BIMAS",
+        "FROTO",
+        "ISCTR",
+        "SASA",
+        "TOASO",
+        "YKBNK",
+        "CCOLA",
+        "ARCLK",
+        "MGROS",
+        "KCHOL",
+        "EREGL",
+    ]
+    crypto_symbols = [
+        "BTCUSDT",
+        "ETHUSDT",
+        "BNBUSDT",
+        "XRPUSDT",
+        "ADAUSDT",
+        "SOLUSDT",
+        "DOGEUSDT",
+        "DOTUSDT",
+        "MATICUSDT",
+        "LTCUSDT",
+        "AVAXUSDT",
+        "SHIBUSDT",
+        "TRXUSDT",
+        "UNIUSDT",
+        "LINKUSDT",
+        "ATOMUSDT",
+        "XLMUSDT",
+        "ETCUSDT",
+        "FTMUSDT",
+        "ALGOUSDT",
+    ]
 
     # BIST Backtest (normal)
     portfolio_bist = engine.run_backtest(
