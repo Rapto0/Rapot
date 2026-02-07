@@ -141,7 +141,7 @@ class Portfolio:
 
         # Komisyon + slippage hesapla
         cost_rate = self.costs.get_total_cost(self.market_type)
-        effective_price = price * (1 - cost_rate)  # Slippage: daha düşük fiyat
+        _effective_price = price * (1 - cost_rate)  # Slippage: daha düşük fiyat
 
         # Satış geliri (komisyon düşülmüş)
         gross_revenue = oldest_lot.shares * price
@@ -746,7 +746,7 @@ class BacktestEngine:
             family="monospace",
             ha="center",
             va="center",
-            bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.3),
+            bbox={"boxstyle": "round", "facecolor": "wheat", "alpha": 0.3},
         )
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
