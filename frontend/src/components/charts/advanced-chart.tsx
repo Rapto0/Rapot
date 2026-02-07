@@ -314,7 +314,7 @@ export function AdvancedChartPage({
     useEffect(() => {
         if (!chartContainerRef.current) return
 
-        import("lightweight-charts").then(({ createChart, ColorType, CrosshairMode, CandlestickSeries, createSeriesMarkers }) => {
+        import("lightweight-charts").then(({ createChart, ColorType, CrosshairMode, CandlestickSeries }) => {
             if (!chartContainerRef.current) return
 
             // Destroy existing chart
