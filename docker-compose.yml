@@ -2,7 +2,7 @@ services:
   # 1. FastAPI Backend API
   api:
     build: .
-    container_name: otonom_api
+    container_name: rapot_api
     command: uvicorn api.main:app --host 0.0.0.0 --port 8000
     volumes:
       - .:/app
@@ -20,31 +20,28 @@ services:
       timeout: 10s
       retries: 3
     networks:
-      - otonom_net
+      - rapot_net
 
-  # 2. Streamlit Dashboard
-  dashboard:
-    build: .
-    container_name: otonom_dashboard
-    command: streamlit run dashboard.py --server.port 8501 --server.address 0.0.0.0
-    volumes:
-      - .:/app
+  # 2. Next.js Frontend Dashboard
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: rapot_frontend
     ports:
-      - "8501:8501"
-    env_file:
-      - .env
+      - "3000:3000"
     environment:
-      - API_URL=http://api:8000
+      - NEXT_PUBLIC_API_URL=http://api:8000
     depends_on:
       - api
     restart: unless-stopped
     networks:
-      - otonom_net
+      - rapot_net
 
   # 3. Trading Bot (Scanner)
   bot:
     build: .
-    container_name: otonom_bot
+    container_name: rapot_bot
     command: python main.py
     volumes:
       - .:/app
@@ -57,8 +54,8 @@ services:
       - api
     restart: unless-stopped
     networks:
-      - otonom_net
+      - rapot_net
 
 networks:
-  otonom_net:
+  rapot_net:
     driver: bridge

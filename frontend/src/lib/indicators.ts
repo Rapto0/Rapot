@@ -249,9 +249,9 @@ export function calculateCombo(candles: Candle[]): ComboSignal[] {
         if (!isNaN(cciVal) && cciVal > 200) sellScore++
 
         let signal: 'AL' | 'SAT' | null = null
-        // Pine Script logic: AL needs 3+ OS conditions, SAT needs 4 OB conditions
-        if (buyScore >= 3) signal = 'AL'
-        if (sellScore >= 4) signal = 'SAT'
+        // More permissive: 2+ out of 4 conditions
+        if (buyScore >= 2) signal = 'AL'
+        if (sellScore >= 2) signal = 'SAT'
 
         result.push({
             time: candles[i].time,
@@ -532,9 +532,9 @@ export function calculateHunter(candles: Candle[]): HunterSignal[] {
 
     const result: HunterSignal[] = []
 
-    // Required counts for signals (from Pine Script)
-    const REQ_DIP = 7   // Need at least 7 oversold conditions for DIP (buy)
-    const REQ_TOP = 10  // Need at least 10 overbought conditions for TEPE (sell)
+    // Required counts for signals (more permissive for visible signals)
+    const REQ_DIP = 3   // Need at least 3 oversold conditions for DIP (buy)
+    const REQ_TOP = 4   // Need at least 4 overbought conditions for TEPE (sell)
 
     for (let i = 0; i < candles.length; i++) {
         // Get all indicator values at this index

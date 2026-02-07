@@ -1,24 +1,24 @@
 # CLAUDE.md - Rapot Codebase Guide
 
-This document provides comprehensive guidance for AI assistants working with the Rapot codebase.
+Bu dosya, Rapot kod tabanıyla çalışan AI asistanları için kapsamlı bir kılavuz sağlar.
 
-## Project Overview
+## Proje Genel Bakış
 
-**Rapot** is an autonomous financial analysis and trading bot platform that operates 24/7. It combines:
-- Real-time market scanning for BIST (Istanbul Stock Exchange) and cryptocurrency markets
-- AI-powered technical analysis using Google Gemini
-- Professional web dashboard with TradingView-quality charts
-- Telegram bot notifications for trading signals
+**Rapot** 7/24 çalışan otonom bir finansal analiz ve trading bot platformudur:
+- BIST (Borsa İstanbul) ve kripto piyasaları için gerçek zamanlı tarama
+- Google Gemini ile AI destekli teknik analiz
+- TradingView kalitesinde profesyonel web dashboard
+- Trading sinyalleri için Telegram bot bildirimleri
 
-**Primary Language:** Turkish (bilingual UI)
+**Ana Dil:** Türkçe (iki dilli UI)
 
-## Architecture
+## Mimari
 
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                    RAPOT PLATFORM                       │
 ├─────────────────────────────────────────────────────────┤
-│  FRONTEND (Next.js 14)          BACKEND (Python)       │
+│  FRONTEND (Next.js 16)          BACKEND (Python)       │
 │  ├─ Dashboard UI                ├─ FastAPI REST API    │
 │  ├─ TradingView Charts          ├─ Market Scanner      │
 │  ├─ Signal Management           ├─ Signal Calculator   │
@@ -27,304 +27,270 @@ This document provides comprehensive guidance for AI assistants working with the
 │                                 └─ Health Monitoring   │
 │                                                         │
 │  DATABASE: SQLite (trading_bot.db)                     │
-│  DEPLOYMENT: Docker + docker-compose                   │
+│  DEPLOYMENT: VPS + Docker Engine                       │
 └─────────────────────────────────────────────────────────┘
 ```
 
-## Directory Structure
+## Dizin Yapısı
 
 ```
 /Rapot
-├── frontend/                   # Next.js 14 Dashboard
+├── frontend/                   # Next.js 16 Dashboard
+│   ├── Dockerfile             # Frontend Docker image
 │   ├── src/
 │   │   ├── app/               # App Router pages
-│   │   │   ├── dashboard/     # Main analytics dashboard
-│   │   │   ├── signals/       # Signal management
-│   │   │   ├── trades/        # Trade history
-│   │   │   ├── scanner/       # Market scanner status
-│   │   │   ├── health/        # Bot health monitoring
-│   │   │   ├── settings/      # Configuration
-│   │   │   └── chart/         # TradingView charts
-│   │   ├── components/        # React components
-│   │   │   ├── dashboard/     # Dashboard widgets
-│   │   │   ├── charts/        # Chart components
+│   │   │   ├── dashboard/     # Ana analiz dashboard
+│   │   │   ├── signals/       # Sinyal yönetimi
+│   │   │   ├── trades/        # Trade geçmişi
+│   │   │   ├── scanner/       # Market tarama durumu
+│   │   │   ├── health/        # Bot sağlık izleme
+│   │   │   ├── settings/      # Ayarlar
+│   │   │   └── chart/         # TradingView grafikleri
+│   │   ├── components/        # React bileşenleri
+│   │   │   ├── dashboard/     # Dashboard widget'ları
+│   │   │   ├── charts/        # Grafik bileşenleri
 │   │   │   ├── layout/        # Header, Sidebar, Nav
-│   │   │   └── ui/            # Base Shadcn/UI components
+│   │   │   └── ui/            # Shadcn/UI bileşenleri
 │   │   ├── lib/
-│   │   │   ├── api/           # API client functions
+│   │   │   ├── api/           # API client fonksiyonları
 │   │   │   ├── hooks/         # Custom React hooks
+│   │   │   ├── indicators.ts  # COMBO/HUNTER hesaplamaları
 │   │   │   └── stores/        # Zustand state stores
-│   │   └── types/             # TypeScript definitions
+│   │   └── types/             # TypeScript tanımları
 │   └── package.json
 │
 ├── api/                        # FastAPI Backend
 │   ├── main.py                # REST endpoints
 │   ├── auth.py                # JWT authentication
-│   └── calendar_service.py    # Economic calendar
+│   └── calendar_service.py    # Ekonomik takvim
 │
-├── # Python Backend Modules (root level)
-│   ├── main.py                # Bot entry point
-│   ├── scheduler.py           # Task scheduling
-│   ├── market_scanner.py      # Market scanning engine
-│   ├── signals.py             # Signal calculation (COMBO/HUNTER)
-│   ├── data_loader.py         # Historical data fetching
-│   ├── ai_analyst.py          # Gemini AI integration
-│   ├── database.py            # Database operations
-│   ├── models.py              # SQLAlchemy ORM models
-│   ├── config.py              # Trading configuration
-│   ├── settings.py            # Environment settings (Pydantic)
-│   ├── telegram_notify.py     # Telegram notifications
-│   └── backtesting_system.py  # Backtest engine
+├── # Python Backend Modülleri (root level)
+│   ├── main.py                # Bot giriş noktası
+│   ├── scheduler.py           # Görev zamanlama
+│   ├── market_scanner.py      # Piyasa tarama motoru
+│   ├── signals.py             # Sinyal hesaplama (COMBO/HUNTER)
+│   ├── data_loader.py         # Tarihsel veri çekme
+│   ├── ai_analyst.py          # Gemini AI entegrasyonu
+│   ├── database.py            # Database işlemleri
+│   ├── models.py              # SQLAlchemy ORM modelleri
+│   ├── config.py              # Trading konfigürasyonu
+│   ├── settings.py            # Ortam ayarları (Pydantic)
+│   ├── telegram_notify.py     # Telegram bildirimleri
+│   └── backtesting_system.py  # Backtest motoru
 │
 ├── tests/                      # Test suite
-│   ├── conftest.py            # pytest configuration
+│   ├── conftest.py            # pytest konfigürasyonu
 │   ├── test_config.py
 │   ├── test_market_scanner.py
 │   └── test_signals.py
 │
-├── data/                       # Data files
-│   └── bist_symbols.json      # BIST market symbols
+├── data/                       # Veri dosyaları
+│   └── bist_symbols.json      # BIST sembolleri
 │
 ├── docker-compose.yml          # Container orchestration
 ├── Dockerfile                  # Python container
-├── requirements.txt            # Python dependencies
-└── pyproject.toml              # Python project config
+├── requirements.txt            # Python bağımlılıkları
+└── pyproject.toml              # Python proje config
 ```
 
-## Tech Stack
+## Teknoloji Stack
 
 ### Frontend
-| Technology | Version | Purpose |
-|------------|---------|---------|
+| Teknoloji | Versiyon | Amaç |
+|-----------|----------|------|
 | Next.js | 16.1.4 | React framework (App Router) |
-| React | 19.2.3 | UI library |
-| TypeScript | 5 | Type safety |
-| Tailwind CSS | v4 | Styling |
-| TradingView Charts | 5.1.0 | Professional candlestick charts |
-| Recharts | 3.7.0 | Secondary analytics |
-| Zustand | 5.0.10 | State management |
-| React Query | 5.90.19 | Server state |
-| Shadcn/UI | - | Component library |
+| React | 19.x | UI kütüphanesi |
+| TypeScript | 5 | Tip güvenliği |
+| Tailwind CSS | v4 | Stil |
+| Lightweight Charts | 5.1.0 | Profesyonel mum grafikleri |
+| Zustand | 5.0.10 | State yönetimi |
+| React Query | 5.x | Server state |
+| Shadcn/UI | - | Bileşen kütüphanesi |
 
 ### Backend
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| Python | 3.10+ | Language |
+| Teknoloji | Versiyon | Amaç |
+|-----------|----------|------|
+| Python | 3.10+ | Dil |
 | FastAPI | 0.109.0 | REST API framework |
 | SQLAlchemy | 2.0.0 | ORM |
 | Pydantic | 2.5.0+ | Validation & settings |
-| google-generativeai | 0.3.0+ | AI analysis |
-| python-telegram-bot | 20.0+ | Notifications |
-| python-binance | 1.0.0 | Crypto data |
-| isyatirimhisse | 1.2.0+ | BIST data |
-| ta | 0.10.0+ | Technical analysis |
-| pandas | 2.0.0+ | Data processing |
+| google-generativeai | 0.3.0+ | AI analizi |
+| python-telegram-bot | 20.0+ | Bildirimler |
+| python-binance | 1.0.0 | Kripto verisi |
+| isyatirimhisse | 1.2.0+ | BIST verisi |
+| ta | 0.10.0+ | Teknik analiz |
+| pandas | 2.0.0+ | Veri işleme |
 
-## Development Commands
+## Geliştirme Komutları
 
 ### Frontend
 ```bash
 cd frontend
-npm run dev          # Development server on :3000
+npm run dev          # Development server :3000
 npm run build        # Production build
 npm run start        # Production server
-npm run lint         # ESLint check
+npm run lint         # ESLint kontrolü
+npx tsc --noEmit     # TypeScript kontrolü
 ```
 
 ### Backend
 ```bash
-# Run the trading bot
-python main.py              # Sync mode
-python main.py --async      # Async mode
+# Trading bot çalıştır
+python main.py              # Sync mod
+python main.py --async      # Async mod
 
-# Run API server
+# API server çalıştır
 uvicorn api.main:app --reload --port 8000
 
-# Run tests
-pytest                      # All tests
+# Testleri çalıştır
+pytest                      # Tüm testler
 pytest -v                   # Verbose
-pytest tests/test_signals.py  # Specific file
+pytest tests/test_signals.py  # Belirli dosya
 ```
 
-### Code Quality
+### Kod Kalitesi
 ```bash
-ruff check .               # Lint check
+ruff check .               # Lint kontrolü
 ruff format .              # Auto-format
-pre-commit run --all-files # All pre-commit hooks
+pre-commit run --all-files # Tüm pre-commit hooks
 ```
 
-### Docker
+### Docker (VPS Deployment)
 ```bash
-docker-compose up -d       # Start all services
-docker-compose logs -f api # View API logs
-docker-compose down        # Stop services
+docker-compose up -d           # Tüm servisleri başlat
+docker-compose logs -f api     # API loglarını izle
+docker-compose logs -f frontend # Frontend loglarını izle
+docker-compose down            # Servisleri durdur
+docker-compose build --no-cache # Yeniden build
 ```
 
-## Code Style Conventions
+## Docker Servisleri
+
+`docker-compose.yml` içinde üç servis:
+1. **api** (port 8000): FastAPI backend
+2. **frontend** (port 3000): Next.js dashboard
+3. **bot**: Market scanner ve sinyal üretici
+
+## Kod Stili Kuralları
 
 ### Python
-- **Line length:** 100 characters
+- **Satır uzunluğu:** 100 karakter
 - **Formatter/Linter:** Ruff
-- **Quote style:** Double quotes
-- **Import order:** Standard library, third-party, local (isort managed)
-- **Type hints:** Required for function signatures
-- **Docstrings:** Use triple double-quotes, describe in Turkish or English
+- **Tırnak stili:** Çift tırnak
+- **Import sırası:** Standart, third-party, local (isort)
+- **Type hints:** Fonksiyon imzalarında zorunlu
 
 ### TypeScript/React
-- **Components:** Functional components with hooks
-- **State:** Zustand for client state, React Query for server state
-- **Styling:** Tailwind utility classes
-- **File naming:** kebab-case for files, PascalCase for components
+- **Bileşenler:** Functional components + hooks
+- **State:** Zustand (client), React Query (server)
+- **Stil:** Tailwind utility classes
+- **Dosya isimlendirme:** kebab-case, PascalCase bileşenler
 
-## Database Models
+## Veritabanı Modelleri
 
-The SQLite database (`trading_bot.db`) contains these tables:
+SQLite veritabanı (`trading_bot.db`) tabloları:
 
 ### Signal
-Trading signals generated by the bot
 - `symbol`, `market_type` (BIST/Kripto), `strategy` (COMBO/HUNTER)
 - `signal_type` (AL/SAT), `timeframe`, `score`, `price`, `details` (JSON)
 
 ### Trade
-Executed trades
 - `symbol`, `market_type`, `direction` (BUY/SELL)
 - `price`, `quantity`, `pnl`, `status` (OPEN/CLOSED/CANCELLED)
 
 ### ScanHistory
-Market scanning records
 - `scan_type`, `mode`, `symbols_scanned`, `signals_found`, `duration_seconds`
 
-### BotStat
-Key-value configuration store
-- `stat_name`, `stat_value`, `updated_at`
+## Trading Stratejileri
 
-### AIAnalysis
-AI-generated analysis records
-- `signal_id`, `symbol`, `analysis_text`, `technical_data` (JSON)
+### COMBO Stratejisi
+Multi-indikatör momentum tespiti:
+- **Alış koşulları:** MACD < 0, RSI < 40, Williams %R < -80
+- **Satış koşulları:** MACD > 0, RSI > 80, Williams %R > -10
+- Skor formatı: "+4/-0" (4 alış, 0 satış indikatörü)
 
-## Trading Strategies
+### HUNTER Stratejisi
+Dip/tepe tespiti RSI doğrulaması ile:
+- 7-gün/10-gün dip/tepe pattern tespiti
+- RSI doğrulaması (DIP < 30, TOP > 70)
+- Skor formatı: "7/7" (pattern içindeki gün, gereken gün)
 
-### COMBO Strategy
-Multi-indicator momentum detection:
-- **Buy conditions:** MACD < 0, RSI < 40, Williams %R < -80
-- **Sell conditions:** MACD > 0, RSI > 80, Williams %R > -10
-- Score format: "+4/-0" (4 buy indicators, 0 sell indicators)
+## Lightweight Charts v5 Notları
 
-### HUNTER Strategy
-Peak/valley detection with RSI confirmation:
-- Detects 7-day/10-day dip/top patterns
-- RSI confirmation (DIP < 30, TOP > 70)
-- Score format: "7/7" (days in pattern, days required)
+**Markers API değişti!** v5'te:
+```typescript
+// ESKİ (v4) - ÇALIŞMIYOR:
+series.setMarkers(markers)
+
+// YENİ (v5):
+import { createSeriesMarkers } from 'lightweight-charts'
+const markersInstance = createSeriesMarkers(series, markers)
+// Temizlemek için: markersInstance.detach()
+```
 
 ## API Endpoints
 
 **Base URL:** `http://localhost:8000`
 
-Key endpoints:
 ```
-GET  /signals              # List signals (filterable)
-GET  /signals/{id}         # Signal details
-GET  /trades               # Trade history
-GET  /stats                # Portfolio statistics
-GET  /symbols/bist         # BIST symbols
-GET  /symbols/crypto       # Crypto symbols
-GET  /candles/{symbol}     # OHLCV data
-GET  /market/ticker        # Live ticker
-GET  /market/analysis      # AI analysis
-POST /analyze/{symbol}     # Trigger analysis
-GET  /health               # Health check
+GET  /signals              # Sinyalleri listele (filtrelenebilir)
+GET  /signals/{id}         # Sinyal detayı
+GET  /trades               # Trade geçmişi
+GET  /stats                # Portföy istatistikleri
+GET  /symbols/bist         # BIST sembolleri
+GET  /symbols/crypto       # Kripto sembolleri
+GET  /candles/{symbol}     # OHLCV verisi
+GET  /market/ticker        # Canlı fiyatlar
+GET  /market/analysis      # AI analizi
+POST /analyze/{symbol}     # Analiz tetikle
+GET  /health               # Sağlık kontrolü
 ```
 
-## Environment Variables
+## Ortam Değişkenleri
 
-Required in `.env`:
+`.env` dosyasında gerekli:
 ```bash
-# Telegram (Required)
+# Telegram (Zorunlu)
 TELEGRAM_TOKEN=your_bot_token
 TELEGRAM_CHAT_ID=your_chat_id
 
-# Binance (Optional - for crypto)
+# Binance (Opsiyonel - kripto için)
 BINANCE_API_KEY=your_key
 BINANCE_SECRET_KEY=your_secret
 
-# AI (Optional)
+# AI (Opsiyonel)
 GEMINI_API_KEY=your_gemini_key
 
 # Database
 DATABASE_PATH=trading_bot.db
 ```
 
-## Configuration
+## Önemli Kurallar
 
-Central configuration is in `config.py` using frozen dataclasses:
-- `RateLimits`: API rate limiting
-- `ScanSettings`: Scanning intervals
-- `ComboThresholds`: COMBO strategy parameters
-- `HunterThresholds`: HUNTER strategy parameters
-- `BacktestSettings`: Backtesting configuration
-
-Runtime settings use Pydantic in `settings.py`.
-
-## Testing
-
-Tests are in the `tests/` directory:
-- `conftest.py`: pytest fixtures
-- `test_config.py`: Configuration tests
-- `test_market_scanner.py`: Scanner tests
-- `test_signals.py`: Signal calculation tests
-
-Run with: `pytest -v`
-
-## Docker Services
-
-Three services in `docker-compose.yml`:
-1. **api** (port 8000): FastAPI backend
-2. **dashboard** (port 8501): Legacy Streamlit (being replaced by Next.js)
-3. **bot**: Market scanner and signal generator
-
-## Important Conventions
-
-1. **Turkish terminology in code:**
+1. **Türkçe terminoloji:**
    - AL = BUY, SAT = SELL
    - Günlük = Daily, Haftalık = Weekly
-   - BIST = Istanbul Stock Exchange, Kripto = Cryptocurrency
+   - BIST = Borsa İstanbul, Kripto = Cryptocurrency
 
-2. **Signal scores:**
-   - COMBO: "+X/-Y" format (X buy indicators, Y sell indicators)
-   - HUNTER: "X/Y" format (X days in pattern, Y days required)
+2. **Sinyal skorları:**
+   - COMBO: "+X/-Y" formatı
+   - HUNTER: "X/Y" formatı
 
-3. **Timeframes:**
-   - `1D` = Daily
-   - `W-FRI` = Weekly (Friday close)
-   - `2W-FRI`, `3W-FRI` = Bi/tri-weekly
-   - `ME` = Monthly
+3. **Timeframe'ler:**
+   - `1d` = Günlük, `1wk` = Haftalık
+   - `1h`, `4h` = Saatlik
+   - `15m`, `30m` = Dakikalık
 
-4. **Color scheme (dark theme):**
+4. **Renk şeması (dark theme):**
    - Background: `#0e1117`
    - Cards: `#161b22`
-   - Bullish (Long): `#00c853`
-   - Bearish (Short): `#ff3d00`
-
-## Common Tasks
-
-### Adding a new signal type
-1. Add strategy logic in `signals.py`
-2. Update `ComboThresholds` or `HunterThresholds` in `config.py`
-3. Add corresponding UI in `frontend/src/components/dashboard/`
-
-### Adding a new API endpoint
-1. Add route in `api/main.py`
-2. Add corresponding hook in `frontend/src/lib/hooks/`
-3. Update types in `frontend/src/types/`
-
-### Adding a new dashboard widget
-1. Create component in `frontend/src/components/dashboard/`
-2. Add data hook in `frontend/src/lib/hooks/`
-3. Import and place in dashboard page
+   - Bullish: `#00c853`
+   - Bearish: `#ff3d00`
 
 ## Debugging
 
-- API logs: `docker-compose logs -f api`
-- Bot logs: `docker-compose logs -f bot`
-- Frontend: Browser DevTools + React DevTools
-- Health check: `http://localhost:5000/health`
+- API logları: `docker-compose logs -f api`
+- Frontend logları: `docker-compose logs -f frontend`
+- Bot logları: `docker-compose logs -f bot`
+- Browser: DevTools + React DevTools
+- Health check: `http://localhost:8000/health`

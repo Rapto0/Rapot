@@ -50,7 +50,7 @@ export default function TradesPage() {
                 <div>
                     <h1 className="text-2xl font-bold">İşlem Geçmişi</h1>
                     <p className="text-sm text-muted-foreground">
-                        Tüm açık ve kapalı trade'lerin listesi
+                        Tüm açık ve kapalı trade&apos;lerin listesi
                     </p>
                 </div>
                 <Button
