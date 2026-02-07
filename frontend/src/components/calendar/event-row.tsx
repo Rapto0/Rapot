@@ -1,7 +1,6 @@
 "use client"
 
 import { cn } from "@/lib/utils"
-import { BarChart3 } from "lucide-react"
 
 interface EventRowProps {
     time: string

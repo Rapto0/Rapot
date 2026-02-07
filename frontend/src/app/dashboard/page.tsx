@@ -8,7 +8,7 @@ import { PortfolioPanel } from "@/components/dashboard/portfolio-panel"
 import { MarketOverview } from "@/components/dashboard/market-overview"
 import { BotDashboard } from "@/components/dashboard/bot-dashboard"
 import { useRealtime } from "@/lib/hooks/use-realtime"
-import { Zap, BarChart3, Wallet, Activity } from "lucide-react"
+import { Zap, BarChart3, Activity } from "lucide-react"
 
 export default function DashboardPage() {
     const [selectedSymbol, setSelectedSymbol] = useState('THYAO');

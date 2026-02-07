@@ -5,7 +5,6 @@ import { Badge } from "@/components/ui/badge"
 import { useBotHealth } from "@/lib/hooks/use-health"
 import { useQuery } from "@tanstack/react-query"
 import { fetchScanHistory } from "@/lib/api/client"
-import { cn } from "@/lib/utils"
 import {
     Search,
     TrendingUp,
