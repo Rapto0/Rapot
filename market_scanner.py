@@ -3,6 +3,7 @@ Market Scanner Modülü
 Piyasa tarama ve sinyal işleme fonksiyonları.
 """
 
+import json
 import time
 from typing import Any
 
@@ -190,6 +191,82 @@ def generate_manual_report(
     return msg
 
 
+def format_ai_message_for_telegram(symbol: str, ai_response: str) -> str:
+    """
+    AI JSON çıktısını Telegram için okunabilir metne çevirir.
+    JSON değilse ham metni korur.
+    """
+    header = f"🧠 <b>AI KARARI ({symbol}):</b>"
+
+    try:
+        data = json.loads(ai_response)
+    except (json.JSONDecodeError, TypeError):
+        return f"{header}\n{ai_response}"
+
+    if not isinstance(data, dict):
+        return f"{header}\n{ai_response}"
+
+    error = data.get("error")
+    if error:
+        return f"{header}\n⚠️ AI analizi üretilemedi: {error}"
+
+    sentiment_label = str(data.get("sentiment_label", "NÖTR")).strip() or "NÖTR"
+    sentiment_score = data.get("sentiment_score")
+    if isinstance(sentiment_score, float):
+        score_text = f"{sentiment_score:.1f}/100"
+    elif isinstance(sentiment_score, int) or sentiment_score is not None:
+        score_text = f"{sentiment_score}/100"
+    else:
+        score_text = "Skor yok"
+
+    upper_label = sentiment_label.upper()
+    if "AL" in upper_label:
+        sentiment_icon = "🟢"
+    elif "SAT" in upper_label:
+        sentiment_icon = "🔴"
+    else:
+        sentiment_icon = "⚪️"
+
+    explanation = str(data.get("explanation", "")).strip() or "Detaylı açıklama üretilemedi."
+
+    raw_summary = data.get("summary", [])
+    if isinstance(raw_summary, str):
+        summary_items = [raw_summary.strip()] if raw_summary.strip() else []
+    elif isinstance(raw_summary, list):
+        summary_items = [str(item).strip() for item in raw_summary if str(item).strip()]
+    else:
+        summary_items = []
+    if not summary_items:
+        summary_items = ["Özet maddesi üretilemedi."]
+    summary_lines = "\n".join(f"• {item}" for item in summary_items[:3])
+
+    key_levels = data.get("key_levels") if isinstance(data.get("key_levels"), dict) else {}
+
+    def _join_levels(levels: Any) -> str:
+        if isinstance(levels, str):
+            return levels.strip() or "-"
+        if isinstance(levels, list):
+            cleaned = [str(level).strip() for level in levels if str(level).strip()]
+            return ", ".join(cleaned) if cleaned else "-"
+        return "-"
+
+    support_text = _join_levels(key_levels.get("support", []))
+    resistance_text = _join_levels(key_levels.get("resistance", []))
+    risk_level = str(data.get("risk_level", "Belirsiz")).strip() or "Belirsiz"
+
+    return (
+        f"{header}\n"
+        f"{sentiment_icon} <b>{sentiment_label}</b> ({score_text})\n\n"
+        f"{explanation}\n\n"
+        f"📌 <b>Öne Çıkanlar:</b>\n"
+        f"{summary_lines}\n\n"
+        f"📍 <b>Kritik Seviyeler:</b>\n"
+        f"• Destek: {support_text}\n"
+        f"• Direnç: {resistance_text}\n"
+        f"⚠️ <b>Risk:</b> {risk_level}"
+    )
+
+
 def process_symbol(
     df_daily: pd.DataFrame | None, symbol: str, market_type: str, check_commands_callback=None
 ) -> None:
@@ -309,7 +386,7 @@ def process_symbol(
             technical_data=data_dict,
             news_context=news_data,
         )
-        send_message(f"🧠 <b>AI KARARI ({symbol}):</b>\n{ai_msg}")
+        send_message(format_ai_message_for_telegram(symbol, ai_msg))
 
     # ÇOK UCUZ
     if "1D" in combo_hits["buy"] and "W-FRI" in combo_hits["buy"] and "3W-FRI" in combo_hits["buy"]:
