@@ -42,6 +42,12 @@ function Run-Step {
     Write-Host "==> $Title" -ForegroundColor Cyan
     Write-Host "$Command" -ForegroundColor DarkGray
     Invoke-Expression $Command
+    if (-not $?) {
+        throw "Command failed: $Command"
+    }
+    if ($LASTEXITCODE -ne 0) {
+        throw "Command failed with exit code ${LASTEXITCODE}: $Command"
+    }
 }
 
 # Ensure inside a git repo.
