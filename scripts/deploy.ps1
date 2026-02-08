@@ -12,7 +12,7 @@ param(
     [string]$Server = "root@138.68.71.27",
 
     [Parameter(Mandatory = $false)]
-    [string]$ServerPath = "/home/user/Rapot",
+    [string]$ServerPath = "/root/Rapot",
 
     [Parameter(Mandatory = $false)]
     [string]$Pm2Config = "ecosystem.config.js",

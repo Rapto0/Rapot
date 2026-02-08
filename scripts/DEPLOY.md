@@ -9,6 +9,8 @@ This script automates:
 
 File: `scripts/deploy.ps1`
 
+Default server path: `/root/Rapot`
+
 ## 1) One-time setup (recommended)
 
 Use SSH key auth so deploy runs without password prompts:
@@ -42,6 +44,12 @@ Force server to exactly match `origin/main` (destructive on server local edits):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\deploy.ps1 -CommitMessage "deploy" -ForceServerReset
+```
+
+Use a custom server path:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\deploy.ps1 -CommitMessage "deploy" -ServerPath "/home/user/Rapot"
 ```
 
 ## Notes
