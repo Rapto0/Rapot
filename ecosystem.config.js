@@ -13,8 +13,10 @@ module.exports = {
     {
       name: 'frontend',
       script: 'npm',
-      args: 'run dev -- -H 0.0.0.0 -p 3000',
+      args: 'run start -- -H 0.0.0.0 -p 3000',
       cwd: FRONTEND_DIR,
+      instances: 1,
+      exec_mode: 'fork',
       env: {
         HOSTNAME: '0.0.0.0',
         PORT: '3000',

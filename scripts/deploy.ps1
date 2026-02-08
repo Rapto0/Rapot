@@ -105,6 +105,11 @@ if ($ForceServerReset) {
 }
 
 $serverCommands += @(
+    "cd '$ServerPath/frontend'",
+    "npm ci --include=dev",
+    "npm run build",
+    "cd '$ServerPath'",
+    "pm2 delete frontend || true",
     "pm2 startOrReload '$Pm2Config' --update-env",
     "pm2 save",
     "echo SERVER_HEAD: `$(git rev-parse --short HEAD)",

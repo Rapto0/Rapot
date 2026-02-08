@@ -5,7 +5,9 @@ This script automates:
 2. `git commit`
 3. `git push origin main`
 4. server update via SSH
-5. `pm2 startOrReload ecosystem.config.js`
+5. `npm ci && npm run build` in `frontend`
+6. `pm2 delete frontend` (cleanup stale instance)
+7. `pm2 startOrReload ecosystem.config.js`
 
 File: `scripts/deploy.ps1`
 
@@ -57,3 +59,4 @@ powershell -ExecutionPolicy Bypass -File .\scripts\deploy.ps1 -CommitMessage "de
 - Script expects current branch to be `main`.
 - Without `-ForceServerReset`, server uses `git pull --ff-only` (safer).
 - If pre-commit hooks fail during commit, deploy stops so you can fix issues.
+- Frontend runs in production mode (`next start`) to avoid dev lock/port conflicts.
