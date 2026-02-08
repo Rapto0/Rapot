@@ -94,6 +94,7 @@ if (-not $AllowPasswordPrompt) {
 $serverCommands = @(
     "set -euo pipefail",
     "cd '$ServerPath'",
+    'old_head=$(git rev-parse HEAD)',
     "git fetch '$Remote' '$Branch'",
     "git checkout '$Branch'"
 )
@@ -105,10 +106,23 @@ if ($ForceServerReset) {
 }
 
 $serverCommands += @(
-    "cd '$ServerPath/frontend'",
-    "npm ci --include=dev",
-    "npm run build",
-    "cd '$ServerPath'",
+    'new_head=$(git rev-parse HEAD)',
+    'changed_files=$(git diff --name-only "$old_head" "$new_head" || true)',
+    'if echo "$changed_files" | grep -Eq "^(frontend/|ecosystem\\.config\\.js$)"; then',
+    '  echo "Frontend-related changes detected. Running build steps..."',
+    '  if echo "$changed_files" | grep -Eq "^frontend/(package-lock\\.json|package\\.json)$"; then',
+    "    cd '$ServerPath/frontend'",
+    '    npm ci --include=dev',
+    "    cd '$ServerPath'",
+    '  else',
+    '    echo "Dependency files unchanged. Skipping npm ci."',
+    '  fi',
+    "  cd '$ServerPath/frontend'",
+    '  npm run build',
+    "  cd '$ServerPath'",
+    'else',
+    '  echo "No frontend changes. Skipping npm ci/build."',
+    'fi',
     "pm2 delete frontend || true",
     "pm2 startOrReload '$Pm2Config' --update-env",
     "pm2 save",

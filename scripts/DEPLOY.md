@@ -5,7 +5,9 @@ This script automates:
 2. `git commit`
 3. `git push origin main`
 4. server update via SSH
-5. `npm ci && npm run build` in `frontend`
+5. conditional frontend build:
+   - `frontend` files changed: `npm run build`
+   - `package.json/package-lock.json` changed: `npm ci`
 6. `pm2 delete frontend` (cleanup stale instance)
 7. `pm2 startOrReload ecosystem.config.js`
 
