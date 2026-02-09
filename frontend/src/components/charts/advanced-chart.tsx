@@ -41,6 +41,16 @@ import {
     Settings2,
     Eye,
     EyeOff,
+    Bell,
+    MessageSquare,
+    CalendarDays,
+    Newspaper,
+    LayoutGrid,
+    CircleHelp,
+    Share2,
+    Copy,
+    FolderOpen,
+    Upload,
 } from "lucide-react"
 
 // ==================== TYPES ====================
@@ -51,6 +61,8 @@ interface SignalMarker {
     price: number
     label?: string
 }
+
+type MarketType = "BIST" | "Kripto"
 
 interface ActiveIndicator {
     id: string
@@ -65,8 +77,136 @@ interface PersistedActiveIndicator {
     visible: boolean
 }
 
+interface WatchlistSymbolRow {
+    kind: "symbol"
+    rawSymbol: string
+    marketType: MarketType
+}
+
+interface WatchlistSectionRow {
+    kind: "section"
+    id: string
+    title: string
+}
+
+type WatchlistRow = WatchlistSymbolRow | WatchlistSectionRow
+
+interface WatchlistModel {
+    id: string
+    name: string
+    alarmsEnabled: boolean
+    notes: string
+    rows: WatchlistRow[]
+}
+
+type RightUtilityPanelId = "alerts" | "notes" | "calendar" | "news" | "layout" | "help"
+
+interface UtilityPanelItem {
+    id: RightUtilityPanelId
+    label: string
+    icon: any
+}
+
 const INDICATOR_SETTINGS_STORAGE_KEY = "rapot.dashboard.indicators.v1"
 const DEFAULT_OVERLAY_INDICATOR_IDS = ["combo", "hunter"] as const
+const WATCHLIST_STORAGE_KEY = "rapot.dashboard.watchlists.v1"
+const ACTIVE_WATCHLIST_STORAGE_KEY = "rapot.dashboard.watchlists.active.v1"
+const WATCHLIST_PANEL_STORAGE_KEY = "rapot.dashboard.watchlists.panel.v1"
+
+const WATCHLIST_UTILITY_ITEMS: UtilityPanelItem[] = [
+    { id: "alerts", label: "Alarmlar", icon: Bell },
+    { id: "notes", label: "Notlar", icon: MessageSquare },
+    { id: "calendar", label: "Takvim", icon: CalendarDays },
+    { id: "news", label: "Haberler", icon: Newspaper },
+    { id: "layout", label: "Yerleşim", icon: LayoutGrid },
+    { id: "help", label: "Yardım", icon: CircleHelp },
+]
+
+const makeWatchlistId = (name: string) =>
+    `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now().toString(36)}`
+
+const symbolRow = (rawSymbol: string, marketType: MarketType): WatchlistSymbolRow => ({
+    kind: "symbol",
+    rawSymbol,
+    marketType,
+})
+
+const sectionRow = (title: string): WatchlistSectionRow => ({
+    kind: "section",
+    id: makeWatchlistId(title),
+    title,
+})
+
+const DEFAULT_WATCHLISTS: WatchlistModel[] = [
+    {
+        id: "binance-spot",
+        name: "BINANCE SPOT",
+        alarmsEnabled: false,
+        notes: "",
+        rows: [
+            symbolRow("BTCUSDT", "Kripto"),
+            symbolRow("ETHUSDT", "Kripto"),
+            symbolRow("BNBUSDT", "Kripto"),
+            symbolRow("XRPUSDT", "Kripto"),
+            symbolRow("SOLUSDT", "Kripto"),
+            symbolRow("DOGEUSDT", "Kripto"),
+            symbolRow("ADAUSDT", "Kripto"),
+            symbolRow("AVAXUSDT", "Kripto"),
+        ],
+    },
+    {
+        id: "futures",
+        name: "Futures",
+        alarmsEnabled: false,
+        notes: "",
+        rows: [
+            symbolRow("BTCUSDT", "Kripto"),
+            symbolRow("ETHUSDT", "Kripto"),
+            symbolRow("SOLUSDT", "Kripto"),
+            symbolRow("XRPUSDT", "Kripto"),
+            symbolRow("DOGEUSDT", "Kripto"),
+        ],
+    },
+    {
+        id: "gem",
+        name: "Gem",
+        alarmsEnabled: false,
+        notes: "",
+        rows: [
+            symbolRow("ARBUSDT", "Kripto"),
+            symbolRow("SEIUSDT", "Kripto"),
+            symbolRow("INJUSDT", "Kripto"),
+            symbolRow("TIAUSDT", "Kripto"),
+            symbolRow("SUIUSDT", "Kripto"),
+        ],
+    },
+    {
+        id: "global",
+        name: "Global",
+        alarmsEnabled: false,
+        notes: "",
+        rows: [
+            symbolRow("BTCUSDT", "Kripto"),
+            symbolRow("ETHUSDT", "Kripto"),
+            symbolRow("THYAO", "BIST"),
+            symbolRow("GARAN", "BIST"),
+            symbolRow("ASELS", "BIST"),
+        ],
+    },
+    {
+        id: "bist-portfolio",
+        name: "BIST Portföy",
+        alarmsEnabled: false,
+        notes: "",
+        rows: [
+            symbolRow("THYAO", "BIST"),
+            symbolRow("ASELS", "BIST"),
+            symbolRow("EREGL", "BIST"),
+            symbolRow("BIMAS", "BIST"),
+            symbolRow("KCHOL", "BIST"),
+        ],
+    },
+]
 
 const getDefaultActiveIndicators = (): ActiveIndicator[] => {
     const defaults: ActiveIndicator[] = []
@@ -194,7 +334,7 @@ const deduplicateByTime = <T extends { time: string | number }>(data: T[]): T[] 
 
 interface ChartPageProps {
     initialSymbol?: string
-    initialMarket?: "BIST" | "Kripto"
+    initialMarket?: MarketType
     signals?: SignalMarker[]
     showSignals?: boolean
     showWatchlist?: boolean
@@ -209,13 +349,20 @@ export function AdvancedChartPage({
 }: ChartPageProps) {
     // Basic state
     const [symbol, setSymbol] = useState(initialSymbol)
-    const [marketType, setMarketType] = useState<"BIST" | "Kripto">(initialMarket)
+    const [marketType, setMarketType] = useState<MarketType>(initialMarket)
     const [timeframe, setTimeframe] = useState("1d")
     const [showSymbolSearch, setShowSymbolSearch] = useState(false)
     const [showTimeframeMenu, setShowTimeframeMenu] = useState(false)
     const [searchQuery, setSearchQuery] = useState("")
     const [isFullscreen, setIsFullscreen] = useState(false)
     const [showRightPanel, setShowRightPanel] = useState(showWatchlist)
+    const [watchlists, setWatchlists] = useState<WatchlistModel[]>(() => DEFAULT_WATCHLISTS)
+    const [activeWatchlistId, setActiveWatchlistId] = useState<string>(DEFAULT_WATCHLISTS[0]?.id || "")
+    const [showWatchlistSwitcher, setShowWatchlistSwitcher] = useState(false)
+    const [showWatchlistMenu, setShowWatchlistMenu] = useState(false)
+    const [activeUtilityPanel, setActiveUtilityPanel] = useState<RightUtilityPanelId | null>("alerts")
+    const [watchlistsHydrated, setWatchlistsHydrated] = useState(false)
+    const [watchlistNotice, setWatchlistNotice] = useState<string | null>(null)
 
     // Indicator state
     const [showIndicatorSearch, setShowIndicatorSearch] = useState(false)
@@ -257,6 +404,116 @@ export function AdvancedChartPage({
     const registerIndicatorChart = useCallback((id: string, chart: any) => {
         indicatorChartsRef.current.set(id, chart)
     }, [])
+
+    const showWatchlistToast = useCallback((message: string) => {
+        setWatchlistNotice(message)
+    }, [])
+
+    useEffect(() => {
+        if (!watchlistNotice) return
+        const timer = setTimeout(() => setWatchlistNotice(null), 2800)
+        return () => clearTimeout(timer)
+    }, [watchlistNotice])
+
+    useEffect(() => {
+        if (typeof window === "undefined") {
+            setWatchlistsHydrated(true)
+            return
+        }
+
+        try {
+            const rawWatchlists = window.localStorage.getItem(WATCHLIST_STORAGE_KEY)
+            if (rawWatchlists) {
+                const parsed = JSON.parse(rawWatchlists) as unknown
+                if (Array.isArray(parsed)) {
+                    const restored = parsed
+                        .map((candidate): WatchlistModel | null => {
+                            if (!candidate || typeof candidate !== "object") return null
+                            const item = candidate as Partial<WatchlistModel>
+                            if (typeof item.id !== "string" || typeof item.name !== "string") return null
+                            const rows = Array.isArray(item.rows)
+                                ? item.rows
+                                      .map((row): WatchlistRow | null => {
+                                          if (!row || typeof row !== "object") return null
+                                          const maybeRow = row as Partial<WatchlistRow>
+                                          if (maybeRow.kind === "section" && typeof (maybeRow as any).title === "string") {
+                                              return {
+                                                  kind: "section",
+                                                  id: typeof (maybeRow as any).id === "string" ? (maybeRow as any).id : makeWatchlistId((maybeRow as any).title),
+                                                  title: (maybeRow as any).title,
+                                              }
+                                          }
+                                          if (
+                                              maybeRow.kind === "symbol" &&
+                                              typeof (maybeRow as any).rawSymbol === "string" &&
+                                              ((maybeRow as any).marketType === "BIST" || (maybeRow as any).marketType === "Kripto")
+                                          ) {
+                                              return {
+                                                  kind: "symbol",
+                                                  rawSymbol: (maybeRow as any).rawSymbol,
+                                                  marketType: (maybeRow as any).marketType,
+                                              }
+                                          }
+                                          return null
+                                      })
+                                      .filter((row): row is WatchlistRow => row !== null)
+                                : []
+
+                            return {
+                                id: item.id,
+                                name: item.name,
+                                alarmsEnabled: item.alarmsEnabled === true,
+                                notes: typeof item.notes === "string" ? item.notes : "",
+                                rows,
+                            }
+                        })
+                        .filter((item): item is WatchlistModel => item !== null)
+                    if (restored.length > 0) {
+                        setWatchlists(restored)
+                    }
+                }
+            }
+
+            const storedActiveId = window.localStorage.getItem(ACTIVE_WATCHLIST_STORAGE_KEY)
+            if (storedActiveId) {
+                setActiveWatchlistId(storedActiveId)
+            }
+
+            const storedPanel = window.localStorage.getItem(WATCHLIST_PANEL_STORAGE_KEY)
+            if (
+                storedPanel === "alerts" ||
+                storedPanel === "notes" ||
+                storedPanel === "calendar" ||
+                storedPanel === "news" ||
+                storedPanel === "layout" ||
+                storedPanel === "help"
+            ) {
+                setActiveUtilityPanel(storedPanel)
+            }
+        } catch (error) {
+            console.error("Watchlist state could not be restored:", error)
+        } finally {
+            setWatchlistsHydrated(true)
+        }
+    }, [])
+
+    useEffect(() => {
+        if (!watchlistsHydrated || typeof window === "undefined") return
+        window.localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(watchlists))
+        window.localStorage.setItem(ACTIVE_WATCHLIST_STORAGE_KEY, activeWatchlistId)
+        if (activeUtilityPanel) {
+            window.localStorage.setItem(WATCHLIST_PANEL_STORAGE_KEY, activeUtilityPanel)
+        } else {
+            window.localStorage.removeItem(WATCHLIST_PANEL_STORAGE_KEY)
+        }
+    }, [watchlists, activeWatchlistId, activeUtilityPanel, watchlistsHydrated])
+
+    useEffect(() => {
+        if (watchlists.length === 0) return
+        if (!watchlists.some((watchlist) => watchlist.id === activeWatchlistId)) {
+            setActiveWatchlistId(watchlists[0].id)
+        }
+    }, [watchlists, activeWatchlistId])
 
     useEffect(() => {
         if (typeof window === "undefined") {
@@ -763,7 +1020,7 @@ export function AdvancedChartPage({
     }, [draftIndicatorParams, editingIndicatorId])
 
     // Symbol selection
-    const handleSymbolSelect = (sym: string, market: "BIST" | "Kripto") => {
+    const handleSymbolSelect = (sym: string, market: MarketType) => {
         setSymbol(sym)
         setMarketType(market)
         setShowSymbolSearch(false)
@@ -814,24 +1071,234 @@ export function AdvancedChartPage({
         [activeIndicators]
     )
 
-    // Merged watchlist data
-    const watchlistData = useMemo(() => {
-        const cryptoData = CRYPTO_WATCHLIST.map(sym => ({
-            symbol: sym.replace("USDT", "/USD"),
-            rawSymbol: sym,
-            price: cryptoPrices[sym]?.price?.toFixed(2) || "---",
-            change: cryptoPrices[sym]?.change || 0,
-            type: "Kripto" as const
+    const activeWatchlist = useMemo(
+        () => watchlists.find((watchlist) => watchlist.id === activeWatchlistId) || watchlists[0] || null,
+        [watchlists, activeWatchlistId]
+    )
+
+    const cryptoQuoteMap = useMemo(() => {
+        const map = new Map<string, { priceText: string; change: number }>()
+        for (const [sym, payload] of Object.entries(cryptoPrices)) {
+            map.set(sym, {
+                priceText: payload?.price ? payload.price.toFixed(2) : "---",
+                change: payload?.change ?? 0,
+            })
+        }
+        return map
+    }, [cryptoPrices])
+
+    const bistQuoteMap = useMemo(() => {
+        const map = new Map<string, { priceText: string; change: number }>()
+        for (const ticker of bistTickers || []) {
+            map.set(ticker.symbol.toUpperCase(), {
+                priceText: ticker.price?.toFixed(2) || "---",
+                change: ticker.changePercent || 0,
+            })
+        }
+        return map
+    }, [bistTickers])
+
+    const bistSymbolSet = useMemo(
+        () => new Set((bistSymbols?.symbols || []).map((s) => s.toUpperCase())),
+        [bistSymbols]
+    )
+
+    const binanceSymbolSet = useMemo(
+        () => new Set((binanceSymbols || []).map((s: string) => s.toUpperCase())),
+        [binanceSymbols]
+    )
+
+    const activeWatchlistSymbolRows = useMemo(
+        () =>
+            (activeWatchlist?.rows || []).filter(
+                (row): row is WatchlistSymbolRow => row.kind === "symbol"
+            ),
+        [activeWatchlist]
+    )
+
+    const updateActiveWatchlist = useCallback(
+        (updater: (watchlist: WatchlistModel) => WatchlistModel) => {
+            setWatchlists((prev) =>
+                prev.map((watchlist) =>
+                    watchlist.id === activeWatchlistId ? updater(watchlist) : watchlist
+                )
+            )
+        },
+        [activeWatchlistId]
+    )
+
+    const parseSymbolInput = useCallback(
+        (rawInput: string): WatchlistSymbolRow | null => {
+            let input = rawInput.trim().toUpperCase().replace(/\s+/g, "")
+            if (!input) return null
+
+            if (input.endsWith("/USD")) {
+                input = `${input.replace("/USD", "")}USDT`
+            }
+
+            if (input.endsWith(".IS")) {
+                return symbolRow(input.replace(".IS", ""), "BIST")
+            }
+
+            if (input.endsWith("USDT")) {
+                return symbolRow(input, "Kripto")
+            }
+
+            if (binanceSymbolSet.has(input)) {
+                return symbolRow(input, "Kripto")
+            }
+
+            if (binanceSymbolSet.has(`${input}USDT`)) {
+                return symbolRow(`${input}USDT`, "Kripto")
+            }
+
+            if (bistSymbolSet.has(input)) {
+                return symbolRow(input, "BIST")
+            }
+
+            return null
+        },
+        [binanceSymbolSet, bistSymbolSet]
+    )
+
+    const handleAddSymbolToWatchlist = useCallback(() => {
+        if (!activeWatchlist) return
+        const value = window.prompt("Sembol girin (ör: BTCUSDT, ETH/USD veya THYAO)")
+        if (!value) return
+        const parsed = parseSymbolInput(value)
+        if (!parsed) {
+            showWatchlistToast("Geçersiz sembol. Binance veya BIST sembolü deneyin.")
+            return
+        }
+
+        let added = false
+        updateActiveWatchlist((watchlist) => {
+            const exists = watchlist.rows.some(
+                (row) =>
+                    row.kind === "symbol" &&
+                    row.rawSymbol === parsed.rawSymbol &&
+                    row.marketType === parsed.marketType
+            )
+            if (exists) return watchlist
+            added = true
+            return { ...watchlist, rows: [...watchlist.rows, parsed] }
+        })
+        showWatchlistToast(
+            added
+                ? `${parsed.rawSymbol} listeye eklendi.`
+                : `${parsed.rawSymbol} zaten listede var.`
+        )
+    }, [activeWatchlist, parseSymbolInput, showWatchlistToast, updateActiveWatchlist])
+
+    const handleRemoveRowFromWatchlist = useCallback(
+        (rowIndex: number) => {
+            updateActiveWatchlist((watchlist) => ({
+                ...watchlist,
+                rows: watchlist.rows.filter((_, idx) => idx !== rowIndex),
+            }))
+        },
+        [updateActiveWatchlist]
+    )
+
+    const handleToggleWatchlistAlerts = useCallback(() => {
+        updateActiveWatchlist((watchlist) => ({
+            ...watchlist,
+            alarmsEnabled: !watchlist.alarmsEnabled,
         }))
-        const bistData = (bistTickers || []).map(t => ({
-            symbol: t.symbol,
-            rawSymbol: t.symbol,
-            price: t.price?.toFixed(2) || "---",
-            change: t.changePercent || 0,
-            type: "BIST" as const
+    }, [updateActiveWatchlist])
+
+    const handleCopyWatchlist = useCallback(() => {
+        if (!activeWatchlist) return
+        const duplicate: WatchlistModel = {
+            ...activeWatchlist,
+            id: makeWatchlistId(activeWatchlist.name),
+            name: `${activeWatchlist.name} Kopya`,
+            rows: activeWatchlist.rows.map((row) =>
+                row.kind === "section" ? { ...row, id: makeWatchlistId(row.title) } : { ...row }
+            ),
+        }
+        setWatchlists((prev) => [duplicate, ...prev])
+        setActiveWatchlistId(duplicate.id)
+        setShowWatchlistMenu(false)
+        showWatchlistToast("Listenin kopyası oluşturuldu.")
+    }, [activeWatchlist, showWatchlistToast])
+
+    const handleRenameWatchlist = useCallback(() => {
+        if (!activeWatchlist) return
+        const nextName = window.prompt("Yeni liste adı", activeWatchlist.name)
+        if (!nextName || !nextName.trim()) return
+        updateActiveWatchlist((watchlist) => ({ ...watchlist, name: nextName.trim() }))
+        setShowWatchlistMenu(false)
+        showWatchlistToast("Liste adı güncellendi.")
+    }, [activeWatchlist, showWatchlistToast, updateActiveWatchlist])
+
+    const handleAddSectionToWatchlist = useCallback(() => {
+        const sectionName = window.prompt("Bölüm adı")
+        if (!sectionName || !sectionName.trim()) return
+        updateActiveWatchlist((watchlist) => ({
+            ...watchlist,
+            rows: [...watchlist.rows, sectionRow(sectionName.trim())],
         }))
-        return [...cryptoData, ...bistData]
-    }, [cryptoPrices, bistTickers])
+        setShowWatchlistMenu(false)
+        showWatchlistToast("Listeye yeni bölüm eklendi.")
+    }, [showWatchlistToast, updateActiveWatchlist])
+
+    const handleClearWatchlist = useCallback(() => {
+        if (!activeWatchlist) return
+        const approved = window.confirm(`${activeWatchlist.name} listesini temizlemek istiyor musunuz?`)
+        if (!approved) return
+        updateActiveWatchlist((watchlist) => ({ ...watchlist, rows: [] }))
+        setShowWatchlistMenu(false)
+        showWatchlistToast("Liste temizlendi.")
+    }, [activeWatchlist, showWatchlistToast, updateActiveWatchlist])
+
+    const handleCreateWatchlist = useCallback(() => {
+        const listName = window.prompt("Yeni liste adı")
+        if (!listName || !listName.trim()) return
+        const watchlist: WatchlistModel = {
+            id: makeWatchlistId(listName),
+            name: listName.trim(),
+            alarmsEnabled: false,
+            notes: "",
+            rows: [],
+        }
+        setWatchlists((prev) => [watchlist, ...prev])
+        setActiveWatchlistId(watchlist.id)
+        setShowWatchlistMenu(false)
+        setShowWatchlistSwitcher(false)
+        showWatchlistToast("Yeni liste oluşturuldu.")
+    }, [showWatchlistToast])
+
+    const handleLoadWatchlist = useCallback(() => {
+        setShowWatchlistSwitcher(true)
+        setShowWatchlistMenu(false)
+    }, [])
+
+    const handleShareWatchlist = useCallback(async () => {
+        if (!activeWatchlist) return
+        const symbols = activeWatchlist.rows
+            .filter((row): row is WatchlistSymbolRow => row.kind === "symbol")
+            .map((row) => row.rawSymbol)
+        if (symbols.length === 0) {
+            showWatchlistToast("Paylaşmak için listede sembol yok.")
+            return
+        }
+        const payload = `${activeWatchlist.name}: ${symbols.join(", ")}`
+        try {
+            await navigator.clipboard.writeText(payload)
+            showWatchlistToast("Liste panoya kopyalandı.")
+        } catch {
+            window.prompt("Panoya kopyalayın", payload)
+        }
+        setShowWatchlistMenu(false)
+    }, [activeWatchlist, showWatchlistToast])
+
+    const handleWatchlistNotesChange = useCallback(
+        (value: string) => {
+            updateActiveWatchlist((watchlist) => ({ ...watchlist, notes: value }))
+        },
+        [updateActiveWatchlist]
+    )
 
     return (
         <div
@@ -1157,32 +1624,278 @@ export function AdvancedChartPage({
 
             {/* Right Panel - Watchlist (TradingView Style) */}
             {showRightPanel && (
-                <div className="w-[280px] border-l border-border/30 flex flex-col bg-[#131722]">
-                    <div className="flex items-center justify-between px-3 py-2 border-b border-border/30">
-                        <span className="text-sm font-medium">İzleme Listesi</span>
-                        <div className="flex items-center gap-1">
-                            <button onClick={() => refetchTickers()} className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted/30 text-muted-foreground"><RefreshCw className="h-4 w-4" /></button>
-                            <button className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted/30 text-muted-foreground"><Plus className="h-4 w-4" /></button>
-                            <button className="flex h-6 w-6 items-center justify-center rounded hover:bg-muted/30 text-muted-foreground"><MoreHorizontal className="h-4 w-4" /></button>
-                        </div>
-                    </div>
-                    <div className="flex-1 overflow-y-auto">
-                        {watchlistData.map((item, index) => (
+                <div className="w-[372px] border-l border-border/30 flex bg-[#131722] text-[#d1d4dc]">
+                    <div className="flex-1 flex flex-col min-w-0">
+                        <div className="relative flex items-center gap-1 px-2 py-2 border-b border-[#2a2e39]">
+                            <div className="relative">
+                                <button
+                                    onClick={() => {
+                                        setShowWatchlistSwitcher((prev) => !prev)
+                                        setShowWatchlistMenu(false)
+                                    }}
+                                    className="flex items-center gap-1 rounded-md border border-[#2a2e39] bg-[#1e222d] px-2.5 py-1.5 text-sm font-semibold hover:bg-[#252b38]"
+                                >
+                                    <span>{activeWatchlist?.name || "Izleme Listesi"}</span>
+                                    <ChevronDown className="h-3.5 w-3.5 text-[#8b949e]" />
+                                </button>
+                                {showWatchlistSwitcher && (
+                                    <div className="absolute left-0 top-full mt-2 w-64 rounded-md border border-[#2a2e39] bg-[#11151f] shadow-xl z-50">
+                                        <div className="border-b border-[#2a2e39] px-3 py-2 text-xs text-[#8b949e]">
+                                            Son kullanilan listeler
+                                        </div>
+                                        <div className="max-h-72 overflow-y-auto py-1">
+                                            {watchlists.map((watchlist) => (
+                                                <button
+                                                    key={watchlist.id}
+                                                    onClick={() => {
+                                                        setActiveWatchlistId(watchlist.id)
+                                                        setShowWatchlistSwitcher(false)
+                                                    }}
+                                                    className={cn(
+                                                        "w-full px-3 py-2 text-left text-sm hover:bg-[#1c2230]",
+                                                        watchlist.id === activeWatchlistId && "bg-[#263045] text-primary"
+                                                    )}
+                                                >
+                                                    {watchlist.name}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
                             <button
-                                key={`${item.symbol}-${index}`}
-                                onClick={() => handleSymbolSelect(item.rawSymbol, item.type)}
-                                className={cn("w-full flex items-center justify-between px-3 py-2 hover:bg-muted/30 transition-colors", symbol === item.rawSymbol && "bg-primary/10")}
+                                onClick={handleAddSymbolToWatchlist}
+                                className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#1f2635] text-[#8b949e]"
+                                title="Listeye sembol ekle"
                             >
-                                <div className="flex flex-col text-left">
-                                    <span className="text-sm font-medium">{item.symbol}</span>
-                                    <span className="text-xs text-muted-foreground">{item.type}</span>
-                                </div>
-                                <div className="text-right">
-                                    <div className="text-sm font-mono tabular-nums">{item.price}</div>
-                                    <div className={cn("text-xs font-mono tabular-nums", item.change >= 0 ? "text-profit" : "text-loss")}>{item.change >= 0 ? "+" : ""}{item.change.toFixed(2)}%</div>
-                                </div>
+                                <Plus className="h-4 w-4" />
                             </button>
-                        ))}
+                            <button
+                                onClick={() => refetchTickers()}
+                                className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#1f2635] text-[#8b949e]"
+                                title="Veriyi yenile"
+                            >
+                                <RefreshCw className="h-4 w-4" />
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setShowWatchlistMenu((prev) => !prev)
+                                    setShowWatchlistSwitcher(false)
+                                }}
+                                className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#1f2635] text-[#8b949e]"
+                                title="Liste menusu"
+                            >
+                                <MoreHorizontal className="h-4 w-4" />
+                            </button>
+
+                            {showWatchlistMenu && (
+                                <div className="absolute left-2 top-full mt-2 w-72 rounded-md border border-[#2a2e39] bg-[#11151f] shadow-2xl z-50 overflow-hidden">
+                                    <div className="flex items-center justify-between px-3 py-2 border-b border-[#2a2e39]">
+                                        <span className="text-sm font-medium">Paylasim listesi</span>
+                                        <button
+                                            onClick={handleToggleWatchlistAlerts}
+                                            className={cn(
+                                                "h-5 w-10 rounded-full p-0.5 transition-colors",
+                                                activeWatchlist?.alarmsEnabled ? "bg-primary" : "bg-[#2a2e39]"
+                                            )}
+                                            title="Liste alarmlari"
+                                        >
+                                            <span
+                                                className={cn(
+                                                    "block h-4 w-4 rounded-full bg-white transition-transform",
+                                                    activeWatchlist?.alarmsEnabled ? "translate-x-5" : "translate-x-0"
+                                                )}
+                                            />
+                                        </button>
+                                    </div>
+                                    <div className="p-1">
+                                        <button onClick={handleShareWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-[#1f2635]"><Share2 className="h-4 w-4" /> Listeyi paylas</button>
+                                        <button onClick={handleCopyWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-[#1f2635]"><Copy className="h-4 w-4" /> Kopya olustur</button>
+                                        <button onClick={handleRenameWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-[#1f2635]"><Pencil className="h-4 w-4" /> Yeni ad ver</button>
+                                        <button onClick={handleAddSectionToWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-[#1f2635]"><BarChart3 className="h-4 w-4" /> Bolum ekle</button>
+                                        <button onClick={handleClearWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-[#1f2635]"><Trash2 className="h-4 w-4" /> Listeyi temizle</button>
+                                        <div className="my-1 border-t border-[#2a2e39]" />
+                                        <button onClick={handleCreateWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-[#1f2635]"><Plus className="h-4 w-4" /> Yeni liste olustur</button>
+                                        <button onClick={handleLoadWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-[#1f2635]"><FolderOpen className="h-4 w-4" /> Listeyi yukle</button>
+                                        <button onClick={handleAddSymbolToWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-[#1f2635]"><Upload className="h-4 w-4" /> Sembol ekle</button>
+                                    </div>
+                                    <div className="border-t border-[#2a2e39] px-3 py-2">
+                                        <div className="mb-1 text-[11px] text-[#8b949e] uppercase">Son kullanilanlar</div>
+                                        <div className="space-y-1">
+                                            {watchlists.slice(0, 5).map((watchlist) => (
+                                                <button
+                                                    key={`recent-${watchlist.id}`}
+                                                    onClick={() => {
+                                                        setActiveWatchlistId(watchlist.id)
+                                                        setShowWatchlistMenu(false)
+                                                    }}
+                                                    className="w-full rounded px-2 py-1.5 text-left text-sm hover:bg-[#1f2635]"
+                                                >
+                                                    {watchlist.name}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="grid grid-cols-[1.4fr_1fr_0.8fr] items-center gap-2 border-b border-[#2a2e39] px-3 py-2 text-[11px] uppercase text-[#8b949e]">
+                            <span>Sembol</span>
+                            <span className="text-right">Son</span>
+                            <span className="text-right">Deg%</span>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto">
+                            {(activeWatchlist?.rows || []).length === 0 && (
+                                <div className="px-3 py-4 text-sm text-[#8b949e]">
+                                    Liste bos. <button className="text-primary hover:underline" onClick={handleAddSymbolToWatchlist}>Sembol ekle</button>
+                                </div>
+                            )}
+                            {(activeWatchlist?.rows || []).map((row, index) => {
+                                if (row.kind === "section") {
+                                    return (
+                                        <div key={row.id} className="px-3 py-2 border-t border-[#2a2e39] text-[11px] font-semibold uppercase tracking-wide text-[#8b949e]">
+                                            {row.title}
+                                        </div>
+                                    )
+                                }
+
+                                const quote =
+                                    row.marketType === "Kripto"
+                                        ? cryptoQuoteMap.get(row.rawSymbol)
+                                        : bistQuoteMap.get(row.rawSymbol)
+                                const displaySymbol =
+                                    row.marketType === "Kripto"
+                                        ? row.rawSymbol.replace("USDT", "/USD")
+                                        : row.rawSymbol
+                                const change = quote?.change ?? 0
+                                const priceText = quote?.priceText ?? "---"
+
+                                return (
+                                    <div
+                                        key={`${row.marketType}-${row.rawSymbol}-${index}`}
+                                        className={cn(
+                                            "group grid grid-cols-[1.4fr_1fr_0.8fr_20px] items-center gap-2 px-3 py-2 hover:bg-[#1a2230] transition-colors",
+                                            symbol === row.rawSymbol && marketType === row.marketType && "bg-[#1f2e44]"
+                                        )}
+                                    >
+                                        <button
+                                            onClick={() => handleSymbolSelect(row.rawSymbol, row.marketType)}
+                                            className="truncate text-left text-sm font-medium"
+                                            title={`${row.rawSymbol} (${row.marketType})`}
+                                        >
+                                            {displaySymbol}
+                                        </button>
+                                        <span className="text-right text-sm font-mono tabular-nums">{priceText}</span>
+                                        <span className={cn("text-right text-sm font-mono tabular-nums", change >= 0 ? "text-[#00c853]" : "text-[#ff3d00]")}>
+                                            {change >= 0 ? "+" : ""}
+                                            {change.toFixed(2)}%
+                                        </span>
+                                        <button
+                                            onClick={() => handleRemoveRowFromWatchlist(index)}
+                                            className="opacity-0 group-hover:opacity-100 text-[#8b949e] hover:text-[#ff3d00] transition-opacity"
+                                            title="Satiri kaldir"
+                                        >
+                                            <X className="h-3.5 w-3.5" />
+                                        </button>
+                                    </div>
+                                )
+                            })}
+                        </div>
+
+                        {watchlistNotice && (
+                            <div className="border-t border-[#2a2e39] px-3 py-2 text-xs text-primary">
+                                {watchlistNotice}
+                            </div>
+                        )}
+
+                        {activeUtilityPanel && (
+                            <div className="border-t border-[#2a2e39] px-3 py-3 text-xs">
+                                {activeUtilityPanel === "alerts" && (
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[#8b949e]">Liste alarmlari</span>
+                                            <button onClick={handleToggleWatchlistAlerts} className={cn("rounded px-2 py-1 text-[11px]", activeWatchlist?.alarmsEnabled ? "bg-primary text-primary-foreground" : "bg-[#2a2e39] text-[#d1d4dc]")}>
+                                                {activeWatchlist?.alarmsEnabled ? "Acik" : "Kapali"}
+                                            </button>
+                                        </div>
+                                        <div className="text-[#8b949e]">Aktif sembol: {symbol} - {marketType}</div>
+                                        <div className="text-[#8b949e]">Listedeki semboller: {activeWatchlistSymbolRows.length}</div>
+                                    </div>
+                                )}
+                                {activeUtilityPanel === "notes" && (
+                                    <div className="space-y-2">
+                                        <div className="text-[#8b949e]">Liste notlari</div>
+                                        <textarea
+                                            value={activeWatchlist?.notes || ""}
+                                            onChange={(e) => handleWatchlistNotesChange(e.target.value)}
+                                            placeholder="Bu liste icin not girin..."
+                                            className="h-20 w-full resize-none rounded border border-[#2a2e39] bg-[#0f131a] px-2 py-1.5 text-xs outline-none focus:border-primary/60"
+                                        />
+                                    </div>
+                                )}
+                                {activeUtilityPanel === "calendar" && (
+                                    <div className="space-y-1 text-[#8b949e]">
+                                        <div>Sunucu saati: {new Date().toLocaleString("tr-TR")}</div>
+                                        <div>Grafik periyodu: {currentTimeframeLabel}</div>
+                                        <div>Veri kaynagi: {dataSource}</div>
+                                    </div>
+                                )}
+                                {activeUtilityPanel === "news" && (
+                                    <div className="space-y-1 text-[#8b949e]">
+                                        <div>Liste ozeti:</div>
+                                        {activeWatchlistSymbolRows.slice(0, 4).map((row) => (
+                                            <div key={`news-${row.marketType}-${row.rawSymbol}`} className="truncate">
+                                                {row.rawSymbol} ({row.marketType})
+                                            </div>
+                                        ))}
+                                        {activeWatchlistSymbolRows.length === 0 && <div>Gosterilecek sembol yok.</div>}
+                                    </div>
+                                )}
+                                {activeUtilityPanel === "layout" && (
+                                    <div className="space-y-1 text-[#8b949e]">
+                                        <div>Panel: {showRightPanel ? "Acik" : "Kapali"}</div>
+                                        <div>Indikator sayisi: {activeIndicators.length}</div>
+                                        <div>Overlay: {visibleOverlayIndicators.length}</div>
+                                    </div>
+                                )}
+                                {activeUtilityPanel === "help" && (
+                                    <div className="space-y-1 text-[#8b949e]">
+                                        <div>- `+` ile listeye sembol ekleyin.</div>
+                                        <div>- `...` menusuyle listeyi kopyalayin/yeniden adlandirin.</div>
+                                        <div>- Satirdaki `x` ile sembolu kaldirin.</div>
+                                        <div>- Ikonlarla sag panel modlarini degistirin.</div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="w-12 border-l border-[#2a2e39] flex flex-col items-center gap-1 py-2">
+                        {WATCHLIST_UTILITY_ITEMS.map((panelItem) => {
+                            const Icon = panelItem.icon
+                            return (
+                                <button
+                                    key={panelItem.id}
+                                    onClick={() =>
+                                        setActiveUtilityPanel((prev) =>
+                                            prev === panelItem.id ? null : panelItem.id
+                                        )
+                                    }
+                                    title={panelItem.label}
+                                    className={cn(
+                                        "flex h-9 w-9 items-center justify-center rounded-lg transition-colors",
+                                        activeUtilityPanel === panelItem.id
+                                            ? "bg-[#263045] text-primary"
+                                            : "text-[#8b949e] hover:bg-[#1f2635] hover:text-[#d1d4dc]"
+                                    )}
+                                >
+                                    <Icon className="h-4 w-4" />
+                                </button>
+                            )
+                        })}
                     </div>
                 </div>
             )}
