@@ -204,6 +204,28 @@ export function calculateCCI(candles: Candle[], period: number = 20): IndicatorV
 
 // ==================== COMBO INDICATOR (Overlay) ====================
 
+export interface ComboParams {
+    rsiBuyThreshold: number
+    rsiSellThreshold: number
+    wrBuyThreshold: number
+    wrSellThreshold: number
+    cciBuyThreshold: number
+    cciSellThreshold: number
+    minBuyScore: number
+    minSellScore: number
+}
+
+const DEFAULT_COMBO_PARAMS: ComboParams = {
+    rsiBuyThreshold: 40,
+    rsiSellThreshold: 80,
+    wrBuyThreshold: -80,
+    wrSellThreshold: -10,
+    cciBuyThreshold: -100,
+    cciSellThreshold: 200,
+    minBuyScore: 2,
+    minSellScore: 2,
+}
+
 export interface ComboSignal {
     time: string
     buyScore: number
@@ -217,8 +239,13 @@ export interface ComboSignal {
     }
 }
 
-export function calculateCombo(candles: Candle[]): ComboSignal[] {
+export function calculateCombo(
+    candles: Candle[],
+    params: Partial<ComboParams> = {}
+): ComboSignal[] {
     if (candles.length < 26) return []
+
+    const cfg = { ...DEFAULT_COMBO_PARAMS, ...params }
 
     const rsi = calculateRSI(candles, 14)
     const macd = calculateMACD(candles)
@@ -238,20 +265,19 @@ export function calculateCombo(candles: Candle[]): ComboSignal[] {
 
         // Buy conditions
         if (!isNaN(macdVal) && macdVal < 0) buyScore++
-        if (!isNaN(rsiVal) && rsiVal < 40) buyScore++
-        if (!isNaN(wrVal) && wrVal < -80) buyScore++
-        if (!isNaN(cciVal) && cciVal < -100) buyScore++
+        if (!isNaN(rsiVal) && rsiVal < cfg.rsiBuyThreshold) buyScore++
+        if (!isNaN(wrVal) && wrVal < cfg.wrBuyThreshold) buyScore++
+        if (!isNaN(cciVal) && cciVal < cfg.cciBuyThreshold) buyScore++
 
         // Sell conditions
         if (!isNaN(macdVal) && macdVal > 0) sellScore++
-        if (!isNaN(rsiVal) && rsiVal > 80) sellScore++
-        if (!isNaN(wrVal) && wrVal > -10) sellScore++
-        if (!isNaN(cciVal) && cciVal > 200) sellScore++
+        if (!isNaN(rsiVal) && rsiVal > cfg.rsiSellThreshold) sellScore++
+        if (!isNaN(wrVal) && wrVal > cfg.wrSellThreshold) sellScore++
+        if (!isNaN(cciVal) && cciVal > cfg.cciSellThreshold) sellScore++
 
         let signal: 'AL' | 'SAT' | null = null
-        // More permissive: 2+ out of 4 conditions
-        if (buyScore >= 2) signal = 'AL'
-        if (sellScore >= 2) signal = 'SAT'
+        if (buyScore >= cfg.minBuyScore) signal = 'AL'
+        if (sellScore >= cfg.minSellScore) signal = 'SAT'
 
         result.push({
             time: candles[i].time,
@@ -272,6 +298,40 @@ export function calculateCombo(candles: Candle[]): ComboSignal[] {
 
 // ==================== HUNTER INDICATOR (Overlay) ====================
 // Uses 15 oscillators with N-of-M logic based on Pine Script
+
+export interface HunterParams {
+    requiredDipScore: number
+    requiredTopScore: number
+    rsiDipThreshold: number
+    rsiTopThreshold: number
+    rsiFastDipThreshold: number
+    rsiFastTopThreshold: number
+    wrDipThreshold: number
+    wrTopThreshold: number
+    cciDipThreshold: number
+    cciTopThreshold: number
+    cmoDipThreshold: number
+    cmoTopThreshold: number
+    rsi2DipThreshold: number
+    rsi2TopThreshold: number
+}
+
+const DEFAULT_HUNTER_PARAMS: HunterParams = {
+    requiredDipScore: 3,
+    requiredTopScore: 4,
+    rsiDipThreshold: 30,
+    rsiTopThreshold: 70,
+    rsiFastDipThreshold: 20,
+    rsiFastTopThreshold: 80,
+    wrDipThreshold: -80,
+    wrTopThreshold: -20,
+    cciDipThreshold: -100,
+    cciTopThreshold: 100,
+    cmoDipThreshold: -50,
+    cmoTopThreshold: 50,
+    rsi2DipThreshold: 10,
+    rsi2TopThreshold: 90,
+}
 
 export interface HunterSignal {
     time: string
@@ -510,8 +570,13 @@ function calculateKeltnerPercent(candles: Candle[], period: number = 20, mult: n
     return result
 }
 
-export function calculateHunter(candles: Candle[]): HunterSignal[] {
+export function calculateHunter(
+    candles: Candle[],
+    params: Partial<HunterParams> = {}
+): HunterSignal[] {
     if (candles.length < 30) return []
+
+    const cfg = { ...DEFAULT_HUNTER_PARAMS, ...params }
 
     // Calculate all 15 oscillators
     const rsi14 = calculateRSI(candles, 14)
@@ -531,10 +596,6 @@ export function calculateHunter(candles: Candle[]): HunterSignal[] {
     const macd = calculateMACD(candles)
 
     const result: HunterSignal[] = []
-
-    // Required counts for signals (more permissive for visible signals)
-    const REQ_DIP = 3   // Need at least 3 oversold conditions for DIP (buy)
-    const REQ_TOP = 4   // Need at least 4 overbought conditions for TEPE (sell)
 
     for (let i = 0; i < candles.length; i++) {
         // Get all indicator values at this index
@@ -556,11 +617,11 @@ export function calculateHunter(candles: Candle[]): HunterSignal[] {
 
         // Count oversold (OS) conditions - DIP
         let dipScore = 0
-        if (!isNaN(rsiVal) && rsiVal < 30) dipScore++
-        if (!isNaN(rsiFastVal) && rsiFastVal < 20) dipScore++
-        if (!isNaN(wrVal) && wrVal < -80) dipScore++
-        if (!isNaN(cciVal) && cciVal < -100) dipScore++
-        if (!isNaN(cmoVal) && cmoVal < -50) dipScore++
+        if (!isNaN(rsiVal) && rsiVal < cfg.rsiDipThreshold) dipScore++
+        if (!isNaN(rsiFastVal) && rsiFastVal < cfg.rsiFastDipThreshold) dipScore++
+        if (!isNaN(wrVal) && wrVal < cfg.wrDipThreshold) dipScore++
+        if (!isNaN(cciVal) && cciVal < cfg.cciDipThreshold) dipScore++
+        if (!isNaN(cmoVal) && cmoVal < cfg.cmoDipThreshold) dipScore++
         if (!isNaN(ultimateVal) && ultimateVal < 30) dipScore++
         if (!isNaN(bbPercentVal) && bbPercentVal < 0) dipScore++
         if (!isNaN(rocVal) && rocVal < -5) dipScore++
@@ -570,15 +631,15 @@ export function calculateHunter(candles: Candle[]): HunterSignal[] {
         if (!isNaN(zscoreVal) && zscoreVal < -2) dipScore++
         if (!isNaN(keltnerPercentVal) && keltnerPercentVal < 0) dipScore++
         if (!isNaN(macdVal) && macdVal < 0) dipScore++
-        if (!isNaN(rsi2Val) && rsi2Val < 10) dipScore++
+        if (!isNaN(rsi2Val) && rsi2Val < cfg.rsi2DipThreshold) dipScore++
 
         // Count overbought (OB) conditions - TEPE
         let topScore = 0
-        if (!isNaN(rsiVal) && rsiVal > 70) topScore++
-        if (!isNaN(rsiFastVal) && rsiFastVal > 80) topScore++
-        if (!isNaN(wrVal) && wrVal > -20) topScore++
-        if (!isNaN(cciVal) && cciVal > 100) topScore++
-        if (!isNaN(cmoVal) && cmoVal > 50) topScore++
+        if (!isNaN(rsiVal) && rsiVal > cfg.rsiTopThreshold) topScore++
+        if (!isNaN(rsiFastVal) && rsiFastVal > cfg.rsiFastTopThreshold) topScore++
+        if (!isNaN(wrVal) && wrVal > cfg.wrTopThreshold) topScore++
+        if (!isNaN(cciVal) && cciVal > cfg.cciTopThreshold) topScore++
+        if (!isNaN(cmoVal) && cmoVal > cfg.cmoTopThreshold) topScore++
         if (!isNaN(ultimateVal) && ultimateVal > 70) topScore++
         if (!isNaN(bbPercentVal) && bbPercentVal > 100) topScore++
         if (!isNaN(rocVal) && rocVal > 5) topScore++
@@ -588,14 +649,12 @@ export function calculateHunter(candles: Candle[]): HunterSignal[] {
         if (!isNaN(zscoreVal) && zscoreVal > 2) topScore++
         if (!isNaN(keltnerPercentVal) && keltnerPercentVal > 100) topScore++
         if (!isNaN(macdVal) && macdVal > 0) topScore++
-        if (!isNaN(rsi2Val) && rsi2Val > 90) topScore++
+        if (!isNaN(rsi2Val) && rsi2Val > cfg.rsi2TopThreshold) topScore++
 
         let signal: 'AL' | 'SAT' | null = null
 
-        // DIP signal when at least 7 oscillators are oversold
-        if (dipScore >= REQ_DIP) signal = 'AL'
-        // TEPE signal when at least 10 oscillators are overbought
-        if (topScore >= REQ_TOP) signal = 'SAT'
+        if (dipScore >= cfg.requiredDipScore) signal = 'AL'
+        if (topScore >= cfg.requiredTopScore) signal = 'SAT'
 
         result.push({
             time: candles[i].time,
@@ -627,6 +686,14 @@ export function calculateHunter(candles: Candle[]): HunterSignal[] {
 
 // ==================== INDICATOR METADATA ====================
 
+export interface IndicatorParamSchema {
+    key: string
+    label: string
+    min: number
+    max: number
+    step?: number
+}
+
 export interface IndicatorMeta {
     id: string
     name: string
@@ -635,6 +702,7 @@ export interface IndicatorMeta {
     category: 'momentum' | 'trend' | 'volatility' | 'custom'
     isOverlay: boolean
     defaultParams: Record<string, number>
+    paramSchema?: IndicatorParamSchema[]
 }
 
 export const AVAILABLE_INDICATORS: IndicatorMeta[] = [
@@ -645,7 +713,10 @@ export const AVAILABLE_INDICATORS: IndicatorMeta[] = [
         description: 'Aşırı alım/satım göstergesi (0-100)',
         category: 'momentum',
         isOverlay: false,
-        defaultParams: { period: 14 }
+        defaultParams: { period: 14 },
+        paramSchema: [
+            { key: 'period', label: 'Periyot', min: 2, max: 100, step: 1 },
+        ],
     },
     {
         id: 'macd',
@@ -654,7 +725,12 @@ export const AVAILABLE_INDICATORS: IndicatorMeta[] = [
         description: 'Moving Average Convergence Divergence',
         category: 'trend',
         isOverlay: false,
-        defaultParams: { fast: 12, slow: 26, signal: 9 }
+        defaultParams: { fast: 12, slow: 26, signal: 9 },
+        paramSchema: [
+            { key: 'fast', label: 'Hızlı EMA', min: 2, max: 50, step: 1 },
+            { key: 'slow', label: 'Yavaş EMA', min: 5, max: 100, step: 1 },
+            { key: 'signal', label: 'Sinyal', min: 2, max: 30, step: 1 },
+        ],
     },
     {
         id: 'wr',
@@ -663,7 +739,10 @@ export const AVAILABLE_INDICATORS: IndicatorMeta[] = [
         description: 'Momentum göstergesi (-100 to 0)',
         category: 'momentum',
         isOverlay: false,
-        defaultParams: { period: 14 }
+        defaultParams: { period: 14 },
+        paramSchema: [
+            { key: 'period', label: 'Periyot', min: 2, max: 100, step: 1 },
+        ],
     },
     {
         id: 'cci',
@@ -672,7 +751,10 @@ export const AVAILABLE_INDICATORS: IndicatorMeta[] = [
         description: 'Trend sapma göstergesi',
         category: 'momentum',
         isOverlay: false,
-        defaultParams: { period: 20 }
+        defaultParams: { period: 20 },
+        paramSchema: [
+            { key: 'period', label: 'Periyot', min: 2, max: 100, step: 1 },
+        ],
     },
     {
         id: 'combo',
@@ -681,7 +763,17 @@ export const AVAILABLE_INDICATORS: IndicatorMeta[] = [
         description: 'Rapot özel AL/SAT sinyali (4 indikatör birleşimi)',
         category: 'custom',
         isOverlay: true,
-        defaultParams: {}
+        defaultParams: { ...DEFAULT_COMBO_PARAMS },
+        paramSchema: [
+            { key: 'rsiBuyThreshold', label: 'RSI AL Eşik', min: 1, max: 60, step: 1 },
+            { key: 'rsiSellThreshold', label: 'RSI SAT Eşik', min: 40, max: 99, step: 1 },
+            { key: 'wrBuyThreshold', label: 'W%R AL Eşik', min: -100, max: 0, step: 1 },
+            { key: 'wrSellThreshold', label: 'W%R SAT Eşik', min: -100, max: 0, step: 1 },
+            { key: 'cciBuyThreshold', label: 'CCI AL Eşik', min: -300, max: 0, step: 1 },
+            { key: 'cciSellThreshold', label: 'CCI SAT Eşik', min: 0, max: 300, step: 1 },
+            { key: 'minBuyScore', label: 'AL Skor Min', min: 1, max: 4, step: 1 },
+            { key: 'minSellScore', label: 'SAT Skor Min', min: 1, max: 4, step: 1 },
+        ],
     },
     {
         id: 'hunter',
@@ -690,6 +782,22 @@ export const AVAILABLE_INDICATORS: IndicatorMeta[] = [
         description: 'Rapot özel dip/tepe tespit sinyali',
         category: 'custom',
         isOverlay: true,
-        defaultParams: {}
+        defaultParams: { ...DEFAULT_HUNTER_PARAMS },
+        paramSchema: [
+            { key: 'requiredDipScore', label: 'DIP Min Skor', min: 1, max: 15, step: 1 },
+            { key: 'requiredTopScore', label: 'TEPE Min Skor', min: 1, max: 15, step: 1 },
+            { key: 'rsiDipThreshold', label: 'RSI DIP Eşik', min: 1, max: 50, step: 1 },
+            { key: 'rsiTopThreshold', label: 'RSI TEPE Eşik', min: 50, max: 99, step: 1 },
+            { key: 'rsiFastDipThreshold', label: 'RSI Fast DIP', min: 1, max: 50, step: 1 },
+            { key: 'rsiFastTopThreshold', label: 'RSI Fast TEPE', min: 50, max: 99, step: 1 },
+            { key: 'wrDipThreshold', label: 'W%R DIP Eşik', min: -100, max: 0, step: 1 },
+            { key: 'wrTopThreshold', label: 'W%R TEPE Eşik', min: -100, max: 0, step: 1 },
+            { key: 'cciDipThreshold', label: 'CCI DIP Eşik', min: -300, max: 0, step: 1 },
+            { key: 'cciTopThreshold', label: 'CCI TEPE Eşik', min: 0, max: 300, step: 1 },
+            { key: 'cmoDipThreshold', label: 'CMO DIP Eşik', min: -100, max: 0, step: 1 },
+            { key: 'cmoTopThreshold', label: 'CMO TEPE Eşik', min: 0, max: 100, step: 1 },
+            { key: 'rsi2DipThreshold', label: 'RSI2 DIP Eşik', min: 1, max: 50, step: 1 },
+            { key: 'rsi2TopThreshold', label: 'RSI2 TEPE Eşik', min: 50, max: 99, step: 1 },
+        ],
     }
 ]

@@ -15,6 +15,7 @@ import {
     AVAILABLE_INDICATORS,
     type Candle,
     type IndicatorMeta,
+    type IndicatorParamSchema,
 } from "@/lib/indicators"
 import {
     Search,
@@ -37,6 +38,9 @@ import {
     RefreshCw,
     MoreHorizontal,
     Trash2,
+    Settings2,
+    Eye,
+    EyeOff,
 } from "lucide-react"
 
 // ==================== TYPES ====================
@@ -52,6 +56,7 @@ interface ActiveIndicator {
     id: string
     meta: IndicatorMeta
     params: Record<string, number>
+    visible: boolean
 }
 
 // Extended Timeframe options organized by category
@@ -196,10 +201,11 @@ export function AdvancedChartPage({
         const comboMeta = AVAILABLE_INDICATORS.find(i => i.id === 'combo')
         const hunterMeta = AVAILABLE_INDICATORS.find(i => i.id === 'hunter')
         const defaults: ActiveIndicator[] = []
-        if (comboMeta) defaults.push({ id: 'combo', meta: comboMeta, params: {} })
-        if (hunterMeta) defaults.push({ id: 'hunter', meta: hunterMeta, params: {} })
+        if (comboMeta) defaults.push({ id: 'combo', meta: comboMeta, params: { ...comboMeta.defaultParams }, visible: true })
+        if (hunterMeta) defaults.push({ id: 'hunter', meta: hunterMeta, params: { ...hunterMeta.defaultParams }, visible: true })
         return defaults
     })
+    const [editingIndicatorId, setEditingIndicatorId] = useState<string | null>(null)
 
     // Drawing tools state
     const [activeTool, setActiveTool] = useState<'none' | 'ruler' | 'pencil' | 'text'>('none')
@@ -495,8 +501,9 @@ export function AdvancedChartPage({
                 }
 
                 // Combo overlay markers
-                if (activeIndicators.some(i => i.id === 'combo')) {
-                    const comboSignals = calculateCombo(candles)
+                const comboIndicator = activeIndicators.find(i => i.id === 'combo' && i.visible)
+                if (comboIndicator) {
+                    const comboSignals = calculateCombo(candles, comboIndicator.params)
                     const comboWithSignals = comboSignals.filter(s => s.signal !== null)
                     console.log(`COMBO: ${comboWithSignals.length} signals out of ${comboSignals.length} candles`)
                     comboSignals.forEach((sig) => {
@@ -514,8 +521,9 @@ export function AdvancedChartPage({
                 }
 
                 // Hunter overlay markers
-                if (activeIndicators.some(i => i.id === 'hunter')) {
-                    const hunterSignals = calculateHunter(candles)
+                const hunterIndicator = activeIndicators.find(i => i.id === 'hunter' && i.visible)
+                if (hunterIndicator) {
+                    const hunterSignals = calculateHunter(candles, hunterIndicator.params)
                     const hunterWithSignals = hunterSignals.filter(s => s.signal !== null)
                     console.log(`HUNTER: ${hunterWithSignals.length} signals out of ${hunterSignals.length} candles`)
                     hunterSignals.forEach((sig) => {
@@ -590,7 +598,8 @@ export function AdvancedChartPage({
         setActiveIndicators(prev => [...prev, {
             id: indicatorId,
             meta,
-            params: { ...meta.defaultParams }
+            params: { ...meta.defaultParams },
+            visible: true,
         }])
         setShowIndicatorSearch(false)
         setIndicatorSearchQuery("")
@@ -599,6 +608,32 @@ export function AdvancedChartPage({
     // Remove indicator
     const removeIndicator = useCallback((indicatorId: string) => {
         setActiveIndicators(prev => prev.filter(i => i.id !== indicatorId))
+        setEditingIndicatorId(prev => (prev === indicatorId ? null : prev))
+    }, [])
+
+    const toggleIndicatorVisibility = useCallback((indicatorId: string) => {
+        setActiveIndicators(prev => prev.map(ind =>
+            ind.id === indicatorId ? { ...ind, visible: !ind.visible } : ind
+        ))
+    }, [])
+
+    const updateIndicatorParam = useCallback(
+        (indicatorId: string, key: string, value: number) => {
+            setActiveIndicators(prev => prev.map(ind =>
+                ind.id === indicatorId
+                    ? { ...ind, params: { ...ind.params, [key]: value } }
+                    : ind
+            ))
+        },
+        []
+    )
+
+    const resetIndicatorParams = useCallback((indicatorId: string) => {
+        setActiveIndicators(prev => prev.map(ind =>
+            ind.id === indicatorId
+                ? { ...ind, params: { ...ind.meta.defaultParams } }
+                : ind
+        ))
     }, [])
 
     // Symbol selection
@@ -643,6 +678,16 @@ export function AdvancedChartPage({
         )
     }, [indicatorSearchQuery])
 
+    const editingIndicator = useMemo(
+        () => activeIndicators.find(ind => ind.id === editingIndicatorId) || null,
+        [activeIndicators, editingIndicatorId]
+    )
+
+    const visibleOverlayIndicators = useMemo(
+        () => activeIndicators.filter(ind => ind.meta.isOverlay && ind.visible),
+        [activeIndicators]
+    )
+
     // Merged watchlist data
     const watchlistData = useMemo(() => {
         const cryptoData = CRYPTO_WATCHLIST.map(sym => ({
@@ -666,7 +711,7 @@ export function AdvancedChartPage({
         <div
             ref={fullscreenContainerRef}
             className={cn(
-                "flex rounded-xl overflow-hidden bg-background glass-panel-intense",
+                "relative flex rounded-xl overflow-hidden bg-background glass-panel-intense",
                 isFullscreen ? "fixed inset-0 z-50 rounded-none" : ""
             )}
         >
@@ -801,8 +846,28 @@ export function AdvancedChartPage({
                                                 <div className="text-xs text-muted-foreground mb-2 px-2">Aktif İndikatörler</div>
                                                 {activeIndicators.map((ind) => (
                                                     <div key={ind.id} className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-muted/30">
-                                                        <span className="text-sm font-medium">{ind.meta.shortName}</span>
-                                                        <button onClick={() => removeIndicator(ind.id)} className="text-muted-foreground hover:text-loss"><Trash2 className="h-4 w-4" /></button>
+                                                        <span className={cn("text-sm font-medium", !ind.visible && "opacity-50")}>{ind.meta.shortName}</span>
+                                                        <div className="flex items-center gap-1">
+                                                            <button
+                                                                onClick={() => toggleIndicatorVisibility(ind.id)}
+                                                                className="text-muted-foreground hover:text-foreground"
+                                                                title={ind.visible ? "Gizle" : "Göster"}
+                                                            >
+                                                                {ind.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                                                            </button>
+                                                            {ind.meta.paramSchema && ind.meta.paramSchema.length > 0 && (
+                                                                <button
+                                                                    onClick={() => setEditingIndicatorId(ind.id)}
+                                                                    className="text-muted-foreground hover:text-primary"
+                                                                    title="Ayarlar"
+                                                                >
+                                                                    <Settings2 className="h-4 w-4" />
+                                                                </button>
+                                                            )}
+                                                            <button onClick={() => removeIndicator(ind.id)} className="text-muted-foreground hover:text-loss" title="Kaldır">
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </button>
+                                                        </div>
                                                     </div>
                                                 ))}
                                             </div>
@@ -886,6 +951,39 @@ export function AdvancedChartPage({
 
                 {/* Chart Area */}
                 <div className="flex-1 relative" style={{ minHeight: isFullscreen ? 'calc(100vh - 200px)' : '500px' }}>
+                    {visibleOverlayIndicators.length > 0 && (
+                        <div className="absolute left-3 top-3 z-20 flex flex-col gap-1 pointer-events-none">
+                            {visibleOverlayIndicators.map((ind) => (
+                                <div key={ind.id} className="pointer-events-auto flex items-center gap-2 rounded-md border border-border/50 bg-background/80 px-2 py-1 backdrop-blur-sm">
+                                    <span className="text-xs font-medium">{ind.meta.shortName}</span>
+                                    <button
+                                        onClick={() => toggleIndicatorVisibility(ind.id)}
+                                        className="text-muted-foreground hover:text-foreground"
+                                        title="Gizle"
+                                    >
+                                        <Eye className="h-3.5 w-3.5" />
+                                    </button>
+                                    {ind.meta.paramSchema && ind.meta.paramSchema.length > 0 && (
+                                        <button
+                                            onClick={() => setEditingIndicatorId(ind.id)}
+                                            className="text-muted-foreground hover:text-primary"
+                                            title="Ayarlar"
+                                        >
+                                            <Settings2 className="h-3.5 w-3.5" />
+                                        </button>
+                                    )}
+                                    <button
+                                        onClick={() => removeIndicator(ind.id)}
+                                        className="text-muted-foreground hover:text-loss"
+                                        title="Kaldır"
+                                    >
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
                     {isLoading && (
                         <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm z-10 pointer-events-none">
                             <div className="flex flex-col items-center gap-3">
@@ -902,7 +1000,7 @@ export function AdvancedChartPage({
                 </div>
 
                 {/* Indicator Panels */}
-                {activeIndicators.filter(i => !i.meta.isOverlay).map((ind) => (
+                {activeIndicators.filter(i => !i.meta.isOverlay && i.visible).map((ind) => (
                     <IndicatorPane
                         key={ind.id}
                         indicator={ind}
@@ -959,6 +1057,84 @@ export function AdvancedChartPage({
                                 </div>
                             </button>
                         ))}
+                    </div>
+                </div>
+            )}
+
+            {editingIndicator && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                    <div className="w-full max-w-2xl rounded-xl border border-border/50 bg-background shadow-2xl">
+                        <div className="flex items-center justify-between border-b border-border/40 px-4 py-3">
+                            <div>
+                                <div className="text-sm text-muted-foreground">İndikatör Ayarları</div>
+                                <div className="text-lg font-semibold">{editingIndicator.meta.name}</div>
+                            </div>
+                            <button
+                                onClick={() => setEditingIndicatorId(null)}
+                                className="rounded-md p-2 text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+                                title="Kapat"
+                            >
+                                <X className="h-4 w-4" />
+                            </button>
+                        </div>
+
+                        <div className="grid max-h-[65vh] gap-4 overflow-y-auto p-4 md:grid-cols-2">
+                            {(editingIndicator.meta.paramSchema || []).map((schema: IndicatorParamSchema) => {
+                                const currentValue = editingIndicator.params[schema.key]
+                                    ?? editingIndicator.meta.defaultParams[schema.key]
+                                    ?? schema.min
+                                const step = schema.step ?? 1
+                                return (
+                                    <div key={schema.key} className="rounded-lg border border-border/30 bg-muted/10 p-3">
+                                        <div className="mb-2 flex items-center justify-between">
+                                            <label className="text-sm font-medium">{schema.label}</label>
+                                            <span className="text-xs text-muted-foreground">{currentValue}</span>
+                                        </div>
+                                        <input
+                                            type="range"
+                                            min={schema.min}
+                                            max={schema.max}
+                                            step={step}
+                                            value={currentValue}
+                                            onChange={(e) => updateIndicatorParam(
+                                                editingIndicator.id,
+                                                schema.key,
+                                                Number(e.target.value)
+                                            )}
+                                            className="mb-2 w-full"
+                                        />
+                                        <input
+                                            type="number"
+                                            min={schema.min}
+                                            max={schema.max}
+                                            step={step}
+                                            value={currentValue}
+                                            onChange={(e) => updateIndicatorParam(
+                                                editingIndicator.id,
+                                                schema.key,
+                                                Number(e.target.value)
+                                            )}
+                                            className="w-full rounded-md border border-border/40 bg-background px-2 py-1 text-sm outline-none focus:border-primary/50"
+                                        />
+                                    </div>
+                                )
+                            })}
+                        </div>
+
+                        <div className="flex items-center justify-between border-t border-border/40 px-4 py-3">
+                            <button
+                                onClick={() => resetIndicatorParams(editingIndicator.id)}
+                                className="rounded-md border border-border/40 px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+                            >
+                                Varsayılanlara Dön
+                            </button>
+                            <button
+                                onClick={() => setEditingIndicatorId(null)}
+                                className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90"
+                            >
+                                Uygula
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
@@ -1026,7 +1202,12 @@ function IndicatorPane({ indicator, candles, onRemove, mainChartRef, onChartRead
                 series = chart.addSeries(LineSeries, { color: chartColors.indicators.rsi, lineWidth: 2, priceScaleId: 'right' })
                 series.setData(deduplicateByTime(rsiData.filter(d => !isNaN(d.value)).map(d => ({ time: formatTime(d.time), value: d.value }))) as any)
             } else if (indicator.id === 'macd') {
-                const macdData = calculateMACD(candles)
+                const macdData = calculateMACD(
+                    candles,
+                    indicator.params.fast || 12,
+                    indicator.params.slow || 26,
+                    indicator.params.signal || 9
+                )
                 const macdSeries = chart.addSeries(LineSeries, { color: chartColors.indicators.macd, lineWidth: 2 })
                 macdSeries.setData(deduplicateByTime(macdData.filter(d => !isNaN(d.macd)).map(d => ({ time: formatTime(d.time), value: d.macd }))) as any)
                 const signalSeries = chart.addSeries(LineSeries, { color: chartColors.indicators.macdSignal, lineWidth: 2 })
