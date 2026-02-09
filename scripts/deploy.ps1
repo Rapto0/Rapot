@@ -90,23 +90,20 @@ Run-Step -Title "Push to GitHub" -Executable "git" -Arguments @("push", $Remote,
 
 if ($NoServer) {
     Write-Host ""
-    Write-Host "Skipped server update (-NoServer)." -ForegroundColor Yellow
+    Write-Host "Skipped server deploy command output (-NoServer)." -ForegroundColor Yellow
     exit 0
 }
 
-$sshArgs = @("-o", "ConnectTimeout=12")
-if (-not $AllowPasswordPrompt) {
-    $sshArgs += @("-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new")
-    Run-Step -Title "Check SSH key access" -Executable "ssh" -Arguments ($sshArgs + @($Server, "echo ok"))
+if ($AllowPasswordPrompt) {
+    Write-Host ""
+    Write-Host "Note: -AllowPasswordPrompt is ignored in manual server deploy mode." -ForegroundColor Yellow
 }
 
-$serverCommands = @(
-    "set -euo pipefail",
-    "cd '$ServerPath'",
-    'old_head=$(git rev-parse HEAD)',
-    "git fetch '$Remote' '$Branch'",
-    "git checkout '$Branch'"
-)
+$serverCommands = @()
+$serverCommands += "ssh $Server"
+$serverCommands += "cd '$ServerPath'"
+$serverCommands += "git fetch '$Remote' '$Branch'"
+$serverCommands += "git checkout '$Branch'"
 
 if ($ForceServerReset) {
     $serverCommands += "git reset --hard '$Remote/$Branch'"
@@ -115,23 +112,27 @@ if ($ForceServerReset) {
 }
 
 $serverCommands += @(
-    'new_head=$(git rev-parse HEAD)',
-    'changed_files=$(git diff --name-only "$old_head" "$new_head" || true)',
-    'if echo "$changed_files" | grep -q "^requirements\\.txt$" || echo "$changed_files" | grep -q "^pyproject\\.toml$"; then echo "Backend dependency changes detected. Installing Python requirements..."; python3 -m pip install -r requirements.txt; else echo "No backend dependency changes. Skipping pip install."; fi',
-    (@'
-if echo "$changed_files" | grep -q "^frontend/" || echo "$changed_files" | grep -q "^ecosystem\\.config\\.js$"; then echo "Frontend-related changes detected. Running build steps..."; if echo "$changed_files" | grep -q "^frontend/package-lock\\.json$" || echo "$changed_files" | grep -q "^frontend/package\\.json$"; then cd '{0}/frontend'; npm ci --include=dev; cd '{0}'; else echo "Dependency files unchanged. Skipping npm ci."; fi; cd '{0}/frontend'; npm run build; cd '{0}'; else echo "No frontend changes. Skipping npm ci/build."; fi
-'@ -f $ServerPath),
+    "python3 -m pip install -r requirements.txt",
+    "cd '$ServerPath/frontend'",
+    "npm ci --include=dev",
+    "npm run build",
+    "cd '$ServerPath'",
     "pm2 delete frontend || true",
     "pm2 startOrReload '$Pm2Config' --update-env",
     "pm2 save",
-    'echo SERVER_HEAD: $(git rev-parse --short HEAD)',
+    "echo SERVER_HEAD: `$(git rev-parse --short HEAD)",
     "git status --short",
-    "pm2 status"
+    "pm2 status",
+    "curl -I http://127.0.0.1:3000/dashboard"
 )
 
-$serverScript = $serverCommands -join "; "
-$sshDisplay = "ssh $($sshArgs -join ' ') $Server `"$serverScript`""
-Run-Step -Title "Update server and reload services" -Executable "ssh" -Arguments ($sshArgs + @($Server, $serverScript)) -DisplayCommand $sshDisplay
+Write-Host ""
+Write-Host "==> Manual Server Deploy Commands" -ForegroundColor Cyan
+Write-Host "Run the following commands on your server, in order:" -ForegroundColor Yellow
+Write-Host ""
+for ($i = 0; $i -lt $serverCommands.Count; $i++) {
+    Write-Host ("{0}. {1}" -f ($i + 1), $serverCommands[$i]) -ForegroundColor DarkGray
+}
 
 Write-Host ""
-Write-Host "Deploy completed successfully." -ForegroundColor Green
+Write-Host "Commit + push completed. Server deploy commands printed." -ForegroundColor Green

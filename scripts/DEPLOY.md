@@ -1,50 +1,33 @@
-# Auto Deploy (Local -> GitHub -> Server)
+# Deploy Flow (Local -> GitHub + Manual Server)
 
 This script automates:
 1. `git add -A`
 2. `git commit`
 3. `git push origin main`
-4. server update via SSH
-5. conditional frontend build:
-   - `frontend` files changed: `npm run build`
-   - `package.json/package-lock.json` changed: `npm ci`
-6. `pm2 delete frontend` (cleanup stale instance)
-7. `pm2 startOrReload ecosystem.config.js`
+4. prints server deploy commands for you to run manually
 
 File: `scripts/deploy.ps1`
 
 Default server path: `/root/Rapot`
 
-## 1) One-time setup (recommended)
-
-Use SSH key auth so deploy runs without password prompts:
-
-```powershell
-ssh-keygen -t ed25519 -C "rapot-deploy"
-type $env:USERPROFILE\.ssh\id_ed25519.pub | ssh root@138.68.71.27 "mkdir -p ~/.ssh && cat >> ~/.ssh/authorized_keys"
-```
-
-## 2) Basic usage
+## 1) Basic usage
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\deploy.ps1 -CommitMessage "fix: your message"
 ```
 
-## 3) Useful options
+After this command, script prints numbered server commands.
+Run them on your server in the same order.
 
-Update only local+GitHub (skip server):
+## 2) Useful options
+
+Update only local+GitHub and do not print server commands:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\deploy.ps1 -CommitMessage "chore: update" -NoServer
 ```
 
-Allow password prompt for SSH (if key is not ready):
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\deploy.ps1 -CommitMessage "chore: update" -AllowPasswordPrompt
-```
-
-Force server to exactly match `origin/main` (destructive on server local edits):
+Force server reset command in printed output (destructive on server local edits):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\deploy.ps1 -CommitMessage "deploy" -ForceServerReset
@@ -59,6 +42,6 @@ powershell -ExecutionPolicy Bypass -File .\scripts\deploy.ps1 -CommitMessage "de
 ## Notes
 
 - Script expects current branch to be `main`.
-- Without `-ForceServerReset`, server uses `git pull --ff-only` (safer).
+- Without `-ForceServerReset`, printed commands use `git pull --ff-only` (safer).
 - If pre-commit hooks fail during commit, deploy stops so you can fix issues.
-- Frontend runs in production mode (`next start`) to avoid dev lock/port conflicts.
+- Script no longer executes SSH deploy automatically; it prints commands for manual run.
