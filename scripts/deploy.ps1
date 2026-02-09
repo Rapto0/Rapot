@@ -35,18 +35,28 @@ function Run-Step {
         [Parameter(Mandatory = $true)]
         [string]$Title,
         [Parameter(Mandatory = $true)]
-        [string]$Command
+        [string]$Executable,
+        [Parameter(Mandatory = $false)]
+        [string[]]$Arguments = @(),
+        [Parameter(Mandatory = $false)]
+        [string]$DisplayCommand = ""
     )
+
+    if ([string]::IsNullOrWhiteSpace($DisplayCommand)) {
+        $DisplayCommand = "$Executable $($Arguments -join ' ')".Trim()
+    }
 
     Write-Host ""
     Write-Host "==> $Title" -ForegroundColor Cyan
-    Write-Host "$Command" -ForegroundColor DarkGray
-    Invoke-Expression $Command
+    Write-Host "$DisplayCommand" -ForegroundColor DarkGray
+
+    & $Executable @Arguments
+
     if (-not $?) {
-        throw "Command failed: $Command"
+        throw "Command failed: $DisplayCommand"
     }
     if ($LASTEXITCODE -ne 0) {
-        throw "Command failed with exit code ${LASTEXITCODE}: $Command"
+        throw "Command failed with exit code ${LASTEXITCODE}: $DisplayCommand"
     }
 }
 
@@ -63,21 +73,20 @@ if ($currentBranch -ne $Branch) {
 
 $status = (git status --porcelain)
 if (-not [string]::IsNullOrWhiteSpace($status)) {
-    Run-Step -Title "Stage all changes" -Command "git add -A"
+    Run-Step -Title "Stage all changes" -Executable "git" -Arguments @("add", "-A")
 
     $staged = (git diff --cached --name-only)
     if (-not [string]::IsNullOrWhiteSpace($staged)) {
         if ([string]::IsNullOrWhiteSpace($CommitMessage)) {
             $CommitMessage = "chore: auto deploy $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
         }
-        $escapedMessage = $CommitMessage.Replace('"', '\"')
-        Run-Step -Title "Create commit" -Command "git commit -m `"$escapedMessage`""
+        Run-Step -Title "Create commit" -Executable "git" -Arguments @("commit", "-m", $CommitMessage)
     }
 } else {
     Write-Host "No local changes to commit." -ForegroundColor Yellow
 }
 
-Run-Step -Title "Push to GitHub" -Command "git push $Remote $Branch"
+Run-Step -Title "Push to GitHub" -Executable "git" -Arguments @("push", $Remote, $Branch)
 
 if ($NoServer) {
     Write-Host ""
@@ -85,10 +94,10 @@ if ($NoServer) {
     exit 0
 }
 
-$sshBase = "-o ConnectTimeout=12"
+$sshArgs = @("-o", "ConnectTimeout=12")
 if (-not $AllowPasswordPrompt) {
-    $sshBase = "$sshBase -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
-    Run-Step -Title "Check SSH key access" -Command "ssh $sshBase $Server `"echo ok`""
+    $sshArgs += @("-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=accept-new")
+    Run-Step -Title "Check SSH key access" -Executable "ssh" -Arguments ($sshArgs + @($Server, "echo ok"))
 }
 
 $serverCommands = @(
@@ -126,13 +135,14 @@ $serverCommands += @(
     "pm2 delete frontend || true",
     "pm2 startOrReload '$Pm2Config' --update-env",
     "pm2 save",
-    "echo SERVER_HEAD: `$(git rev-parse --short HEAD)",
+    'echo SERVER_HEAD: $(git rev-parse --short HEAD)',
     "git status --short",
     "pm2 status"
 )
 
-$serverScript = $serverCommands -join "; "
-Run-Step -Title "Update server and reload services" -Command "ssh $sshBase $Server `"$serverScript`""
+$serverScript = $serverCommands -join "`n"
+$sshDisplay = "ssh $($sshArgs -join ' ') $Server `"$serverScript`""
+Run-Step -Title "Update server and reload services" -Executable "ssh" -Arguments ($sshArgs + @($Server, $serverScript)) -DisplayCommand $sshDisplay
 
 Write-Host ""
 Write-Host "Deploy completed successfully." -ForegroundColor Green
