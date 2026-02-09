@@ -608,6 +608,70 @@ async def get_market_overview(request: Request):
         }
 
 
+@app.get("/market/indices", tags=["Market Data"])
+@limiter.limit("20/minute")
+async def get_market_indices(
+    request: Request,
+    symbol: list[str] = Query(
+        default=["^GSPC", "^NDX", "XU100.IS"],
+        description="Global endeks sembolleri. Örnek: ?symbol=^GSPC&symbol=^NDX&symbol=XU100.IS",
+    ),
+):
+    """
+    Landing sayfası için global endeks özet verisi döndürür.
+    """
+    try:
+        display_names = {
+            "^GSPC": "S&P 500",
+            "^NDX": "Nasdaq 100",
+            "XU100.IS": "BIST 100",
+        }
+
+        unique_symbols = []
+        for raw_symbol in symbol:
+            normalized = raw_symbol.strip().upper()
+            if not normalized:
+                continue
+            if normalized in unique_symbols:
+                continue
+            unique_symbols.append(normalized)
+
+        unique_symbols = unique_symbols[:10]
+
+        items = []
+        for ticker_symbol in unique_symbols:
+            ticker = yf.Ticker(ticker_symbol)
+            hist = ticker.history(period="2d")
+            if hist.empty:
+                hist = ticker.history(period="5d")
+
+            if hist.empty:
+                continue
+
+            current_price = float(hist["Close"].iloc[-1])
+            previous_close = (
+                float(hist["Close"].iloc[-2]) if len(hist) > 1 else float(hist["Open"].iloc[-1])
+            )
+            change_percent = (
+                ((current_price - previous_close) / previous_close) * 100 if previous_close else 0.0
+            )
+
+            items.append(
+                {
+                    "symbol": ticker_symbol,
+                    "regularMarketPrice": current_price,
+                    "regularMarketChangePercent": change_percent,
+                    "shortName": display_names.get(ticker_symbol, ticker_symbol),
+                }
+            )
+
+        return items
+
+    except Exception as e:
+        print(f"Market indices error: {e}")
+        return []
+
+
 @app.get("/scans", tags=["System"])
 @limiter.limit("10/minute")
 async def get_scan_history(request: Request, limit: int = 10):

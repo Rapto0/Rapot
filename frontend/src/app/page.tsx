@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Search, ArrowRight, TrendingUp, Globe, BarChart3, Newspaper } from "lucide-react"
 import { useBinanceTicker } from "@/lib/hooks/use-binance-ticker"
-import { getMarketData, MarketData } from "@/lib/actions/market-data"
+import { fetchGlobalIndices, type GlobalIndexData } from "@/lib/api/client"
 import { GlobalTicker } from "@/components/dashboard/global-ticker"
 import { useEffect, useState, KeyboardEvent } from "react"
 import { useRouter } from "next/navigation"
@@ -18,12 +18,12 @@ export default function LandingPage() {
   const cryptoPrices = useBinanceTicker(["BTCUSDT"])
 
   // 2. Live Market Data (Server Action -> Client State)
-  const [marketData, setMarketData] = useState<Record<string, MarketData>>({})
+  const [marketData, setMarketData] = useState<Record<string, GlobalIndexData>>({})
 
   useEffect(() => {
     const fetchIndices = async () => {
-      const data = await getMarketData(["^GSPC", "^NDX", "XU100.IS"])
-      const map: Record<string, MarketData> = {}
+      const data = await fetchGlobalIndices(["^GSPC", "^NDX", "XU100.IS"])
+      const map: Record<string, GlobalIndexData> = {}
       data.forEach(item => map[item.symbol] = item)
       setMarketData(map)
     }

@@ -262,6 +262,22 @@ export async function fetchMarketOverview(): Promise<MarketOverviewResponse> {
     return fetchApi<MarketOverviewResponse>(`${API_BASE_URL}/market/overview`);
 }
 
+export interface GlobalIndexData {
+    symbol: string;
+    regularMarketPrice: number;
+    regularMarketChangePercent: number;
+    shortName?: string;
+}
+
+export async function fetchGlobalIndices(symbols: string[]): Promise<GlobalIndexData[]> {
+    const params = new URLSearchParams();
+    symbols.forEach((value) => params.append("symbol", value));
+    const query = params.toString();
+    return fetchApi<GlobalIndexData[]>(
+        `${API_BASE_URL}/market/indices${query ? `?${query}` : ""}`
+    );
+}
+
 // ==================== SYSTEM API ====================
 
 export interface ScanHistory {

@@ -117,6 +117,7 @@ if ($ForceServerReset) {
 $serverCommands += @(
     'new_head=$(git rev-parse HEAD)',
     'changed_files=$(git diff --name-only "$old_head" "$new_head" || true)',
+    'if echo "$changed_files" | grep -q "^requirements\\.txt$" || echo "$changed_files" | grep -q "^pyproject\\.toml$"; then echo "Backend dependency changes detected. Installing Python requirements..."; python3 -m pip install -r requirements.txt; else echo "No backend dependency changes. Skipping pip install."; fi',
     (@'
 if echo "$changed_files" | grep -q "^frontend/" || echo "$changed_files" | grep -q "^ecosystem\\.config\\.js$"; then echo "Frontend-related changes detected. Running build steps..."; if echo "$changed_files" | grep -q "^frontend/package-lock\\.json$" || echo "$changed_files" | grep -q "^frontend/package\\.json$"; then cd '{0}/frontend'; npm ci --include=dev; cd '{0}'; else echo "Dependency files unchanged. Skipping npm ci."; fi; cd '{0}/frontend'; npm run build; cd '{0}'; else echo "No frontend changes. Skipping npm ci/build."; fi
 '@ -f $ServerPath),
