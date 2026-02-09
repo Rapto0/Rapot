@@ -140,18 +140,9 @@ $serverCommands += @(
     "pm2 status"
 )
 
-$serverScript = $serverCommands -join "`n"
-
-Write-Host ""
-Write-Host "==> Update server and reload services" -ForegroundColor Cyan
-Write-Host "ssh $($sshArgs -join ' ') $Server `"bash -se`"" -ForegroundColor DarkGray
-$serverScript | & ssh @sshArgs $Server "bash -se"
-if (-not $?) {
-    throw "Command failed: ssh $($sshArgs -join ' ') $Server `"bash -se`""
-}
-if ($LASTEXITCODE -ne 0) {
-    throw "Command failed with exit code ${LASTEXITCODE}: ssh $($sshArgs -join ' ') $Server `"bash -se`""
-}
+$serverScript = $serverCommands -join "; "
+$sshDisplay = "ssh $($sshArgs -join ' ') $Server `"$serverScript`""
+Run-Step -Title "Update server and reload services" -Executable "ssh" -Arguments ($sshArgs + @($Server, $serverScript)) -DisplayCommand $sshDisplay
 
 Write-Host ""
 Write-Host "Deploy completed successfully." -ForegroundColor Green
