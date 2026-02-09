@@ -312,6 +312,24 @@ export interface HunterParams {
     cciTopThreshold: number
     cmoDipThreshold: number
     cmoTopThreshold: number
+    ultimateDipThreshold: number
+    ultimateTopThreshold: number
+    bbPercentDipThreshold: number
+    bbPercentTopThreshold: number
+    rocDipThreshold: number
+    rocTopThreshold: number
+    bopDipThreshold: number
+    bopTopThreshold: number
+    demarkerDipThreshold: number
+    demarkerTopThreshold: number
+    psyDipThreshold: number
+    psyTopThreshold: number
+    zscoreDipThreshold: number
+    zscoreTopThreshold: number
+    keltnerPercentDipThreshold: number
+    keltnerPercentTopThreshold: number
+    macdDipThreshold: number
+    macdTopThreshold: number
     rsi2DipThreshold: number
     rsi2TopThreshold: number
 }
@@ -329,6 +347,24 @@ const DEFAULT_HUNTER_PARAMS: HunterParams = {
     cciTopThreshold: 100,
     cmoDipThreshold: -50,
     cmoTopThreshold: 50,
+    ultimateDipThreshold: 30,
+    ultimateTopThreshold: 70,
+    bbPercentDipThreshold: 0,
+    bbPercentTopThreshold: 100,
+    rocDipThreshold: -5,
+    rocTopThreshold: 5,
+    bopDipThreshold: -0.5,
+    bopTopThreshold: 0.5,
+    demarkerDipThreshold: 30,
+    demarkerTopThreshold: 70,
+    psyDipThreshold: 25,
+    psyTopThreshold: 75,
+    zscoreDipThreshold: -2,
+    zscoreTopThreshold: 2,
+    keltnerPercentDipThreshold: 0,
+    keltnerPercentTopThreshold: 100,
+    macdDipThreshold: 0,
+    macdTopThreshold: 0,
     rsi2DipThreshold: 10,
     rsi2TopThreshold: 90,
 }
@@ -622,15 +658,15 @@ export function calculateHunter(
         if (!isNaN(wrVal) && wrVal < cfg.wrDipThreshold) dipScore++
         if (!isNaN(cciVal) && cciVal < cfg.cciDipThreshold) dipScore++
         if (!isNaN(cmoVal) && cmoVal < cfg.cmoDipThreshold) dipScore++
-        if (!isNaN(ultimateVal) && ultimateVal < 30) dipScore++
-        if (!isNaN(bbPercentVal) && bbPercentVal < 0) dipScore++
-        if (!isNaN(rocVal) && rocVal < -5) dipScore++
-        if (!isNaN(bopVal) && bopVal < -0.5) dipScore++
-        if (!isNaN(demarkerVal) && demarkerVal < 30) dipScore++
-        if (!isNaN(psyVal) && psyVal < 25) dipScore++
-        if (!isNaN(zscoreVal) && zscoreVal < -2) dipScore++
-        if (!isNaN(keltnerPercentVal) && keltnerPercentVal < 0) dipScore++
-        if (!isNaN(macdVal) && macdVal < 0) dipScore++
+        if (!isNaN(ultimateVal) && ultimateVal < cfg.ultimateDipThreshold) dipScore++
+        if (!isNaN(bbPercentVal) && bbPercentVal < cfg.bbPercentDipThreshold) dipScore++
+        if (!isNaN(rocVal) && rocVal < cfg.rocDipThreshold) dipScore++
+        if (!isNaN(bopVal) && bopVal < cfg.bopDipThreshold) dipScore++
+        if (!isNaN(demarkerVal) && demarkerVal < cfg.demarkerDipThreshold) dipScore++
+        if (!isNaN(psyVal) && psyVal < cfg.psyDipThreshold) dipScore++
+        if (!isNaN(zscoreVal) && zscoreVal < cfg.zscoreDipThreshold) dipScore++
+        if (!isNaN(keltnerPercentVal) && keltnerPercentVal < cfg.keltnerPercentDipThreshold) dipScore++
+        if (!isNaN(macdVal) && macdVal < cfg.macdDipThreshold) dipScore++
         if (!isNaN(rsi2Val) && rsi2Val < cfg.rsi2DipThreshold) dipScore++
 
         // Count overbought (OB) conditions - TEPE
@@ -640,15 +676,15 @@ export function calculateHunter(
         if (!isNaN(wrVal) && wrVal > cfg.wrTopThreshold) topScore++
         if (!isNaN(cciVal) && cciVal > cfg.cciTopThreshold) topScore++
         if (!isNaN(cmoVal) && cmoVal > cfg.cmoTopThreshold) topScore++
-        if (!isNaN(ultimateVal) && ultimateVal > 70) topScore++
-        if (!isNaN(bbPercentVal) && bbPercentVal > 100) topScore++
-        if (!isNaN(rocVal) && rocVal > 5) topScore++
-        if (!isNaN(bopVal) && bopVal > 0.5) topScore++
-        if (!isNaN(demarkerVal) && demarkerVal > 70) topScore++
-        if (!isNaN(psyVal) && psyVal > 75) topScore++
-        if (!isNaN(zscoreVal) && zscoreVal > 2) topScore++
-        if (!isNaN(keltnerPercentVal) && keltnerPercentVal > 100) topScore++
-        if (!isNaN(macdVal) && macdVal > 0) topScore++
+        if (!isNaN(ultimateVal) && ultimateVal > cfg.ultimateTopThreshold) topScore++
+        if (!isNaN(bbPercentVal) && bbPercentVal > cfg.bbPercentTopThreshold) topScore++
+        if (!isNaN(rocVal) && rocVal > cfg.rocTopThreshold) topScore++
+        if (!isNaN(bopVal) && bopVal > cfg.bopTopThreshold) topScore++
+        if (!isNaN(demarkerVal) && demarkerVal > cfg.demarkerTopThreshold) topScore++
+        if (!isNaN(psyVal) && psyVal > cfg.psyTopThreshold) topScore++
+        if (!isNaN(zscoreVal) && zscoreVal > cfg.zscoreTopThreshold) topScore++
+        if (!isNaN(keltnerPercentVal) && keltnerPercentVal > cfg.keltnerPercentTopThreshold) topScore++
+        if (!isNaN(macdVal) && macdVal > cfg.macdTopThreshold) topScore++
         if (!isNaN(rsi2Val) && rsi2Val > cfg.rsi2TopThreshold) topScore++
 
         let signal: 'AL' | 'SAT' | null = null
@@ -786,18 +822,36 @@ export const AVAILABLE_INDICATORS: IndicatorMeta[] = [
         paramSchema: [
             { key: 'requiredDipScore', label: 'DIP Min Skor', min: 1, max: 15, step: 1 },
             { key: 'requiredTopScore', label: 'TEPE Min Skor', min: 1, max: 15, step: 1 },
-            { key: 'rsiDipThreshold', label: 'RSI DIP Eşik', min: 1, max: 50, step: 1 },
-            { key: 'rsiTopThreshold', label: 'RSI TEPE Eşik', min: 50, max: 99, step: 1 },
+            { key: 'rsiDipThreshold', label: 'RSI DIP Esik', min: 1, max: 50, step: 1 },
+            { key: 'rsiTopThreshold', label: 'RSI TEPE Esik', min: 50, max: 99, step: 1 },
             { key: 'rsiFastDipThreshold', label: 'RSI Fast DIP', min: 1, max: 50, step: 1 },
             { key: 'rsiFastTopThreshold', label: 'RSI Fast TEPE', min: 50, max: 99, step: 1 },
-            { key: 'wrDipThreshold', label: 'W%R DIP Eşik', min: -100, max: 0, step: 1 },
-            { key: 'wrTopThreshold', label: 'W%R TEPE Eşik', min: -100, max: 0, step: 1 },
-            { key: 'cciDipThreshold', label: 'CCI DIP Eşik', min: -300, max: 0, step: 1 },
-            { key: 'cciTopThreshold', label: 'CCI TEPE Eşik', min: 0, max: 300, step: 1 },
-            { key: 'cmoDipThreshold', label: 'CMO DIP Eşik', min: -100, max: 0, step: 1 },
-            { key: 'cmoTopThreshold', label: 'CMO TEPE Eşik', min: 0, max: 100, step: 1 },
-            { key: 'rsi2DipThreshold', label: 'RSI2 DIP Eşik', min: 1, max: 50, step: 1 },
-            { key: 'rsi2TopThreshold', label: 'RSI2 TEPE Eşik', min: 50, max: 99, step: 1 },
+            { key: 'wrDipThreshold', label: 'W%R DIP Esik', min: -100, max: 0, step: 1 },
+            { key: 'wrTopThreshold', label: 'W%R TEPE Esik', min: -100, max: 0, step: 1 },
+            { key: 'cciDipThreshold', label: 'CCI DIP Esik', min: -300, max: 0, step: 1 },
+            { key: 'cciTopThreshold', label: 'CCI TEPE Esik', min: 0, max: 300, step: 1 },
+            { key: 'cmoDipThreshold', label: 'CMO DIP Esik', min: -100, max: 0, step: 1 },
+            { key: 'cmoTopThreshold', label: 'CMO TEPE Esik', min: 0, max: 100, step: 1 },
+            { key: 'ultimateDipThreshold', label: 'Ultimate DIP Esik', min: 1, max: 50, step: 1 },
+            { key: 'ultimateTopThreshold', label: 'Ultimate TEPE Esik', min: 50, max: 99, step: 1 },
+            { key: 'bbPercentDipThreshold', label: '%B DIP Esik', min: -50, max: 100, step: 1 },
+            { key: 'bbPercentTopThreshold', label: '%B TEPE Esik', min: 0, max: 150, step: 1 },
+            { key: 'rocDipThreshold', label: 'ROC% DIP Esik', min: -50, max: 0, step: 0.5 },
+            { key: 'rocTopThreshold', label: 'ROC% TEPE Esik', min: 0, max: 50, step: 0.5 },
+            { key: 'bopDipThreshold', label: 'BOP DIP Esik', min: -1, max: 0, step: 0.05 },
+            { key: 'bopTopThreshold', label: 'BOP TEPE Esik', min: 0, max: 1, step: 0.05 },
+            { key: 'demarkerDipThreshold', label: 'DeM DIP Esik', min: 1, max: 50, step: 1 },
+            { key: 'demarkerTopThreshold', label: 'DeM TEPE Esik', min: 50, max: 99, step: 1 },
+            { key: 'psyDipThreshold', label: 'PSY DIP Esik', min: 1, max: 50, step: 1 },
+            { key: 'psyTopThreshold', label: 'PSY TEPE Esik', min: 50, max: 99, step: 1 },
+            { key: 'zscoreDipThreshold', label: 'Z-Score DIP Esik', min: -5, max: 0, step: 0.1 },
+            { key: 'zscoreTopThreshold', label: 'Z-Score TEPE Esik', min: 0, max: 5, step: 0.1 },
+            { key: 'keltnerPercentDipThreshold', label: 'Kelt %B DIP Esik', min: -50, max: 100, step: 1 },
+            { key: 'keltnerPercentTopThreshold', label: 'Kelt %B TEPE Esik', min: 0, max: 150, step: 1 },
+            { key: 'macdDipThreshold', label: 'MACD Trend DIP', min: -10, max: 0, step: 0.1 },
+            { key: 'macdTopThreshold', label: 'MACD Trend TEPE', min: 0, max: 10, step: 0.1 },
+            { key: 'rsi2DipThreshold', label: 'RSI(2) DIP Esik', min: 1, max: 50, step: 1 },
+            { key: 'rsi2TopThreshold', label: 'RSI(2) TEPE Esik', min: 50, max: 99, step: 1 },
         ],
     }
 ]

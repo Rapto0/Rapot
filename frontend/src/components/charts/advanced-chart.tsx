@@ -59,6 +59,30 @@ interface ActiveIndicator {
     visible: boolean
 }
 
+interface PersistedActiveIndicator {
+    id: string
+    params: Record<string, number>
+    visible: boolean
+}
+
+const INDICATOR_SETTINGS_STORAGE_KEY = "rapot.dashboard.indicators.v1"
+const DEFAULT_OVERLAY_INDICATOR_IDS = ["combo", "hunter"] as const
+
+const getDefaultActiveIndicators = (): ActiveIndicator[] => {
+    const defaults: ActiveIndicator[] = []
+    for (const id of DEFAULT_OVERLAY_INDICATOR_IDS) {
+        const meta = AVAILABLE_INDICATORS.find((indicator) => indicator.id === id)
+        if (!meta) continue
+        defaults.push({
+            id,
+            meta,
+            params: { ...meta.defaultParams },
+            visible: true,
+        })
+    }
+    return defaults
+}
+
 // Extended Timeframe options organized by category
 const TIMEFRAME_CATEGORIES = [
     {
@@ -196,16 +220,10 @@ export function AdvancedChartPage({
     // Indicator state
     const [showIndicatorSearch, setShowIndicatorSearch] = useState(false)
     const [indicatorSearchQuery, setIndicatorSearchQuery] = useState("")
-    // Default active indicators: COMBO and HUNTER overlays
-    const [activeIndicators, setActiveIndicators] = useState<ActiveIndicator[]>(() => {
-        const comboMeta = AVAILABLE_INDICATORS.find(i => i.id === 'combo')
-        const hunterMeta = AVAILABLE_INDICATORS.find(i => i.id === 'hunter')
-        const defaults: ActiveIndicator[] = []
-        if (comboMeta) defaults.push({ id: 'combo', meta: comboMeta, params: { ...comboMeta.defaultParams }, visible: true })
-        if (hunterMeta) defaults.push({ id: 'hunter', meta: hunterMeta, params: { ...hunterMeta.defaultParams }, visible: true })
-        return defaults
-    })
+    const [activeIndicators, setActiveIndicators] = useState<ActiveIndicator[]>(() => getDefaultActiveIndicators())
     const [editingIndicatorId, setEditingIndicatorId] = useState<string | null>(null)
+    const [draftIndicatorParams, setDraftIndicatorParams] = useState<Record<string, number>>({})
+    const [indicatorStateHydrated, setIndicatorStateHydrated] = useState(false)
 
     // Drawing tools state
     const [activeTool, setActiveTool] = useState<'none' | 'ruler' | 'pencil' | 'text'>('none')
@@ -239,6 +257,84 @@ export function AdvancedChartPage({
     const registerIndicatorChart = useCallback((id: string, chart: any) => {
         indicatorChartsRef.current.set(id, chart)
     }, [])
+
+    useEffect(() => {
+        if (typeof window === "undefined") {
+            setIndicatorStateHydrated(true)
+            return
+        }
+
+        try {
+            const rawState = window.localStorage.getItem(INDICATOR_SETTINGS_STORAGE_KEY)
+            if (!rawState) {
+                return
+            }
+
+            const parsedState = JSON.parse(rawState) as unknown
+            if (!Array.isArray(parsedState)) {
+                return
+            }
+
+            const restoredIndicators: ActiveIndicator[] = parsedState
+                .map((entry): ActiveIndicator | null => {
+                    if (!entry || typeof entry !== "object") {
+                        return null
+                    }
+
+                    const candidate = entry as Partial<PersistedActiveIndicator>
+                    if (typeof candidate.id !== "string") {
+                        return null
+                    }
+
+                    const meta = AVAILABLE_INDICATORS.find((indicator) => indicator.id === candidate.id)
+                    if (!meta) {
+                        return null
+                    }
+
+                    const params: Record<string, number> = { ...meta.defaultParams }
+                    if (candidate.params && typeof candidate.params === "object") {
+                        for (const [key, value] of Object.entries(candidate.params as Record<string, unknown>)) {
+                            if (typeof value === "number" && Number.isFinite(value)) {
+                                params[key] = value
+                            }
+                        }
+                    }
+
+                    return {
+                        id: candidate.id,
+                        meta,
+                        params,
+                        visible: candidate.visible !== false,
+                    }
+                })
+                .filter((indicator): indicator is ActiveIndicator => indicator !== null)
+
+            if (restoredIndicators.length > 0 || parsedState.length === 0) {
+                setActiveIndicators(restoredIndicators)
+            }
+        } catch (error) {
+            console.error("Indicator settings could not be restored:", error)
+        } finally {
+            setIndicatorStateHydrated(true)
+        }
+    }, [])
+
+    useEffect(() => {
+        if (!indicatorStateHydrated || typeof window === "undefined") {
+            return
+        }
+
+        try {
+            const stateToPersist: PersistedActiveIndicator[] = activeIndicators.map((indicator) => ({
+                id: indicator.id,
+                params: indicator.params,
+                visible: indicator.visible,
+            }))
+            window.localStorage.setItem(INDICATOR_SETTINGS_STORAGE_KEY, JSON.stringify(stateToPersist))
+        } catch (error) {
+            console.error("Indicator settings could not be saved:", error)
+        }
+    }, [activeIndicators, indicatorStateHydrated])
 
     // Fetch candle data
     const { data: candlesResponse, isLoading } = useQuery({
@@ -608,8 +704,11 @@ export function AdvancedChartPage({
     // Remove indicator
     const removeIndicator = useCallback((indicatorId: string) => {
         setActiveIndicators(prev => prev.filter(i => i.id !== indicatorId))
-        setEditingIndicatorId(prev => (prev === indicatorId ? null : prev))
-    }, [])
+        if (editingIndicatorId === indicatorId) {
+            setEditingIndicatorId(null)
+            setDraftIndicatorParams({})
+        }
+    }, [editingIndicatorId])
 
     const toggleIndicatorVisibility = useCallback((indicatorId: string) => {
         setActiveIndicators(prev => prev.map(ind =>
@@ -617,24 +716,51 @@ export function AdvancedChartPage({
         ))
     }, [])
 
-    const updateIndicatorParam = useCallback(
-        (indicatorId: string, key: string, value: number) => {
-            setActiveIndicators(prev => prev.map(ind =>
-                ind.id === indicatorId
-                    ? { ...ind, params: { ...ind.params, [key]: value } }
-                    : ind
-            ))
-        },
-        []
-    )
+    const openIndicatorSettings = useCallback((indicatorId: string) => {
+        const indicator = activeIndicators.find((ind) => ind.id === indicatorId)
+        if (!indicator || !indicator.meta.paramSchema || indicator.meta.paramSchema.length === 0) {
+            return
+        }
+        setEditingIndicatorId(indicatorId)
+        setDraftIndicatorParams({ ...indicator.params })
+    }, [activeIndicators])
 
-    const resetIndicatorParams = useCallback((indicatorId: string) => {
-        setActiveIndicators(prev => prev.map(ind =>
-            ind.id === indicatorId
-                ? { ...ind, params: { ...ind.meta.defaultParams } }
-                : ind
-        ))
+    const closeIndicatorSettings = useCallback(() => {
+        setEditingIndicatorId(null)
+        setDraftIndicatorParams({})
     }, [])
+
+    const updateDraftIndicatorParam = useCallback((key: string, value: number) => {
+        if (!Number.isFinite(value)) {
+            return
+        }
+        setDraftIndicatorParams(prev => ({ ...prev, [key]: value }))
+    }, [])
+
+    const resetDraftIndicatorParams = useCallback(() => {
+        const indicator = activeIndicators.find((ind) => ind.id === editingIndicatorId)
+        if (!indicator) {
+            return
+        }
+        setDraftIndicatorParams({ ...indicator.meta.defaultParams })
+    }, [activeIndicators, editingIndicatorId])
+
+    const applyIndicatorSettings = useCallback(() => {
+        if (!editingIndicatorId) {
+            return
+        }
+        setActiveIndicators(prev => prev.map((indicator) => {
+            if (indicator.id !== editingIndicatorId) {
+                return indicator
+            }
+            return {
+                ...indicator,
+                params: { ...indicator.meta.defaultParams, ...draftIndicatorParams },
+            }
+        }))
+        setEditingIndicatorId(null)
+        setDraftIndicatorParams({})
+    }, [draftIndicatorParams, editingIndicatorId])
 
     // Symbol selection
     const handleSymbolSelect = (sym: string, market: "BIST" | "Kripto") => {
@@ -857,7 +983,7 @@ export function AdvancedChartPage({
                                                             </button>
                                                             {ind.meta.paramSchema && ind.meta.paramSchema.length > 0 && (
                                                                 <button
-                                                                    onClick={() => setEditingIndicatorId(ind.id)}
+                                                                    onClick={() => openIndicatorSettings(ind.id)}
                                                                     className="text-muted-foreground hover:text-primary"
                                                                     title="Ayarlar"
                                                                 >
@@ -965,7 +1091,7 @@ export function AdvancedChartPage({
                                     </button>
                                     {ind.meta.paramSchema && ind.meta.paramSchema.length > 0 && (
                                         <button
-                                            onClick={() => setEditingIndicatorId(ind.id)}
+                                            onClick={() => openIndicatorSettings(ind.id)}
                                             className="text-muted-foreground hover:text-primary"
                                             title="Ayarlar"
                                         >
@@ -1070,7 +1196,7 @@ export function AdvancedChartPage({
                                 <div className="text-lg font-semibold">{editingIndicator.meta.name}</div>
                             </div>
                             <button
-                                onClick={() => setEditingIndicatorId(null)}
+                                onClick={closeIndicatorSettings}
                                 className="rounded-md p-2 text-muted-foreground hover:bg-muted/40 hover:text-foreground"
                                 title="Kapat"
                             >
@@ -1080,10 +1206,15 @@ export function AdvancedChartPage({
 
                         <div className="grid max-h-[65vh] gap-4 overflow-y-auto p-4 md:grid-cols-2">
                             {(editingIndicator.meta.paramSchema || []).map((schema: IndicatorParamSchema) => {
-                                const currentValue = editingIndicator.params[schema.key]
+                                const currentValue = draftIndicatorParams[schema.key]
+                                    ?? editingIndicator.params[schema.key]
                                     ?? editingIndicator.meta.defaultParams[schema.key]
                                     ?? schema.min
                                 const step = schema.step ?? 1
+                                const updateSchemaValue = (rawValue: number) => {
+                                    const clamped = Math.min(schema.max, Math.max(schema.min, rawValue))
+                                    updateDraftIndicatorParam(schema.key, clamped)
+                                }
                                 return (
                                     <div key={schema.key} className="rounded-lg border border-border/30 bg-muted/10 p-3">
                                         <div className="mb-2 flex items-center justify-between">
@@ -1096,11 +1227,7 @@ export function AdvancedChartPage({
                                             max={schema.max}
                                             step={step}
                                             value={currentValue}
-                                            onChange={(e) => updateIndicatorParam(
-                                                editingIndicator.id,
-                                                schema.key,
-                                                Number(e.target.value)
-                                            )}
+                                            onChange={(e) => updateSchemaValue(Number(e.target.value))}
                                             className="mb-2 w-full"
                                         />
                                         <input
@@ -1109,11 +1236,11 @@ export function AdvancedChartPage({
                                             max={schema.max}
                                             step={step}
                                             value={currentValue}
-                                            onChange={(e) => updateIndicatorParam(
-                                                editingIndicator.id,
-                                                schema.key,
-                                                Number(e.target.value)
-                                            )}
+                                            onChange={(e) => {
+                                                const parsed = Number(e.target.value)
+                                                if (Number.isNaN(parsed)) return
+                                                updateSchemaValue(parsed)
+                                            }}
                                             className="w-full rounded-md border border-border/40 bg-background px-2 py-1 text-sm outline-none focus:border-primary/50"
                                         />
                                     </div>
@@ -1123,13 +1250,13 @@ export function AdvancedChartPage({
 
                         <div className="flex items-center justify-between border-t border-border/40 px-4 py-3">
                             <button
-                                onClick={() => resetIndicatorParams(editingIndicator.id)}
+                                onClick={resetDraftIndicatorParams}
                                 className="rounded-md border border-border/40 px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted/40 hover:text-foreground"
                             >
                                 Varsayılanlara Dön
                             </button>
                             <button
-                                onClick={() => setEditingIndicatorId(null)}
+                                onClick={applyIndicatorSettings}
                                 className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90"
                             >
                                 Uygula
