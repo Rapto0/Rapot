@@ -117,9 +117,9 @@ if ($ForceServerReset) {
 $serverCommands += @(
     'new_head=$(git rev-parse HEAD)',
     'changed_files=$(git diff --name-only "$old_head" "$new_head" || true)',
-    'if echo "$changed_files" | grep -Eq "^(frontend/|ecosystem\\.config\\.js$)"; then',
+    'if echo "$changed_files" | grep -q "^frontend/" || echo "$changed_files" | grep -q "^ecosystem\\.config\\.js$"; then',
     '  echo "Frontend-related changes detected. Running build steps..."',
-    '  if echo "$changed_files" | grep -Eq "^frontend/(package-lock\\.json|package\\.json)$"; then',
+    '  if echo "$changed_files" | grep -q "^frontend/package-lock\\.json$" || echo "$changed_files" | grep -q "^frontend/package\\.json$"; then',
     "    cd '$ServerPath/frontend'",
     '    npm ci --include=dev',
     "    cd '$ServerPath'",
@@ -141,8 +141,17 @@ $serverCommands += @(
 )
 
 $serverScript = $serverCommands -join "`n"
-$sshDisplay = "ssh $($sshArgs -join ' ') $Server `"$serverScript`""
-Run-Step -Title "Update server and reload services" -Executable "ssh" -Arguments ($sshArgs + @($Server, $serverScript)) -DisplayCommand $sshDisplay
+
+Write-Host ""
+Write-Host "==> Update server and reload services" -ForegroundColor Cyan
+Write-Host "ssh $($sshArgs -join ' ') $Server `"bash -se`"" -ForegroundColor DarkGray
+$serverScript | & ssh @sshArgs $Server "bash -se"
+if (-not $?) {
+    throw "Command failed: ssh $($sshArgs -join ' ') $Server `"bash -se`""
+}
+if ($LASTEXITCODE -ne 0) {
+    throw "Command failed with exit code ${LASTEXITCODE}: ssh $($sshArgs -join ' ') $Server `"bash -se`""
+}
 
 Write-Host ""
 Write-Host "Deploy completed successfully." -ForegroundColor Green
