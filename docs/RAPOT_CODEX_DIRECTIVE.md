@@ -1,4 +1,4 @@
-# RAPOT DASHBOARD — UI/UX TASARIM DİREKTİFİ
+﻿# RAPOT DASHBOARD — UI/UX TASARIM DİREKTİFİ
 ## Codex Geliştirme Kılavuzu v1.0
 
 ---
@@ -542,6 +542,19 @@ src/
 - Resim: SVG ikon tercih et, PNG/JPG KULLANMA (ikon için)
 - Bundle: her route lazy load
 - Font: preload, display: swap
+```
+
+### 10.5 Encoding ve Metin Bütünlüğü (ZORUNLU)
+```
+- Tüm metin dosyaları UTF-8 (tercihen BOM'suz) olarak okunur/yazılır.
+- Türkçe karakter içeren dosyalarda platform varsayılan encoding'i ASLA kullanılmaz.
+- PowerShell ile dosya işleniyorsa daima açık encoding kullan:
+  Get-Content -Raw -Encoding utf8
+  Set-Content -Encoding utf8
+- Toplu replace sonrası metin bozulması kontrolü zorunlu:
+  rg -n "(\\uFFFD|\\xC3|\\xC4|\\xC5)" frontend/src docs
+- Arayüzde bozuk/okunmayan karakter çıktısı görülürse değişiklik yayınlanmaz;
+  önce encoding düzeltilir, sonra commit/push yapılır.
 ```
 
 ---
