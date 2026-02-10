@@ -1,159 +1,101 @@
-"use client"
+﻿"use client"
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import type { ComponentType } from "react"
 import { cn } from "@/lib/utils"
 import {
-    LayoutDashboard,
-    Search,
-    Bell,
-    History,
-    Activity,
-    Settings,
-    TrendingUp,
-    LineChart,
-    CalendarDays,
-    BarChart3,
-    Pin,
-    PinOff,
-    Home,
+  LayoutDashboard,
+  Search,
+  Bell,
+  History,
+  Activity,
+  Settings,
+  LineChart,
+  CalendarDays,
+  BarChart3,
+  Home,
 } from "lucide-react"
-import { useSidebar } from "./sidebar-context"
 
-const navigation = [
-    { name: "Ana Sayfa", href: "/", icon: Home },
-    { name: "Gösterge Paneli", href: "/dashboard", icon: LayoutDashboard },
-    { name: "Grafik", href: "/chart", icon: BarChart3 },
-    { name: "Piyasa Tarayıcı", href: "/scanner", icon: Search },
-    { name: "Aktif Sinyaller", href: "/signals", icon: Bell },
-    { name: "İşlem Geçmişi", href: "/trades", icon: History },
-    { name: "Bot Sağlığı", href: "/health", icon: Activity },
-    { name: "TradingView", href: "/tradingview", icon: LineChart },
-    { name: "Ekonomik Takvim", href: "/calendar", icon: CalendarDays },
-    { name: "Ayarlar", href: "/settings", icon: Settings },
+type NavItem = {
+  name: string
+  href: string
+  icon: ComponentType<{ className?: string }>
+}
+
+const navigation: NavItem[] = [
+  { name: "Ana Sayfa", href: "/", icon: Home },
+  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { name: "Grafik", href: "/chart", icon: BarChart3 },
+  { name: "Tarayıcı", href: "/scanner", icon: Search },
+  { name: "Sinyaller", href: "/signals", icon: Bell },
+  { name: "İşlemler", href: "/trades", icon: History },
+  { name: "Bot Sağlığı", href: "/health", icon: Activity },
+  { name: "TradingView", href: "/tradingview", icon: LineChart },
+  { name: "Takvim", href: "/calendar", icon: CalendarDays },
 ]
 
+const footerNavigation: NavItem[] = [
+  { name: "Ayarlar", href: "/settings", icon: Settings },
+]
+
+function isActiveRoute(pathname: string, href: string) {
+  if (href === "/") {
+    return pathname === "/"
+  }
+  return pathname === href || pathname.startsWith(`${href}/`)
+}
+
+function SidebarItem({ item, pathname }: { item: NavItem; pathname: string }) {
+  const active = isActiveRoute(pathname, item.href)
+
+  return (
+    <Link
+      href={item.href}
+      className={cn(
+        "group relative flex h-9 w-9 items-center justify-center border border-transparent text-muted-foreground transition-colors",
+        "hover:bg-raised hover:text-foreground",
+        active && "bg-raised text-foreground border-border"
+      )}
+      aria-label={item.name}
+    >
+      {active && <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 bg-foreground" />}
+      <item.icon className="h-4 w-4" />
+      <span className="pointer-events-none absolute left-[calc(100%+8px)] top-1/2 z-[70] hidden -translate-y-1/2 whitespace-nowrap border border-border bg-overlay px-2 py-1 text-[10px] font-medium tracking-[0.06em] text-foreground group-hover:block">
+        {item.name}
+      </span>
+    </Link>
+  )
+}
+
 export function Sidebar() {
-    const pathname = usePathname()
-    const { isPinned, setIsPinned, isHovered, setIsHovered, isExpanded } = useSidebar()
+  const pathname = usePathname()
 
-    return (
-        <aside
-            onMouseEnter={() => !isPinned && setIsHovered(true)}
-            onMouseLeave={() => !isPinned && setIsHovered(false)}
-            className={cn(
-                "fixed left-0 top-0 z-[60] h-screen border-r border-sidebar-border bg-sidebar/95 backdrop-blur-xl hidden md:flex flex-col",
-                "transition-all duration-300 ease-out",
-                isExpanded ? "w-56" : "w-16"
-            )}
+  return (
+    <aside className="fixed left-0 top-0 z-[60] hidden h-screen w-14 flex-col border-r border-sidebar-border bg-sidebar md:flex">
+      <div className="flex h-10 items-center justify-center border-b border-sidebar-border">
+        <Link
+          href="/"
+          className="flex h-7 w-7 items-center justify-center border border-border bg-raised text-xs font-semibold tracking-[0.06em] text-foreground"
+          aria-label="Rapot"
         >
-            {/* Logo Area */}
-            <div className="flex h-14 items-center border-b border-sidebar-border px-3">
-                <Link href="/" className="flex items-center gap-3 flex-1 min-w-0">
-                    <div className={cn(
-                        "flex items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-red-600 transition-all duration-300 shadow-lg",
-                        isExpanded ? "h-9 w-9" : "h-10 w-10"
-                    )}>
-                        <TrendingUp className={cn(
-                            "text-white transition-all duration-300",
-                            isExpanded ? "h-5 w-5" : "h-6 w-6"
-                        )} />
-                    </div>
-                    <span className={cn(
-                        "text-lg font-bold text-foreground whitespace-nowrap transition-all duration-300",
-                        isExpanded ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-4 w-0"
-                    )}>
-                        Rapot
-                    </span>
-                </Link>
+          R
+        </Link>
+      </div>
 
-                {/* Pin/Unpin Button - Only visible when expanded */}
-                <button
-                    onClick={() => setIsPinned(!isPinned)}
-                    className={cn(
-                        "flex h-8 w-8 items-center justify-center rounded-lg transition-all duration-300",
-                        "text-muted-foreground hover:text-foreground hover:bg-sidebar-accent",
-                        isExpanded ? "opacity-100 scale-100" : "opacity-0 scale-75 pointer-events-none w-0"
-                    )}
-                    title={isPinned ? "Otomatik gizle" : "Sabitle"}
-                >
-                    {isPinned ? (
-                        <Pin className="h-4 w-4 text-primary" />
-                    ) : (
-                        <PinOff className="h-4 w-4" />
-                    )}
-                </button>
-            </div>
+      <nav className="flex flex-1 flex-col items-center gap-2 py-3">
+        {navigation.map((item) => (
+          <SidebarItem key={item.href} item={item} pathname={pathname} />
+        ))}
+      </nav>
 
-            {/* Navigation */}
-            <nav className="flex-1 space-y-1 p-2 overflow-y-auto overflow-x-hidden">
-                {navigation.map((item, index) => {
-                    const isActive = pathname === item.href
-                    return (
-                        <Link
-                            key={item.name}
-                            href={item.href}
-                            className={cn(
-                                "relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200",
-                                "hover:scale-[1.02] active:scale-[0.98]",
-                                isActive
-                                    ? "bg-primary/10 text-primary shadow-sm"
-                                    : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground"
-                            )}
-                            style={{
-                                transitionDelay: isExpanded ? `${index * 20}ms` : "0ms"
-                            }}
-                        >
-                            <div className={cn(
-                                "flex h-8 w-8 items-center justify-center rounded-lg shrink-0 transition-colors",
-                                isActive ? "bg-primary/10" : "bg-transparent"
-                            )}>
-                                <item.icon className={cn(
-                                    "h-5 w-5 transition-transform duration-200",
-                                    !isExpanded && "scale-110"
-                                )} />
-                            </div>
-                            <span className={cn(
-                                "whitespace-nowrap transition-all duration-300",
-                                isExpanded ? "opacity-100 translate-x-0" : "opacity-0 -translate-x-4 w-0 overflow-hidden"
-                            )}>
-                                {item.name}
-                            </span>
-
-                            {/* Active indicator dot */}
-                            {isActive && !isExpanded && (
-                                <span className="absolute left-1 w-1 h-6 rounded-full bg-primary" />
-                            )}
-                        </Link>
-                    )
-                })}
-            </nav>
-
-            {/* Bot/API Status Indicator */}
-            <div className="p-3 border-t border-sidebar-border">
-                <div className={cn(
-                    "flex items-center gap-3 rounded-xl px-3 py-2 bg-sidebar-accent/50 transition-all duration-300",
-                    !isExpanded && "justify-center px-2"
-                )}>
-                    <div className="relative shrink-0">
-                        <div className="h-2.5 w-2.5 rounded-full bg-profit" />
-                        <div className="absolute inset-0 h-2.5 w-2.5 animate-ping rounded-full bg-profit opacity-75" />
-                    </div>
-                    <span className={cn(
-                        "text-xs text-muted-foreground whitespace-nowrap transition-all duration-300",
-                        isExpanded ? "opacity-100" : "opacity-0 w-0 overflow-hidden"
-                    )}>
-                        API Bağlı
-                    </span>
-                </div>
-
-                {/* Hover hint when collapsed and not pinned */}
-                {!isExpanded && !isPinned && (
-                    <div className="mt-2 text-[10px] text-muted-foreground/50 text-center animate-pulse">
-                        ← Hover
-                    </div>
-                )}
-            </div>
-        </aside>
-    )
+      <div className="border-t border-sidebar-border py-3">
+        <div className="flex flex-col items-center gap-2">
+          {footerNavigation.map((item) => (
+            <SidebarItem key={item.href} item={item} pathname={pathname} />
+          ))}
+        </div>
+      </div>
+    </aside>
+  )
 }

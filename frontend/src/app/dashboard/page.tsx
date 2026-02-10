@@ -1,138 +1,117 @@
-'use client';
+﻿'use client'
 
-import { useState } from 'react';
-import { KPICards } from "@/components/dashboard/kpi-cards"
-import { AdvancedChartPage } from "@/components/charts/advanced-chart"
-import { SignalTerminal } from "@/components/dashboard/signal-terminal"
-import { PortfolioPanel } from "@/components/dashboard/portfolio-panel"
-import { MarketOverview } from "@/components/dashboard/market-overview"
-import { BotDashboard } from "@/components/dashboard/bot-dashboard"
-import { useRealtime } from "@/lib/hooks/use-realtime"
-import { Zap, BarChart3, Activity } from "lucide-react"
+import { useMemo, useState } from 'react'
+import { AdvancedChartPage } from '@/components/charts/advanced-chart'
+import { useDashboardKPIs } from '@/lib/hooks/use-dashboard'
+import { useRecentSignals } from '@/lib/hooks/use-signals'
+import { cn } from '@/lib/utils'
+
+type MarketType = 'BIST' | 'Kripto'
 
 export default function DashboardPage() {
-    const [selectedSymbol, setSelectedSymbol] = useState('THYAO');
-    const [selectedMarket, setSelectedMarket] = useState<'BIST' | 'Kripto'>('BIST');
-    const [selectedPrice, setSelectedPrice] = useState(0);
+  const [selectedSymbol, setSelectedSymbol] = useState('THYAO')
+  const [selectedMarket, setSelectedMarket] = useState<MarketType>('BIST')
+  const { data: kpis } = useDashboardKPIs()
+  const { data: recentSignals } = useRecentSignals(12)
 
-    // Initialize real-time connection
-    const { connectionState } = useRealtime({
-        onSignal: (signal) => {
-            // Could show notification for new signals
-            console.log('New signal:', signal);
-        },
-    });
+  const pnlLabel = useMemo(() => {
+    if (!kpis) return '--'
+    return `${kpis.totalPnL >= 0 ? '+' : ''}${kpis.totalPnL.toLocaleString('tr-TR', { maximumFractionDigits: 2 })} ₺`
+  }, [kpis])
 
-    // Handle signal selection from terminal
-    const handleSignalSelect = (signal: any) => {
-        setSelectedSymbol(signal.symbol);
-        setSelectedMarket(signal.marketType as 'BIST' | 'Kripto');
-        setSelectedPrice(signal.price);
-    };
+  return (
+    <div className="flex h-[calc(100vh-40px)] flex-col gap-2 p-2 md:gap-3 md:p-3">
+      <section className="grid h-16 shrink-0 grid-cols-2 border border-border bg-surface md:grid-cols-5">
+        <RibbonStat label="Toplam PNL" value={pnlLabel} tone={kpis && kpis.totalPnL < 0 ? 'loss' : 'profit'} />
+        <RibbonStat
+          label="Win Rate"
+          value={typeof kpis?.winRate === 'number' ? `${kpis.winRate.toFixed(2)}%` : '--'}
+        />
+        <RibbonStat label="Açık Pozisyon" value={typeof kpis?.openPositions === 'number' ? `${kpis.openPositions}` : '--'} />
+        <RibbonStat label="Toplam İşlem" value={typeof kpis?.totalTrades === 'number' ? `${kpis.totalTrades}` : '--'} />
+        <RibbonStat label="Toplam Sinyal" value={typeof kpis?.totalSignals === 'number' ? `${kpis.totalSignals}` : '--'} />
+      </section>
 
-    return (
-        <div className="flex flex-col min-h-screen -m-4">
-            {/* Main Content */}
-            <div className="flex-1 p-4 space-y-4">
-                {/* Page Header */}
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h1 className="text-2xl font-bold heading-glow">
-                            Komuta Merkezi
-                        </h1>
-                        <p className="text-sm text-muted-foreground flex items-center gap-2">
-                            <Zap className="w-3 h-3 text-primary" />
-                            Gerçek zamanlı piyasa analizi ve sinyal takibi
-                        </p>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm">
-                        <span className={`w-2 h-2 rounded-full ${
-                            connectionState === 'connected'
-                                ? 'bg-profit animate-pulse'
-                                : connectionState === 'connecting'
-                                ? 'bg-neutral animate-pulse'
-                                : 'bg-loss'
-                        }`} />
-                        <span className="text-muted-foreground">
-                            {connectionState === 'connected'
-                                ? 'Canlı Bağlantı'
-                                : connectionState === 'connecting'
-                                ? 'Bağlanıyor...'
-                                : 'Bağlantı Yok'}
-                        </span>
-                    </div>
-                </div>
+      <section className="min-h-0 flex-1 border border-border bg-surface">
+        <AdvancedChartPage
+          initialSymbol={selectedSymbol}
+          initialMarket={selectedMarket}
+          showSignals={false}
+          showWatchlist={true}
+        />
+      </section>
 
-                {/* KPI Cards - Top Row */}
-                <KPICards />
-
-                {/* Main Bento Grid */}
-                <div className="bento-grid">
-                    {/* Trading Chart - Large */}
-                    <div className="col-span-12 lg:col-span-8 row-span-2 bento-item p-0 overflow-hidden">
-                        <AdvancedChartPage
-                            initialSymbol={selectedSymbol}
-                            initialMarket={selectedMarket}
-                        />
-                    </div>
-
-                    {/* Signal Terminal - Side Panel */}
-                    <div className="col-span-12 lg:col-span-4 row-span-2 bento-item p-0 overflow-hidden terminal">
-                        <SignalTerminal
-                            showFilters={true}
-                            onSignalSelect={handleSignalSelect}
-                            defaultTimeRange="24h"
-                        />
-                    </div>
-
-                    {/* Bot Dashboard */}
-                    <div className="col-span-12 lg:col-span-5 bento-item p-0 overflow-hidden">
-                        <div className="p-4">
-                            <div className="flex items-center gap-2 mb-4">
-                                <Activity className="w-5 h-5 text-primary" />
-                                <span className="font-semibold">Bot Durumu</span>
-                            </div>
-                            <BotDashboard />
-                        </div>
-                    </div>
-
-                    {/* Market Overview */}
-                    <div className="col-span-12 lg:col-span-4 bento-item p-0 overflow-hidden">
-                        <div className="p-4">
-                            <div className="flex items-center gap-2 mb-4">
-                                <BarChart3 className="w-5 h-5 text-primary" />
-                                <span className="font-semibold">Piyasa Özeti</span>
-                            </div>
-                            <MarketOverview />
-                        </div>
-                    </div>
-
-                    {/* Portfolio Panel */}
-                    <div className="col-span-12 lg:col-span-3 bento-item p-0 overflow-hidden">
-                        <PortfolioPanel
-                            selectedSymbol={selectedSymbol}
-                            selectedPrice={selectedPrice}
-                        />
-                    </div>
-                </div>
-
-                {/* Footer Stats */}
-                <div className="flex items-center justify-between pt-4 border-t border-border/30 text-xs text-muted-foreground">
-                    <div className="flex items-center gap-4">
-                        <span className="flex items-center gap-1.5">
-                            <Zap className="w-3 h-3 text-primary" />
-                            Rapot Trading Platform v1.0
-                        </span>
-                        <span>•</span>
-                        <span>7/24 Otonom Analiz</span>
-                    </div>
-                    <div className="flex items-center gap-4">
-                        <span>TradingView Charts</span>
-                        <span>•</span>
-                        <span>Binance & BIST Data</span>
-                    </div>
-                </div>
-            </div>
+      <section className="h-40 border border-border bg-surface">
+        <div className="flex h-8 items-center justify-between border-b border-border px-3">
+          <span className="label-uppercase">Sinyal Akışı</span>
+          <span className="text-[10px] text-muted-foreground">Son 12 kayıt</span>
         </div>
-    )
+
+        <div className="h-[calc(100%-32px)] overflow-y-auto">
+          {(recentSignals ?? []).length === 0 ? (
+            <div className="flex h-full items-center justify-center text-xs text-muted-foreground">Sinyal verisi bulunamadı.</div>
+          ) : (
+            (recentSignals ?? []).map((signal) => (
+              <button
+                key={signal.id}
+                type="button"
+                onClick={() => {
+                  setSelectedSymbol(signal.symbol)
+                  setSelectedMarket(signal.marketType)
+                }}
+                className="grid w-full grid-cols-[64px_1fr_100px_52px] items-center gap-2 border-b border-[rgba(255,255,255,0.02)] px-3 py-1.5 text-left hover:bg-raised"
+              >
+                <span
+                  className={cn(
+                    'inline-flex w-fit items-center border px-1.5 py-0.5 text-[10px] font-semibold tracking-[0.06em]',
+                    signal.signalType === 'AL'
+                      ? 'border-profit bg-profit/10 text-profit'
+                      : 'border-loss bg-loss/10 text-loss'
+                  )}
+                >
+                  {signal.signalType}
+                </span>
+                <div className="min-w-0">
+                  <div className="truncate text-xs font-medium text-foreground">{signal.symbol}</div>
+                  <div className="truncate text-[10px] text-muted-foreground">{signal.strategy} • {signal.timeframe}</div>
+                </div>
+                <div className="mono-numbers text-right text-xs text-foreground">
+                  {signal.marketType === 'Kripto' ? '$' : '₺'}
+                  {signal.price.toLocaleString('tr-TR', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: signal.marketType === 'Kripto' ? 4 : 2,
+                  })}
+                </div>
+                <div className="mono-numbers text-right text-[10px] text-muted-foreground">
+                  {new Date(signal.createdAt).toLocaleTimeString('tr-TR', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      </section>
+    </div>
+  )
+}
+
+function RibbonStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string
+  value: string
+  tone?: 'profit' | 'loss'
+}) {
+  return (
+    <div className="flex min-w-0 flex-col justify-center gap-1 border-r border-border px-3 last:border-r-0">
+      <span className="label-uppercase">{label}</span>
+      <span className={cn('mono-numbers truncate text-lg font-semibold', tone === 'profit' && 'text-profit', tone === 'loss' && 'text-loss')}>
+        {value}
+      </span>
+    </div>
+  )
 }

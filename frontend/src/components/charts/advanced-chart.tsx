@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
@@ -118,8 +118,8 @@ const WATCHLIST_UTILITY_ITEMS: UtilityPanelItem[] = [
     { id: "notes", label: "Notlar", icon: MessageSquare },
     { id: "calendar", label: "Takvim", icon: CalendarDays },
     { id: "news", label: "Haberler", icon: Newspaper },
-    { id: "layout", label: "Yerleşim", icon: LayoutGrid },
-    { id: "help", label: "Yardım", icon: CircleHelp },
+    { id: "layout", label: "YerleÅŸim", icon: LayoutGrid },
+    { id: "help", label: "YardÄ±m", icon: CircleHelp },
 ]
 
 const makeWatchlistId = (name: string) =>
@@ -195,7 +195,7 @@ const DEFAULT_WATCHLISTS: WatchlistModel[] = [
     },
     {
         id: "bist-portfolio",
-        name: "BIST Portföy",
+        name: "BIST PortfÃ¶y",
         alarmsEnabled: false,
         notes: "",
         rows: [
@@ -243,11 +243,11 @@ const TIMEFRAME_CATEGORIES = [
         ]
     },
     {
-        category: "Gün",
+        category: "GÃ¼n",
         items: [
-            { label: "1G", value: "1d", description: "1 Gün" },
-            { label: "2G", value: "2d", description: "2 Gün" },
-            { label: "3G", value: "3d", description: "3 Gün" },
+            { label: "1G", value: "1d", description: "1 GÃ¼n" },
+            { label: "2G", value: "2d", description: "2 GÃ¼n" },
+            { label: "3G", value: "3d", description: "3 GÃ¼n" },
         ]
     },
     {
@@ -283,27 +283,27 @@ const CRYPTO_WATCHLIST = [
     "DOGEUSDT", "SOLUSDT", "DOTUSDT", "MATICUSDT", "LTCUSDT",
 ]
 
-// ==================== CHART THEME (Cosmic Glass) ====================
+// ==================== CHART THEME ====================
 
 const chartColors = {
     background: "transparent",
-    text: "#8b949e",
-    grid: "rgba(48, 54, 61, 0.3)",
-    crosshair: "rgba(0, 242, 234, 0.5)",
-    crosshairLabel: "#161b22",
-    bullish: "#00c853",
-    bearish: "#ff3d00",
+    text: "rgba(255, 255, 255, 0.5)",
+    grid: "rgba(255, 255, 255, 0.04)",
+    crosshair: "rgba(255, 255, 255, 0.18)",
+    crosshairLabel: "#16161e",
+    bullish: "#22c55e",
+    bearish: "#ef4444",
     volume: {
-        up: "rgba(0, 200, 83, 0.4)",
-        down: "rgba(255, 61, 0, 0.4)"
+        up: "rgba(34, 197, 94, 0.18)",
+        down: "rgba(239, 68, 68, 0.18)"
     },
     indicators: {
-        rsi: "#2962ff",
-        macd: "#f23645",
-        macdSignal: "#089981",
-        macdHistogram: "#787b86",
-        wr: "#9c27b0",
-        cci: "#ff9800",
+        rsi: "#3b82f6",
+        macd: "#8b5cf6",
+        macdSignal: "#06b6d4",
+        macdHistogram: "rgba(255, 255, 255, 0.28)",
+        wr: "#8b5cf6",
+        cci: "#3b82f6",
     }
 }
 
@@ -866,7 +866,7 @@ export function AdvancedChartPage({
                                 position: sig.signal === 'AL' ? 'belowBar' : 'aboveBar',
                                 shape: sig.signal === 'AL' ? 'arrowUp' : 'arrowDown',
                                 color: sig.signal === 'AL' ? '#00e676' : '#ff5252',
-                                text: sig.signal === 'AL' ? 'DİP' : 'SAT',
+                                text: sig.signal === 'AL' ? 'DÄ°P' : 'SAT',
                                 size: 2,
                             })
                         }
@@ -886,7 +886,7 @@ export function AdvancedChartPage({
                                 position: sig.signal === 'AL' ? 'belowBar' : 'aboveBar',
                                 shape: sig.signal === 'AL' ? 'arrowUp' : 'arrowDown',
                                 color: sig.signal === 'AL' ? '#76ff03' : '#ff1744',
-                                text: sig.signal === 'AL' ? 'DİP' : 'TEPE',
+                                text: sig.signal === 'AL' ? 'DÄ°P' : 'TEPE',
                                 size: 2,
                             })
                         }
@@ -1163,11 +1163,11 @@ export function AdvancedChartPage({
 
     const handleAddSymbolToWatchlist = useCallback(() => {
         if (!activeWatchlist) return
-        const value = window.prompt("Sembol girin (ör: BTCUSDT, ETH/USD veya THYAO)")
+        const value = window.prompt("Sembol girin (Ã¶r: BTCUSDT, ETH/USD veya THYAO)")
         if (!value) return
         const parsed = parseSymbolInput(value)
         if (!parsed) {
-            showWatchlistToast("Geçersiz sembol. Binance veya BIST sembolü deneyin.")
+            showWatchlistToast("GeÃ§ersiz sembol. Binance veya BIST sembolÃ¼ deneyin.")
             return
         }
 
@@ -1220,27 +1220,27 @@ export function AdvancedChartPage({
         setWatchlists((prev) => [duplicate, ...prev])
         setActiveWatchlistId(duplicate.id)
         setShowWatchlistMenu(false)
-        showWatchlistToast("Listenin kopyası oluşturuldu.")
+        showWatchlistToast("Listenin kopyasÄ± oluÅŸturuldu.")
     }, [activeWatchlist, showWatchlistToast])
 
     const handleRenameWatchlist = useCallback(() => {
         if (!activeWatchlist) return
-        const nextName = window.prompt("Yeni liste adı", activeWatchlist.name)
+        const nextName = window.prompt("Yeni liste adÄ±", activeWatchlist.name)
         if (!nextName || !nextName.trim()) return
         updateActiveWatchlist((watchlist) => ({ ...watchlist, name: nextName.trim() }))
         setShowWatchlistMenu(false)
-        showWatchlistToast("Liste adı güncellendi.")
+        showWatchlistToast("Liste adÄ± gÃ¼ncellendi.")
     }, [activeWatchlist, showWatchlistToast, updateActiveWatchlist])
 
     const handleAddSectionToWatchlist = useCallback(() => {
-        const sectionName = window.prompt("Bölüm adı")
+        const sectionName = window.prompt("BÃ¶lÃ¼m adÄ±")
         if (!sectionName || !sectionName.trim()) return
         updateActiveWatchlist((watchlist) => ({
             ...watchlist,
             rows: [...watchlist.rows, sectionRow(sectionName.trim())],
         }))
         setShowWatchlistMenu(false)
-        showWatchlistToast("Listeye yeni bölüm eklendi.")
+        showWatchlistToast("Listeye yeni bÃ¶lÃ¼m eklendi.")
     }, [showWatchlistToast, updateActiveWatchlist])
 
     const handleClearWatchlist = useCallback(() => {
@@ -1253,7 +1253,7 @@ export function AdvancedChartPage({
     }, [activeWatchlist, showWatchlistToast, updateActiveWatchlist])
 
     const handleCreateWatchlist = useCallback(() => {
-        const listName = window.prompt("Yeni liste adı")
+        const listName = window.prompt("Yeni liste adÄ±")
         if (!listName || !listName.trim()) return
         const watchlist: WatchlistModel = {
             id: makeWatchlistId(listName),
@@ -1266,7 +1266,7 @@ export function AdvancedChartPage({
         setActiveWatchlistId(watchlist.id)
         setShowWatchlistMenu(false)
         setShowWatchlistSwitcher(false)
-        showWatchlistToast("Yeni liste oluşturuldu.")
+        showWatchlistToast("Yeni liste oluÅŸturuldu.")
     }, [showWatchlistToast])
 
     const handleLoadWatchlist = useCallback(() => {
@@ -1280,15 +1280,15 @@ export function AdvancedChartPage({
             .filter((row): row is WatchlistSymbolRow => row.kind === "symbol")
             .map((row) => row.rawSymbol)
         if (symbols.length === 0) {
-            showWatchlistToast("Paylaşmak için listede sembol yok.")
+            showWatchlistToast("PaylaÅŸmak iÃ§in listede sembol yok.")
             return
         }
         const payload = `${activeWatchlist.name}: ${symbols.join(", ")}`
         try {
             await navigator.clipboard.writeText(payload)
-            showWatchlistToast("Liste panoya kopyalandı.")
+            showWatchlistToast("Liste panoya kopyalandÄ±.")
         } catch {
-            window.prompt("Panoya kopyalayın", payload)
+            window.prompt("Panoya kopyalayÄ±n", payload)
         }
         setShowWatchlistMenu(false)
     }, [activeWatchlist, showWatchlistToast])
@@ -1304,7 +1304,7 @@ export function AdvancedChartPage({
         <div
             ref={fullscreenContainerRef}
             className={cn(
-                "relative flex rounded-xl overflow-hidden bg-background glass-panel-intense",
+                "relative flex rounded-sm overflow-hidden bg-background glass-panel-intense",
                 isFullscreen ? "fixed inset-0 z-50 rounded-none" : ""
             )}
         >
@@ -1317,19 +1317,19 @@ export function AdvancedChartPage({
                         <div className="relative">
                             <button
                                 onClick={() => setShowSymbolSearch(!showSymbolSearch)}
-                                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-card/50 hover:bg-card border border-border/50 hover:border-primary/30 transition-all"
+                                className="flex items-center gap-2 px-4 py-2 rounded-sm bg-card/50 hover:bg-card border border-border/50 hover:border-primary/30 transition-all"
                             >
                                 <BarChart3 className="h-4 w-4 text-primary" />
                                 <span className="text-lg font-bold">{symbol}</span>
                                 <span className={cn(
                                     "text-xs px-2 py-0.5 rounded-full font-medium",
-                                    marketType === "BIST" ? "bg-primary/20 text-primary" : "bg-orange-500/20 text-orange-400"
+                                    marketType === "BIST" ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
                                 )}>{marketType}</span>
                                 <ChevronDown className="h-4 w-4 text-muted-foreground" />
                             </button>
 
                             {showSymbolSearch && (
-                                <div className="absolute top-full left-0 mt-2 w-96 glass-panel shadow-xl z-50 overflow-hidden">
+                                <div className="absolute top-full left-0 mt-2 w-96 glass-panel z-50 overflow-hidden">
                                     <div className="p-3 border-b border-border/30">
                                         <div className="relative">
                                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -1338,7 +1338,7 @@ export function AdvancedChartPage({
                                                 value={searchQuery}
                                                 onChange={(e) => setSearchQuery(e.target.value)}
                                                 placeholder="Sembol ara..."
-                                                className="w-full pl-10 pr-4 py-2 bg-background/50 border border-border/50 rounded-lg text-sm focus:outline-none focus:border-primary/50"
+                                                className="w-full pl-10 pr-4 py-2 bg-background/50 border border-border/50 rounded-sm text-sm focus:outline-none focus:border-primary/50"
                                                 autoFocus
                                             />
                                         </div>
@@ -1351,10 +1351,10 @@ export function AdvancedChartPage({
                                                 className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-muted/30 transition-colors"
                                             >
                                                 <div className="flex items-center gap-3">
-                                                    <span className={cn("w-2 h-2 rounded-full", s.market === "BIST" ? "bg-primary" : "bg-orange-500")} />
+                                                    <span className={cn("w-2 h-2 rounded-full", s.market === "BIST" ? "bg-primary" : "bg-muted-foreground")} />
                                                     <span className="font-medium">{s.symbol}</span>
                                                 </div>
-                                                <span className={cn("text-xs px-2 py-0.5 rounded-full", s.market === "BIST" ? "bg-primary/10 text-primary" : "bg-orange-500/10 text-orange-400")}>{s.market}</span>
+                                                <span className={cn("text-xs px-2 py-0.5 rounded-full", s.market === "BIST" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>{s.market}</span>
                                             </button>
                                         ))}
                                     </div>
@@ -1365,7 +1365,7 @@ export function AdvancedChartPage({
                         {/* Price Info */}
                         <div className="flex flex-col">
                             <span className="text-2xl font-bold mono-numbers">
-                                {marketType === "Kripto" ? "$" : "₺"}
+                                {marketType === "Kripto" ? "$" : "â‚º"}
                                 {livePrice.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: marketType === "Kripto" ? 4 : 2 })}
                             </span>
                             <div className={cn("flex items-center gap-1.5 text-sm", isPositive ? "text-profit" : "text-loss")}>
@@ -1379,23 +1379,23 @@ export function AdvancedChartPage({
                     {/* Timeframe & Controls */}
                     <div className="flex items-center gap-3">
                         {/* Quick Timeframes */}
-                        <div className="flex items-center bg-muted/30 rounded-lg p-1">
+                        <div className="flex items-center bg-muted/30 rounded-sm p-1">
                             {QUICK_TIMEFRAMES.map((tf) => (
                                 <button
                                     key={tf.value}
                                     onClick={() => setTimeframe(tf.value)}
                                     className={cn(
-                                        "px-3 py-1.5 rounded-md text-sm font-medium transition-all",
+                                        "px-3 py-1.5 rounded-sm text-sm font-medium transition-all",
                                         timeframe === tf.value ? "bg-primary/20 text-primary neon-text" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                                     )}
                                 >{tf.label}</button>
                             ))}
                             <div className="relative">
-                                <button onClick={() => setShowTimeframeMenu(!showTimeframeMenu)} className="px-2 py-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted/50">
+                                <button onClick={() => setShowTimeframeMenu(!showTimeframeMenu)} className="px-2 py-1.5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted/50">
                                     <ChevronDown className="h-4 w-4" />
                                 </button>
                                 {showTimeframeMenu && (
-                                    <div className="absolute top-full right-0 mt-2 w-64 glass-panel shadow-xl z-50 overflow-hidden">
+                                    <div className="absolute top-full right-0 mt-2 w-64 glass-panel z-50 overflow-hidden">
                                         {TIMEFRAME_CATEGORIES.map((cat) => (
                                             <div key={cat.category}>
                                                 <div className="px-3 py-2 text-xs font-semibold text-muted-foreground bg-muted/30">{cat.category}</div>
@@ -1417,26 +1417,26 @@ export function AdvancedChartPage({
                         </div>
 
                         {/* Tools */}
-                        <div className="flex items-center gap-1 bg-muted/30 rounded-lg p-1">
+                        <div className="flex items-center gap-1 bg-muted/30 rounded-sm p-1">
                             <div className="relative">
                                 <button
                                     onClick={() => setShowIndicatorSearch(!showIndicatorSearch)}
-                                    className={cn("p-2 rounded-md transition-all", activeIndicators.length > 0 ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/50")}
-                                    title="İndikatörler"
+                                    className={cn("p-2 rounded-sm transition-all", activeIndicators.length > 0 ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/50")}
+                                    title="Ä°ndikatÃ¶rler"
                                 >
                                     <LineChart className="h-4 w-4" />
                                 </button>
                                 {showIndicatorSearch && (
-                                    <div className="absolute top-full right-0 mt-2 w-80 glass-panel shadow-xl z-50 overflow-hidden">
+                                    <div className="absolute top-full right-0 mt-2 w-80 glass-panel z-50 overflow-hidden">
                                         <div className="p-3 border-b border-border/30">
                                             <div className="relative">
                                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                                <input type="text" value={indicatorSearchQuery} onChange={(e) => setIndicatorSearchQuery(e.target.value)} placeholder="İndikatör ara..." className="w-full pl-10 pr-4 py-2 bg-background/50 border border-border/50 rounded-lg text-sm focus:outline-none focus:border-primary/50" autoFocus />
+                                                <input type="text" value={indicatorSearchQuery} onChange={(e) => setIndicatorSearchQuery(e.target.value)} placeholder="Ä°ndikatÃ¶r ara..." className="w-full pl-10 pr-4 py-2 bg-background/50 border border-border/50 rounded-sm text-sm focus:outline-none focus:border-primary/50" autoFocus />
                                             </div>
                                         </div>
                                         {activeIndicators.length > 0 && (
                                             <div className="p-2 border-b border-border/30">
-                                                <div className="text-xs text-muted-foreground mb-2 px-2">Aktif İndikatörler</div>
+                                                <div className="text-xs text-muted-foreground mb-2 px-2">Aktif Ä°ndikatÃ¶rler</div>
                                                 {activeIndicators.map((ind) => (
                                                     <div key={ind.id} className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-muted/30">
                                                         <span className={cn("text-sm font-medium", !ind.visible && "opacity-50")}>{ind.meta.shortName}</span>
@@ -1444,7 +1444,7 @@ export function AdvancedChartPage({
                                                             <button
                                                                 onClick={() => toggleIndicatorVisibility(ind.id)}
                                                                 className="text-muted-foreground hover:text-foreground"
-                                                                title={ind.visible ? "Gizle" : "Göster"}
+                                                                title={ind.visible ? "Gizle" : "GÃ¶ster"}
                                                             >
                                                                 {ind.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
                                                             </button>
@@ -1457,7 +1457,7 @@ export function AdvancedChartPage({
                                                                     <Settings2 className="h-4 w-4" />
                                                                 </button>
                                                             )}
-                                                            <button onClick={() => removeIndicator(ind.id)} className="text-muted-foreground hover:text-loss" title="Kaldır">
+                                                            <button onClick={() => removeIndicator(ind.id)} className="text-muted-foreground hover:text-loss" title="KaldÄ±r">
                                                                 <Trash2 className="h-4 w-4" />
                                                             </button>
                                                         </div>
@@ -1471,7 +1471,7 @@ export function AdvancedChartPage({
                                                     key={ind.id}
                                                     onClick={() => addIndicator(ind.id)}
                                                     disabled={activeIndicators.some(i => i.id === ind.id)}
-                                                    className={cn("w-full flex items-center justify-between px-3 py-2 rounded-lg transition-colors text-left", activeIndicators.some(i => i.id === ind.id) ? "opacity-50 cursor-not-allowed bg-muted/20" : "hover:bg-muted/30")}
+                                                    className={cn("w-full flex items-center justify-between px-3 py-2 rounded-sm transition-colors text-left", activeIndicators.some(i => i.id === ind.id) ? "opacity-50 cursor-not-allowed bg-muted/20" : "hover:bg-muted/30")}
                                                 >
                                                     <div>
                                                         <div className="font-medium text-sm">{ind.shortName}</div>
@@ -1484,21 +1484,21 @@ export function AdvancedChartPage({
                                     </div>
                                 )}
                             </div>
-                            <button onClick={() => setActiveTool(activeTool === 'ruler' ? 'none' : 'ruler')} className={cn("p-2 rounded-md transition-all", activeTool === 'ruler' ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/50")} title="Ölçüm Cetveli"><Ruler className="h-4 w-4" /></button>
-                            <button onClick={() => setActiveTool(activeTool === 'pencil' ? 'none' : 'pencil')} className={cn("p-2 rounded-md transition-all", activeTool === 'pencil' ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/50")} title="Çizim Araçları"><Pencil className="h-4 w-4" /></button>
-                            <button onClick={() => setActiveTool(activeTool === 'text' ? 'none' : 'text')} className={cn("p-2 rounded-md transition-all", activeTool === 'text' ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/50")} title="Metin Ekle"><Type className="h-4 w-4" /></button>
+                            <button onClick={() => setActiveTool(activeTool === 'ruler' ? 'none' : 'ruler')} className={cn("p-2 rounded-sm transition-all", activeTool === 'ruler' ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/50")} title="Ã–lÃ§Ã¼m Cetveli"><Ruler className="h-4 w-4" /></button>
+                            <button onClick={() => setActiveTool(activeTool === 'pencil' ? 'none' : 'pencil')} className={cn("p-2 rounded-sm transition-all", activeTool === 'pencil' ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/50")} title="Ã‡izim AraÃ§larÄ±"><Pencil className="h-4 w-4" /></button>
+                            <button onClick={() => setActiveTool(activeTool === 'text' ? 'none' : 'text')} className={cn("p-2 rounded-sm transition-all", activeTool === 'text' ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/50")} title="Metin Ekle"><Type className="h-4 w-4" /></button>
                         </div>
 
-                        <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/30 rounded-lg text-xs">
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/30 rounded-sm text-xs">
                             <Zap className="h-3 w-3 text-primary animate-pulse" />
                             <span className="text-muted-foreground">{dataSource}</span>
                         </div>
 
-                        <button onClick={() => setShowRightPanel(!showRightPanel)} className={cn("p-2 rounded-lg transition-all bg-muted/30 hover:bg-muted/50", showRightPanel && "text-primary")} title={showRightPanel ? "Paneli Gizle" : "Paneli Göster"}>
+                        <button onClick={() => setShowRightPanel(!showRightPanel)} className={cn("p-2 rounded-sm transition-all bg-muted/30 hover:bg-muted/50", showRightPanel && "text-primary")} title={showRightPanel ? "Paneli Gizle" : "Paneli GÃ¶ster"}>
                             {showRightPanel ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
                         </button>
 
-                        <button onClick={toggleFullscreen} className="p-2 rounded-lg bg-muted/30 hover:bg-muted/50 hover:text-primary transition-all" title={isFullscreen ? "Küçült" : "Tam Ekran"}>
+                        <button onClick={toggleFullscreen} className="p-2 rounded-sm bg-muted/30 hover:bg-muted/50 hover:text-primary transition-all" title={isFullscreen ? "KÃ¼Ã§Ã¼lt" : "Tam Ekran"}>
                             {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
                         </button>
                     </div>
@@ -1509,19 +1509,19 @@ export function AdvancedChartPage({
                     <div className="flex items-center gap-6 px-4 py-2 border-b border-border/30 bg-muted/10">
                         <div className="flex items-center gap-6 text-sm">
                             <div className="flex items-center gap-2">
-                                <span className="text-muted-foreground text-xs uppercase">Açılış</span>
+                                <span className="text-muted-foreground text-xs uppercase">AÃ§Ä±lÄ±ÅŸ</span>
                                 <span className="font-medium mono-numbers">{displayOHLCV.open.toFixed(2)}</span>
                             </div>
                             <div className="flex items-center gap-2">
-                                <span className="text-muted-foreground text-xs uppercase">Yüksek</span>
+                                <span className="text-muted-foreground text-xs uppercase">YÃ¼ksek</span>
                                 <span className="font-medium mono-numbers text-profit">{displayOHLCV.high.toFixed(2)}</span>
                             </div>
                             <div className="flex items-center gap-2">
-                                <span className="text-muted-foreground text-xs uppercase">Düşük</span>
+                                <span className="text-muted-foreground text-xs uppercase">DÃ¼ÅŸÃ¼k</span>
                                 <span className="font-medium mono-numbers text-loss">{displayOHLCV.low.toFixed(2)}</span>
                             </div>
                             <div className="flex items-center gap-2">
-                                <span className="text-muted-foreground text-xs uppercase">Kapanış</span>
+                                <span className="text-muted-foreground text-xs uppercase">KapanÄ±ÅŸ</span>
                                 <span className={cn("font-medium mono-numbers", displayOHLCV.close >= displayOHLCV.open ? "text-profit" : "text-loss")}>{displayOHLCV.close.toFixed(2)}</span>
                             </div>
                         </div>
@@ -1535,9 +1535,9 @@ export function AdvancedChartPage({
                 {/* Active Tool Info */}
                 {activeTool !== 'none' && (
                     <div className="flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary text-sm">
-                        {activeTool === 'ruler' && "Ölçüm modu aktif. Grafikte iki nokta seçin."}
-                        {activeTool === 'pencil' && "Çizim modu aktif. Grafikte serbest çizim yapabilirsiniz."}
-                        {activeTool === 'text' && "Metin modu aktif. Grafikte bir noktaya tıklayarak metin ekleyin."}
+                        {activeTool === 'ruler' && "Ã–lÃ§Ã¼m modu aktif. Grafikte iki nokta seÃ§in."}
+                        {activeTool === 'pencil' && "Ã‡izim modu aktif. Grafikte serbest Ã§izim yapabilirsiniz."}
+                        {activeTool === 'text' && "Metin modu aktif. Grafikte bir noktaya tÄ±klayarak metin ekleyin."}
                         <button onClick={() => setActiveTool('none')} className="ml-auto hover:text-white"><X className="h-4 w-4" /></button>
                     </div>
                 )}
@@ -1547,7 +1547,7 @@ export function AdvancedChartPage({
                     {visibleOverlayIndicators.length > 0 && (
                         <div className="absolute left-3 top-3 z-20 flex flex-col gap-1 pointer-events-none">
                             {visibleOverlayIndicators.map((ind) => (
-                                <div key={ind.id} className="pointer-events-auto flex items-center gap-2 rounded-md border border-border/50 bg-background/80 px-2 py-1 backdrop-blur-sm">
+                                <div key={ind.id} className="pointer-events-auto flex items-center gap-2 rounded-sm border border-border/50 bg-background/80 px-2 py-1 backdrop-blur-sm">
                                     <span className="text-xs font-medium">{ind.meta.shortName}</span>
                                     <button
                                         onClick={() => toggleIndicatorVisibility(ind.id)}
@@ -1568,7 +1568,7 @@ export function AdvancedChartPage({
                                     <button
                                         onClick={() => removeIndicator(ind.id)}
                                         className="text-muted-foreground hover:text-loss"
-                                        title="Kaldır"
+                                        title="KaldÄ±r"
                                     >
                                         <Trash2 className="h-3.5 w-3.5" />
                                     </button>
@@ -1581,7 +1581,7 @@ export function AdvancedChartPage({
                         <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm z-10 pointer-events-none">
                             <div className="flex flex-col items-center gap-3">
                                 <div className="w-10 h-10 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                                <span className="text-sm text-muted-foreground">Grafik yükleniyor...</span>
+                                <span className="text-sm text-muted-foreground">Grafik yÃ¼kleniyor...</span>
                             </div>
                         </div>
                     )}
@@ -1610,10 +1610,10 @@ export function AdvancedChartPage({
                 {/* Status Bar */}
                 <div className="flex items-center justify-between px-4 py-2 border-t border-border/30 text-xs text-muted-foreground">
                     <div className="flex items-center gap-4">
-                        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-profit animate-pulse" />Canlı</span>
+                        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-profit animate-pulse" />CanlÄ±</span>
                         <span>{candles.length} mum</span>
                         <span>Periyot: {currentTimeframeLabel}</span>
-                        {activeIndicators.length > 0 && <span className="flex items-center gap-1"><LineChart className="h-3 w-3 text-primary" />{activeIndicators.length} indikatör</span>}
+                        {activeIndicators.length > 0 && <span className="flex items-center gap-1"><LineChart className="h-3 w-3 text-primary" />{activeIndicators.length} indikatÃ¶r</span>}
                     </div>
                     <div className="flex items-center gap-4">
                         <span>Kaynak: {dataSource}</span>
@@ -1624,23 +1624,23 @@ export function AdvancedChartPage({
 
             {/* Right Panel - Watchlist (TradingView Style) */}
             {showRightPanel && (
-                <div className="w-[372px] border-l border-border/30 flex bg-[#131722] text-[#d1d4dc]">
+                <div className="w-[280px] border-l border-border/30 flex bg-surface text-foreground">
                     <div className="flex-1 flex flex-col min-w-0">
-                        <div className="relative flex items-center gap-1 px-2 py-2 border-b border-[#2a2e39]">
+                        <div className="relative flex items-center gap-1 px-2 py-2 border-b border-border">
                             <div className="relative">
                                 <button
                                     onClick={() => {
                                         setShowWatchlistSwitcher((prev) => !prev)
                                         setShowWatchlistMenu(false)
                                     }}
-                                    className="flex items-center gap-1 rounded-md border border-[#2a2e39] bg-[#1e222d] px-2.5 py-1.5 text-sm font-semibold hover:bg-[#252b38]"
+                                    className="flex items-center gap-1 rounded-sm border border-border bg-raised px-2.5 py-1.5 text-sm font-semibold hover:bg-overlay"
                                 >
                                     <span>{activeWatchlist?.name || "Izleme Listesi"}</span>
-                                    <ChevronDown className="h-3.5 w-3.5 text-[#8b949e]" />
+                                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                                 </button>
                                 {showWatchlistSwitcher && (
-                                    <div className="absolute left-0 top-full mt-2 w-64 rounded-md border border-[#2a2e39] bg-[#11151f] shadow-xl z-50">
-                                        <div className="border-b border-[#2a2e39] px-3 py-2 text-xs text-[#8b949e]">
+                                    <div className="absolute left-0 top-full mt-2 w-64 rounded-sm border border-border bg-overlay z-50">
+                                        <div className="border-b border-border px-3 py-2 text-xs text-muted-foreground">
                                             Son kullanilan listeler
                                         </div>
                                         <div className="max-h-72 overflow-y-auto py-1">
@@ -1652,8 +1652,8 @@ export function AdvancedChartPage({
                                                         setShowWatchlistSwitcher(false)
                                                     }}
                                                     className={cn(
-                                                        "w-full px-3 py-2 text-left text-sm hover:bg-[#1c2230]",
-                                                        watchlist.id === activeWatchlistId && "bg-[#263045] text-primary"
+                                                        "w-full px-3 py-2 text-left text-sm hover:bg-raised",
+                                                        watchlist.id === activeWatchlistId && "bg-raised text-primary"
                                                     )}
                                                 >
                                                     {watchlist.name}
@@ -1666,14 +1666,14 @@ export function AdvancedChartPage({
 
                             <button
                                 onClick={handleAddSymbolToWatchlist}
-                                className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#1f2635] text-[#8b949e]"
+                                className="flex h-7 w-7 items-center justify-center rounded-sm hover:bg-raised text-muted-foreground"
                                 title="Listeye sembol ekle"
                             >
                                 <Plus className="h-4 w-4" />
                             </button>
                             <button
                                 onClick={() => refetchTickers()}
-                                className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#1f2635] text-[#8b949e]"
+                                className="flex h-7 w-7 items-center justify-center rounded-sm hover:bg-raised text-muted-foreground"
                                 title="Veriyi yenile"
                             >
                                 <RefreshCw className="h-4 w-4" />
@@ -1683,21 +1683,21 @@ export function AdvancedChartPage({
                                     setShowWatchlistMenu((prev) => !prev)
                                     setShowWatchlistSwitcher(false)
                                 }}
-                                className="flex h-7 w-7 items-center justify-center rounded-md hover:bg-[#1f2635] text-[#8b949e]"
+                                className="flex h-7 w-7 items-center justify-center rounded-sm hover:bg-raised text-muted-foreground"
                                 title="Liste menusu"
                             >
                                 <MoreHorizontal className="h-4 w-4" />
                             </button>
 
                             {showWatchlistMenu && (
-                                <div className="absolute left-2 top-full mt-2 w-72 rounded-md border border-[#2a2e39] bg-[#11151f] shadow-2xl z-50 overflow-hidden">
-                                    <div className="flex items-center justify-between px-3 py-2 border-b border-[#2a2e39]">
+                                <div className="absolute left-2 top-full mt-2 w-72 rounded-sm border border-border bg-overlay z-50 overflow-hidden">
+                                    <div className="flex items-center justify-between px-3 py-2 border-b border-border">
                                         <span className="text-sm font-medium">Paylasim listesi</span>
                                         <button
                                             onClick={handleToggleWatchlistAlerts}
                                             className={cn(
                                                 "h-5 w-10 rounded-full p-0.5 transition-colors",
-                                                activeWatchlist?.alarmsEnabled ? "bg-primary" : "bg-[#2a2e39]"
+                                                activeWatchlist?.alarmsEnabled ? "bg-primary" : "bg-raised"
                                             )}
                                             title="Liste alarmlari"
                                         >
@@ -1710,18 +1710,18 @@ export function AdvancedChartPage({
                                         </button>
                                     </div>
                                     <div className="p-1">
-                                        <button onClick={handleShareWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-[#1f2635]"><Share2 className="h-4 w-4" /> Listeyi paylas</button>
-                                        <button onClick={handleCopyWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-[#1f2635]"><Copy className="h-4 w-4" /> Kopya olustur</button>
-                                        <button onClick={handleRenameWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-[#1f2635]"><Pencil className="h-4 w-4" /> Yeni ad ver</button>
-                                        <button onClick={handleAddSectionToWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-[#1f2635]"><BarChart3 className="h-4 w-4" /> Bolum ekle</button>
-                                        <button onClick={handleClearWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-[#1f2635]"><Trash2 className="h-4 w-4" /> Listeyi temizle</button>
-                                        <div className="my-1 border-t border-[#2a2e39]" />
-                                        <button onClick={handleCreateWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-[#1f2635]"><Plus className="h-4 w-4" /> Yeni liste olustur</button>
-                                        <button onClick={handleLoadWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-[#1f2635]"><FolderOpen className="h-4 w-4" /> Listeyi yukle</button>
-                                        <button onClick={handleAddSymbolToWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-[#1f2635]"><Upload className="h-4 w-4" /> Sembol ekle</button>
+                                        <button onClick={handleShareWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-raised"><Share2 className="h-4 w-4" /> Listeyi paylas</button>
+                                        <button onClick={handleCopyWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-raised"><Copy className="h-4 w-4" /> Kopya olustur</button>
+                                        <button onClick={handleRenameWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-raised"><Pencil className="h-4 w-4" /> Yeni ad ver</button>
+                                        <button onClick={handleAddSectionToWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-raised"><BarChart3 className="h-4 w-4" /> Bolum ekle</button>
+                                        <button onClick={handleClearWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-raised"><Trash2 className="h-4 w-4" /> Listeyi temizle</button>
+                                        <div className="my-1 border-t border-border" />
+                                        <button onClick={handleCreateWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-raised"><Plus className="h-4 w-4" /> Yeni liste olustur</button>
+                                        <button onClick={handleLoadWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-raised"><FolderOpen className="h-4 w-4" /> Listeyi yukle</button>
+                                        <button onClick={handleAddSymbolToWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-raised"><Upload className="h-4 w-4" /> Sembol ekle</button>
                                     </div>
-                                    <div className="border-t border-[#2a2e39] px-3 py-2">
-                                        <div className="mb-1 text-[11px] text-[#8b949e] uppercase">Son kullanilanlar</div>
+                                    <div className="border-t border-border px-3 py-2">
+                                        <div className="mb-1 text-[11px] text-muted-foreground uppercase">Son kullanilanlar</div>
                                         <div className="space-y-1">
                                             {watchlists.slice(0, 5).map((watchlist) => (
                                                 <button
@@ -1730,7 +1730,7 @@ export function AdvancedChartPage({
                                                         setActiveWatchlistId(watchlist.id)
                                                         setShowWatchlistMenu(false)
                                                     }}
-                                                    className="w-full rounded px-2 py-1.5 text-left text-sm hover:bg-[#1f2635]"
+                                                    className="w-full rounded px-2 py-1.5 text-left text-sm hover:bg-raised"
                                                 >
                                                     {watchlist.name}
                                                 </button>
@@ -1741,7 +1741,7 @@ export function AdvancedChartPage({
                             )}
                         </div>
 
-                        <div className="grid grid-cols-[1.4fr_1fr_0.8fr] items-center gap-2 border-b border-[#2a2e39] px-3 py-2 text-[11px] uppercase text-[#8b949e]">
+                        <div className="grid grid-cols-[1.4fr_1fr_0.8fr] items-center gap-2 border-b border-border px-3 py-2 text-[11px] uppercase text-muted-foreground">
                             <span>Sembol</span>
                             <span className="text-right">Son</span>
                             <span className="text-right">Deg%</span>
@@ -1749,14 +1749,14 @@ export function AdvancedChartPage({
 
                         <div className="flex-1 overflow-y-auto">
                             {(activeWatchlist?.rows || []).length === 0 && (
-                                <div className="px-3 py-4 text-sm text-[#8b949e]">
+                                <div className="px-3 py-4 text-sm text-muted-foreground">
                                     Liste bos. <button className="text-primary hover:underline" onClick={handleAddSymbolToWatchlist}>Sembol ekle</button>
                                 </div>
                             )}
                             {(activeWatchlist?.rows || []).map((row, index) => {
                                 if (row.kind === "section") {
                                     return (
-                                        <div key={row.id} className="px-3 py-2 border-t border-[#2a2e39] text-[11px] font-semibold uppercase tracking-wide text-[#8b949e]">
+                                        <div key={row.id} className="px-3 py-2 border-t border-border text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                                             {row.title}
                                         </div>
                                     )
@@ -1789,13 +1789,13 @@ export function AdvancedChartPage({
                                             {displaySymbol}
                                         </button>
                                         <span className="text-right text-sm font-mono tabular-nums">{priceText}</span>
-                                        <span className={cn("text-right text-sm font-mono tabular-nums", change >= 0 ? "text-[#00c853]" : "text-[#ff3d00]")}>
+                                        <span className={cn("text-right text-sm font-mono tabular-nums", change >= 0 ? "text-profit" : "text-loss")}>
                                             {change >= 0 ? "+" : ""}
                                             {change.toFixed(2)}%
                                         </span>
                                         <button
                                             onClick={() => handleRemoveRowFromWatchlist(index)}
-                                            className="opacity-0 group-hover:opacity-100 text-[#8b949e] hover:text-[#ff3d00] transition-opacity"
+                                            className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-loss transition-opacity"
                                             title="Satiri kaldir"
                                         >
                                             <X className="h-3.5 w-3.5" />
@@ -1806,45 +1806,45 @@ export function AdvancedChartPage({
                         </div>
 
                         {watchlistNotice && (
-                            <div className="border-t border-[#2a2e39] px-3 py-2 text-xs text-primary">
+                            <div className="border-t border-border px-3 py-2 text-xs text-primary">
                                 {watchlistNotice}
                             </div>
                         )}
 
                         {activeUtilityPanel && (
-                            <div className="border-t border-[#2a2e39] px-3 py-3 text-xs">
+                            <div className="border-t border-border px-3 py-3 text-xs">
                                 {activeUtilityPanel === "alerts" && (
                                     <div className="space-y-2">
                                         <div className="flex items-center justify-between">
-                                            <span className="text-[#8b949e]">Liste alarmlari</span>
-                                            <button onClick={handleToggleWatchlistAlerts} className={cn("rounded px-2 py-1 text-[11px]", activeWatchlist?.alarmsEnabled ? "bg-primary text-primary-foreground" : "bg-[#2a2e39] text-[#d1d4dc]")}>
+                                            <span className="text-muted-foreground">Liste alarmlari</span>
+                                            <button onClick={handleToggleWatchlistAlerts} className={cn("rounded px-2 py-1 text-[11px]", activeWatchlist?.alarmsEnabled ? "bg-primary text-primary-foreground" : "bg-raised text-foreground")}>
                                                 {activeWatchlist?.alarmsEnabled ? "Acik" : "Kapali"}
                                             </button>
                                         </div>
-                                        <div className="text-[#8b949e]">Aktif sembol: {symbol} - {marketType}</div>
-                                        <div className="text-[#8b949e]">Listedeki semboller: {activeWatchlistSymbolRows.length}</div>
+                                        <div className="text-muted-foreground">Aktif sembol: {symbol} - {marketType}</div>
+                                        <div className="text-muted-foreground">Listedeki semboller: {activeWatchlistSymbolRows.length}</div>
                                     </div>
                                 )}
                                 {activeUtilityPanel === "notes" && (
                                     <div className="space-y-2">
-                                        <div className="text-[#8b949e]">Liste notlari</div>
+                                        <div className="text-muted-foreground">Liste notlari</div>
                                         <textarea
                                             value={activeWatchlist?.notes || ""}
                                             onChange={(e) => handleWatchlistNotesChange(e.target.value)}
                                             placeholder="Bu liste icin not girin..."
-                                            className="h-20 w-full resize-none rounded border border-[#2a2e39] bg-[#0f131a] px-2 py-1.5 text-xs outline-none focus:border-primary/60"
+                                            className="h-20 w-full resize-none rounded border border-border bg-base px-2 py-1.5 text-xs outline-none focus:border-primary/60"
                                         />
                                     </div>
                                 )}
                                 {activeUtilityPanel === "calendar" && (
-                                    <div className="space-y-1 text-[#8b949e]">
+                                    <div className="space-y-1 text-muted-foreground">
                                         <div>Sunucu saati: {new Date().toLocaleString("tr-TR")}</div>
                                         <div>Grafik periyodu: {currentTimeframeLabel}</div>
                                         <div>Veri kaynagi: {dataSource}</div>
                                     </div>
                                 )}
                                 {activeUtilityPanel === "news" && (
-                                    <div className="space-y-1 text-[#8b949e]">
+                                    <div className="space-y-1 text-muted-foreground">
                                         <div>Liste ozeti:</div>
                                         {activeWatchlistSymbolRows.slice(0, 4).map((row) => (
                                             <div key={`news-${row.marketType}-${row.rawSymbol}`} className="truncate">
@@ -1855,14 +1855,14 @@ export function AdvancedChartPage({
                                     </div>
                                 )}
                                 {activeUtilityPanel === "layout" && (
-                                    <div className="space-y-1 text-[#8b949e]">
+                                    <div className="space-y-1 text-muted-foreground">
                                         <div>Panel: {showRightPanel ? "Acik" : "Kapali"}</div>
                                         <div>Indikator sayisi: {activeIndicators.length}</div>
                                         <div>Overlay: {visibleOverlayIndicators.length}</div>
                                     </div>
                                 )}
                                 {activeUtilityPanel === "help" && (
-                                    <div className="space-y-1 text-[#8b949e]">
+                                    <div className="space-y-1 text-muted-foreground">
                                         <div>- `+` ile listeye sembol ekleyin.</div>
                                         <div>- `...` menusuyle listeyi kopyalayin/yeniden adlandirin.</div>
                                         <div>- Satirdaki `x` ile sembolu kaldirin.</div>
@@ -1873,7 +1873,7 @@ export function AdvancedChartPage({
                         )}
                     </div>
 
-                    <div className="w-12 border-l border-[#2a2e39] flex flex-col items-center gap-1 py-2">
+                    <div className="w-12 border-l border-border flex flex-col items-center gap-1 py-2">
                         {WATCHLIST_UTILITY_ITEMS.map((panelItem) => {
                             const Icon = panelItem.icon
                             return (
@@ -1886,10 +1886,10 @@ export function AdvancedChartPage({
                                     }
                                     title={panelItem.label}
                                     className={cn(
-                                        "flex h-9 w-9 items-center justify-center rounded-lg transition-colors",
+                                        "flex h-9 w-9 items-center justify-center rounded-sm transition-colors",
                                         activeUtilityPanel === panelItem.id
-                                            ? "bg-[#263045] text-primary"
-                                            : "text-[#8b949e] hover:bg-[#1f2635] hover:text-[#d1d4dc]"
+                                            ? "bg-raised text-primary"
+                                            : "text-muted-foreground hover:bg-raised hover:text-foreground"
                                     )}
                                 >
                                     <Icon className="h-4 w-4" />
@@ -1902,15 +1902,15 @@ export function AdvancedChartPage({
 
             {editingIndicator && (
                 <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                    <div className="w-full max-w-2xl rounded-xl border border-border/50 bg-background shadow-2xl">
+                    <div className="w-full max-w-2xl rounded-sm border border-border/50 bg-background">
                         <div className="flex items-center justify-between border-b border-border/40 px-4 py-3">
                             <div>
-                                <div className="text-sm text-muted-foreground">İndikatör Ayarları</div>
+                                <div className="text-sm text-muted-foreground">Ä°ndikatÃ¶r AyarlarÄ±</div>
                                 <div className="text-lg font-semibold">{editingIndicator.meta.name}</div>
                             </div>
                             <button
                                 onClick={closeIndicatorSettings}
-                                className="rounded-md p-2 text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+                                className="rounded-sm p-2 text-muted-foreground hover:bg-muted/40 hover:text-foreground"
                                 title="Kapat"
                             >
                                 <X className="h-4 w-4" />
@@ -1929,7 +1929,7 @@ export function AdvancedChartPage({
                                     updateDraftIndicatorParam(schema.key, clamped)
                                 }
                                 return (
-                                    <div key={schema.key} className="rounded-lg border border-border/30 bg-muted/10 p-3">
+                                    <div key={schema.key} className="rounded-sm border border-border/30 bg-muted/10 p-3">
                                         <div className="mb-2 flex items-center justify-between">
                                             <label className="text-sm font-medium">{schema.label}</label>
                                             <span className="text-xs text-muted-foreground">{currentValue}</span>
@@ -1954,7 +1954,7 @@ export function AdvancedChartPage({
                                                 if (Number.isNaN(parsed)) return
                                                 updateSchemaValue(parsed)
                                             }}
-                                            className="w-full rounded-md border border-border/40 bg-background px-2 py-1 text-sm outline-none focus:border-primary/50"
+                                            className="w-full rounded-sm border border-border/40 bg-background px-2 py-1 text-sm outline-none focus:border-primary/50"
                                         />
                                     </div>
                                 )
@@ -1964,13 +1964,13 @@ export function AdvancedChartPage({
                         <div className="flex items-center justify-between border-t border-border/40 px-4 py-3">
                             <button
                                 onClick={resetDraftIndicatorParams}
-                                className="rounded-md border border-border/40 px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+                                className="rounded-sm border border-border/40 px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted/40 hover:text-foreground"
                             >
-                                Varsayılanlara Dön
+                                VarsayÄ±lanlara DÃ¶n
                             </button>
                             <button
                                 onClick={applyIndicatorSettings}
-                                className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90"
+                                className="rounded-sm bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90"
                             >
                                 Uygula
                             </button>
@@ -2016,21 +2016,21 @@ function IndicatorPane({ indicator, candles, onRemove, mainChartRef, onChartRead
             }
 
             const chart = createChart(containerRef.current, {
-                layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: '#8b949e', fontSize: 10 },
-                grid: { vertLines: { color: 'rgba(48, 54, 61, 0.3)' }, horzLines: { color: 'rgba(48, 54, 61, 0.3)' } },
+                layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: chartColors.text, fontSize: 10 },
+                grid: { vertLines: { color: chartColors.grid }, horzLines: { color: chartColors.grid } },
                 width: containerRef.current.clientWidth,
                 height: 100,
-                rightPriceScale: { borderColor: 'rgba(48, 54, 61, 0.3)' },
+                rightPriceScale: { borderColor: chartColors.grid },
                 timeScale: {
                     visible: true,
-                    borderColor: 'rgba(48, 54, 61, 0.3)',
+                    borderColor: chartColors.grid,
                     timeVisible: true,
                     secondsVisible: false,
                 },
                 crosshair: {
                     mode: CrosshairMode.Normal,
-                    vertLine: { color: 'rgba(0, 242, 234, 0.5)', width: 1, style: 0 },
-                    horzLine: { color: 'rgba(0, 242, 234, 0.5)', width: 1, style: 0 },
+                    vertLine: { color: chartColors.crosshair, width: 1, style: 0 },
+                    horzLine: { color: chartColors.crosshair, width: 1, style: 0 },
                 },
                 handleScroll: { mouseWheel: true, pressedMouseMove: true },
                 handleScale: { mouseWheel: true },
