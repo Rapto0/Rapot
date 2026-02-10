@@ -23,6 +23,7 @@ env/
 # Logs
 *.log
 logs/
+backups/
 
 # Backtest outputs
 backtest_*.xlsx
