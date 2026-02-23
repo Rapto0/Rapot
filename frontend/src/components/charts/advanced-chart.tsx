@@ -2188,7 +2188,7 @@ export function AdvancedChartPage({
                         }}
                         mainChartRef={chartInstance}
                         hoveredUnixTime={hoveredUnixTime}
-                        onChartReady={(chart) => registerIndicatorChart(ind.id, chart)}
+                        onChartReady={registerIndicatorChart}
                     />
                 ))}
 
@@ -2575,7 +2575,7 @@ interface IndicatorPaneProps {
     onRemove: () => void
     mainChartRef: React.MutableRefObject<any>
     hoveredUnixTime: number | null
-    onChartReady?: (chart: any) => void
+    onChartReady?: (indicatorId: string, chart: any) => void
 }
 
 function IndicatorPane({ indicator, candles, onRemove, mainChartRef, hoveredUnixTime, onChartReady }: IndicatorPaneProps) {
@@ -2718,7 +2718,7 @@ function IndicatorPane({ indicator, candles, onRemove, mainChartRef, hoveredUnix
 
             chartRef.current = chart
             primarySeriesRef.current = series
-            onChartReady?.(chart)
+            onChartReady?.(indicator.id, chart)
 
             // Sync time scale with main chart (with safety checks)
             const syncWithMain = () => {
@@ -2743,19 +2743,6 @@ function IndicatorPane({ indicator, candles, onRemove, mainChartRef, hoveredUnix
                 try {
                     mainTimeScale = mainChartRef.current.timeScale()
                     mainTimeScale.subscribeVisibleLogicalRangeChange(syncWithMain)
-
-                    // Also sync this chart's changes back to main
-                    const syncMainFromLocal = (range: any) => {
-                        if (isDisposedRef.current || !mainChartRef.current || isSyncingRef.current || !range) return
-                        try {
-                            isSyncingRef.current = true
-                            mainChartRef.current.timeScale().setVisibleLogicalRange(range)
-                            isSyncingRef.current = false
-                        } catch (e) {
-                            // Main chart disposed
-                        }
-                    }
-                    chart.timeScale().subscribeVisibleLogicalRangeChange(syncMainFromLocal)
 
                     // Initial sync
                     syncWithMain()
