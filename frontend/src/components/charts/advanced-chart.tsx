@@ -557,7 +557,7 @@ export function AdvancedChartPage({
     const chartInstance = useRef<any>(null)
     const seriesInstance = useRef<any>(null)
     const markersInstance = useRef<any>(null) // v5 markers primitive
-    const lastCrosshairTimeRef = useRef<string | null>(null)
+    const lastCrosshairUnixRef = useRef<number | null>(null)
     const fullscreenContainerRef = useRef<HTMLDivElement>(null)
     const isInitialLoadRef = useRef<boolean>(true)
     const lastSymbolRef = useRef<string>(initialSymbol)
@@ -1044,26 +1044,25 @@ export function AdvancedChartPage({
 
             // Crosshair move handler
             chart.subscribeCrosshairMove((param) => {
-                if (!param.time || !param.seriesData.size) {
-                    if (lastCrosshairTimeRef.current !== null) {
-                        lastCrosshairTimeRef.current = null
+                const hoverUnix = param.time ? normalizeHorzTimeToUnix(param.time) : null
+
+                if (hoverUnix === null || !param.seriesData.size) {
+                    if (lastCrosshairUnixRef.current !== null) {
+                        lastCrosshairUnixRef.current = null
                         setCrosshairData(null)
                     }
-                    setHoveredUnixTime(null)
+                    setHoveredUnixTime((prev) => (prev === null ? prev : null))
                     return
                 }
 
-                const timeStr = param.time.toString()
-                if (timeStr === lastCrosshairTimeRef.current) {
+                if (hoverUnix === lastCrosshairUnixRef.current) {
                     return
                 }
-
-                const hoverUnix = normalizeHorzTimeToUnix(param.time)
-                setHoveredUnixTime(hoverUnix)
+                lastCrosshairUnixRef.current = hoverUnix
+                setHoveredUnixTime((prev) => (prev === hoverUnix ? prev : hoverUnix))
 
                 const candleData = param.seriesData.get(candlestickSeries)
                 if (candleData && 'open' in candleData) {
-                    lastCrosshairTimeRef.current = timeStr
                     setCrosshairData({
                         time: formatCrosshairTime(param.time),
                         open: candleData.open,
@@ -1072,6 +1071,8 @@ export function AdvancedChartPage({
                         close: candleData.close,
                         volume: 0,
                     })
+                } else {
+                    setCrosshairData(null)
                 }
             })
 
@@ -2483,6 +2484,16 @@ function IndicatorPane({ indicator, candles, onRemove, mainChartRef, hoveredUnix
     const resizeStartYRef = useRef(0)
     const resizeStartHeightRef = useRef(120)
     const paneHeightRef = useRef(120)
+    const lastHoverSyncUnixRef = useRef<number | null>(null)
+    const lastHoverValueRef = useRef<number | null>(null)
+    const hoverSyncRafRef = useRef<number | null>(null)
+
+    const candleSignature = useMemo(() => {
+        if (candles.length === 0) return "empty"
+        const first = candles[0]?.time || ""
+        const last = candles[candles.length - 1]?.time || ""
+        return `${candles.length}:${first}:${last}`
+    }, [candles])
 
     useEffect(() => {
         paneHeightRef.current = paneHeight
@@ -2684,7 +2695,7 @@ function IndicatorPane({ indicator, candles, onRemove, mainChartRef, hoveredUnix
                 primarySeriesPointsRef.current = []
             }
         })
-    }, [indicator, candles, mainChartRef, onChartReady])
+    }, [indicator, candleSignature, mainChartRef, onChartReady, candles])
 
     useEffect(() => {
         if (!containerRef.current || !chartRef.current || isDisposedRef.current) return
@@ -2701,26 +2712,53 @@ function IndicatorPane({ indicator, candles, onRemove, mainChartRef, hoveredUnix
     useEffect(() => {
         if (!chartRef.current || !primarySeriesRef.current) return
 
+        if (hoverSyncRafRef.current !== null) {
+            window.cancelAnimationFrame(hoverSyncRafRef.current)
+            hoverSyncRafRef.current = null
+        }
+
         if (hoveredUnixTime === null) {
-            setHoveredValue(null)
+            lastHoverSyncUnixRef.current = null
+            lastHoverValueRef.current = null
+            setHoveredValue((prev) => (prev === null ? prev : null))
             if (typeof chartRef.current.clearCrosshairPosition === "function") {
                 try { chartRef.current.clearCrosshairPosition() } catch (e) { /* ignore */ }
             }
             return
         }
 
-        const nearest = findNearestSeriesPointByTime(primarySeriesPointsRef.current, hoveredUnixTime)
-        if (!nearest) return
+        if (lastHoverSyncUnixRef.current === hoveredUnixTime) {
+            return
+        }
+        lastHoverSyncUnixRef.current = hoveredUnixTime
 
-        setHoveredValue(nearest.value)
-        if (typeof chartRef.current.setCrosshairPosition === "function") {
-            try {
-                chartRef.current.setCrosshairPosition(nearest.value, nearest.rawTime as any, primarySeriesRef.current)
-            } catch (e) {
-                // Ignore crosshair sync errors
+        hoverSyncRafRef.current = window.requestAnimationFrame(() => {
+            const nearest = findNearestSeriesPointByTime(primarySeriesPointsRef.current, hoveredUnixTime)
+            if (!nearest) return
+
+            if (lastHoverValueRef.current !== nearest.value) {
+                lastHoverValueRef.current = nearest.value
+                setHoveredValue(nearest.value)
+            }
+
+            if (typeof chartRef.current.setCrosshairPosition === "function") {
+                try {
+                    chartRef.current.setCrosshairPosition(nearest.value, nearest.rawTime as any, primarySeriesRef.current)
+                } catch (e) {
+                    // Ignore crosshair sync errors
+                }
+            }
+        })
+    }, [hoveredUnixTime, indicator.id, candleSignature])
+
+    useEffect(() => {
+        return () => {
+            if (hoverSyncRafRef.current !== null) {
+                window.cancelAnimationFrame(hoverSyncRafRef.current)
+                hoverSyncRafRef.current = null
             }
         }
-    }, [hoveredUnixTime, indicator.id, candles])
+    }, [])
 
     return (
         <div className="border-t border-border/30">
