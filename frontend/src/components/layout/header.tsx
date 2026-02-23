@@ -5,31 +5,36 @@ import { cn } from "@/lib/utils"
 import { useHealthCheck } from "@/lib/hooks/use-health"
 
 export function Header() {
-  const [now, setNow] = useState<Date>(new Date())
+  const [now, setNow] = useState<Date | null>(null)
   const { data: health, isError } = useHealthCheck()
 
   useEffect(() => {
+    setNow(new Date())
     const timer = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(timer)
   }, [])
 
   const dateLabel = useMemo(
     () =>
-      now.toLocaleDateString("tr-TR", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      }),
+      now
+        ? now.toLocaleDateString("tr-TR", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          })
+        : "--/--/----",
     [now]
   )
 
   const timeLabel = useMemo(
     () =>
-      now.toLocaleTimeString("tr-TR", {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      }),
+      now
+        ? now.toLocaleTimeString("tr-TR", {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          })
+        : "--:--:--",
     [now]
   )
 

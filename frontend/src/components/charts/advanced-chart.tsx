@@ -401,6 +401,19 @@ const findNearestSeriesPointByTime = (
         : rightPoint
 }
 
+const buildMarkerHash = (markers: Array<{ time: string | number, text?: string, position?: string, color?: string }>): string => {
+    if (markers.length === 0) return "0"
+    let hash = 17
+    for (let i = 0; i < markers.length; i++) {
+        const marker = markers[i]
+        const encoded = `${marker.time}|${marker.text || ""}|${marker.position || ""}|${marker.color || ""}`
+        for (let j = 0; j < encoded.length; j++) {
+            hash = (hash * 31 + encoded.charCodeAt(j)) >>> 0
+        }
+    }
+    return `${markers.length}:${hash}`
+}
+
 // Helper to parse backend time string into chart timestamp.
 // IMPORTANT: Intraday timestamps from API are exchange wall-time (TR) without timezone.
 // Lightweight Charts expects UTC timestamps; we therefore encode wall-time as UTC
@@ -519,6 +532,7 @@ export function AdvancedChartPage({
     const [activeUtilityPanel, setActiveUtilityPanel] = useState<RightUtilityPanelId | null>("alerts")
     const [watchlistsHydrated, setWatchlistsHydrated] = useState(false)
     const [watchlistNotice, setWatchlistNotice] = useState<string | null>(null)
+    const [serverClockLabel, setServerClockLabel] = useState("--")
 
     // Indicator state
     const [showIndicatorSearch, setShowIndicatorSearch] = useState(false)
@@ -559,6 +573,8 @@ export function AdvancedChartPage({
     const markersInstance = useRef<any>(null) // v5 markers primitive
     const lastCrosshairUnixRef = useRef<number | null>(null)
     const activeToolRef = useRef<'none' | 'ruler' | 'pencil' | 'text'>('none')
+    const lastMarkersHashRef = useRef<string>("")
+    const lastCandleHashRef = useRef<string>("")
     const fullscreenContainerRef = useRef<HTMLDivElement>(null)
     const isInitialLoadRef = useRef<boolean>(true)
     const lastSymbolRef = useRef<string>(initialSymbol)
@@ -585,6 +601,13 @@ export function AdvancedChartPage({
     useEffect(() => {
         rulerDraftStartRef.current = rulerDraftStart
     }, [rulerDraftStart])
+
+    useEffect(() => {
+        const updateClock = () => setServerClockLabel(new Date().toLocaleString("tr-TR"))
+        updateClock()
+        const timer = window.setInterval(updateClock, 1000)
+        return () => window.clearInterval(timer)
+    }, [])
 
     const anchorFromClientPoint = useCallback((clientX: number, clientY: number): ChartAnchorPoint | null => {
         if (!chartContainerRef.current || !chartInstance.current || !seriesInstance.current) return null
@@ -964,6 +987,34 @@ export function AdvancedChartPage({
     }, [candlesResponse?.candles])
     const dataSource = candlesResponse?.source || "loading"
 
+    const candlesSignature = useMemo(() => {
+        if (candles.length === 0) return "empty"
+        const first = candles[0]
+        const last = candles[candles.length - 1]
+        return `${candles.length}:${first.time}:${first.open}:${first.high}:${first.low}:${first.close}:${last.time}:${last.open}:${last.high}:${last.low}:${last.close}`
+    }, [candles])
+
+    const signalsSignature = useMemo(() => {
+        if (!showSignals || signals.length === 0) return "signals-off"
+        const first = signals[0]
+        const last = signals[signals.length - 1]
+        return `${signals.length}:${first.time}:${first.type}:${last.time}:${last.type}`
+    }, [signals, showSignals])
+
+    const markerIndicatorSignature = useMemo(() => {
+        const tracked = activeIndicators
+            .filter((indicator) => indicator.id === "combo" || indicator.id === "hunter")
+            .map((indicator) => {
+                const params = Object.entries(indicator.params)
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([key, value]) => `${key}=${value}`)
+                    .join(",")
+                return `${indicator.id}:${indicator.visible ? "1" : "0"}:${params}`
+            })
+            .sort()
+        return tracked.join("|")
+    }, [activeIndicators])
+
     // Calculate price info
     const currentPrice = candles.length > 0 ? candles[candles.length - 1].close : 0
     const prevPrice = candles.length > 1 ? candles[candles.length - 2].close : currentPrice
@@ -1179,96 +1230,103 @@ export function AdvancedChartPage({
 
             // Deduplicate and sort data
             const candleData = deduplicateByTime(rawCandleData)
+            const firstCandle = candleData[0]
+            const lastCandle = candleData[candleData.length - 1]
+            const nextCandleHash = firstCandle && lastCandle
+                ? `${candleData.length}:${firstCandle.time}:${firstCandle.open}:${firstCandle.high}:${firstCandle.low}:${firstCandle.close}:${lastCandle.time}:${lastCandle.open}:${lastCandle.high}:${lastCandle.low}:${lastCandle.close}`
+                : "0"
 
             try {
-                seriesInstance.current.setData(candleData)
+                if (nextCandleHash !== lastCandleHashRef.current) {
+                    seriesInstance.current.setData(candleData)
+                    lastCandleHashRef.current = nextCandleHash
+                }
 
                 // Add signal markers (including Combo/Hunter overlays)
-                const markers: any[] = []
+                const shouldSkipHeavyMarkerOps = activeToolRef.current !== "none"
+                if (!shouldSkipHeavyMarkerOps) {
+                    const markers: any[] = []
 
-                // Original signals
-                if (showSignals && signals.length > 0) {
-                    signals.forEach((signal) => {
-                        markers.push({
-                            time: formatTime(signal.time),
-                            position: signal.type === 'AL' ? 'belowBar' : 'aboveBar',
-                            shape: signal.type === 'AL' ? 'arrowUp' : 'arrowDown',
-                            color: signal.type === 'AL' ? chartColors.bullish : chartColors.bearish,
-                            text: signal.type,
-                            size: 2,
-                        })
-                    })
-                }
-
-                // Combo overlay markers
-                const comboIndicator = activeIndicators.find(i => i.id === 'combo' && i.visible)
-                if (comboIndicator) {
-                    const comboSignals = calculateCombo(candles, comboIndicator.params)
-                    const comboWithSignals = comboSignals.filter(s => s.signal !== null)
-                    console.log(`COMBO: ${comboWithSignals.length} signals out of ${comboSignals.length} candles`)
-                    comboSignals.forEach((sig) => {
-                        if (sig.signal) {
+                    // Original signals
+                    if (showSignals && signals.length > 0) {
+                        signals.forEach((signal) => {
                             markers.push({
-                                time: formatTime(sig.time),
-                                position: sig.signal === 'AL' ? 'belowBar' : 'aboveBar',
-                                shape: sig.signal === 'AL' ? 'arrowUp' : 'arrowDown',
-                                color: sig.signal === 'AL' ? '#00e676' : '#ff5252',
-                                text: sig.signal === 'AL' ? 'DİP' : 'SAT',
+                                time: formatTime(signal.time),
+                                position: signal.type === 'AL' ? 'belowBar' : 'aboveBar',
+                                shape: signal.type === 'AL' ? 'arrowUp' : 'arrowDown',
+                                color: signal.type === 'AL' ? chartColors.bullish : chartColors.bearish,
+                                text: signal.type,
                                 size: 2,
                             })
-                        }
-                    })
-                }
-
-                // Hunter overlay markers
-                const hunterIndicator = activeIndicators.find(i => i.id === 'hunter' && i.visible)
-                if (hunterIndicator) {
-                    const hunterSignals = calculateHunter(candles, hunterIndicator.params)
-                    const hunterWithSignals = hunterSignals.filter(s => s.signal !== null)
-                    console.log(`HUNTER: ${hunterWithSignals.length} signals out of ${hunterSignals.length} candles`)
-                    hunterSignals.forEach((sig) => {
-                        if (sig.signal) {
-                            markers.push({
-                                time: formatTime(sig.time),
-                                position: sig.signal === 'AL' ? 'belowBar' : 'aboveBar',
-                                shape: sig.signal === 'AL' ? 'arrowUp' : 'arrowDown',
-                                color: sig.signal === 'AL' ? '#76ff03' : '#ff1744',
-                                text: sig.signal === 'AL' ? 'DİP' : 'TEPE',
-                                size: 2,
-                            })
-                        }
-                    })
-                }
-
-                console.log(`Total markers to add: ${markers.length}`)
-
-                // Set markers using v5 API (createSeriesMarkers)
-                if (seriesInstance.current) {
-                    try {
-                        // Sort markers by time (required for v5)
-                        const sortedMarkers = [...markers].sort((a, b) => {
-                            const timeA = typeof a.time === 'number' ? a.time : parseChartTimeToUnix(a.time)
-                            const timeB = typeof b.time === 'number' ? b.time : parseChartTimeToUnix(b.time)
-                            return timeA - timeB
                         })
+                    }
 
-                        // Remove existing markers primitive if any
-                        if (markersInstance.current) {
-                            try {
-                                markersInstance.current.detach()
-                            } catch (e) {
-                                // Ignore detach errors
+                    // Combo overlay markers
+                    const comboIndicator = activeIndicators.find(i => i.id === 'combo' && i.visible)
+                    if (comboIndicator) {
+                        const comboSignals = calculateCombo(candles, comboIndicator.params)
+                        comboSignals.forEach((sig) => {
+                            if (sig.signal) {
+                                markers.push({
+                                    time: formatTime(sig.time),
+                                    position: sig.signal === 'AL' ? 'belowBar' : 'aboveBar',
+                                    shape: sig.signal === 'AL' ? 'arrowUp' : 'arrowDown',
+                                    color: sig.signal === 'AL' ? '#00e676' : '#ff5252',
+                                    text: sig.signal === 'AL' ? 'DİP' : 'SAT',
+                                    size: 2,
+                                })
                             }
-                            markersInstance.current = null
-                        }
+                        })
+                    }
 
-                        // Create new markers primitive (v5 API)
-                        if (sortedMarkers.length > 0) {
-                            markersInstance.current = createSeriesMarkers(seriesInstance.current, sortedMarkers)
-                            console.log(`Markers set via createSeriesMarkers(): ${sortedMarkers.length} markers`)
+                    // Hunter overlay markers
+                    const hunterIndicator = activeIndicators.find(i => i.id === 'hunter' && i.visible)
+                    if (hunterIndicator) {
+                        const hunterSignals = calculateHunter(candles, hunterIndicator.params)
+                        hunterSignals.forEach((sig) => {
+                            if (sig.signal) {
+                                markers.push({
+                                    time: formatTime(sig.time),
+                                    position: sig.signal === 'AL' ? 'belowBar' : 'aboveBar',
+                                    shape: sig.signal === 'AL' ? 'arrowUp' : 'arrowDown',
+                                    color: sig.signal === 'AL' ? '#76ff03' : '#ff1744',
+                                    text: sig.signal === 'AL' ? 'DİP' : 'TEPE',
+                                    size: 2,
+                                })
+                            }
+                        })
+                    }
+
+                    if (seriesInstance.current) {
+                        try {
+                            // Sort markers by time (required for v5)
+                            const sortedMarkers = [...markers].sort((a, b) => {
+                                const timeA = typeof a.time === 'number' ? a.time : parseChartTimeToUnix(a.time)
+                                const timeB = typeof b.time === 'number' ? b.time : parseChartTimeToUnix(b.time)
+                                return timeA - timeB
+                            })
+
+                            const nextMarkersHash = buildMarkerHash(sortedMarkers)
+                            if (nextMarkersHash !== lastMarkersHashRef.current) {
+                                // Remove existing markers primitive if any
+                                if (markersInstance.current) {
+                                    try {
+                                        markersInstance.current.detach()
+                                    } catch (e) {
+                                        // Ignore detach errors
+                                    }
+                                    markersInstance.current = null
+                                }
+
+                                // Create new markers primitive (v5 API)
+                                if (sortedMarkers.length > 0) {
+                                    markersInstance.current = createSeriesMarkers(seriesInstance.current, sortedMarkers)
+                                }
+                                lastMarkersHashRef.current = nextMarkersHash
+                            }
+                        } catch (e) {
+                            console.error('Error setting markers:', e)
                         }
-                    } catch (e) {
-                        console.error('Error setting markers:', e)
                     }
                 }
 
@@ -1288,7 +1346,7 @@ export function AdvancedChartPage({
                 console.error("Chart update error:", e)
             }
         })
-    }, [candles, signals, showSignals, activeIndicators, chartReady, symbol, timeframe])
+    }, [candles, signals, showSignals, activeIndicators, chartReady, symbol, timeframe, candlesSignature, signalsSignature, markerIndicatorSignature, activeTool])
 
     // Add indicator
     const addIndicator = useCallback((indicatorId: string) => {
@@ -2365,7 +2423,7 @@ export function AdvancedChartPage({
                                 )}
                                 {activeUtilityPanel === "calendar" && (
                                     <div className="space-y-1 text-muted-foreground">
-                                        <div>Sunucu saati: {new Date().toLocaleString("tr-TR")}</div>
+                                        <div>Sunucu saati: {serverClockLabel}</div>
                                         <div>Grafik periyodu: {currentTimeframeLabel}</div>
                                         <div>Veri kaynagi: {dataSource}</div>
                                     </div>
