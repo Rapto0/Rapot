@@ -558,12 +558,16 @@ export function AdvancedChartPage({
     const seriesInstance = useRef<any>(null)
     const markersInstance = useRef<any>(null) // v5 markers primitive
     const lastCrosshairUnixRef = useRef<number | null>(null)
+    const activeToolRef = useRef<'none' | 'ruler' | 'pencil' | 'text'>('none')
     const fullscreenContainerRef = useRef<HTMLDivElement>(null)
     const isInitialLoadRef = useRef<boolean>(true)
     const lastSymbolRef = useRef<string>(initialSymbol)
     const lastTimeframeRef = useRef<string>("1d")
     const indicatorChartsRef = useRef<Map<string, any>>(new Map())
     const isPointerDrawingRef = useRef(false)
+    const rulerDraftStartRef = useRef<ChartAnchorPoint | null>(null)
+    const rulerMoveRafRef = useRef<number | null>(null)
+    const pendingRulerAnchorRef = useRef<ChartAnchorPoint | null>(null)
 
     // Register indicator chart for crosshair sync
     const registerIndicatorChart = useCallback((id: string, chart: any) => {
@@ -573,6 +577,14 @@ export function AdvancedChartPage({
     const showWatchlistToast = useCallback((message: string) => {
         setWatchlistNotice(message)
     }, [])
+
+    useEffect(() => {
+        activeToolRef.current = activeTool
+    }, [activeTool])
+
+    useEffect(() => {
+        rulerDraftStartRef.current = rulerDraftStart
+    }, [rulerDraftStart])
 
     const anchorFromClientPoint = useCallback((clientX: number, clientY: number): ChartAnchorPoint | null => {
         if (!chartContainerRef.current || !chartInstance.current || !seriesInstance.current) return null
@@ -604,17 +616,20 @@ export function AdvancedChartPage({
         if (!anchor) return
 
         if (activeTool === "ruler") {
-            if (!rulerDraftStart) {
+            const currentDraftStart = rulerDraftStartRef.current
+            if (!currentDraftStart) {
                 setRulerDraftStart(anchor)
                 setRulerDraftEnd(anchor)
+                rulerDraftStartRef.current = anchor
             } else {
                 setRulerDrawings((prev) => [...prev, {
                     id: `${Date.now().toString(36)}-${prev.length}`,
-                    start: rulerDraftStart,
+                    start: currentDraftStart,
                     end: anchor,
                 }])
                 setRulerDraftStart(null)
                 setRulerDraftEnd(null)
+                rulerDraftStartRef.current = null
             }
             return
         }
@@ -634,15 +649,28 @@ export function AdvancedChartPage({
                 text: text.trim(),
             }])
         }
-    }, [activeTool, anchorFromClientPoint, rulerDraftStart])
+    }, [activeTool, anchorFromClientPoint])
 
     const handleDrawingMouseMove = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
         if (activeTool === "none") return
         const anchor = anchorFromClientPoint(event.clientX, event.clientY)
         if (!anchor) return
 
-        if (activeTool === "ruler" && rulerDraftStart) {
-            setRulerDraftEnd(anchor)
+        if (activeTool === "ruler" && rulerDraftStartRef.current) {
+            pendingRulerAnchorRef.current = anchor
+            if (rulerMoveRafRef.current === null) {
+                rulerMoveRafRef.current = window.requestAnimationFrame(() => {
+                    rulerMoveRafRef.current = null
+                    const nextAnchor = pendingRulerAnchorRef.current
+                    if (!nextAnchor) return
+                    setRulerDraftEnd((prev) => {
+                        if (prev && Math.abs(prev.time - nextAnchor.time) < 1 && Math.abs(prev.price - nextAnchor.price) < 0.01) {
+                            return prev
+                        }
+                        return nextAnchor
+                    })
+                })
+            }
             return
         }
 
@@ -656,7 +684,7 @@ export function AdvancedChartPage({
                 return [...prev, anchor]
             })
         }
-    }, [activeTool, anchorFromClientPoint, rulerDraftStart])
+    }, [activeTool, anchorFromClientPoint])
 
     const handleDrawingMouseUp = useCallback(() => {
         if (activeTool === "pencil" && isPointerDrawingRef.current) {
@@ -674,14 +702,29 @@ export function AdvancedChartPage({
 
     useEffect(() => {
         if (activeTool !== "ruler") {
+            if (rulerMoveRafRef.current !== null) {
+                window.cancelAnimationFrame(rulerMoveRafRef.current)
+                rulerMoveRafRef.current = null
+            }
+            pendingRulerAnchorRef.current = null
             setRulerDraftStart(null)
             setRulerDraftEnd(null)
+            rulerDraftStartRef.current = null
         }
         if (activeTool !== "pencil") {
             isPointerDrawingRef.current = false
             setActivePencilPoints(null)
         }
     }, [activeTool])
+
+    useEffect(() => {
+        return () => {
+            if (rulerMoveRafRef.current !== null) {
+                window.cancelAnimationFrame(rulerMoveRafRef.current)
+                rulerMoveRafRef.current = null
+            }
+        }
+    }, [])
 
     useEffect(() => {
         if (!watchlistNotice) return
@@ -1044,6 +1087,11 @@ export function AdvancedChartPage({
 
             // Crosshair move handler
             chart.subscribeCrosshairMove((param) => {
+                // While drawing tools are active, skip crosshair state churn.
+                if (activeToolRef.current !== "none") {
+                    return
+                }
+
                 const hoverUnix = param.time ? normalizeHorzTimeToUnix(param.time) : null
 
                 if (hoverUnix === null || !param.seriesData.size) {
