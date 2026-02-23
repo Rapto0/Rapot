@@ -838,7 +838,8 @@ async def get_candles(
     symbol: str,
     market_type: str = Query("BIST", description="Piyasa türü (BIST/Kripto)"),
     timeframe: str = Query(
-        "1d", description="Timeframe (15m, 30m, 1h, 2h, 4h, 8h, 12h, 1d, 1wk, 1mo)"
+        "1d",
+        description="Timeframe (15m, 30m, 1h, 2h, 4h, 8h, 12h, 1d, 2d, 3d, 4d, 5d, 6d, 1wk, 1mo)",
     ),
     limit: int = Query(500, description="Number of candles (max 2000)"),
 ):
@@ -915,13 +916,13 @@ async def get_candles(
 
                 yf_symbol = symbol + ".IS" if not symbol.endswith(".IS") else symbol
                 # NOTE:
-                # yfinance 1h bars for BIST are often half-hour anchored compared with TradingView.
-                # For 1h, pull 30m bars and resample locally to align bars better with chart sessions.
+                # yfinance 1h bars for BIST are often misaligned and sometimes sparse compared with TradingView.
+                # For 1h, pull denser 15m bars and resample locally for better bar continuity/alignment.
                 if timeframe in ["15m", "30m"]:
                     yf_interval = timeframe
                     period = "60d"
                 elif timeframe == "1h":
-                    yf_interval = "30m"
+                    yf_interval = "15m"
                     period = "60d"
                 else:
                     yf_interval = "1h"
@@ -957,7 +958,7 @@ async def get_candles(
                             .agg(agg_map)
                             .dropna()
                         )
-                    elif timeframe == "1h" and yf_interval == "30m":
+                    elif timeframe == "1h" and yf_interval == "15m":
                         df = (
                             df.resample("1h", label="left", closed="left", origin="start_day")
                             .agg(agg_map)

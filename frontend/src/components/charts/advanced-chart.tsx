@@ -107,6 +107,28 @@ interface UtilityPanelItem {
     icon: any
 }
 
+interface ChartAnchorPoint {
+    time: number
+    price: number
+}
+
+interface RulerDrawing {
+    id: string
+    start: ChartAnchorPoint
+    end: ChartAnchorPoint
+}
+
+interface PencilDrawing {
+    id: string
+    points: ChartAnchorPoint[]
+}
+
+interface TextDrawing {
+    id: string
+    point: ChartAnchorPoint
+    text: string
+}
+
 const INDICATOR_SETTINGS_STORAGE_KEY = "rapot.dashboard.indicators.v1"
 const DEFAULT_OVERLAY_INDICATOR_IDS = ["combo", "hunter"] as const
 const WATCHLIST_STORAGE_KEY = "rapot.dashboard.watchlists.v1"
@@ -248,6 +270,9 @@ const TIMEFRAME_CATEGORIES = [
             { label: "1G", value: "1d", description: "1 Gün" },
             { label: "2G", value: "2d", description: "2 Gün" },
             { label: "3G", value: "3d", description: "3 Gün" },
+            { label: "4G", value: "4d", description: "4 Gün" },
+            { label: "5G", value: "5d", description: "5 Gün" },
+            { label: "6G", value: "6d", description: "6 Gün" },
         ]
     },
     {
@@ -309,6 +334,72 @@ const chartColors = {
 
 const DATE_ONLY_RE = /^(\d{4})-(\d{2})-(\d{2})$/
 const INTRADAY_RE = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/
+
+const normalizeHorzTimeToUnix = (value: unknown): number | null => {
+    if (typeof value === "number" && Number.isFinite(value)) {
+        return Math.floor(value)
+    }
+    if (typeof value === "string") {
+        if (!value.trim()) return null
+        return parseChartTimeToUnix(value)
+    }
+    if (value && typeof value === "object" && "year" in value && "month" in value && "day" in value) {
+        const typed = value as { year: number, month: number, day: number }
+        return Math.floor(Date.UTC(typed.year, typed.month - 1, typed.day, 0, 0, 0) / 1000)
+    }
+    return null
+}
+
+const getTimeframeStepSeconds = (timeframe: string): number => {
+    const mapping: Record<string, number> = {
+        "15m": 15 * 60,
+        "30m": 30 * 60,
+        "1h": 60 * 60,
+        "2h": 2 * 60 * 60,
+        "4h": 4 * 60 * 60,
+        "8h": 8 * 60 * 60,
+        "12h": 12 * 60 * 60,
+        "18h": 18 * 60 * 60,
+        "1d": 24 * 60 * 60,
+        "2d": 2 * 24 * 60 * 60,
+        "3d": 3 * 24 * 60 * 60,
+        "4d": 4 * 24 * 60 * 60,
+        "5d": 5 * 24 * 60 * 60,
+        "6d": 6 * 24 * 60 * 60,
+        "1wk": 7 * 24 * 60 * 60,
+        "2wk": 14 * 24 * 60 * 60,
+        "3wk": 21 * 24 * 60 * 60,
+        "1mo": 30 * 24 * 60 * 60,
+        "2mo": 60 * 24 * 60 * 60,
+        "3mo": 90 * 24 * 60 * 60,
+    }
+    return mapping[timeframe] ?? 24 * 60 * 60
+}
+
+const findNearestSeriesPointByTime = (
+    points: Array<{ timeKey: number, rawTime: string | number, value: number }>,
+    targetTime: number
+): { timeKey: number, rawTime: string | number, value: number } | null => {
+    if (points.length === 0) return null
+
+    let left = 0
+    let right = points.length - 1
+    while (left <= right) {
+        const mid = Math.floor((left + right) / 2)
+        const current = points[mid].timeKey
+        if (current === targetTime) return points[mid]
+        if (current < targetTime) left = mid + 1
+        else right = mid - 1
+    }
+
+    const leftPoint = left < points.length ? points[left] : null
+    const rightPoint = right >= 0 ? points[right] : null
+    if (!leftPoint) return rightPoint
+    if (!rightPoint) return leftPoint
+    return Math.abs(leftPoint.timeKey - targetTime) < Math.abs(rightPoint.timeKey - targetTime)
+        ? leftPoint
+        : rightPoint
+}
 
 // Helper to parse backend time string into chart timestamp.
 // IMPORTANT: Intraday timestamps from API are exchange wall-time (TR) without timezone.
@@ -439,6 +530,14 @@ export function AdvancedChartPage({
 
     // Drawing tools state
     const [activeTool, setActiveTool] = useState<'none' | 'ruler' | 'pencil' | 'text'>('none')
+    const [rulerDrawings, setRulerDrawings] = useState<RulerDrawing[]>([])
+    const [rulerDraftStart, setRulerDraftStart] = useState<ChartAnchorPoint | null>(null)
+    const [rulerDraftEnd, setRulerDraftEnd] = useState<ChartAnchorPoint | null>(null)
+    const [pencilDrawings, setPencilDrawings] = useState<PencilDrawing[]>([])
+    const [activePencilPoints, setActivePencilPoints] = useState<ChartAnchorPoint[] | null>(null)
+    const [textDrawings, setTextDrawings] = useState<TextDrawing[]>([])
+    const [overlayRenderNonce, setOverlayRenderNonce] = useState(0)
+    const [hoveredUnixTime, setHoveredUnixTime] = useState<number | null>(null)
 
     // Chart ready state
     const [chartReady, setChartReady] = useState(false)
@@ -464,6 +563,7 @@ export function AdvancedChartPage({
     const lastSymbolRef = useRef<string>(initialSymbol)
     const lastTimeframeRef = useRef<string>("1d")
     const indicatorChartsRef = useRef<Map<string, any>>(new Map())
+    const isPointerDrawingRef = useRef(false)
 
     // Register indicator chart for crosshair sync
     const registerIndicatorChart = useCallback((id: string, chart: any) => {
@@ -473,6 +573,115 @@ export function AdvancedChartPage({
     const showWatchlistToast = useCallback((message: string) => {
         setWatchlistNotice(message)
     }, [])
+
+    const anchorFromClientPoint = useCallback((clientX: number, clientY: number): ChartAnchorPoint | null => {
+        if (!chartContainerRef.current || !chartInstance.current || !seriesInstance.current) return null
+        const rect = chartContainerRef.current.getBoundingClientRect()
+        const x = clientX - rect.left
+        const y = clientY - rect.top
+
+        if (x < 0 || y < 0 || x > rect.width || y > rect.height) return null
+
+        const timeValue = chartInstance.current.timeScale().coordinateToTime(x)
+        const unix = normalizeHorzTimeToUnix(timeValue)
+        const price = seriesInstance.current.coordinateToPrice(y)
+
+        if (unix === null || price === null || !Number.isFinite(price)) return null
+        return { time: unix, price }
+    }, [])
+
+    const projectAnchorToScreen = useCallback((point: ChartAnchorPoint): { x: number, y: number } | null => {
+        if (!chartInstance.current || !seriesInstance.current) return null
+        const x = chartInstance.current.timeScale().timeToCoordinate(point.time)
+        const y = seriesInstance.current.priceToCoordinate(point.price)
+        if (x === null || y === null || !Number.isFinite(x) || !Number.isFinite(y)) return null
+        return { x, y }
+    }, [])
+
+    const handleDrawingMouseDown = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+        if (activeTool === "none") return
+        const anchor = anchorFromClientPoint(event.clientX, event.clientY)
+        if (!anchor) return
+
+        if (activeTool === "ruler") {
+            if (!rulerDraftStart) {
+                setRulerDraftStart(anchor)
+                setRulerDraftEnd(anchor)
+            } else {
+                setRulerDrawings((prev) => [...prev, {
+                    id: `${Date.now().toString(36)}-${prev.length}`,
+                    start: rulerDraftStart,
+                    end: anchor,
+                }])
+                setRulerDraftStart(null)
+                setRulerDraftEnd(null)
+            }
+            return
+        }
+
+        if (activeTool === "pencil") {
+            isPointerDrawingRef.current = true
+            setActivePencilPoints([anchor])
+            return
+        }
+
+        if (activeTool === "text") {
+            const text = window.prompt("Grafiğe eklenecek metni girin:")
+            if (!text || !text.trim()) return
+            setTextDrawings((prev) => [...prev, {
+                id: `${Date.now().toString(36)}-${prev.length}`,
+                point: anchor,
+                text: text.trim(),
+            }])
+        }
+    }, [activeTool, anchorFromClientPoint, rulerDraftStart])
+
+    const handleDrawingMouseMove = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+        if (activeTool === "none") return
+        const anchor = anchorFromClientPoint(event.clientX, event.clientY)
+        if (!anchor) return
+
+        if (activeTool === "ruler" && rulerDraftStart) {
+            setRulerDraftEnd(anchor)
+            return
+        }
+
+        if (activeTool === "pencil" && isPointerDrawingRef.current) {
+            setActivePencilPoints((prev) => {
+                if (!prev || prev.length === 0) return [anchor]
+                const last = prev[prev.length - 1]
+                if (Math.abs(last.time - anchor.time) < 1 && Math.abs(last.price - anchor.price) < 0.01) {
+                    return prev
+                }
+                return [...prev, anchor]
+            })
+        }
+    }, [activeTool, anchorFromClientPoint, rulerDraftStart])
+
+    const handleDrawingMouseUp = useCallback(() => {
+        if (activeTool === "pencil" && isPointerDrawingRef.current) {
+            isPointerDrawingRef.current = false
+            setActivePencilPoints((prev) => {
+                if (!prev || prev.length < 2) return null
+                setPencilDrawings((existing) => [...existing, {
+                    id: `${Date.now().toString(36)}-${existing.length}`,
+                    points: prev,
+                }])
+                return null
+            })
+        }
+    }, [activeTool])
+
+    useEffect(() => {
+        if (activeTool !== "ruler") {
+            setRulerDraftStart(null)
+            setRulerDraftEnd(null)
+        }
+        if (activeTool !== "pencil") {
+            isPointerDrawingRef.current = false
+            setActivePencilPoints(null)
+        }
+    }, [activeTool])
 
     useEffect(() => {
         if (!watchlistNotice) return
@@ -781,6 +990,7 @@ export function AdvancedChartPage({
                 rightPriceScale: {
                     borderColor: chartColors.grid,
                     scaleMargins: { top: 0.05, bottom: 0.05 },
+                    minimumWidth: 64,
                 },
                 timeScale: {
                     borderColor: chartColors.grid,
@@ -839,6 +1049,7 @@ export function AdvancedChartPage({
                         lastCrosshairTimeRef.current = null
                         setCrosshairData(null)
                     }
+                    setHoveredUnixTime(null)
                     return
                 }
 
@@ -846,6 +1057,9 @@ export function AdvancedChartPage({
                 if (timeStr === lastCrosshairTimeRef.current) {
                     return
                 }
+
+                const hoverUnix = normalizeHorzTimeToUnix(param.time)
+                setHoveredUnixTime(hoverUnix)
 
                 const candleData = param.seriesData.get(candlestickSeries)
                 if (candleData && 'open' in candleData) {
@@ -865,6 +1079,11 @@ export function AdvancedChartPage({
             seriesInstance.current = candlestickSeries
             setChartReady(true)
 
+            const handleVisibleRangeChange = () => {
+                setOverlayRenderNonce((value) => value + 1)
+            }
+            chart.timeScale().subscribeVisibleLogicalRangeChange(handleVisibleRangeChange)
+
             // Handle resize
             const handleResize = () => {
                 if (chartContainerRef.current && chartInstance.current) {
@@ -878,6 +1097,7 @@ export function AdvancedChartPage({
             window.addEventListener("resize", handleResize)
 
             return () => {
+                chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleVisibleRangeChange)
                 window.removeEventListener("resize", handleResize)
                 // Clean up markers primitive
                 if (markersInstance.current) {
@@ -1014,6 +1234,7 @@ export function AdvancedChartPage({
                     lastSymbolRef.current = symbol
                     lastTimeframeRef.current = timeframe
                 }
+                setOverlayRenderNonce((value) => value + 1)
             } catch (e) {
                 console.error("Chart update error:", e)
             }
@@ -1148,6 +1369,89 @@ export function AdvancedChartPage({
         () => activeIndicators.filter(ind => ind.meta.isOverlay && ind.visible),
         [activeIndicators]
     )
+
+    const projectedDrawings = useMemo(() => {
+        const stepSeconds = getTimeframeStepSeconds(timeframe)
+
+        const projectRuler = (ruler: RulerDrawing) => {
+            const start = projectAnchorToScreen(ruler.start)
+            const end = projectAnchorToScreen(ruler.end)
+            if (!start || !end) return null
+
+            const priceDiff = ruler.end.price - ruler.start.price
+            const pct = ruler.start.price !== 0 ? (priceDiff / ruler.start.price) * 100 : 0
+            const bars = Math.max(1, Math.round(Math.abs(ruler.end.time - ruler.start.time) / stepSeconds))
+            const midpoint = {
+                x: (start.x + end.x) / 2,
+                y: (start.y + end.y) / 2,
+            }
+
+            return {
+                id: ruler.id,
+                start,
+                end,
+                label: `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%  ${priceDiff >= 0 ? "+" : ""}${priceDiff.toFixed(2)} (${bars} bar)`,
+                midpoint,
+            }
+        }
+
+        const rulerItems = rulerDrawings
+            .map(projectRuler)
+            .filter((item): item is NonNullable<ReturnType<typeof projectRuler>> => item !== null)
+
+        let rulerDraft: ReturnType<typeof projectRuler> | null = null
+        if (rulerDraftStart && rulerDraftEnd) {
+            rulerDraft = projectRuler({
+                id: "draft-ruler",
+                start: rulerDraftStart,
+                end: rulerDraftEnd,
+            })
+        }
+
+        const pencilItems = pencilDrawings
+            .map((stroke) => {
+                const points = stroke.points
+                    .map((point) => projectAnchorToScreen(point))
+                    .filter((point): point is { x: number, y: number } => point !== null)
+                if (points.length < 2) return null
+                return { id: stroke.id, points }
+            })
+            .filter((item): item is { id: string, points: { x: number, y: number }[] } => item !== null)
+
+        const activePencil = (activePencilPoints || [])
+            .map((point) => projectAnchorToScreen(point))
+            .filter((point): point is { x: number, y: number } => point !== null)
+
+        const textItems = textDrawings
+            .map((drawing) => {
+                const point = projectAnchorToScreen(drawing.point)
+                if (!point) return null
+                return {
+                    id: drawing.id,
+                    point,
+                    text: drawing.text,
+                }
+            })
+            .filter((item): item is { id: string, point: { x: number, y: number }, text: string } => item !== null)
+
+        return {
+            rulerItems,
+            rulerDraft,
+            pencilItems,
+            activePencil,
+            textItems,
+        }
+    }, [
+        timeframe,
+        projectAnchorToScreen,
+        rulerDrawings,
+        rulerDraftStart,
+        rulerDraftEnd,
+        pencilDrawings,
+        activePencilPoints,
+        textDrawings,
+        overlayRenderNonce,
+    ])
 
     const activeWatchlist = useMemo(
         () => watchlists.find((watchlist) => watchlist.id === activeWatchlistId) || watchlists[0] || null,
@@ -1668,6 +1972,101 @@ export function AdvancedChartPage({
                         className="w-full h-full cursor-crosshair"
                         style={{ touchAction: 'none', minHeight: 'inherit' }}
                     />
+
+                    <div
+                        className={cn(
+                            "absolute inset-0 z-[12]",
+                            activeTool === "none" ? "pointer-events-none" : "pointer-events-auto cursor-crosshair"
+                        )}
+                        onMouseDown={handleDrawingMouseDown}
+                        onMouseMove={handleDrawingMouseMove}
+                        onMouseUp={handleDrawingMouseUp}
+                        onMouseLeave={handleDrawingMouseUp}
+                    >
+                        <svg className="h-full w-full">
+                            {projectedDrawings.rulerItems.map((ruler) => (
+                                <g key={ruler.id}>
+                                    <line x1={ruler.start.x} y1={ruler.start.y} x2={ruler.end.x} y2={ruler.end.y} stroke="#9ca3af" strokeWidth={1.5} />
+                                    <circle cx={ruler.start.x} cy={ruler.start.y} r={3} fill="#9ca3af" />
+                                    <circle cx={ruler.end.x} cy={ruler.end.y} r={3} fill="#9ca3af" />
+                                    <rect x={ruler.midpoint.x - 88} y={ruler.midpoint.y - 24} width={176} height={18} rx={4} fill="rgba(17,24,39,0.85)" />
+                                    <text x={ruler.midpoint.x} y={ruler.midpoint.y - 11} fill="#e5e7eb" fontSize={11} textAnchor="middle">
+                                        {ruler.label}
+                                    </text>
+                                </g>
+                            ))}
+
+                            {projectedDrawings.rulerDraft && (
+                                <g>
+                                    <line
+                                        x1={projectedDrawings.rulerDraft.start.x}
+                                        y1={projectedDrawings.rulerDraft.start.y}
+                                        x2={projectedDrawings.rulerDraft.end.x}
+                                        y2={projectedDrawings.rulerDraft.end.y}
+                                        stroke="#60a5fa"
+                                        strokeWidth={1.5}
+                                        strokeDasharray="4 3"
+                                    />
+                                    <rect
+                                        x={projectedDrawings.rulerDraft.midpoint.x - 88}
+                                        y={projectedDrawings.rulerDraft.midpoint.y - 24}
+                                        width={176}
+                                        height={18}
+                                        rx={4}
+                                        fill="rgba(30,58,138,0.82)"
+                                    />
+                                    <text
+                                        x={projectedDrawings.rulerDraft.midpoint.x}
+                                        y={projectedDrawings.rulerDraft.midpoint.y - 11}
+                                        fill="#dbeafe"
+                                        fontSize={11}
+                                        textAnchor="middle"
+                                    >
+                                        {projectedDrawings.rulerDraft.label}
+                                    </text>
+                                </g>
+                            )}
+
+                            {projectedDrawings.pencilItems.map((stroke) => (
+                                <polyline
+                                    key={stroke.id}
+                                    points={stroke.points.map((point) => `${point.x},${point.y}`).join(" ")}
+                                    fill="none"
+                                    stroke="#fbbf24"
+                                    strokeWidth={1.6}
+                                    strokeLinejoin="round"
+                                    strokeLinecap="round"
+                                />
+                            ))}
+
+                            {projectedDrawings.activePencil.length > 1 && (
+                                <polyline
+                                    points={projectedDrawings.activePencil.map((point) => `${point.x},${point.y}`).join(" ")}
+                                    fill="none"
+                                    stroke="#fcd34d"
+                                    strokeWidth={1.6}
+                                    strokeLinejoin="round"
+                                    strokeLinecap="round"
+                                />
+                            )}
+
+                            {projectedDrawings.textItems.map((item) => (
+                                <g key={item.id}>
+                                    <rect
+                                        x={item.point.x - 4}
+                                        y={item.point.y - 17}
+                                        width={Math.max(52, item.text.length * 6.2)}
+                                        height={18}
+                                        rx={4}
+                                        fill="rgba(31,41,55,0.88)"
+                                    />
+                                    <text x={item.point.x + 2} y={item.point.y - 5} fill="#e5e7eb" fontSize={11}>
+                                        {item.text}
+                                    </text>
+                                </g>
+                            ))}
+                        </svg>
+                    </div>
                 </div>
 
                 {/* Indicator Panels */}
@@ -1681,6 +2080,7 @@ export function AdvancedChartPage({
                             indicatorChartsRef.current.delete(ind.id)
                         }}
                         mainChartRef={chartInstance}
+                        hoveredUnixTime={hoveredUnixTime}
                         onChartReady={(chart) => registerIndicatorChart(ind.id, chart)}
                     />
                 ))}
@@ -2067,14 +2467,46 @@ interface IndicatorPaneProps {
     candles: Candle[]
     onRemove: () => void
     mainChartRef: React.MutableRefObject<any>
+    hoveredUnixTime: number | null
     onChartReady?: (chart: any) => void
 }
 
-function IndicatorPane({ indicator, candles, onRemove, mainChartRef, onChartReady }: IndicatorPaneProps) {
+function IndicatorPane({ indicator, candles, onRemove, mainChartRef, hoveredUnixTime, onChartReady }: IndicatorPaneProps) {
     const containerRef = useRef<HTMLDivElement>(null)
     const chartRef = useRef<any>(null)
+    const primarySeriesRef = useRef<any>(null)
+    const primarySeriesPointsRef = useRef<Array<{ timeKey: number, rawTime: string | number, value: number }>>([])
     const isSyncingRef = useRef(false)
     const isDisposedRef = useRef(false)
+    const [paneHeight, setPaneHeight] = useState(120)
+    const [hoveredValue, setHoveredValue] = useState<number | null>(null)
+    const resizeStartYRef = useRef(0)
+    const resizeStartHeightRef = useRef(120)
+    const paneHeightRef = useRef(120)
+
+    useEffect(() => {
+        paneHeightRef.current = paneHeight
+    }, [paneHeight])
+
+    const startResize = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+        event.preventDefault()
+        resizeStartYRef.current = event.clientY
+        resizeStartHeightRef.current = paneHeight
+
+        const handleMouseMove = (moveEvent: MouseEvent) => {
+            const delta = moveEvent.clientY - resizeStartYRef.current
+            const nextHeight = Math.max(84, Math.min(360, resizeStartHeightRef.current - delta))
+            setPaneHeight(nextHeight)
+        }
+
+        const handleMouseUp = () => {
+            window.removeEventListener("mousemove", handleMouseMove)
+            window.removeEventListener("mouseup", handleMouseUp)
+        }
+
+        window.addEventListener("mousemove", handleMouseMove)
+        window.addEventListener("mouseup", handleMouseUp)
+    }, [paneHeight])
 
     useEffect(() => {
         if (!containerRef.current || candles.length === 0) return
@@ -2097,13 +2529,16 @@ function IndicatorPane({ indicator, candles, onRemove, mainChartRef, onChartRead
                 layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: chartColors.text, fontSize: 10 },
                 grid: { vertLines: { color: chartColors.grid }, horzLines: { color: chartColors.grid } },
                 width: containerRef.current.clientWidth,
-                height: 100,
-                rightPriceScale: { borderColor: chartColors.grid },
+                height: paneHeightRef.current,
+                rightPriceScale: { borderColor: chartColors.grid, minimumWidth: 64 },
                 timeScale: {
                     visible: true,
                     borderColor: chartColors.grid,
                     timeVisible: true,
                     secondsVisible: false,
+                    rightOffset: 12,
+                    barSpacing: 6,
+                    minBarSpacing: 2,
                 },
                 crosshair: {
                     mode: CrosshairMode.Normal,
@@ -2115,10 +2550,25 @@ function IndicatorPane({ indicator, candles, onRemove, mainChartRef, onChartRead
             })
 
             let series: any = null
+            let primaryLine: Array<{ time: string | number, value: number }> = []
+
+            const setPrimarySeriesPoints = (line: Array<{ time: string | number, value: number }>) => {
+                primaryLine = line
+                primarySeriesPointsRef.current = line
+                    .map((point) => ({
+                        rawTime: point.time,
+                        timeKey: typeof point.time === "number" ? point.time : parseChartTimeToUnix(point.time),
+                        value: point.value,
+                    }))
+                    .sort((a, b) => a.timeKey - b.timeKey)
+            }
+
             if (indicator.id === 'rsi') {
                 const rsiData = calculateRSI(candles, indicator.params.period || 14)
                 series = chart.addSeries(LineSeries, { color: chartColors.indicators.rsi, lineWidth: 2, priceScaleId: 'right' })
-                series.setData(deduplicateByTime(rsiData.filter(d => !isNaN(d.value)).map(d => ({ time: formatTime(d.time), value: d.value }))) as any)
+                const lineData = deduplicateByTime(rsiData.filter(d => !isNaN(d.value)).map(d => ({ time: formatTime(d.time), value: d.value })))
+                series.setData(lineData as any)
+                setPrimarySeriesPoints(lineData)
             } else if (indicator.id === 'macd') {
                 const macdData = calculateMACD(
                     candles,
@@ -2127,23 +2577,30 @@ function IndicatorPane({ indicator, candles, onRemove, mainChartRef, onChartRead
                     indicator.params.signal || 9
                 )
                 const macdSeries = chart.addSeries(LineSeries, { color: chartColors.indicators.macd, lineWidth: 2 })
-                macdSeries.setData(deduplicateByTime(macdData.filter(d => !isNaN(d.macd)).map(d => ({ time: formatTime(d.time), value: d.macd }))) as any)
+                const macdLine = deduplicateByTime(macdData.filter(d => !isNaN(d.macd)).map(d => ({ time: formatTime(d.time), value: d.macd })))
+                macdSeries.setData(macdLine as any)
                 const signalSeries = chart.addSeries(LineSeries, { color: chartColors.indicators.macdSignal, lineWidth: 2 })
                 signalSeries.setData(deduplicateByTime(macdData.filter(d => !isNaN(d.signal)).map(d => ({ time: formatTime(d.time), value: d.signal }))) as any)
                 const histSeries = chart.addSeries(HistogramSeries, { color: chartColors.indicators.macdHistogram })
                 histSeries.setData(deduplicateByTime(macdData.filter(d => !isNaN(d.histogram)).map(d => ({ time: formatTime(d.time), value: d.histogram, color: d.histogram >= 0 ? 'rgba(0, 200, 83, 0.5)' : 'rgba(255, 61, 0, 0.5)' }))) as any)
                 series = macdSeries
+                setPrimarySeriesPoints(macdLine)
             } else if (indicator.id === 'wr') {
                 const wrData = calculateWilliamsR(candles, indicator.params.period || 14)
                 series = chart.addSeries(LineSeries, { color: chartColors.indicators.wr, lineWidth: 2 })
-                series.setData(deduplicateByTime(wrData.filter(d => !isNaN(d.value)).map(d => ({ time: formatTime(d.time), value: d.value }))) as any)
+                const lineData = deduplicateByTime(wrData.filter(d => !isNaN(d.value)).map(d => ({ time: formatTime(d.time), value: d.value })))
+                series.setData(lineData as any)
+                setPrimarySeriesPoints(lineData)
             } else if (indicator.id === 'cci') {
                 const cciData = calculateCCI(candles, indicator.params.period || 20)
                 series = chart.addSeries(LineSeries, { color: chartColors.indicators.cci, lineWidth: 2 })
-                series.setData(deduplicateByTime(cciData.filter(d => !isNaN(d.value)).map(d => ({ time: formatTime(d.time), value: d.value }))) as any)
+                const lineData = deduplicateByTime(cciData.filter(d => !isNaN(d.value)).map(d => ({ time: formatTime(d.time), value: d.value })))
+                series.setData(lineData as any)
+                setPrimarySeriesPoints(lineData)
             }
 
             chartRef.current = chart
+            primarySeriesRef.current = series
             onChartReady?.(chart)
 
             // Sync time scale with main chart (with safety checks)
@@ -2163,17 +2620,15 @@ function IndicatorPane({ indicator, candles, onRemove, mainChartRef, onChartRead
             }
 
             // Subscribe to main chart's visible range changes
-            let unsubscribeMain: (() => void) | undefined
-            let unsubscribeLocal: (() => void) | undefined
+            let mainTimeScale: any = null
 
             if (mainChartRef.current) {
                 try {
-                    const mainTimeScale = mainChartRef.current.timeScale()
-                    const subMain = mainTimeScale.subscribeVisibleLogicalRangeChange(syncWithMain)
-                    if (typeof subMain === 'function') unsubscribeMain = subMain
+                    mainTimeScale = mainChartRef.current.timeScale()
+                    mainTimeScale.subscribeVisibleLogicalRangeChange(syncWithMain)
 
                     // Also sync this chart's changes back to main
-                    const subLocal = chart.timeScale().subscribeVisibleLogicalRangeChange((range: any) => {
+                    const syncMainFromLocal = (range: any) => {
                         if (isDisposedRef.current || !mainChartRef.current || isSyncingRef.current || !range) return
                         try {
                             isSyncingRef.current = true
@@ -2182,8 +2637,8 @@ function IndicatorPane({ indicator, candles, onRemove, mainChartRef, onChartRead
                         } catch (e) {
                             // Main chart disposed
                         }
-                    })
-                    if (typeof subLocal === 'function') unsubscribeLocal = subLocal
+                    }
+                    chart.timeScale().subscribeVisibleLogicalRangeChange(syncMainFromLocal)
 
                     // Initial sync
                     syncWithMain()
@@ -2195,7 +2650,10 @@ function IndicatorPane({ indicator, candles, onRemove, mainChartRef, onChartRead
             const handleResize = () => {
                 if (containerRef.current && chartRef.current && !isDisposedRef.current) {
                     try {
-                        chartRef.current.applyOptions({ width: containerRef.current.clientWidth })
+                        chartRef.current.applyOptions({
+                            width: containerRef.current.clientWidth,
+                            height: paneHeightRef.current,
+                        })
                     } catch (e) {
                         // Chart disposed
                     }
@@ -2209,11 +2667,8 @@ function IndicatorPane({ indicator, candles, onRemove, mainChartRef, onChartRead
                 window.removeEventListener('resize', handleResize)
 
                 // Unsubscribe from events
-                if (unsubscribeMain) {
-                    try { unsubscribeMain() } catch (e) { /* ignore */ }
-                }
-                if (unsubscribeLocal) {
-                    try { unsubscribeLocal() } catch (e) { /* ignore */ }
+                if (mainTimeScale) {
+                    try { mainTimeScale.unsubscribeVisibleLogicalRangeChange(syncWithMain) } catch (e) { /* ignore */ }
                 }
 
                 // Remove chart
@@ -2225,17 +2680,67 @@ function IndicatorPane({ indicator, candles, onRemove, mainChartRef, onChartRead
                     }
                     chartRef.current = null
                 }
+                primarySeriesRef.current = null
+                primarySeriesPointsRef.current = []
             }
         })
     }, [indicator, candles, mainChartRef, onChartReady])
 
+    useEffect(() => {
+        if (!containerRef.current || !chartRef.current || isDisposedRef.current) return
+        try {
+            chartRef.current.applyOptions({
+                width: containerRef.current.clientWidth,
+                height: paneHeight,
+            })
+        } catch (e) {
+            // Chart disposed
+        }
+    }, [paneHeight])
+
+    useEffect(() => {
+        if (!chartRef.current || !primarySeriesRef.current) return
+
+        if (hoveredUnixTime === null) {
+            setHoveredValue(null)
+            if (typeof chartRef.current.clearCrosshairPosition === "function") {
+                try { chartRef.current.clearCrosshairPosition() } catch (e) { /* ignore */ }
+            }
+            return
+        }
+
+        const nearest = findNearestSeriesPointByTime(primarySeriesPointsRef.current, hoveredUnixTime)
+        if (!nearest) return
+
+        setHoveredValue(nearest.value)
+        if (typeof chartRef.current.setCrosshairPosition === "function") {
+            try {
+                chartRef.current.setCrosshairPosition(nearest.value, nearest.rawTime as any, primarySeriesRef.current)
+            } catch (e) {
+                // Ignore crosshair sync errors
+            }
+        }
+    }, [hoveredUnixTime, indicator.id, candles])
+
     return (
         <div className="border-t border-border/30">
+            <div
+                onMouseDown={startResize}
+                className="h-1 w-full cursor-row-resize bg-border/60 hover:bg-primary/60"
+                title="Panel yüksekliğini ayarlamak için sürükleyin"
+            />
             <div className="flex items-center justify-between px-4 py-1 bg-muted/10">
-                <span className="text-xs font-medium text-muted-foreground">{indicator.meta.shortName}</span>
+                <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-muted-foreground">{indicator.meta.shortName}</span>
+                    {hoveredValue !== null && (
+                        <span className="text-xs font-semibold text-foreground/90 mono-numbers">
+                            {hoveredValue.toFixed(2)}
+                        </span>
+                    )}
+                </div>
                 <button onClick={onRemove} className="text-muted-foreground hover:text-loss"><X className="h-3 w-3" /></button>
             </div>
-            <div ref={containerRef} className="w-full h-[100px]" />
+            <div ref={containerRef} className="w-full" style={{ height: `${paneHeight}px` }} />
         </div>
     )
 }
