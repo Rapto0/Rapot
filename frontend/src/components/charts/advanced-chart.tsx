@@ -307,16 +307,81 @@ const chartColors = {
     }
 }
 
+const DATE_ONLY_RE = /^(\d{4})-(\d{2})-(\d{2})$/
+const INTRADAY_RE = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/
+
+// Helper to parse backend time string into chart timestamp.
+// IMPORTANT: Intraday timestamps from API are exchange wall-time (TR) without timezone.
+// Lightweight Charts expects UTC timestamps; we therefore encode wall-time as UTC
+// to avoid browser local-time drift and chart-side timezone shifts.
+const parseChartTimeToUnix = (timeStr: string): number => {
+    const value = timeStr.trim()
+    const intradayMatch = value.match(INTRADAY_RE)
+    if (intradayMatch) {
+        const year = Number(intradayMatch[1])
+        const month = Number(intradayMatch[2])
+        const day = Number(intradayMatch[3])
+        const hour = Number(intradayMatch[4])
+        const minute = Number(intradayMatch[5])
+        const second = Number(intradayMatch[6] || "0")
+        return Math.floor(Date.UTC(year, month - 1, day, hour, minute, second) / 1000)
+    }
+
+    const dateOnlyMatch = value.match(DATE_ONLY_RE)
+    if (dateOnlyMatch) {
+        const year = Number(dateOnlyMatch[1])
+        const month = Number(dateOnlyMatch[2])
+        const day = Number(dateOnlyMatch[3])
+        return Math.floor(Date.UTC(year, month - 1, day, 0, 0, 0) / 1000)
+    }
+
+    const parsed = Date.parse(value)
+    if (!Number.isNaN(parsed)) {
+        return Math.floor(parsed / 1000)
+    }
+    return 0
+}
+
 // Helper to format date for Lightweight Charts
 // For daily data: returns yyyy-mm-dd string
 // For intraday data: returns Unix timestamp (seconds)
 const formatTime = (timeStr: string): string | number => {
     if (timeStr.includes(' ') || timeStr.includes('T')) {
-        // Intraday data - convert to Unix timestamp (seconds)
-        return Math.floor(new Date(timeStr).getTime() / 1000)
+        return parseChartTimeToUnix(timeStr)
     }
-    // Daily data - keep as yyyy-mm-dd string
     return timeStr
+}
+
+const formatCrosshairTime = (value: unknown): string => {
+    if (typeof value === "number") {
+        return new Intl.DateTimeFormat("tr-TR", {
+            timeZone: "UTC",
+            year: "2-digit",
+            month: "short",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+        }).format(new Date(value * 1000))
+    }
+
+    if (typeof value === "string") {
+        if (value.trim().length === 0) return value
+        const unix = parseChartTimeToUnix(value)
+        return formatCrosshairTime(unix)
+    }
+
+    if (value && typeof value === "object" && "year" in value && "month" in value && "day" in value) {
+        const typed = value as { year: number, month: number, day: number }
+        const unix = Math.floor(Date.UTC(typed.year, typed.month - 1, typed.day, 0, 0, 0) / 1000)
+        return new Intl.DateTimeFormat("tr-TR", {
+            timeZone: "UTC",
+            year: "2-digit",
+            month: "short",
+            day: "2-digit",
+        }).format(new Date(unix * 1000))
+    }
+
+    return String(value ?? "")
 }
 
 // Helper to deduplicate and sort candle data by time
@@ -326,8 +391,8 @@ const deduplicateByTime = <T extends { time: string | number }>(data: T[]): T[] 
         seen.set(item.time, item) // Later items override earlier ones
     }
     return Array.from(seen.values()).sort((a, b) => {
-        const timeA = typeof a.time === 'number' ? a.time : new Date(a.time).getTime()
-        const timeB = typeof b.time === 'number' ? b.time : new Date(b.time).getTime()
+        const timeA = typeof a.time === 'number' ? a.time : parseChartTimeToUnix(a.time)
+        const timeB = typeof b.time === 'number' ? b.time : parseChartTimeToUnix(b.time)
         return timeA - timeB
     })
 }
@@ -631,7 +696,20 @@ export function AdvancedChartPage({
     // Live crypto prices for watchlist
     const cryptoPrices = useBinanceTicker(CRYPTO_WATCHLIST)
 
-    const candles: Candle[] = candlesResponse?.candles || []
+    const candles: Candle[] = useMemo(() => {
+        const rawCandles = candlesResponse?.candles || []
+        if (rawCandles.length === 0) return []
+
+        const deduped = new Map<number, Candle>()
+        for (const candle of rawCandles) {
+            const unix = parseChartTimeToUnix(candle.time)
+            deduped.set(unix, candle)
+        }
+
+        return Array.from(deduped.entries())
+            .sort((a, b) => a[0] - b[0])
+            .map((entry) => entry[1])
+    }, [candlesResponse?.candles])
     const dataSource = candlesResponse?.source || "loading"
 
     // Calculate price info
@@ -773,7 +851,7 @@ export function AdvancedChartPage({
                 if (candleData && 'open' in candleData) {
                     lastCrosshairTimeRef.current = timeStr
                     setCrosshairData({
-                        time: timeStr,
+                        time: formatCrosshairTime(param.time),
                         open: candleData.open,
                         high: candleData.high,
                         low: candleData.low,
@@ -900,8 +978,8 @@ export function AdvancedChartPage({
                     try {
                         // Sort markers by time (required for v5)
                         const sortedMarkers = [...markers].sort((a, b) => {
-                            const timeA = typeof a.time === 'number' ? a.time : new Date(a.time).getTime()
-                            const timeB = typeof b.time === 'number' ? b.time : new Date(b.time).getTime()
+                            const timeA = typeof a.time === 'number' ? a.time : parseChartTimeToUnix(a.time)
+                            const timeB = typeof b.time === 'number' ? b.time : parseChartTimeToUnix(b.time)
                             return timeA - timeB
                         })
 

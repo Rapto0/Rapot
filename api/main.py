@@ -903,20 +903,6 @@ async def get_candles(
     resample_tf = resample_map.get(timeframe, "1D")
     binance_interval = binance_interval_map.get(timeframe, "1d")
 
-    # yfinance interval mapping for intraday
-    yf_interval_map = {
-        "15m": "15m",
-        "30m": "30m",
-        "1h": "1h",
-        "2h": "1h",  # yfinance doesn't have 2h, will resample
-        "4h": "1h",  # will resample
-        "8h": "1h",  # will resample
-        "12h": "1h",  # will resample
-        "1d": "1d",
-        "1wk": "1wk",
-        "1mo": "1mo",
-    }
-
     df = None
     source = "cache"
 
@@ -925,35 +911,73 @@ async def get_candles(
         if market_type == "BIST" and is_intraday:
             try:
                 import pandas as pd
+                import pytz
 
                 yf_symbol = symbol + ".IS" if not symbol.endswith(".IS") else symbol
-                yf_interval = yf_interval_map.get(timeframe, "1h")
+                # NOTE:
+                # yfinance 1h bars for BIST are often half-hour anchored compared with TradingView.
+                # For 1h, pull 30m bars and resample locally to align bars better with chart sessions.
+                if timeframe in ["15m", "30m"]:
+                    yf_interval = timeframe
+                    period = "60d"
+                elif timeframe == "1h":
+                    yf_interval = "30m"
+                    period = "60d"
+                else:
+                    yf_interval = "1h"
+                    period = "730d"
 
                 ticker = yf.Ticker(yf_symbol)
-                # For intraday, yfinance requires period instead of start date.
-                # Max 60 days for 15m/30m, 730 days for 1h.
-                period = "60d" if yf_interval in ["15m", "30m"] else "730d"
-
-                df = ticker.history(period=period, interval=yf_interval)
+                df = ticker.history(
+                    period=period,
+                    interval=yf_interval,
+                    auto_adjust=False,
+                    actions=False,
+                )
 
                 if df is not None and not df.empty:
-                    # Resample if needed (2h, 4h, 8h, 12h)
-                    if timeframe in ["2h", "4h", "8h", "12h"]:
-                        hours = int(timeframe.replace("h", ""))
+                    turkey_tz = pytz.timezone("Europe/Istanbul")
+                    if hasattr(df.index, "tz") and df.index.tz is not None:
+                        df.index = df.index.tz_convert(turkey_tz)
+                    else:
+                        with suppress(Exception):
+                            df.index = df.index.tz_localize("UTC").tz_convert(turkey_tz)
+
+                    agg_map = {
+                        "Open": "first",
+                        "High": "max",
+                        "Low": "min",
+                        "Close": "last",
+                        "Volume": "sum",
+                    }
+
+                    if timeframe == "30m" and yf_interval == "15m":
                         df = (
-                            df.resample(f"{hours}h")
-                            .agg(
-                                {
-                                    "Open": "first",
-                                    "High": "max",
-                                    "Low": "min",
-                                    "Close": "last",
-                                    "Volume": "sum",
-                                }
-                            )
+                            df.resample("30min", label="left", closed="left", origin="start_day")
+                            .agg(agg_map)
                             .dropna()
                         )
-                    source = "yfinance_intraday"
+                    elif timeframe == "1h" and yf_interval == "30m":
+                        df = (
+                            df.resample("1h", label="left", closed="left", origin="start_day")
+                            .agg(agg_map)
+                            .dropna()
+                        )
+                    # Resample if needed (2h, 4h, 8h, 12h)
+                    elif timeframe in ["2h", "4h", "8h", "12h"]:
+                        hours = int(timeframe.replace("h", ""))
+                        df = (
+                            df.resample(
+                                f"{hours}h", label="left", closed="left", origin="start_day"
+                            )
+                            .agg(agg_map)
+                            .dropna()
+                        )
+                    source = (
+                        "yfinance_intraday_resampled"
+                        if timeframe != yf_interval
+                        else "yfinance_intraday"
+                    )
             except Exception as yf_err:
                 print(f"yfinance intraday error for {symbol}: {yf_err}")
                 df = None
@@ -1107,7 +1131,7 @@ async def get_candles(
         return {
             "symbol": symbol,
             "market_type": market_type,
-            "timeframe": resample_tf,
+            "timeframe": timeframe,
             "source": source,
             "count": len(candles),
             "candles": candles,

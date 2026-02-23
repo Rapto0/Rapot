@@ -65,6 +65,11 @@ function ema(data: number[], period: number): number[] {
 // ==================== RSI ====================
 
 export function calculateRSI(candles: Candle[], period: number = 14): IndicatorValue[] {
+    if (candles.length === 0) return []
+    if (candles.length <= period) {
+        return candles.map((c) => ({ time: c.time, value: NaN }))
+    }
+
     const closes = candles.map(c => c.close)
     const result: IndicatorValue[] = []
 
@@ -81,6 +86,14 @@ export function calculateRSI(candles: Candle[], period: number = 14): IndicatorV
     let avgGain = gains.slice(0, period).reduce((a, b) => a + b, 0) / period
     let avgLoss = losses.slice(0, period).reduce((a, b) => a + b, 0) / period
 
+    const resolveRsiValue = (gain: number, loss: number): number => {
+        if (loss === 0 && gain === 0) return 50
+        if (loss === 0) return 100
+        if (gain === 0) return 0
+        const rs = gain / loss
+        return 100 - (100 / (1 + rs))
+    }
+
     // Pad with NaN for initial period
     for (let i = 0; i < period; i++) {
         result.push({ time: candles[i].time, value: NaN })
@@ -89,14 +102,12 @@ export function calculateRSI(candles: Candle[], period: number = 14): IndicatorV
     // Calculate RSI
     for (let i = period; i < candles.length; i++) {
         if (i === period) {
-            const rs = avgLoss === 0 ? 100 : avgGain / avgLoss
-            const rsi = 100 - (100 / (1 + rs))
+            const rsi = resolveRsiValue(avgGain, avgLoss)
             result.push({ time: candles[i].time, value: rsi })
         } else {
             avgGain = (avgGain * (period - 1) + gains[i - 1]) / period
             avgLoss = (avgLoss * (period - 1) + losses[i - 1]) / period
-            const rs = avgLoss === 0 ? 100 : avgGain / avgLoss
-            const rsi = 100 - (100 / (1 + rs))
+            const rsi = resolveRsiValue(avgGain, avgLoss)
             result.push({ time: candles[i].time, value: rsi })
         }
     }
