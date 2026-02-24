@@ -452,37 +452,48 @@ export function useAnimatedNumber(value: number, duration: number = 300) {
   const [displayValue, setDisplayValue] = useState(value);
   const [direction, setDirection] = useState<'up' | 'down' | null>(null);
   const previousValue = useRef(value);
+  const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (value !== previousValue.current) {
       setDirection(value > previousValue.current ? 'up' : 'down');
+      const startValue = previousValue.current;
       previousValue.current = value;
 
-      // Animate to new value
-      const startValue = displayValue;
       const diff = value - startValue;
       const startTime = performance.now();
+
+      // Cancel any running animation
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+      }
 
       const animate = (currentTime: number) => {
         const elapsed = currentTime - startTime;
         const progress = Math.min(elapsed / duration, 1);
-
-        // Easing function
         const eased = 1 - Math.pow(1 - progress, 3);
         setDisplayValue(startValue + diff * eased);
 
         if (progress < 1) {
-          requestAnimationFrame(animate);
+          rafRef.current = requestAnimationFrame(animate);
+        } else {
+          rafRef.current = null;
         }
       };
 
-      requestAnimationFrame(animate);
+      rafRef.current = requestAnimationFrame(animate);
 
       // Clear direction after animation
       const timeout = setTimeout(() => setDirection(null), duration + 100);
-      return () => clearTimeout(timeout);
+      return () => {
+        clearTimeout(timeout);
+        if (rafRef.current !== null) {
+          cancelAnimationFrame(rafRef.current);
+          rafRef.current = null;
+        }
+      };
     }
-  }, [value, duration, displayValue]);
+  }, [value, duration]);
 
   return { displayValue, direction };
 }
