@@ -13,6 +13,8 @@ export function useBinanceTicker(symbols: string[]) {
     const [prices, setPrices] = useState<Record<string, { price: number; change: number; priceChange: number }>>({})
     const ws = useRef<WebSocket | null>(null)
     const reconnectTimerRef = useRef<number | null>(null)
+    const flushTimerRef = useRef<number | null>(null)
+    const pendingUpdatesRef = useRef<Record<string, { price: number; change: number; priceChange: number }>>({})
 
     const symbolsKey = useMemo(() => {
         const unique = Array.from(
@@ -37,6 +39,11 @@ export function useBinanceTicker(symbols: string[]) {
                 window.clearTimeout(reconnectTimerRef.current)
                 reconnectTimerRef.current = null
             }
+            if (flushTimerRef.current !== null) {
+                window.clearTimeout(flushTimerRef.current)
+                flushTimerRef.current = null
+            }
+            pendingUpdatesRef.current = {}
             ws.current?.close(1000, "No symbols")
             ws.current = null
             return
@@ -45,6 +52,48 @@ export function useBinanceTicker(symbols: string[]) {
         let disposed = false
         let reconnectDelay = 1000
         let socket: WebSocket | null = null
+        const activeSymbols = new Set(normalizedSymbols)
+
+        const flushPendingUpdates = () => {
+            if (flushTimerRef.current !== null) {
+                window.clearTimeout(flushTimerRef.current)
+                flushTimerRef.current = null
+            }
+
+            const pending = pendingUpdatesRef.current
+            const entries = Object.entries(pending)
+            if (entries.length === 0) return
+            pendingUpdatesRef.current = {}
+
+            setPrices((prev) => {
+                let changed = false
+                const next = { ...prev }
+
+                for (const [symbol, payload] of entries) {
+                    // Ignore stale updates after symbols list changed.
+                    if (!activeSymbols.has(symbol)) continue
+
+                    const current = prev[symbol]
+                    if (
+                        current &&
+                        current.price === payload.price &&
+                        current.change === payload.change &&
+                        current.priceChange === payload.priceChange
+                    ) {
+                        continue
+                    }
+                    next[symbol] = payload
+                    changed = true
+                }
+
+                return changed ? next : prev
+            })
+        }
+
+        const scheduleFlush = () => {
+            if (flushTimerRef.current !== null) return
+            flushTimerRef.current = window.setTimeout(flushPendingUpdates, 250)
+        }
 
         const connect = () => {
             if (disposed) return
@@ -78,21 +127,8 @@ export function useBinanceTicker(symbols: string[]) {
                         priceChange: parseFloat(ticker.p),
                     }
 
-                    setPrices((prev) => {
-                        const current = prev[symbol]
-                        if (
-                            current &&
-                            current.price === nextValue.price &&
-                            current.change === nextValue.change &&
-                            current.priceChange === nextValue.priceChange
-                        ) {
-                            return prev
-                        }
-                        return {
-                            ...prev,
-                            [symbol]: nextValue,
-                        }
-                    })
+                    pendingUpdatesRef.current[symbol] = nextValue
+                    scheduleFlush()
                 } catch {
                     // Ignore malformed packets from network edges/proxies.
                 }
@@ -123,6 +159,11 @@ export function useBinanceTicker(symbols: string[]) {
                 window.clearTimeout(reconnectTimerRef.current)
                 reconnectTimerRef.current = null
             }
+            if (flushTimerRef.current !== null) {
+                window.clearTimeout(flushTimerRef.current)
+                flushTimerRef.current = null
+            }
+            pendingUpdatesRef.current = {}
 
             if (socket) {
                 socket.onopen = null
