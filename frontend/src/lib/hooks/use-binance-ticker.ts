@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState, useMemo } from "react"
 
 interface TickerData {
     s: string // Symbol
@@ -12,6 +12,9 @@ interface TickerData {
 export function useBinanceTicker(symbols: string[]) {
     const [prices, setPrices] = useState<Record<string, { price: number; change: number; priceChange: number }>>({})
     const ws = useRef<WebSocket | null>(null)
+
+    // Stable key for symbols array - only changes when actual symbols change
+    const symbolsKey = useMemo(() => symbols.slice().sort().join(','), [symbols])
 
     useEffect(() => {
         if (symbols.length === 0) return
@@ -37,7 +40,8 @@ export function useBinanceTicker(symbols: string[]) {
         return () => {
             ws.current?.close()
         }
-    }, [JSON.stringify(symbols)])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [symbolsKey])
 
     return prices
 }

@@ -13,21 +13,21 @@ export function BotDashboard() {
     const { data: botStatus } = useQuery({
         queryKey: ["botStatus"],
         queryFn: fetchBotStatus,
-        refetchInterval: 5000 // Real-timeish
+        refetchInterval: 30000
     })
 
     // 2. Fetch Performance Stats
     const { data: stats } = useQuery({
         queryKey: ["stats"],
         queryFn: fetchStats,
-        refetchInterval: 15000
+        refetchInterval: 60000
     })
 
     // 3. Fetch Recent Trades
     const { data: trades } = useQuery({
         queryKey: ["recent_trades"],
         queryFn: () => fetchTrades({ limit: 5 }),
-        refetchInterval: 10000
+        refetchInterval: 60000
     })
 
     const isRunning = botStatus?.bot.is_running

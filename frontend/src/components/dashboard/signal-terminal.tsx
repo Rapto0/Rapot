@@ -450,13 +450,14 @@ export function SignalTerminal({
     prevSignalsRef.current = allFilteredSignals;
   }, [allFilteredSignals, notifications]);
 
-  // Update time only on client side (avoid hydration mismatch)
+  // Update time on client side (avoid hydration mismatch)
+  // Update every 30 seconds instead of every 1 second to prevent excessive re-renders
   useEffect(() => {
     const updateTime = () => {
       setLastUpdateTime(new Date().toLocaleTimeString('tr-TR'));
     };
     updateTime();
-    const interval = setInterval(updateTime, 1000);
+    const interval = setInterval(updateTime, 30000);
     return () => clearInterval(interval);
   }, []);
 

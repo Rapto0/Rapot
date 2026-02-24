@@ -275,6 +275,17 @@ export function AdvancedChartPage({
     const candles: Candle[] = candlesResponse?.candles || []
     const dataSource = candlesResponse?.source || "loading"
 
+    // Memoize expensive indicator calculations
+    const comboSignals = useMemo(() => {
+        if (!activeIndicators.some(i => i.id === 'combo') || candles.length === 0) return []
+        return calculateCombo(candles)
+    }, [candles, activeIndicators])
+
+    const hunterSignals = useMemo(() => {
+        if (!activeIndicators.some(i => i.id === 'hunter') || candles.length === 0) return []
+        return calculateHunter(candles)
+    }, [candles, activeIndicators])
+
     // Calculate price info
     const currentPrice = candles.length > 0 ? candles[candles.length - 1].close : 0
     const prevPrice = candles.length > 1 ? candles[candles.length - 2].close : currentPrice
@@ -494,45 +505,33 @@ export function AdvancedChartPage({
                     })
                 }
 
-                // Combo overlay markers
-                if (activeIndicators.some(i => i.id === 'combo')) {
-                    const comboSignals = calculateCombo(candles)
-                    const comboWithSignals = comboSignals.filter(s => s.signal !== null)
-                    console.log(`COMBO: ${comboWithSignals.length} signals out of ${comboSignals.length} candles`)
-                    comboSignals.forEach((sig) => {
-                        if (sig.signal) {
-                            markers.push({
-                                time: formatTime(sig.time),
-                                position: sig.signal === 'AL' ? 'belowBar' : 'aboveBar',
-                                shape: sig.signal === 'AL' ? 'arrowUp' : 'arrowDown',
-                                color: sig.signal === 'AL' ? '#00e676' : '#ff5252',
-                                text: sig.signal === 'AL' ? 'DİP' : 'SAT',
-                                size: 2,
-                            })
-                        }
-                    })
-                }
+                // Combo overlay markers (using memoized calculations)
+                comboSignals.forEach((sig) => {
+                    if (sig.signal) {
+                        markers.push({
+                            time: formatTime(sig.time),
+                            position: sig.signal === 'AL' ? 'belowBar' : 'aboveBar',
+                            shape: sig.signal === 'AL' ? 'arrowUp' : 'arrowDown',
+                            color: sig.signal === 'AL' ? '#00e676' : '#ff5252',
+                            text: sig.signal === 'AL' ? 'DİP' : 'SAT',
+                            size: 2,
+                        })
+                    }
+                })
 
-                // Hunter overlay markers
-                if (activeIndicators.some(i => i.id === 'hunter')) {
-                    const hunterSignals = calculateHunter(candles)
-                    const hunterWithSignals = hunterSignals.filter(s => s.signal !== null)
-                    console.log(`HUNTER: ${hunterWithSignals.length} signals out of ${hunterSignals.length} candles`)
-                    hunterSignals.forEach((sig) => {
-                        if (sig.signal) {
-                            markers.push({
-                                time: formatTime(sig.time),
-                                position: sig.signal === 'AL' ? 'belowBar' : 'aboveBar',
-                                shape: sig.signal === 'AL' ? 'arrowUp' : 'arrowDown',
-                                color: sig.signal === 'AL' ? '#76ff03' : '#ff1744',
-                                text: sig.signal === 'AL' ? 'DİP' : 'TEPE',
-                                size: 2,
-                            })
-                        }
-                    })
-                }
-
-                console.log(`Total markers to add: ${markers.length}`)
+                // Hunter overlay markers (using memoized calculations)
+                hunterSignals.forEach((sig) => {
+                    if (sig.signal) {
+                        markers.push({
+                            time: formatTime(sig.time),
+                            position: sig.signal === 'AL' ? 'belowBar' : 'aboveBar',
+                            shape: sig.signal === 'AL' ? 'arrowUp' : 'arrowDown',
+                            color: sig.signal === 'AL' ? '#76ff03' : '#ff1744',
+                            text: sig.signal === 'AL' ? 'DİP' : 'TEPE',
+                            size: 2,
+                        })
+                    }
+                })
 
                 // Set markers using v5 API (createSeriesMarkers)
                 if (seriesInstance.current) {
@@ -557,7 +556,6 @@ export function AdvancedChartPage({
                         // Create new markers primitive (v5 API)
                         if (sortedMarkers.length > 0) {
                             markersInstance.current = createSeriesMarkers(seriesInstance.current, sortedMarkers)
-                            console.log(`Markers set via createSeriesMarkers(): ${sortedMarkers.length} markers`)
                         }
                     } catch (e) {
                         console.error('Error setting markers:', e)
@@ -579,7 +577,7 @@ export function AdvancedChartPage({
                 console.error("Chart update error:", e)
             }
         })
-    }, [candles, signals, showSignals, activeIndicators, chartReady, symbol, timeframe])
+    }, [candles, signals, showSignals, comboSignals, hunterSignals, chartReady, symbol, timeframe])
 
     // Add indicator
     const addIndicator = useCallback((indicatorId: string) => {

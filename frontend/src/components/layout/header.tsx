@@ -26,11 +26,11 @@ export function Header() {
     // Live Binance WebSocket prices
     const cryptoPrices = useBinanceTicker(CRYPTO_SYMBOLS)
 
-    // BIST prices from API (faster polling - 15 seconds)
+    // BIST prices from API
     const { data: apiTickers, refetch } = useQuery({
         queryKey: ['ticker'],
         queryFn: fetchTicker,
-        refetchInterval: 15000,
+        refetchInterval: 60000,
         initialData: []
     })
 
@@ -91,7 +91,7 @@ export function Header() {
         return () => document.removeEventListener("mousedown", handleClickOutside)
     }, [])
 
-    // Time update
+    // Time update - every 10 seconds to reduce re-renders
     useEffect(() => {
         const updateTime = () => {
             setCurrentTime(
@@ -103,7 +103,7 @@ export function Header() {
             )
         }
         updateTime()
-        const interval = setInterval(updateTime, 1000)
+        const interval = setInterval(updateTime, 10000)
         return () => clearInterval(interval)
     }, [])
 
