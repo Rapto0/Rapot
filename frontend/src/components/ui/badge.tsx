@@ -3,22 +3,22 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const badgeVariants = cva(
-    "inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+    "inline-flex items-center rounded-sm border px-2 py-0.5 text-[10px] font-semibold tracking-[0.06em] uppercase transition-colors focus:outline-none focus:ring-0",
     {
         variants: {
             variant: {
-                default: "border-transparent bg-primary text-primary-foreground shadow",
-                secondary: "border-transparent bg-secondary text-secondary-foreground",
-                destructive: "border-transparent bg-destructive text-destructive-foreground shadow",
-                outline: "text-foreground",
-                profit: "border-transparent bg-profit/20 text-profit",
-                loss: "border-transparent bg-loss/20 text-loss",
-                long: "border-transparent bg-long/20 text-long",
-                short: "border-transparent bg-short/20 text-short",
-                bist: "border-transparent bg-blue-500/20 text-blue-400",
-                crypto: "border-transparent bg-yellow-500/20 text-yellow-400",
-                combo: "border-transparent bg-purple-500/20 text-purple-400",
-                hunter: "border-transparent bg-orange-500/20 text-orange-400",
+                default: "border-border bg-muted text-foreground",
+                secondary: "border-border bg-muted text-muted-foreground",
+                destructive: "border-loss bg-loss/10 text-loss",
+                outline: "border-border bg-transparent text-foreground",
+                profit: "border-profit bg-profit/10 text-profit",
+                loss: "border-loss bg-loss/10 text-loss",
+                long: "border-profit bg-profit/10 text-profit",
+                short: "border-loss bg-loss/10 text-loss",
+                bist: "border-border bg-muted text-foreground",
+                crypto: "border-border bg-muted text-foreground",
+                combo: "border-border bg-muted text-foreground",
+                hunter: "border-border bg-muted text-foreground",
             },
         },
         defaultVariants: {

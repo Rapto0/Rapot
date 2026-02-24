@@ -1,9 +1,6 @@
 "use server"
 
-import YahooFinance from "yahoo-finance2"
-
-// Create Yahoo Finance instance
-const yahooFinance = new YahooFinance()
+import { fetchGlobalIndices } from "@/lib/api/client"
 
 export interface MarketData {
     symbol: string
@@ -21,8 +18,7 @@ interface QuoteResult {
 
 export async function getMarketData(symbols: string[]): Promise<MarketData[]> {
     try {
-        const results = await yahooFinance.quote(symbols) as QuoteResult | QuoteResult[]
-        const quotes = Array.isArray(results) ? results : [results]
+        const quotes = (await fetchGlobalIndices(symbols)) as QuoteResult[]
         return quotes.map((quote: QuoteResult) => ({
             symbol: quote.symbol,
             regularMarketPrice: quote.regularMarketPrice || 0,

@@ -3,6 +3,7 @@ market_scanner.py için unit testler.
 ScannerState ve yardımcı fonksiyonları test eder.
 """
 
+import json
 import os
 import sys
 
@@ -12,6 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from market_scanner import (
     ScannerState,
+    format_ai_message_for_telegram,
     format_combo_debug,
     format_hunter_debug,
     generate_manual_report,
@@ -48,7 +50,7 @@ class TestScannerState:
     def test_multiple_increments(self):
         """Birden fazla artırma doğru çalışır."""
         state = ScannerState()
-        for i in range(5):
+        for _ in range(5):
             state.increment_scan()
         assert state.scan_count == 5
 
@@ -145,3 +147,43 @@ class TestGenerateManualReport:
         """Rapor piyasa türünü içerir."""
         result = generate_manual_report("BTCUSDT", "Kripto", combo_result, hunter_result)
         assert "Kripto" in result
+
+
+class TestFormatAIMessageForTelegram:
+    """AI JSON -> Telegram format dönüşüm testleri."""
+
+    @pytest.mark.unit
+    def test_formats_structured_json(self):
+        payload = {
+            "sentiment_score": 30,
+            "sentiment_label": "SAT",
+            "summary": [
+                "RSI aşırı alım bölgesinde.",
+                "HUNTER göstergesi pahalı sinyali veriyor.",
+                "Haber akışı kısa vadede oynaklık yaratabilir.",
+            ],
+            "explanation": "Teknik göstergeler kısa vadede satış baskısına işaret ediyor.",
+            "key_levels": {"support": ["21.50", "20.80"], "resistance": ["22.50", "23.00"]},
+            "risk_level": "Orta",
+        }
+
+        result = format_ai_message_for_telegram("AYES", json.dumps(payload))
+
+        assert "AI KARARI (AYES)" in result
+        assert "<b>SAT</b>" in result
+        assert "Öne Çıkanlar" in result
+        assert "Destek: 21.50, 20.80" in result
+        assert '"sentiment_score"' not in result
+
+    @pytest.mark.unit
+    def test_handles_error_payload(self):
+        result = format_ai_message_for_telegram(
+            "AYES", json.dumps({"error": "Timeout", "sentiment_score": 50})
+        )
+
+        assert "AI analizi üretilemedi: Timeout" in result
+
+    @pytest.mark.unit
+    def test_fallback_for_non_json(self):
+        result = format_ai_message_for_telegram("AYES", "Düz metin AI yanıtı")
+        assert "Düz metin AI yanıtı" in result

@@ -14,7 +14,7 @@ passlib[bcrypt]>=1.7.4
 slowapi>=0.1.9
 aiohttp>=3.9.0
 beautifulsoup4>=4.12.0
-google-generativeai>=0.3.0
+google-genai>=0.4.0
 ta>=0.10.0
 watchfiles
 python-binance>=1.0.0

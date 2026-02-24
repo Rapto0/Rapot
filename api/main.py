@@ -6,6 +6,7 @@ Kullanım:
     uvicorn api.main:app --reload --port 8000
 """
 
+import os
 from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
@@ -30,8 +31,8 @@ from api.auth import (  # noqa: E402
     get_current_user,
 )
 from api.calendar_service import calendar_service  # noqa: E402
+from api.realtime import broadcast_bist_update, broadcast_ticker  # noqa: E402
 from api.realtime import router as realtime_router  # noqa: E402
-from api.realtime import broadcast_ticker, broadcast_bist_update, broadcast_signal  # noqa: E402
 
 # Rate Limiter
 limiter = Limiter(key_func=get_remote_address)
@@ -40,35 +41,41 @@ limiter = Limiter(key_func=get_remote_address)
 _start_time = datetime.now()
 
 import threading  # noqa: E402
-from contextlib import asynccontextmanager  # noqa: E402
+from contextlib import asynccontextmanager, suppress  # noqa: E402
+
+RUN_EMBEDDED_BOT = os.getenv("RUN_EMBEDDED_BOT", "0").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
     Uygulama yaşam döngüsü.
-    Botun scheduler döngüsünü arka plan thread'inde başlatır.
+    Opsiyonel olarak bot scheduler döngüsünü arka plan thread'inde başlatır.
     """
+    if RUN_EMBEDDED_BOT:
+        # Bot Thread Başlat
+        def run_scheduler():
+            try:
+                print("Embedded bot mode enabled in API process.")
+                from scheduler import start_bot
 
-    # Bot Thread Başlat
-    def run_scheduler():
-        try:
-            print("🤖 Bot Scheduler Thread Başlatılıyor...")
-            from scheduler import start_bot
+                # Async modda çalıştır (kendi event loop'unu yönetir)
+                start_bot(use_async=True)
+            except Exception as e:
+                print(f"Embedded bot thread error: {e}")
 
-            # Async modda çalıştır (kendi event loop'unu yönetir)
-            # main.py varsayılanı False olabilir ama burada True deniyoruz
-            start_bot(use_async=True)
-        except Exception as e:
-            print(f"❌ Bot Thread Hatası: {e}")
-
-    # Daemon thread: Ana process kapanınca bu da kapanır
-    bot_thread = threading.Thread(target=run_scheduler, daemon=True)
-    bot_thread.start()
+        # Daemon thread: Ana process kapanınca bu da kapanır
+        bot_thread = threading.Thread(target=run_scheduler, daemon=True)
+        bot_thread.start()
 
     yield
 
-    print("🛑 API Kapatılıyor...")
+    print("API shutting down.")
 
 
 # FastAPI uygulaması
@@ -563,8 +570,8 @@ async def get_market_overview(request: Request):
 
         for key, symbol in symbols.items():
             ticker = yf.Ticker(symbol)
-            # Mini grafik için son 1 günlük veriyi 15 veya 5er dakikalık alalım
-            df = ticker.history(period="24h", interval="15m")
+            # yfinance period values do not support "24h"; use "1d" for the last day
+            df = ticker.history(period="1d", interval="15m")
 
             if df.empty:
                 # Fallback if 24h is empty (e.g. weekend for BIST)
@@ -599,6 +606,70 @@ async def get_market_overview(request: Request):
             "bist": {"currentValue": 0, "change": 0, "history": []},
             "crypto": {"currentValue": 0, "change": 0, "history": []},
         }
+
+
+@app.get("/market/indices", tags=["Market Data"])
+@limiter.limit("20/minute")
+async def get_market_indices(
+    request: Request,
+    symbol: list[str] = Query(
+        default=["^GSPC", "^NDX", "XU100.IS"],
+        description="Global endeks sembolleri. Örnek: ?symbol=^GSPC&symbol=^NDX&symbol=XU100.IS",
+    ),
+):
+    """
+    Landing sayfası için global endeks özet verisi döndürür.
+    """
+    try:
+        display_names = {
+            "^GSPC": "S&P 500",
+            "^NDX": "Nasdaq 100",
+            "XU100.IS": "BIST 100",
+        }
+
+        unique_symbols = []
+        for raw_symbol in symbol:
+            normalized = raw_symbol.strip().upper()
+            if not normalized:
+                continue
+            if normalized in unique_symbols:
+                continue
+            unique_symbols.append(normalized)
+
+        unique_symbols = unique_symbols[:10]
+
+        items = []
+        for ticker_symbol in unique_symbols:
+            ticker = yf.Ticker(ticker_symbol)
+            hist = ticker.history(period="2d")
+            if hist.empty:
+                hist = ticker.history(period="5d")
+
+            if hist.empty:
+                continue
+
+            current_price = float(hist["Close"].iloc[-1])
+            previous_close = (
+                float(hist["Close"].iloc[-2]) if len(hist) > 1 else float(hist["Open"].iloc[-1])
+            )
+            change_percent = (
+                ((current_price - previous_close) / previous_close) * 100 if previous_close else 0.0
+            )
+
+            items.append(
+                {
+                    "symbol": ticker_symbol,
+                    "regularMarketPrice": current_price,
+                    "regularMarketChangePercent": change_percent,
+                    "shortName": display_names.get(ticker_symbol, ticker_symbol),
+                }
+            )
+
+        return items
+
+    except Exception as e:
+        print(f"Market indices error: {e}")
+        return []
 
 
 @app.get("/scans", tags=["System"])
@@ -766,7 +837,10 @@ async def get_candles(
     request: Request,
     symbol: str,
     market_type: str = Query("BIST", description="Piyasa türü (BIST/Kripto)"),
-    timeframe: str = Query("1d", description="Timeframe (15m, 30m, 1h, 2h, 4h, 8h, 12h, 1d, 1wk, 1mo)"),
+    timeframe: str = Query(
+        "1d",
+        description="Timeframe (15m, 30m, 1h, 2h, 4h, 8h, 12h, 1d, 2d, 3d, 4d, 5d, 6d, 1wk, 1mo)",
+    ),
     limit: int = Query(500, description="Number of candles (max 2000)"),
 ):
     """
@@ -830,20 +904,6 @@ async def get_candles(
     resample_tf = resample_map.get(timeframe, "1D")
     binance_interval = binance_interval_map.get(timeframe, "1d")
 
-    # yfinance interval mapping for intraday
-    yf_interval_map = {
-        "15m": "15m",
-        "30m": "30m",
-        "1h": "1h",
-        "2h": "1h",  # yfinance doesn't have 2h, will resample
-        "4h": "1h",  # will resample
-        "8h": "1h",  # will resample
-        "12h": "1h",  # will resample
-        "1d": "1d",
-        "1wk": "1wk",
-        "1mo": "1mo",
-    }
-
     df = None
     source = "cache"
 
@@ -852,32 +912,73 @@ async def get_candles(
         if market_type == "BIST" and is_intraday:
             try:
                 import pandas as pd
+                import pytz
 
                 yf_symbol = symbol + ".IS" if not symbol.endswith(".IS") else symbol
-                yf_interval = yf_interval_map.get(timeframe, "1h")
-
-                ticker = yf.Ticker(yf_symbol)
-                # For intraday, yfinance requires period instead of start date
-                # Max 60 days for 15m/30m, 730 days for 1h
-                if yf_interval in ["15m", "30m"]:
+                # NOTE:
+                # yfinance 1h bars for BIST are often misaligned and sometimes sparse compared with TradingView.
+                # For 1h, pull denser 15m bars and resample locally for better bar continuity/alignment.
+                if timeframe in ["15m", "30m"]:
+                    yf_interval = timeframe
+                    period = "60d"
+                elif timeframe == "1h":
+                    yf_interval = "15m"
                     period = "60d"
                 else:
+                    yf_interval = "1h"
                     period = "730d"
 
-                df = ticker.history(period=period, interval=yf_interval)
+                ticker = yf.Ticker(yf_symbol)
+                df = ticker.history(
+                    period=period,
+                    interval=yf_interval,
+                    auto_adjust=False,
+                    actions=False,
+                )
 
                 if df is not None and not df.empty:
+                    turkey_tz = pytz.timezone("Europe/Istanbul")
+                    if hasattr(df.index, "tz") and df.index.tz is not None:
+                        df.index = df.index.tz_convert(turkey_tz)
+                    else:
+                        with suppress(Exception):
+                            df.index = df.index.tz_localize("UTC").tz_convert(turkey_tz)
+
+                    agg_map = {
+                        "Open": "first",
+                        "High": "max",
+                        "Low": "min",
+                        "Close": "last",
+                        "Volume": "sum",
+                    }
+
+                    if timeframe == "30m" and yf_interval == "15m":
+                        df = (
+                            df.resample("30min", label="left", closed="left", origin="start_day")
+                            .agg(agg_map)
+                            .dropna()
+                        )
+                    elif timeframe == "1h" and yf_interval == "15m":
+                        df = (
+                            df.resample("1h", label="left", closed="left", origin="start_day")
+                            .agg(agg_map)
+                            .dropna()
+                        )
                     # Resample if needed (2h, 4h, 8h, 12h)
-                    if timeframe in ["2h", "4h", "8h", "12h"]:
+                    elif timeframe in ["2h", "4h", "8h", "12h"]:
                         hours = int(timeframe.replace("h", ""))
-                        df = df.resample(f"{hours}h").agg({
-                            'Open': 'first',
-                            'High': 'max',
-                            'Low': 'min',
-                            'Close': 'last',
-                            'Volume': 'sum'
-                        }).dropna()
-                    source = "yfinance_intraday"
+                        df = (
+                            df.resample(
+                                f"{hours}h", label="left", closed="left", origin="start_day"
+                            )
+                            .agg(agg_map)
+                            .dropna()
+                        )
+                    source = (
+                        "yfinance_intraday_resampled"
+                        if timeframe != yf_interval
+                        else "yfinance_intraday"
+                    )
             except Exception as yf_err:
                 print(f"yfinance intraday error for {symbol}: {yf_err}")
                 df = None
@@ -885,25 +986,33 @@ async def get_candles(
         # For Crypto with intraday: Fetch directly from Binance with the interval
         elif market_type in ["Kripto", "CRYPTO"] and is_intraday:
             try:
-                from binance.client import Client
                 import pandas as pd
+                from binance.client import Client
 
                 client = Client()
-                klines = client.get_klines(
-                    symbol=symbol,
-                    interval=binance_interval,
-                    limit=limit
-                )
+                klines = client.get_klines(symbol=symbol, interval=binance_interval, limit=limit)
 
                 if klines:
-                    df = pd.DataFrame(klines, columns=[
-                        'timestamp', 'Open', 'High', 'Low', 'Close', 'Volume',
-                        'close_time', 'quote_volume', 'trades', 'taker_buy_base',
-                        'taker_buy_quote', 'ignore'
-                    ])
-                    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-                    df.set_index('timestamp', inplace=True)
-                    df = df[['Open', 'High', 'Low', 'Close', 'Volume']].astype(float)
+                    df = pd.DataFrame(
+                        klines,
+                        columns=[
+                            "timestamp",
+                            "Open",
+                            "High",
+                            "Low",
+                            "Close",
+                            "Volume",
+                            "close_time",
+                            "quote_volume",
+                            "trades",
+                            "taker_buy_base",
+                            "taker_buy_quote",
+                            "ignore",
+                        ],
+                    )
+                    df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
+                    df.set_index("timestamp", inplace=True)
+                    df = df[["Open", "High", "Low", "Close", "Volume"]].astype(float)
                     source = "binance"
             except Exception as binance_err:
                 print(f"Binance intraday error for {symbol}: {binance_err}")
@@ -934,12 +1043,10 @@ async def get_candles(
 
                         # Save to cache for next time
                         if df is not None and not df.empty:
-                            try:
+                            with suppress(Exception):
                                 from price_cache import price_cache as pc
 
                                 pc.set(symbol, market_type, df)
-                            except Exception:
-                                pass
                     except Exception as bist_err:
                         print(f"BIST data error for {symbol}: {bist_err}")
                         df = None
@@ -954,12 +1061,10 @@ async def get_candles(
 
                         # Save to cache
                         if df is not None and not df.empty:
-                            try:
+                            with suppress(Exception):
                                 from price_cache import price_cache as pc
 
                                 pc.set(symbol, "Kripto", df)
-                            except Exception:
-                                pass
                     except Exception as crypto_err:
                         print(f"Crypto data error for {symbol}: {crypto_err}")
                         df = None
@@ -992,6 +1097,7 @@ async def get_candles(
 
         # 5. Format output with Turkey timezone conversion
         import pytz
+
         turkey_tz = pytz.timezone("Europe/Istanbul")
         candles = []
         if df is not None and not df.empty:
@@ -1003,13 +1109,11 @@ async def get_candles(
                 ts = index
                 if is_intraday:
                     # Convert UTC to Turkey timezone for intraday data
-                    if hasattr(ts, 'tzinfo') and ts.tzinfo is not None:
+                    if hasattr(ts, "tzinfo") and ts.tzinfo is not None:
                         ts = ts.astimezone(turkey_tz)
-                    elif hasattr(ts, 'tz_localize'):
-                        try:
-                            ts = ts.tz_localize('UTC').tz_convert(turkey_tz)
-                        except Exception:
-                            pass
+                    elif hasattr(ts, "tz_localize"):
+                        with suppress(Exception):
+                            ts = ts.tz_localize("UTC").tz_convert(turkey_tz)
                     time_val = ts.strftime("%Y-%m-%d %H:%M")
                 else:
                     time_val = ts.strftime("%Y-%m-%d")
@@ -1028,7 +1132,7 @@ async def get_candles(
         return {
             "symbol": symbol,
             "market_type": market_type,
-            "timeframe": resample_tf,
+            "timeframe": timeframe,
             "source": source,
             "count": len(candles),
             "candles": candles,
@@ -1059,8 +1163,8 @@ async def startup_event():
 
     # Start Real-time Services
     try:
-        from websocket_manager import ws_manager
         from bist_service import bist_service
+        from websocket_manager import ws_manager
 
         # Register callbacks for broadcasting
         ws_manager.on("ticker", broadcast_ticker)
@@ -1081,8 +1185,8 @@ async def shutdown_event():
     """API kapanışında çalışır."""
     # Stop Real-time Services
     try:
-        from websocket_manager import ws_manager
         from bist_service import bist_service
+        from websocket_manager import ws_manager
 
         await ws_manager.stop()
         await bist_service.stop()

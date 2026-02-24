@@ -7,20 +7,39 @@ import json
 import threading
 from typing import Any
 
-import google.generativeai as genai
+try:
+    from google import genai as google_genai
+except Exception:  # pragma: no cover
+    google_genai = None
 
 from logger import get_logger
 from settings import settings
+
+legacy_genai = None
 
 logger = get_logger(__name__)
 
 # Gemini API - settings.py'den credentials alınıyor
 api_key = settings.gemini_api_key
 
+gemini_client = None
+gemini_backend = "none"
+
 if api_key:
-    genai.configure(api_key=api_key)
+    if google_genai is not None:
+        gemini_client = google_genai.Client(api_key=api_key)
+        gemini_backend = "google.genai"
+    else:
+        try:
+            import google.generativeai as legacy_genai_module
+
+            legacy_genai = legacy_genai_module
+            legacy_genai.configure(api_key=api_key)
+            gemini_backend = "google.generativeai"
+        except Exception:
+            logger.warning("Gemini SDK bulunamadi (google.genai / google.generativeai).")
 else:
-    logger.warning("GEMINI_API_KEY bulunamadı!")
+    logger.warning("GEMINI_API_KEY bulunamadi!")
 
 # AI analizi için timeout - settings.py'den alınıyor
 AI_TIMEOUT = settings.ai_timeout
@@ -108,13 +127,22 @@ def analyze_with_gemini(
             {"error": "API Key eksik", "sentiment_score": 50, "summary": ["Analiz yapılamadı."]}
         )
 
+    if gemini_client is None and legacy_genai is None:
+        return json.dumps(
+            {
+                "error": "Gemini SDK eksik",
+                "sentiment_score": 50,
+                "summary": ["Gemini SDK bulunamadi."],
+            }
+        )
+
     result = {"text": None, "error": None}
 
     def _generate():
         try:
             import json
 
-            model = genai.GenerativeModel("gemini-2.0-flash")
+            model = None
 
             news_text = "Haber verisi yok veya çekilemedi. Sadece tekniğe odaklan."
             if news_context:
@@ -150,9 +178,22 @@ def analyze_with_gemini(
             }}
             """
 
-            response = model.generate_content(prompt)
+            if gemini_client is not None:
+                response = gemini_client.models.generate_content(
+                    model="gemini-2.0-flash", contents=prompt
+                )
+                response_text = getattr(response, "text", None)
+            elif legacy_genai is not None:
+                model = legacy_genai.GenerativeModel("gemini-2.0-flash")
+                response = model.generate_content(prompt)
+                response_text = getattr(response, "text", None)
+            else:
+                raise RuntimeError("Gemini SDK unavailable")
+
+            if not response_text:
+                raise ValueError("Gemini API bos yanit dondurdu")
             # Markdown temizliği (bazı modeller ```json ... ``` ile dönebilir)
-            clean_text = response.text.replace("```json", "").replace("```", "").strip()
+            clean_text = response_text.replace("```json", "").replace("```", "").strip()
 
             # JSON doğrulama
             json.loads(clean_text)

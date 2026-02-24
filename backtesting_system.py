@@ -141,7 +141,7 @@ class Portfolio:
 
         # Komisyon + slippage hesapla
         cost_rate = self.costs.get_total_cost(self.market_type)
-        effective_price = price * (1 - cost_rate)  # Slippage: daha düşük fiyat
+        _effective_price = price * (1 - cost_rate)  # Slippage: daha düşük fiyat
 
         # Satış geliri (komisyon düşülmüş)
         gross_revenue = oldest_lot.shares * price
@@ -746,7 +746,7 @@ class BacktestEngine:
             family="monospace",
             ha="center",
             va="center",
-            bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.3),
+            bbox={"boxstyle": "round", "facecolor": "wheat", "alpha": 0.3},
         )
 
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -1093,8 +1093,51 @@ def main():
     engine = BacktestEngine(start_date="2006-01-01")
 
     # Test sembolleri
-    bist_symbols = ["THYAO", "GARAN", "ASELS"]
-    crypto_symbols = ["BTCUSDT", "ETHUSDT"]
+    bist_symbols = [
+        "THYAO",
+        "GARAN",
+        "ASELS",
+        "KRDMD",
+        "SISE",
+        "TUPRS",
+        "VESTL",
+        "EREGL",
+        "PETKM",
+        "AKBNK",
+        "BIMAS",
+        "FROTO",
+        "ISCTR",
+        "SASA",
+        "TOASO",
+        "YKBNK",
+        "CCOLA",
+        "ARCLK",
+        "MGROS",
+        "KCHOL",
+        "EREGL",
+    ]
+    crypto_symbols = [
+        "BTCUSDT",
+        "ETHUSDT",
+        "BNBUSDT",
+        "XRPUSDT",
+        "ADAUSDT",
+        "SOLUSDT",
+        "DOGEUSDT",
+        "DOTUSDT",
+        "MATICUSDT",
+        "LTCUSDT",
+        "AVAXUSDT",
+        "SHIBUSDT",
+        "TRXUSDT",
+        "UNIUSDT",
+        "LINKUSDT",
+        "ATOMUSDT",
+        "XLMUSDT",
+        "ETCUSDT",
+        "FTMUSDT",
+        "ALGOUSDT",
+    ]
 
     # BIST Backtest (normal)
     portfolio_bist = engine.run_backtest(

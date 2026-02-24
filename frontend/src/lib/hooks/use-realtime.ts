@@ -147,28 +147,21 @@ export const useRealtimeStore = create<RealtimeStore>((set, get) => ({
   },
 
   priceChanges: new Map(),
-  _flashTimers: new Map<string, NodeJS.Timeout>(),
   setPriceChange: (symbol, direction) => {
-    const state = get() as any;
-    const newChanges = new Map<string, 'up' | 'down' | null>(state.priceChanges);
+    const newChanges = new Map(get().priceChanges);
     newChanges.set(symbol, direction);
     set({ priceChanges: newChanges });
 
-    // Clear flash after animation, debounce per symbol
+    // Clear flash after animation
     if (direction) {
-      const timers = state._flashTimers as Map<string, NodeJS.Timeout>;
-      const existing = timers.get(symbol);
-      if (existing) clearTimeout(existing);
-
-      timers.set(symbol, setTimeout(() => {
+      setTimeout(() => {
         const current = get().priceChanges;
         if (current.get(symbol) === direction) {
           const cleared = new Map(current);
           cleared.set(symbol, null);
           set({ priceChanges: cleared });
         }
-        timers.delete(symbol);
-      }, 500));
+      }, 500);
     }
   },
 
@@ -459,44 +452,44 @@ export function useAnimatedNumber(value: number, duration: number = 300) {
   const [displayValue, setDisplayValue] = useState(value);
   const [direction, setDirection] = useState<'up' | 'down' | null>(null);
   const previousValue = useRef(value);
-  const animFrameRef = useRef<number | null>(null);
+  const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (value !== previousValue.current) {
       setDirection(value > previousValue.current ? 'up' : 'down');
       const startValue = previousValue.current;
       previousValue.current = value;
+
       const diff = value - startValue;
       const startTime = performance.now();
 
-      // Cancel any ongoing animation
-      if (animFrameRef.current) {
-        cancelAnimationFrame(animFrameRef.current);
+      // Cancel any running animation
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
       }
 
       const animate = (currentTime: number) => {
         const elapsed = currentTime - startTime;
         const progress = Math.min(elapsed / duration, 1);
-
-        // Easing function
         const eased = 1 - Math.pow(1 - progress, 3);
         setDisplayValue(startValue + diff * eased);
 
         if (progress < 1) {
-          animFrameRef.current = requestAnimationFrame(animate);
+          rafRef.current = requestAnimationFrame(animate);
         } else {
-          animFrameRef.current = null;
+          rafRef.current = null;
         }
       };
 
-      animFrameRef.current = requestAnimationFrame(animate);
+      rafRef.current = requestAnimationFrame(animate);
 
       // Clear direction after animation
       const timeout = setTimeout(() => setDirection(null), duration + 100);
       return () => {
         clearTimeout(timeout);
-        if (animFrameRef.current) {
-          cancelAnimationFrame(animFrameRef.current);
+        if (rafRef.current !== null) {
+          cancelAnimationFrame(rafRef.current);
+          rafRef.current = null;
         }
       };
     }

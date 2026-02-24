@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { DM_Mono, DM_Sans } from "next/font/google";
 import "./globals.css";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
@@ -7,19 +7,21 @@ import { MobileNav, MobileHeader } from "@/components/layout/mobile-nav";
 import { MainContent } from "@/components/layout/main-content";
 import { Providers } from "@/components/providers";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const dmSans = DM_Sans({
   subsets: ["latin"],
+  variable: "--font-dm-sans",
+  weight: ["400", "500", "600", "700"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const dmMono = DM_Mono({
   subsets: ["latin"],
+  variable: "--font-dm-mono",
+  weight: ["400", "500"],
 });
 
 export const metadata: Metadata = {
-  title: "Rapot Dashboard | Finansal Analiz Platformu",
-  description: "Profesyonel BIST ve Kripto piyasa tarama, sinyal ve trade takip platformu",
+  title: "Rapot Terminal | Finansal Analiz Platformu",
+  description: "BIST ve Kripto piyasa tarama, sinyal ve trade takip platformu",
   keywords: ["BIST", "Kripto", "Trading", "Sinyal", "Analiz", "Dashboard"],
 };
 
@@ -30,22 +32,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="tr" className="dark">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
-      >
+      <body className={`${dmSans.variable} ${dmMono.variable} antialiased bg-background text-foreground font-sans`}>
         <Providers>
-          {/* Desktop Navigation */}
           <Sidebar />
           <Header />
-
-          {/* Mobile Navigation */}
           <MobileHeader />
-          <MobileNav />
-
-          {/* Main Content - Responsive margins */}
           <MainContent>
             {children}
           </MainContent>
+          <MobileNav />
         </Providers>
       </body>
     </html>
