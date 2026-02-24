@@ -969,7 +969,7 @@ export function AdvancedChartPage({
     })
 
     // Live crypto prices for watchlist
-    const cryptoPrices = useBinanceTicker(CRYPTO_WATCHLIST)
+    const cryptoPrices = useBinanceTicker(CRYPTO_WATCHLIST, { paused: activeTool !== "none" })
 
     const candles: Candle[] = useMemo(() => {
         const rawCandles = candlesResponse?.candles || []

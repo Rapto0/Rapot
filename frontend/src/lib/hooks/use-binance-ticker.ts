@@ -9,7 +9,12 @@ interface TickerData {
     P: string // Price Change Percent
 }
 
-export function useBinanceTicker(symbols: string[]) {
+interface UseBinanceTickerOptions {
+    paused?: boolean
+}
+
+export function useBinanceTicker(symbols: string[], options?: UseBinanceTickerOptions) {
+    const paused = options?.paused === true
     const [prices, setPrices] = useState<Record<string, { price: number; change: number; priceChange: number }>>({})
     const ws = useRef<WebSocket | null>(null)
     const reconnectTimerRef = useRef<number | null>(null)
@@ -34,7 +39,7 @@ export function useBinanceTicker(symbols: string[]) {
     )
 
     useEffect(() => {
-        if (normalizedSymbols.length === 0) {
+        if (paused || normalizedSymbols.length === 0) {
             if (reconnectTimerRef.current !== null) {
                 window.clearTimeout(reconnectTimerRef.current)
                 reconnectTimerRef.current = null
@@ -44,7 +49,7 @@ export function useBinanceTicker(symbols: string[]) {
                 flushTimerRef.current = null
             }
             pendingUpdatesRef.current = {}
-            ws.current?.close(1000, "No symbols")
+            ws.current?.close(1000, paused ? "Paused" : "No symbols")
             ws.current = null
             return
         }
@@ -179,7 +184,7 @@ export function useBinanceTicker(symbols: string[]) {
                 ws.current = null
             }
         }
-    }, [normalizedSymbols, symbolsKey])
+    }, [normalizedSymbols, symbolsKey, paused])
 
     return prices
 }
