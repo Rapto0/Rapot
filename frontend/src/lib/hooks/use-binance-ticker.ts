@@ -11,15 +11,22 @@ interface TickerData {
 
 interface UseBinanceTickerOptions {
     paused?: boolean
+    flushIntervalMs?: number
 }
 
 export function useBinanceTicker(symbols: string[], options?: UseBinanceTickerOptions) {
     const paused = options?.paused === true
+    const flushIntervalMs = Math.max(100, options?.flushIntervalMs ?? 250)
     const [prices, setPrices] = useState<Record<string, { price: number; change: number; priceChange: number }>>({})
     const ws = useRef<WebSocket | null>(null)
     const reconnectTimerRef = useRef<number | null>(null)
     const flushTimerRef = useRef<number | null>(null)
     const pendingUpdatesRef = useRef<Record<string, { price: number; change: number; priceChange: number }>>({})
+    const perfLogRef = useRef<{ lastAt: number; flushes: number; symbols: number }>({
+        lastAt: 0,
+        flushes: 0,
+        symbols: 0,
+    })
 
     const symbolsKey = useMemo(() => {
         const unique = Array.from(
@@ -93,11 +100,27 @@ export function useBinanceTicker(symbols: string[], options?: UseBinanceTickerOp
 
                 return changed ? next : prev
             })
+
+            if (process.env.NODE_ENV !== "production") {
+                const now = performance.now()
+                perfLogRef.current.flushes += 1
+                perfLogRef.current.symbols = entries.length
+                if (now - perfLogRef.current.lastAt >= 3000) {
+                    perfLogRef.current.lastAt = now
+                    console.debug("[ws-perf] binance-ticker", {
+                        symbols: normalizedSymbols.length,
+                        flushIntervalMs,
+                        pendingSymbols: perfLogRef.current.symbols,
+                        flushCountWindow: perfLogRef.current.flushes,
+                    })
+                    perfLogRef.current.flushes = 0
+                }
+            }
         }
 
         const scheduleFlush = () => {
             if (flushTimerRef.current !== null) return
-            flushTimerRef.current = window.setTimeout(flushPendingUpdates, 250)
+            flushTimerRef.current = window.setTimeout(flushPendingUpdates, flushIntervalMs)
         }
 
         const connect = () => {
@@ -184,7 +207,7 @@ export function useBinanceTicker(symbols: string[], options?: UseBinanceTickerOp
                 ws.current = null
             }
         }
-    }, [normalizedSymbols, symbolsKey, paused])
+    }, [normalizedSymbols, symbolsKey, paused, flushIntervalMs])
 
     return prices
 }

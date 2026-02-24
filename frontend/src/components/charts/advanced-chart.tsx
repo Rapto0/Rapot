@@ -6,17 +6,17 @@ import { fetchCandles, fetchBistSymbols, fetchTicker } from "@/lib/api/client"
 import { useBinanceTicker } from "@/lib/hooks/use-binance-ticker"
 import { cn } from "@/lib/utils"
 import {
-    calculateRSI,
-    calculateMACD,
-    calculateWilliamsR,
-    calculateCCI,
-    calculateCombo,
-    calculateHunter,
     AVAILABLE_INDICATORS,
     type Candle,
     type IndicatorMeta,
     type IndicatorParamSchema,
 } from "@/lib/indicators"
+import type {
+    IndicatorWorkerComputeRequest,
+    IndicatorWorkerComputeResponse,
+    WorkerIndicatorDescriptor,
+    WorkerPaneSeriesResult,
+} from "@/lib/types/indicator-worker"
 import {
     Search,
     TrendingUp,
@@ -127,6 +127,16 @@ interface TextDrawing {
     id: string
     point: ChartAnchorPoint
     text: string
+}
+
+interface WorkerComputationState {
+    requestId: number
+    computeMs: number
+    panes: Record<string, WorkerPaneSeriesResult>
+    overlays: {
+        combo: Array<{ time: string, signal: "AL" | "SAT" }>
+        hunter: Array<{ time: string, signal: "AL" | "SAT" }>
+    }
 }
 
 const INDICATOR_SETTINGS_STORAGE_KEY = "rapot.dashboard.indicators.v1"
@@ -307,6 +317,9 @@ const CRYPTO_WATCHLIST = [
     "BTCUSDT", "ETHUSDT", "BNBUSDT", "XRPUSDT", "ADAUSDT",
     "DOGEUSDT", "SOLUSDT", "DOTUSDT", "MATICUSDT", "LTCUSDT",
 ]
+
+const DEV_PERF_ENABLED = process.env.NODE_ENV !== "production"
+const DEV_PERF_THROTTLE_MS = 2000
 
 // ==================== CHART THEME ====================
 
@@ -565,6 +578,12 @@ export function AdvancedChartPage({
         close: number
         volume: number
     } | null>(null)
+    const [workerComputationState, setWorkerComputationState] = useState<WorkerComputationState>({
+        requestId: 0,
+        computeMs: 0,
+        panes: {},
+        overlays: { combo: [], hunter: [] },
+    })
 
     // Refs
     const chartContainerRef = useRef<HTMLDivElement>(null)
@@ -586,6 +605,10 @@ export function AdvancedChartPage({
     const pendingRulerAnchorRef = useRef<ChartAnchorPoint | null>(null)
     const overlaySyncRafRef = useRef<number | null>(null)
     const hasProjectedDrawingsRef = useRef(false)
+    const indicatorWorkerRef = useRef<Worker | null>(null)
+    const latestWorkerRequestIdRef = useRef(0)
+    const pendingWorkerDispatchTimerRef = useRef<number | null>(null)
+    const perfLogRef = useRef<Record<string, number>>({})
 
     // Register indicator chart for crosshair sync
     const registerIndicatorChart = useCallback((id: string, chart: any) => {
@@ -594,6 +617,15 @@ export function AdvancedChartPage({
 
     const showWatchlistToast = useCallback((message: string) => {
         setWatchlistNotice(message)
+    }, [])
+
+    const logPerf = useCallback((key: string, payload: Record<string, unknown>) => {
+        if (!DEV_PERF_ENABLED) return
+        const now = performance.now()
+        const last = perfLogRef.current[key] || 0
+        if (now - last < DEV_PERF_THROTTLE_MS) return
+        perfLogRef.current[key] = now
+        console.debug(`[chart-perf] ${key}`, payload)
     }, [])
 
     const requestOverlayProjectionRefresh = useCallback(() => {
@@ -995,7 +1027,10 @@ export function AdvancedChartPage({
     })
 
     // Live crypto prices for watchlist
-    const cryptoPrices = useBinanceTicker(CRYPTO_WATCHLIST, { paused: activeTool !== "none" })
+    const cryptoPrices = useBinanceTicker(CRYPTO_WATCHLIST, {
+        paused: activeTool !== "none",
+        flushIntervalMs: 320,
+    })
 
     const candles: Candle[] = useMemo(() => {
         const rawCandles = candlesResponse?.candles || []
@@ -1040,6 +1075,124 @@ export function AdvancedChartPage({
             .sort()
         return tracked.join("|")
     }, [activeIndicators])
+
+    const workerIndicators = useMemo<WorkerIndicatorDescriptor[]>(() => (
+        activeIndicators
+            .map((indicator) => ({
+                id: indicator.id,
+                params: indicator.params,
+                visible: indicator.visible,
+                isOverlay: indicator.meta.isOverlay,
+            }))
+            .sort((a, b) => a.id.localeCompare(b.id))
+    ), [activeIndicators])
+
+    const workerIndicatorSignature = useMemo(
+        () => workerIndicators
+            .map((indicator) => {
+                const params = Object.entries(indicator.params)
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([key, value]) => `${key}=${value}`)
+                    .join(",")
+                return `${indicator.id}:${indicator.visible ? "1" : "0"}:${indicator.isOverlay ? "overlay" : "pane"}:${params}`
+            })
+            .join("|"),
+        [workerIndicators]
+    )
+
+    const workerOverlaySignature = useMemo(() => {
+        const combo = workerComputationState.overlays.combo
+        const hunter = workerComputationState.overlays.hunter
+        const comboFirst = combo[0]
+        const comboLast = combo[combo.length - 1]
+        const hunterFirst = hunter[0]
+        const hunterLast = hunter[hunter.length - 1]
+        return [
+            `combo:${combo.length}:${comboFirst?.time || ""}:${comboFirst?.signal || ""}:${comboLast?.time || ""}:${comboLast?.signal || ""}`,
+            `hunter:${hunter.length}:${hunterFirst?.time || ""}:${hunterFirst?.signal || ""}:${hunterLast?.time || ""}:${hunterLast?.signal || ""}`,
+        ].join("|")
+    }, [workerComputationState.overlays.combo, workerComputationState.overlays.hunter])
+
+    useEffect(() => {
+        if (typeof window === "undefined") return
+        let worker: Worker | null = null
+        try {
+            worker = new Worker(new URL("../../workers/indicator-worker.ts", import.meta.url), { type: "module" })
+            indicatorWorkerRef.current = worker
+        } catch (error) {
+            console.error("Indicator worker could not be started:", error)
+            indicatorWorkerRef.current = null
+            return
+        }
+
+        worker.onmessage = (event: MessageEvent<IndicatorWorkerComputeResponse>) => {
+            const message = event.data
+            if (!message || message.type !== "compute-indicators-result") {
+                return
+            }
+            if (message.requestId < latestWorkerRequestIdRef.current) {
+                return
+            }
+            setWorkerComputationState({
+                requestId: message.requestId,
+                computeMs: message.computeMs,
+                panes: message.panes,
+                overlays: message.overlays,
+            })
+            logPerf("indicator-worker", {
+                requestId: message.requestId,
+                computeMs: Number(message.computeMs.toFixed(2)),
+                paneCount: Object.keys(message.panes).length,
+                comboSignals: message.overlays.combo.length,
+                hunterSignals: message.overlays.hunter.length,
+            })
+        }
+
+        worker.onerror = (error) => {
+            console.error("Indicator worker error:", error)
+        }
+
+        return () => {
+            if (pendingWorkerDispatchTimerRef.current !== null) {
+                window.clearTimeout(pendingWorkerDispatchTimerRef.current)
+                pendingWorkerDispatchTimerRef.current = null
+            }
+            worker?.terminate()
+            indicatorWorkerRef.current = null
+        }
+    }, [logPerf])
+
+    useEffect(() => {
+        if (!indicatorWorkerRef.current) return
+
+        if (pendingWorkerDispatchTimerRef.current !== null) {
+            window.clearTimeout(pendingWorkerDispatchTimerRef.current)
+            pendingWorkerDispatchTimerRef.current = null
+        }
+
+        pendingWorkerDispatchTimerRef.current = window.setTimeout(() => {
+            const worker = indicatorWorkerRef.current
+            if (!worker) return
+
+            const requestId = latestWorkerRequestIdRef.current + 1
+            latestWorkerRequestIdRef.current = requestId
+
+            const message: IndicatorWorkerComputeRequest = {
+                type: "compute-indicators",
+                requestId,
+                candles,
+                indicators: workerIndicators,
+            }
+            worker.postMessage(message)
+        }, 60)
+
+        return () => {
+            if (pendingWorkerDispatchTimerRef.current !== null) {
+                window.clearTimeout(pendingWorkerDispatchTimerRef.current)
+                pendingWorkerDispatchTimerRef.current = null
+            }
+        }
+    }, [candles, candlesSignature, workerIndicators, workerIndicatorSignature])
 
     // Calculate price info
     const currentPrice = candles.length > 0 ? candles[candles.length - 1].close : 0
@@ -1241,11 +1394,12 @@ export function AdvancedChartPage({
                 }
             }
         })
-    }, [isFullscreen])
+    }, [isFullscreen, requestOverlayProjectionRefresh])
 
     // Update chart data
     useEffect(() => {
         if (!chartReady || candles.length === 0 || !seriesInstance.current) return
+        const updateStart = performance.now()
 
         // Dynamic import for v5 markers API
         import("lightweight-charts").then(({ createSeriesMarkers }) => {
@@ -1276,7 +1430,14 @@ export function AdvancedChartPage({
                 // Add signal markers (including Combo/Hunter overlays)
                 const shouldSkipHeavyMarkerOps = activeToolRef.current !== "none"
                 if (!shouldSkipHeavyMarkerOps) {
-                    const markers: any[] = []
+                    const markers: Array<{
+                        time: string | number
+                        position: "belowBar" | "aboveBar"
+                        shape: "arrowUp" | "arrowDown"
+                        color: string
+                        text: string
+                        size: number
+                    }> = []
 
                     // Original signals
                     if (showSignals && signals.length > 0) {
@@ -1295,36 +1456,32 @@ export function AdvancedChartPage({
                     // Combo overlay markers
                     const comboIndicator = activeIndicators.find(i => i.id === 'combo' && i.visible)
                     if (comboIndicator) {
-                        const comboSignals = calculateCombo(candles, comboIndicator.params)
+                        const comboSignals = workerComputationState.overlays.combo
                         comboSignals.forEach((sig) => {
-                            if (sig.signal) {
-                                markers.push({
-                                    time: formatTime(sig.time),
-                                    position: sig.signal === 'AL' ? 'belowBar' : 'aboveBar',
-                                    shape: sig.signal === 'AL' ? 'arrowUp' : 'arrowDown',
-                                    color: sig.signal === 'AL' ? '#00e676' : '#ff5252',
-                                    text: sig.signal === 'AL' ? 'DİP' : 'SAT',
-                                    size: 2,
-                                })
-                            }
+                            markers.push({
+                                time: formatTime(sig.time),
+                                position: sig.signal === 'AL' ? 'belowBar' : 'aboveBar',
+                                shape: sig.signal === 'AL' ? 'arrowUp' : 'arrowDown',
+                                color: sig.signal === 'AL' ? '#00e676' : '#ff5252',
+                                text: sig.signal === 'AL' ? 'DİP' : 'SAT',
+                                size: 2,
+                            })
                         })
                     }
 
                     // Hunter overlay markers
                     const hunterIndicator = activeIndicators.find(i => i.id === 'hunter' && i.visible)
                     if (hunterIndicator) {
-                        const hunterSignals = calculateHunter(candles, hunterIndicator.params)
+                        const hunterSignals = workerComputationState.overlays.hunter
                         hunterSignals.forEach((sig) => {
-                            if (sig.signal) {
-                                markers.push({
-                                    time: formatTime(sig.time),
-                                    position: sig.signal === 'AL' ? 'belowBar' : 'aboveBar',
-                                    shape: sig.signal === 'AL' ? 'arrowUp' : 'arrowDown',
-                                    color: sig.signal === 'AL' ? '#76ff03' : '#ff1744',
-                                    text: sig.signal === 'AL' ? 'DİP' : 'TEPE',
-                                    size: 2,
-                                })
-                            }
+                            markers.push({
+                                time: formatTime(sig.time),
+                                position: sig.signal === 'AL' ? 'belowBar' : 'aboveBar',
+                                shape: sig.signal === 'AL' ? 'arrowUp' : 'arrowDown',
+                                color: sig.signal === 'AL' ? '#76ff03' : '#ff1744',
+                                text: sig.signal === 'AL' ? 'DİP' : 'TEPE',
+                                size: 2,
+                            })
                         })
                     }
 
@@ -1373,11 +1530,18 @@ export function AdvancedChartPage({
                     lastTimeframeRef.current = timeframe
                 }
                 requestOverlayProjectionRefresh()
+                logPerf("main-chart-update", {
+                    ms: Number((performance.now() - updateStart).toFixed(2)),
+                    candles: candleData.length,
+                    workerRequestId: workerComputationState.requestId,
+                    comboSignals: workerComputationState.overlays.combo.length,
+                    hunterSignals: workerComputationState.overlays.hunter.length,
+                })
             } catch (e) {
                 console.error("Chart update error:", e)
             }
         })
-    }, [candles, signals, showSignals, activeIndicators, chartReady, symbol, timeframe, candlesSignature, signalsSignature, markerIndicatorSignature, activeTool, requestOverlayProjectionRefresh])
+    }, [candles, signals, showSignals, activeIndicators, chartReady, symbol, timeframe, candlesSignature, signalsSignature, markerIndicatorSignature, activeTool, requestOverlayProjectionRefresh, workerComputationState.requestId, workerOverlaySignature, workerComputationState.overlays.combo, workerComputationState.overlays.hunter, logPerf])
 
     // Add indicator
     const addIndicator = useCallback((indicatorId: string) => {
@@ -2213,6 +2377,7 @@ export function AdvancedChartPage({
                         key={ind.id}
                         indicator={ind}
                         candles={candles}
+                        precomputedSeries={workerComputationState.panes[ind.id] || null}
                         onRemove={() => {
                             removeIndicator(ind.id)
                             indicatorChartsRef.current.delete(ind.id)
@@ -2603,13 +2768,14 @@ export function AdvancedChartPage({
 interface IndicatorPaneProps {
     indicator: ActiveIndicator
     candles: Candle[]
+    precomputedSeries: WorkerPaneSeriesResult | null
     onRemove: () => void
     mainChartRef: React.MutableRefObject<any>
     hoveredUnixTime: number | null
     onChartReady?: (indicatorId: string, chart: any) => void
 }
 
-function IndicatorPane({ indicator, candles, onRemove, mainChartRef, hoveredUnixTime, onChartReady }: IndicatorPaneProps) {
+function IndicatorPane({ indicator, candles, precomputedSeries, onRemove, mainChartRef, hoveredUnixTime, onChartReady }: IndicatorPaneProps) {
     const containerRef = useRef<HTMLDivElement>(null)
     const chartRef = useRef<any>(null)
     const primarySeriesRef = useRef<any>(null)
@@ -2711,38 +2877,64 @@ function IndicatorPane({ indicator, candles, onRemove, mainChartRef, hoveredUnix
                     .sort((a, b) => a.timeKey - b.timeKey)
             }
 
-            if (indicator.id === 'rsi') {
-                const rsiData = calculateRSI(candles, indicator.params.period || 14)
-                series = chart.addSeries(LineSeries, { color: chartColors.indicators.rsi, lineWidth: 2, priceScaleId: 'right' })
-                const lineData = deduplicateByTime(rsiData.filter(d => !isNaN(d.value)).map(d => ({ time: formatTime(d.time), value: d.value })))
+            if (indicator.id === "rsi") {
+                series = chart.addSeries(LineSeries, { color: chartColors.indicators.rsi, lineWidth: 2, priceScaleId: "right" })
+                let lineData: Array<{ time: string | number, value: number }> = []
+                if (precomputedSeries?.kind === "line") {
+                    lineData = deduplicateByTime(
+                        precomputedSeries.line.map((point) => ({ time: formatTime(point.time), value: point.value }))
+                    )
+                }
                 series.setData(lineData as any)
                 setPrimarySeriesPoints(lineData)
-            } else if (indicator.id === 'macd') {
-                const macdData = calculateMACD(
-                    candles,
-                    indicator.params.fast || 12,
-                    indicator.params.slow || 26,
-                    indicator.params.signal || 9
-                )
+            } else if (indicator.id === "macd") {
                 const macdSeries = chart.addSeries(LineSeries, { color: chartColors.indicators.macd, lineWidth: 2 })
-                const macdLine = deduplicateByTime(macdData.filter(d => !isNaN(d.macd)).map(d => ({ time: formatTime(d.time), value: d.macd })))
-                macdSeries.setData(macdLine as any)
                 const signalSeries = chart.addSeries(LineSeries, { color: chartColors.indicators.macdSignal, lineWidth: 2 })
-                signalSeries.setData(deduplicateByTime(macdData.filter(d => !isNaN(d.signal)).map(d => ({ time: formatTime(d.time), value: d.signal }))) as any)
                 const histSeries = chart.addSeries(HistogramSeries, { color: chartColors.indicators.macdHistogram })
-                histSeries.setData(deduplicateByTime(macdData.filter(d => !isNaN(d.histogram)).map(d => ({ time: formatTime(d.time), value: d.histogram, color: d.histogram >= 0 ? 'rgba(0, 200, 83, 0.5)' : 'rgba(255, 61, 0, 0.5)' }))) as any)
+
+                let macdLine: Array<{ time: string | number, value: number }> = []
+                let signalLine: Array<{ time: string | number, value: number }> = []
+                let histogram: Array<{ time: string | number, value: number, color: string }> = []
+
+                if (precomputedSeries?.kind === "macd") {
+                    macdLine = deduplicateByTime(
+                        precomputedSeries.macd.map((point) => ({ time: formatTime(point.time), value: point.value }))
+                    )
+                    signalLine = deduplicateByTime(
+                        precomputedSeries.signal.map((point) => ({ time: formatTime(point.time), value: point.value }))
+                    )
+                    histogram = deduplicateByTime(
+                        precomputedSeries.histogram.map((point) => ({
+                            time: formatTime(point.time),
+                            value: point.value,
+                            color: point.color,
+                        }))
+                    )
+                }
+
+                macdSeries.setData(macdLine as any)
+                signalSeries.setData(signalLine as any)
+                histSeries.setData(histogram as any)
                 series = macdSeries
                 setPrimarySeriesPoints(macdLine)
-            } else if (indicator.id === 'wr') {
-                const wrData = calculateWilliamsR(candles, indicator.params.period || 14)
+            } else if (indicator.id === "wr") {
                 series = chart.addSeries(LineSeries, { color: chartColors.indicators.wr, lineWidth: 2 })
-                const lineData = deduplicateByTime(wrData.filter(d => !isNaN(d.value)).map(d => ({ time: formatTime(d.time), value: d.value })))
+                let lineData: Array<{ time: string | number, value: number }> = []
+                if (precomputedSeries?.kind === "line") {
+                    lineData = deduplicateByTime(
+                        precomputedSeries.line.map((point) => ({ time: formatTime(point.time), value: point.value }))
+                    )
+                }
                 series.setData(lineData as any)
                 setPrimarySeriesPoints(lineData)
-            } else if (indicator.id === 'cci') {
-                const cciData = calculateCCI(candles, indicator.params.period || 20)
+            } else if (indicator.id === "cci") {
                 series = chart.addSeries(LineSeries, { color: chartColors.indicators.cci, lineWidth: 2 })
-                const lineData = deduplicateByTime(cciData.filter(d => !isNaN(d.value)).map(d => ({ time: formatTime(d.time), value: d.value })))
+                let lineData: Array<{ time: string | number, value: number }> = []
+                if (precomputedSeries?.kind === "line") {
+                    lineData = deduplicateByTime(
+                        precomputedSeries.line.map((point) => ({ time: formatTime(point.time), value: point.value }))
+                    )
+                }
                 series.setData(lineData as any)
                 setPrimarySeriesPoints(lineData)
             }
@@ -2819,7 +3011,7 @@ function IndicatorPane({ indicator, candles, onRemove, mainChartRef, hoveredUnix
                 primarySeriesPointsRef.current = []
             }
         })
-    }, [indicator, candleSignature, mainChartRef, onChartReady, candles])
+    }, [indicator, candleSignature, mainChartRef, onChartReady, candles, precomputedSeries])
 
     useEffect(() => {
         if (!containerRef.current || !chartRef.current || isDisposedRef.current) return
