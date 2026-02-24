@@ -584,6 +584,8 @@ export function AdvancedChartPage({
     const rulerDraftStartRef = useRef<ChartAnchorPoint | null>(null)
     const rulerMoveRafRef = useRef<number | null>(null)
     const pendingRulerAnchorRef = useRef<ChartAnchorPoint | null>(null)
+    const overlaySyncRafRef = useRef<number | null>(null)
+    const hasProjectedDrawingsRef = useRef(false)
 
     // Register indicator chart for crosshair sync
     const registerIndicatorChart = useCallback((id: string, chart: any) => {
@@ -594,9 +596,29 @@ export function AdvancedChartPage({
         setWatchlistNotice(message)
     }, [])
 
+    const requestOverlayProjectionRefresh = useCallback(() => {
+        if (overlaySyncRafRef.current !== null) {
+            return
+        }
+        overlaySyncRafRef.current = window.requestAnimationFrame(() => {
+            overlaySyncRafRef.current = null
+            setOverlayRenderNonce((value) => value + 1)
+        })
+    }, [])
+
     useEffect(() => {
         activeToolRef.current = activeTool
     }, [activeTool])
+
+    useEffect(() => {
+        hasProjectedDrawingsRef.current =
+            rulerDrawings.length > 0 ||
+            pencilDrawings.length > 0 ||
+            textDrawings.length > 0 ||
+            rulerDraftStart !== null ||
+            rulerDraftEnd !== null ||
+            activePencilPoints !== null
+    }, [rulerDrawings, pencilDrawings, textDrawings, rulerDraftStart, rulerDraftEnd, activePencilPoints])
 
     useEffect(() => {
         rulerDraftStartRef.current = rulerDraftStart
@@ -742,6 +764,10 @@ export function AdvancedChartPage({
 
     useEffect(() => {
         return () => {
+            if (overlaySyncRafRef.current !== null) {
+                window.cancelAnimationFrame(overlaySyncRafRef.current)
+                overlaySyncRafRef.current = null
+            }
             if (rulerMoveRafRef.current !== null) {
                 window.cancelAnimationFrame(rulerMoveRafRef.current)
                 rulerMoveRafRef.current = null
@@ -1180,7 +1206,12 @@ export function AdvancedChartPage({
             setChartReady(true)
 
             const handleVisibleRangeChange = () => {
-                setOverlayRenderNonce((value) => value + 1)
+                // Skip expensive React re-renders while there are no custom drawings to project.
+                if (!hasProjectedDrawingsRef.current) {
+                    return
+                }
+
+                requestOverlayProjectionRefresh()
             }
             chart.timeScale().subscribeVisibleLogicalRangeChange(handleVisibleRangeChange)
 
@@ -1341,12 +1372,12 @@ export function AdvancedChartPage({
                     lastSymbolRef.current = symbol
                     lastTimeframeRef.current = timeframe
                 }
-                setOverlayRenderNonce((value) => value + 1)
+                requestOverlayProjectionRefresh()
             } catch (e) {
                 console.error("Chart update error:", e)
             }
         })
-    }, [candles, signals, showSignals, activeIndicators, chartReady, symbol, timeframe, candlesSignature, signalsSignature, markerIndicatorSignature, activeTool])
+    }, [candles, signals, showSignals, activeIndicators, chartReady, symbol, timeframe, candlesSignature, signalsSignature, markerIndicatorSignature, activeTool, requestOverlayProjectionRefresh])
 
     // Add indicator
     const addIndicator = useCallback((indicatorId: string) => {
