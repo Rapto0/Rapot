@@ -6,7 +6,7 @@ export function useHealthCheck() {
     return useQuery({
         queryKey: ['health'],
         queryFn: fetchHealth,
-        refetchInterval: 5000, // Check every 5 seconds
+        refetchInterval: 60000, // Check every 60 seconds
     });
 }
 
@@ -15,7 +15,7 @@ export function useBotStatus() {
     return useQuery({
         queryKey: ['bot', 'status'],
         queryFn: fetchBotStatus,
-        refetchInterval: 10000, // Refresh every 10 seconds
+        refetchInterval: 30000, // Refresh every 30 seconds
     });
 }
 
