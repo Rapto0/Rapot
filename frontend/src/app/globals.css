@@ -366,23 +366,8 @@ button {
 }
 
 .shimmer {
-  background: linear-gradient(
-    90deg,
-    rgba(255, 255, 255, 0.04) 0%,
-    rgba(255, 255, 255, 0.09) 50%,
-    rgba(255, 255, 255, 0.04) 100%
-  );
-  background-size: 200% 100%;
-  animation: shimmer-slide 1.8s linear infinite;
-}
-
-@keyframes shimmer-slide {
-  from {
-    background-position: -200% 0;
-  }
-  to {
-    background-position: 200% 0;
-  }
+  background: rgba(255, 255, 255, 0.06);
+  animation: pulse-soft 1.2s ease-in-out infinite;
 }
 
 /* Remove legacy decorative classes impact */

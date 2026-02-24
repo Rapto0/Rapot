@@ -1,242 +1,143 @@
-"use client"
+﻿"use client"
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { useBotHealth } from "@/lib/hooks/use-health"
 import { useQuery } from "@tanstack/react-query"
-import { fetchScanHistory } from "@/lib/api/client"
-import {
-    Search,
-    TrendingUp,
-    Clock,
-    BarChart3,
-    Play,
-    RefreshCw,
-} from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { useBotHealth } from "@/lib/hooks/use-health"
+import { fetchScanHistory } from "@/lib/api/client"
+import { RefreshCw, Search } from "lucide-react"
 
 export default function ScannerPage() {
-    const health = useBotHealth()
+  const health = useBotHealth()
 
-    // Fetch recent scans
-    const { data: recentScans, isLoading: isScansLoading } = useQuery({
-        queryKey: ['scanHistory'],
-        queryFn: () => fetchScanHistory(10),
-        refetchInterval: 30000,
-    })
+  const { data: recentScans, isLoading, refetch, isFetching } = useQuery({
+    queryKey: ["scanHistory"],
+    queryFn: () => fetchScanHistory(12),
+    refetchInterval: 30_000,
+  })
 
-    return (
-        <div className="space-y-4">
-            {/* Page Header */}
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-2xl font-bold">Piyasa Tarayıcı</h1>
-                    <p className="text-sm text-muted-foreground">
-                        BIST ve Kripto piyasalarını tarama ve izleme
-                    </p>
-                </div>
-                <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" className="gap-2">
-                        <RefreshCw className="h-4 w-4" />
-                        Yenile
-                    </Button>
-                    <Button size="sm" className="gap-2">
-                        <Play className="h-4 w-4" />
-                        Taramayı Başlat
-                    </Button>
-                </div>
-            </div>
-
-            {/* Scanner Stats */}
-            <div className="grid gap-4 md:grid-cols-4">
-                <Card>
-                    <CardContent className="pt-4">
-                        <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                                <Search className="h-5 w-5" />
-                            </div>
-                            <div>
-                                <p className="text-2xl font-bold">{health.isScanning ? "Taranıyor..." : "Hazır"}</p>
-                                <p className="text-xs text-muted-foreground">Bot Durumu</p>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardContent className="pt-4">
-                        <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-profit/10 text-profit">
-                                <TrendingUp className="h-5 w-5" />
-                            </div>
-                            <div>
-                                <p className="text-2xl font-bold">{health.scanCount}</p>
-                                <p className="text-xs text-muted-foreground">Toplam Tarama</p>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardContent className="pt-4">
-                        <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-yellow-500/10 text-yellow-500">
-                                <Clock className="h-5 w-5" />
-                            </div>
-                            <div>
-                                <p className="text-2xl font-bold">{health.uptime}</p>
-                                <p className="text-xs text-muted-foreground">Çalışma Süresi</p>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardContent className="pt-4">
-                        <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">
-                                <BarChart3 className="h-5 w-5" />
-                            </div>
-                            <div>
-                                <p className="text-2xl font-bold">~30s</p>
-                                <p className="text-xs text-muted-foreground">Ort. Süre</p>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-
-            {/* Market Sections */}
-            <div className="grid gap-4 lg:grid-cols-2">
-                {/* BIST Scanner */}
-                <Card>
-                    <CardHeader>
-                        <div className="flex items-center justify-between">
-                            <CardTitle className="flex items-center gap-2 text-base">
-                                <Badge variant="bist">BIST</Badge>
-                                Borsa İstanbul
-                            </CardTitle>
-                            <div className="flex items-center gap-2">
-                                <div className="relative">
-                                    <div className={`h-2 w-2 rounded-full ${health.isRunning ? 'bg-profit' : 'bg-loss'}`} />
-                                    {health.isRunning && <div className="absolute inset-0 h-2 w-2 animate-ping rounded-full bg-profit opacity-75" />}
-                                </div>
-                                <span className="text-xs text-muted-foreground">Aktif</span>
-                            </div>
-                        </div>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="space-y-3">
-                            <div className="flex justify-between text-sm">
-                                <span className="text-muted-foreground">Taranan Sembol</span>
-                                <span className="font-medium">500+</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                                <span className="text-muted-foreground">Aktif Strateji</span>
-                                <span className="font-medium">COMBO + HUNTER</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                                <span className="text-muted-foreground">Son Tarama</span>
-                                <span className="font-medium">
-                                    {health.lastScan ? new Date(health.lastScan).toLocaleTimeString('tr-TR') : '-'}
-                                </span>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-
-                {/* Crypto Scanner */}
-                <Card>
-                    <CardHeader>
-                        <div className="flex items-center justify-between">
-                            <CardTitle className="flex items-center gap-2 text-base">
-                                <Badge variant="crypto">Kripto</Badge>
-                                Binance
-                            </CardTitle>
-                            <div className="flex items-center gap-2">
-                                <div className="relative">
-                                    <div className={`h-2 w-2 rounded-full ${health.isRunning ? 'bg-profit' : 'bg-loss'}`} />
-                                    {health.isRunning && <div className="absolute inset-0 h-2 w-2 animate-ping rounded-full bg-profit opacity-75" />}
-                                </div>
-                                <span className="text-xs text-muted-foreground">Aktif</span>
-                            </div>
-                        </div>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="space-y-3">
-                            <div className="flex justify-between text-sm">
-                                <span className="text-muted-foreground">Taranan Sembol</span>
-                                <span className="font-medium">150+</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                                <span className="text-muted-foreground">Aktif Strateji</span>
-                                <span className="font-medium">COMBO + HUNTER</span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                                <span className="text-muted-foreground">Son Tarama</span>
-                                <span className="font-medium">
-                                    {health.lastScan ? new Date(health.lastScan).toLocaleTimeString('tr-TR') : '-'}
-                                </span>
-                            </div>
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
-
-            {/* Recent Scans */}
-            <Card>
-                <CardHeader>
-                    <CardTitle className="text-base">Son Taramalar</CardTitle>
-                </CardHeader>
-                <CardContent className="p-0">
-                    {isScansLoading && <div className="p-4 text-center text-sm text-muted-foreground">Yükleniyor...</div>}
-                    {!isScansLoading && (!recentScans || recentScans.length === 0) && (
-                        <div className="p-4 text-center text-sm text-muted-foreground">Kayıt yok</div>
-                    )}
-
-                    {!isScansLoading && recentScans && recentScans.length > 0 && (
-                        <div className="divide-y divide-border">
-                            {recentScans.map((scan) => (
-                                <div
-                                    key={scan.id}
-                                    className="flex items-center justify-between px-4 py-3"
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted text-sm font-bold">
-                                            #{scan.id}
-                                        </div>
-                                        <div>
-                                            <div className="flex items-center gap-2">
-                                                <Badge
-                                                    variant={scan.scan_type === "BIST" ? "bist" : "crypto"}
-                                                >
-                                                    {scan.scan_type}
-                                                </Badge>
-                                                <span className="text-sm font-medium">
-                                                    {scan.symbols_scanned} sembol tarandı
-                                                </span>
-                                            </div>
-                                            <p className="text-xs text-muted-foreground mt-1">
-                                                Süre: {scan.duration_seconds.toFixed(1)} saniye
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="text-sm font-medium text-profit">
-                                            {scan.signals_found} sinyal bulundu
-                                        </p>
-                                        <p className="text-xs text-muted-foreground">
-                                            {new Date(scan.created_at).toLocaleString("tr-TR", {
-                                                day: "2-digit",
-                                                month: "2-digit",
-                                                hour: "2-digit",
-                                                minute: "2-digit",
-                                            })}
-                                        </p>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </CardContent>
-            </Card>
+  return (
+    <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-3 p-3">
+      <section className="border border-border bg-surface p-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <div className="label-uppercase">Tarayıcı</div>
+            <h1 className="mt-1 text-lg font-semibold tracking-[-0.02em]">Piyasa tarama ekranı</h1>
+            <p className="mt-1 text-xs text-muted-foreground">BIST ve Kripto taramalarının durum ve geçmişi.</p>
+          </div>
+          <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => refetch()} disabled={isFetching}>
+            <RefreshCw className={isFetching ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} />
+            Yenile
+          </Button>
         </div>
-    )
+      </section>
+
+      <section className="grid h-16 shrink-0 grid-cols-2 border border-border bg-surface md:grid-cols-4">
+        <RibbonItem label="Bot" value={health.isRunning ? "Aktif" : "Kapalı"} tone={health.isRunning ? "profit" : "loss"} />
+        <RibbonItem label="Tarama" value={health.isScanning ? "Sürüyor" : "Hazır"} tone={health.isScanning ? "neutral" : undefined} />
+        <RibbonItem label="Toplam" value={`${health.scanCount}`} />
+        <RibbonItem label="Uptime" value={health.uptime} />
+      </section>
+
+      <section className="grid gap-3 border border-border bg-surface p-3 md:grid-cols-2">
+        <ScannerBox
+          market="BIST"
+          active={health.isRunning}
+          text="Borsa İstanbul sembolleri periyodik olarak taranıyor."
+        />
+        <ScannerBox
+          market="Kripto"
+          active={health.isRunning}
+          text="Binance spot çiftleri COMBO ve HUNTER ile izleniyor."
+        />
+      </section>
+
+      <section className="border border-border bg-surface">
+        <div className="border-b border-border px-3 py-2">
+          <span className="label-uppercase">Son taramalar</span>
+        </div>
+
+        {isLoading ? (
+          <div className="px-3 py-8 text-center text-xs text-muted-foreground">Yükleniyor...</div>
+        ) : null}
+
+        {!isLoading && (!recentScans || recentScans.length === 0) ? (
+          <div className="px-3 py-8 text-center text-xs text-muted-foreground">Kayıt bulunamadı.</div>
+        ) : null}
+
+        {!isLoading && recentScans && recentScans.length > 0 ? (
+          <div className="divide-y divide-border">
+            {recentScans.map((scan) => (
+              <div key={scan.id} className="grid grid-cols-[72px_1fr_96px_80px] items-center gap-2 px-3 py-2">
+                <div className="mono-numbers text-xs text-muted-foreground">#{scan.id}</div>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <Badge variant={scan.scan_type === "BIST" ? "bist" : "crypto"}>{scan.scan_type}</Badge>
+                    <span className="text-xs text-foreground">{scan.symbols_scanned} sembol</span>
+                  </div>
+                  <div className="mt-0.5 text-[10px] text-muted-foreground">Süre: {scan.duration_seconds.toFixed(1)} sn</div>
+                </div>
+                <div className="mono-numbers text-right text-xs text-profit">{scan.signals_found} sinyal</div>
+                <div className="mono-numbers text-right text-[10px] text-muted-foreground">
+                  {new Date(scan.created_at).toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </section>
+    </div>
+  )
+}
+
+function RibbonItem({
+  label,
+  value,
+  tone,
+}: {
+  label: string
+  value: string
+  tone?: "profit" | "loss" | "neutral"
+}) {
+  return (
+    <div className="flex min-w-0 flex-col justify-center gap-1 border-r border-border px-3 last:border-r-0">
+      <span className="label-uppercase">{label}</span>
+      <span
+        className={
+          tone === "profit"
+            ? "mono-numbers truncate text-lg font-semibold text-profit"
+            : tone === "loss"
+              ? "mono-numbers truncate text-lg font-semibold text-loss"
+              : tone === "neutral"
+                ? "mono-numbers truncate text-lg font-semibold text-neutral"
+                : "mono-numbers truncate text-lg font-semibold"
+        }
+      >
+        {value}
+      </span>
+    </div>
+  )
+}
+
+function ScannerBox({
+  market,
+  active,
+  text,
+}: {
+  market: "BIST" | "Kripto"
+  active: boolean
+  text: string
+}) {
+  return (
+    <div className="border border-border bg-base p-3">
+      <div className="mb-2 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Search className="h-3.5 w-3.5 text-muted-foreground" />
+          <span className="text-sm font-semibold">{market}</span>
+        </div>
+        <span className={active ? "signal-badge signal-buy" : "signal-badge signal-sell"}>{active ? "AKTİF" : "KAPALI"}</span>
+      </div>
+      <p className="text-xs text-muted-foreground">{text}</p>
+    </div>
+  )
 }

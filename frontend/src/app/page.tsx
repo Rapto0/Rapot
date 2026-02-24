@@ -76,7 +76,7 @@ export default function LandingPage() {
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-3">
             <div className="label-uppercase">Rapot Terminal</div>
-            <h1 className="max-w-3xl text-2xl font-semibold tracking-[-0.02em] md:text-[30px]">
+            <h1 className="max-w-3xl text-xl font-semibold tracking-[-0.02em] md:text-2xl">
               Kripto ve BIST için veri odaklı izleme, analiz ve sinyal akışı
             </h1>
             <p className="max-w-2xl text-sm text-muted-foreground">

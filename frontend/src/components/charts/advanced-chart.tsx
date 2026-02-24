@@ -2070,7 +2070,7 @@ export function AdvancedChartPage({
                                     onClick={() => setTimeframe(tf.value)}
                                     className={cn(
                                         "px-3 py-1.5 rounded-sm text-sm font-medium transition-all",
-                                        timeframe === tf.value ? "bg-primary/20 text-primary neon-text" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                                        timeframe === tf.value ? "bg-raised text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                                     )}
                                 >{tf.label}</button>
                             ))}
@@ -2558,8 +2558,8 @@ export function AdvancedChartPage({
                                     <div
                                         key={`${row.marketType}-${row.rawSymbol}-${index}`}
                                         className={cn(
-                                            "group grid grid-cols-[1.4fr_1fr_0.8fr_20px] items-center gap-2 px-3 py-2 hover:bg-[#1a2230] transition-colors",
-                                            symbol === row.rawSymbol && marketType === row.marketType && "bg-[#1f2e44]"
+                                            "group grid grid-cols-[1.4fr_1fr_0.8fr_20px] items-center gap-2 px-3 py-2 transition-colors hover:bg-raised",
+                                            symbol === row.rawSymbol && marketType === row.marketType && "bg-raised"
                                         )}
                                     >
                                         <button
