@@ -1988,12 +1988,12 @@ export function AdvancedChartPage({
         <div
             ref={fullscreenContainerRef}
             className={cn(
-                "relative flex rounded-sm overflow-hidden bg-background glass-panel-intense",
+                "relative flex h-full min-h-0 overflow-hidden rounded-sm bg-background glass-panel-intense",
                 isFullscreen ? "fixed inset-0 z-50 rounded-none" : ""
             )}
         >
             {/* Main Chart Area */}
-            <div className="flex-1 flex flex-col min-w-0">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                 {/* Header */}
                 <div className="flex items-center justify-between px-4 py-3 border-b border-border/30">
                     {/* Symbol Selector */}
@@ -2227,7 +2227,7 @@ export function AdvancedChartPage({
                 )}
 
                 {/* Chart Area */}
-                <div className="flex-1 relative" style={{ minHeight: isFullscreen ? 'calc(100vh - 200px)' : '500px' }}>
+                <div className="relative flex-1 min-h-[320px]">
                     {visibleOverlayIndicators.length > 0 && (
                         <div className="absolute left-3 top-3 z-20 flex flex-col gap-1 pointer-events-none">
                             {visibleOverlayIndicators.map((ind) => (
@@ -2272,7 +2272,7 @@ export function AdvancedChartPage({
                     <div
                         ref={chartContainerRef}
                         className="w-full h-full cursor-crosshair"
-                        style={{ touchAction: 'none', minHeight: 'inherit' }}
+                        style={{ touchAction: 'none' }}
                     />
 
                     <div
@@ -2405,8 +2405,8 @@ export function AdvancedChartPage({
 
             {/* Right Panel - Watchlist (TradingView Style) */}
             {showRightPanel && (
-                <div className="w-[280px] border-l border-border/30 flex bg-surface text-foreground">
-                    <div className="flex-1 flex flex-col min-w-0">
+                <div className="flex w-[300px] border-l border-border/30 bg-surface text-foreground xl:w-[320px]">
+                    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                         <div className="relative flex items-center gap-1 px-2 py-2 border-b border-border">
                             <div className="relative">
                                 <button

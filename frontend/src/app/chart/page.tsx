@@ -9,19 +9,25 @@ function ChartPageContent() {
   const symbol = searchParams.get("symbol") || "THYAO"
   const market = (searchParams.get("market") as "BIST" | "Kripto") || "BIST"
 
-  return <AdvancedChartPage initialSymbol={symbol} initialMarket={market} />
+  return (
+    <div className="h-full min-h-0">
+      <AdvancedChartPage initialSymbol={symbol} initialMarket={market} />
+    </div>
+  )
 }
 
 export default function ChartPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex h-[420px] items-center justify-center border border-border bg-surface text-xs text-muted-foreground">
-          Grafik yükleniyor...
-        </div>
-      }
-    >
-      <ChartPageContent />
-    </Suspense>
+    <div className="h-full min-h-0">
+      <Suspense
+        fallback={
+          <div className="flex h-full min-h-[420px] items-center justify-center border border-border bg-surface text-xs text-muted-foreground">
+            Grafik yükleniyor...
+          </div>
+        }
+      >
+        <ChartPageContent />
+      </Suspense>
+    </div>
   )
 }
