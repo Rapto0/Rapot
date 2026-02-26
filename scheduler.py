@@ -89,11 +89,19 @@ def start_bot(use_async: bool = True) -> None:
         use_async: True ise async tarama kullan (varsayılan: True, main.py'den False geçiliyor)
     """
     from command_handler import check_commands
+    from db_session import init_db
     from market_scanner import get_scan_count, scan_market
 
     mode = "⚡ Async" if use_async else "🔄 Sync"
     logger.info(f"🚀 Bot Başlatılıyor... ({mode} Mode)")
     print(f"🚀 Bot Başlatılıyor... ({mode} Mode)")
+
+    try:
+        init_db()
+        logger.info("Bot başlangıcında veritabanı şeması doğrulandı.")
+    except Exception as e:
+        logger.error(f"Veritabanı başlatılamadı, bot durduruluyor: {e}")
+        raise
 
     # Health API'yi başlat
     try:
@@ -127,11 +135,11 @@ def start_bot(use_async: bool = True) -> None:
             get_scan_count_callback=get_scan_count,
         )
 
+    def run_sync_scan():
+        scan_market(check_commands_callback=check_commands_wrapper)
+
     # Tarama fonksiyonu seç
-    if use_async:
-        scan_func = run_async_scan_wrapper
-    else:
-        scan_func = lambda: scan_market(check_commands_callback=check_commands_wrapper)
+    scan_func = run_async_scan_wrapper if use_async else run_sync_scan
 
     # İlk tarama
     logger.info("İlk tarama başlatılıyor...")
