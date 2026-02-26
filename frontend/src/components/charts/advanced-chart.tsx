@@ -614,20 +614,20 @@ export function AdvancedChartPage({
         if (!chartInstance.current) return
         const mainTimeScale = chartInstance.current.timeScale?.()
         if (!mainTimeScale) return
-        const visibleRange = mainTimeScale.getVisibleRange?.() || null
         const logicalRange = mainTimeScale.getVisibleLogicalRange?.() || null
-        if (!visibleRange && !logicalRange) return
+        const visibleRange = mainTimeScale.getVisibleRange?.() || null
+        if (!logicalRange && !visibleRange) return
 
         indicatorChartsRef.current.forEach((paneChart) => {
             try {
                 const paneTimeScale = paneChart.timeScale?.()
                 if (!paneTimeScale) return
-                if (visibleRange && typeof paneTimeScale.setVisibleRange === "function") {
-                    paneTimeScale.setVisibleRange(visibleRange)
-                    return
-                }
                 if (logicalRange && typeof paneTimeScale.setVisibleLogicalRange === "function") {
                     paneTimeScale.setVisibleLogicalRange(logicalRange)
+                    return
+                }
+                if (visibleRange && typeof paneTimeScale.setVisibleRange === "function") {
+                    paneTimeScale.setVisibleRange(visibleRange)
                 }
             } catch (error) {
                 // Ignore stale indicator chart handles.
@@ -3023,15 +3023,15 @@ function IndicatorPane({ indicator, candles, precomputedSeries, onRemove, mainCh
                 if (isDisposedRef.current || !mainChartRef.current || isSyncingRef.current) return
                 try {
                     const mainTimeScale = mainChartRef.current.timeScale()
-                    const visibleRange = mainTimeScale.getVisibleRange?.() || null
                     const logicalRange = mainTimeScale.getVisibleLogicalRange?.() || null
+                    const visibleRange = mainTimeScale.getVisibleRange?.() || null
                     if ((visibleRange || logicalRange) && chartRef.current) {
                         isSyncingRef.current = true
                         const paneTimeScale = chartRef.current.timeScale()
-                        if (visibleRange && typeof paneTimeScale.setVisibleRange === "function") {
-                            paneTimeScale.setVisibleRange(visibleRange)
-                        } else if (logicalRange && typeof paneTimeScale.setVisibleLogicalRange === "function") {
+                        if (logicalRange && typeof paneTimeScale.setVisibleLogicalRange === "function") {
                             paneTimeScale.setVisibleLogicalRange(logicalRange)
+                        } else if (visibleRange && typeof paneTimeScale.setVisibleRange === "function") {
+                            paneTimeScale.setVisibleRange(visibleRange)
                         }
                         isSyncingRef.current = false
                     }
