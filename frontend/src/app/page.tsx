@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, type ComponentType, type KeyboardEvent } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Search, ArrowRight, LayoutDashboard, CalendarDays, LineChart, Activity } from "lucide-react"
+import { Search, ArrowRight, CalendarDays, LineChart, Activity, History } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { useBinanceTicker } from "@/lib/hooks/use-binance-ticker"
@@ -121,10 +121,10 @@ export default function LandingPage() {
 
       <section className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-4">
         <QuickLinkCard
-          href="/dashboard"
-          title="Dashboard"
-          description="Canlı chart + indikatör + izleme listesi"
-          icon={LayoutDashboard}
+          href="/trades"
+          title="İşlemler"
+          description="Açık ve kapalı pozisyon kayıtları"
+          icon={History}
         />
         <QuickLinkCard
           href="/chart"

@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation"
 import type { ComponentType } from "react"
 import { cn } from "@/lib/utils"
 import {
-  LayoutDashboard,
   Search,
   Bell,
   History,
@@ -25,7 +24,6 @@ type NavItem = {
 
 const navigation: NavItem[] = [
   { name: "Ana Sayfa", href: "/", icon: Home },
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Grafik", href: "/chart", icon: BarChart3 },
   { name: "Tarayıcı", href: "/scanner", icon: Search },
   { name: "Sinyaller", href: "/signals", icon: Bell },

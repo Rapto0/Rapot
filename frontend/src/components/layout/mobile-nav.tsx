@@ -4,9 +4,9 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import {
-  LayoutDashboard,
   Search,
   Bell,
+  BarChart3,
   History,
   Settings,
   Home,
@@ -14,7 +14,7 @@ import {
 
 const mobileNavItems = [
   { name: "Ana", href: "/", icon: Home },
-  { name: "Panel", href: "/dashboard", icon: LayoutDashboard },
+  { name: "Grafik", href: "/chart", icon: BarChart3 },
   { name: "Tarayıcı", href: "/scanner", icon: Search },
   { name: "Sinyal", href: "/signals", icon: Bell },
   { name: "Ayar", href: "/settings", icon: Settings },
