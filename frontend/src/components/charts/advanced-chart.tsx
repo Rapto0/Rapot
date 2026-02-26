@@ -614,12 +614,21 @@ export function AdvancedChartPage({
         if (!chartInstance.current) return
         const mainTimeScale = chartInstance.current.timeScale?.()
         if (!mainTimeScale) return
-        const range = mainTimeScale.getVisibleLogicalRange?.()
-        if (!range) return
+        const visibleRange = mainTimeScale.getVisibleRange?.() || null
+        const logicalRange = mainTimeScale.getVisibleLogicalRange?.() || null
+        if (!visibleRange && !logicalRange) return
 
         indicatorChartsRef.current.forEach((paneChart) => {
             try {
-                paneChart.timeScale().setVisibleLogicalRange(range)
+                const paneTimeScale = paneChart.timeScale?.()
+                if (!paneTimeScale) return
+                if (visibleRange && typeof paneTimeScale.setVisibleRange === "function") {
+                    paneTimeScale.setVisibleRange(visibleRange)
+                    return
+                }
+                if (logicalRange && typeof paneTimeScale.setVisibleLogicalRange === "function") {
+                    paneTimeScale.setVisibleLogicalRange(logicalRange)
+                }
             } catch (error) {
                 // Ignore stale indicator chart handles.
             }
@@ -2905,6 +2914,44 @@ function IndicatorPane({ indicator, candles, precomputedSeries, onRemove, mainCh
                     .sort((a, b) => a.timeKey - b.timeKey)
             }
 
+            const candleTimeline = deduplicateByTime(
+                candles.map((item) => ({ time: formatTime(item.time) }))
+            ).map((item) => item.time)
+
+            const alignLineToTimeline = (line: Array<{ time: string | number, value: number }>) => {
+                if (candleTimeline.length === 0) return line as Array<{ time: string | number } | { time: string | number, value: number }>
+                const valueByTime = new Map<number, number>()
+                for (const point of line) {
+                    const timeKey = typeof point.time === "number" ? point.time : parseChartTimeToUnix(point.time)
+                    valueByTime.set(timeKey, point.value)
+                }
+                return candleTimeline.map((time) => {
+                    const timeKey = typeof time === "number" ? time : parseChartTimeToUnix(time)
+                    const value = valueByTime.get(timeKey)
+                    if (value === undefined) {
+                        return { time }
+                    }
+                    return { time, value }
+                })
+            }
+
+            const alignHistogramToTimeline = (histogram: Array<{ time: string | number, value: number, color: string }>) => {
+                if (candleTimeline.length === 0) return histogram as Array<{ time: string | number } | { time: string | number, value: number, color: string }>
+                const valueByTime = new Map<number, { value: number, color: string }>()
+                for (const point of histogram) {
+                    const timeKey = typeof point.time === "number" ? point.time : parseChartTimeToUnix(point.time)
+                    valueByTime.set(timeKey, { value: point.value, color: point.color })
+                }
+                return candleTimeline.map((time) => {
+                    const timeKey = typeof time === "number" ? time : parseChartTimeToUnix(time)
+                    const value = valueByTime.get(timeKey)
+                    if (!value) {
+                        return { time }
+                    }
+                    return { time, value: value.value, color: value.color }
+                })
+            }
+
             if (indicator.id === "rsi") {
                 series = chart.addSeries(LineSeries, { color: chartColors.indicators.rsi, lineWidth: 2, priceScaleId: "right" })
                 let lineData: Array<{ time: string | number, value: number }> = []
@@ -2913,7 +2960,7 @@ function IndicatorPane({ indicator, candles, precomputedSeries, onRemove, mainCh
                         precomputedSeries.line.map((point) => ({ time: formatTime(point.time), value: point.value }))
                     )
                 }
-                series.setData(lineData as any)
+                series.setData(alignLineToTimeline(lineData) as any)
                 setPrimarySeriesPoints(lineData)
             } else if (indicator.id === "macd") {
                 const macdSeries = chart.addSeries(LineSeries, { color: chartColors.indicators.macd, lineWidth: 2 })
@@ -2940,9 +2987,9 @@ function IndicatorPane({ indicator, candles, precomputedSeries, onRemove, mainCh
                     )
                 }
 
-                macdSeries.setData(macdLine as any)
-                signalSeries.setData(signalLine as any)
-                histSeries.setData(histogram as any)
+                macdSeries.setData(alignLineToTimeline(macdLine) as any)
+                signalSeries.setData(alignLineToTimeline(signalLine) as any)
+                histSeries.setData(alignHistogramToTimeline(histogram) as any)
                 series = macdSeries
                 setPrimarySeriesPoints(macdLine)
             } else if (indicator.id === "wr") {
@@ -2953,7 +3000,7 @@ function IndicatorPane({ indicator, candles, precomputedSeries, onRemove, mainCh
                         precomputedSeries.line.map((point) => ({ time: formatTime(point.time), value: point.value }))
                     )
                 }
-                series.setData(lineData as any)
+                series.setData(alignLineToTimeline(lineData) as any)
                 setPrimarySeriesPoints(lineData)
             } else if (indicator.id === "cci") {
                 series = chart.addSeries(LineSeries, { color: chartColors.indicators.cci, lineWidth: 2 })
@@ -2963,7 +3010,7 @@ function IndicatorPane({ indicator, candles, precomputedSeries, onRemove, mainCh
                         precomputedSeries.line.map((point) => ({ time: formatTime(point.time), value: point.value }))
                     )
                 }
-                series.setData(lineData as any)
+                series.setData(alignLineToTimeline(lineData) as any)
                 setPrimarySeriesPoints(lineData)
             }
 
@@ -2976,10 +3023,16 @@ function IndicatorPane({ indicator, candles, precomputedSeries, onRemove, mainCh
                 if (isDisposedRef.current || !mainChartRef.current || isSyncingRef.current) return
                 try {
                     const mainTimeScale = mainChartRef.current.timeScale()
-                    const range = mainTimeScale.getVisibleLogicalRange()
-                    if (range && chartRef.current) {
+                    const visibleRange = mainTimeScale.getVisibleRange?.() || null
+                    const logicalRange = mainTimeScale.getVisibleLogicalRange?.() || null
+                    if ((visibleRange || logicalRange) && chartRef.current) {
                         isSyncingRef.current = true
-                        chartRef.current.timeScale().setVisibleLogicalRange(range)
+                        const paneTimeScale = chartRef.current.timeScale()
+                        if (visibleRange && typeof paneTimeScale.setVisibleRange === "function") {
+                            paneTimeScale.setVisibleRange(visibleRange)
+                        } else if (logicalRange && typeof paneTimeScale.setVisibleLogicalRange === "function") {
+                            paneTimeScale.setVisibleLogicalRange(logicalRange)
+                        }
                         isSyncingRef.current = false
                     }
                 } catch (e) {
