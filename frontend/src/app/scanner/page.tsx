@@ -46,12 +46,14 @@ export default function ScannerPage() {
     queryKey: ["scanner", "scanHistory"],
     queryFn: () => fetchScanHistory(180),
     refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   })
 
   const logsQuery = useQuery({
     queryKey: ["scanner", "logs"],
     queryFn: () => fetchLogs(120),
-    refetchInterval: 10_000,
+    refetchInterval: 20_000,
+    refetchIntervalInBackground: false,
   })
 
   const bistSignalsQuery = useQuery<UiSignal[]>({
@@ -61,6 +63,7 @@ export default function ScannerPage() {
       return rows.map(transformSignal)
     },
     refetchInterval: 45_000,
+    refetchIntervalInBackground: false,
   })
 
   const kriptoSignalsQuery = useQuery<UiSignal[]>({
@@ -70,6 +73,7 @@ export default function ScannerPage() {
       return rows.map(transformSignal)
     },
     refetchInterval: 45_000,
+    refetchIntervalInBackground: false,
   })
 
   const isRefreshing =

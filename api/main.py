@@ -6,6 +6,7 @@ Kullanım:
     uvicorn api.main:app --reload --port 8000
 """
 
+import math
 import os
 from datetime import datetime, timedelta
 
@@ -648,10 +649,29 @@ async def get_market_indices(
             if hist.empty:
                 continue
 
-            current_price = float(hist["Close"].iloc[-1])
-            previous_close = (
-                float(hist["Close"].iloc[-2]) if len(hist) > 1 else float(hist["Open"].iloc[-1])
-            )
+            close_series = hist.get("Close")
+            open_series = hist.get("Open")
+            if close_series is None:
+                continue
+
+            close_values = close_series.dropna()
+            if close_values.empty:
+                continue
+
+            current_price = float(close_values.iloc[-1])
+            if not math.isfinite(current_price):
+                continue
+
+            if len(close_values) > 1:
+                previous_close = float(close_values.iloc[-2])
+            elif open_series is not None and not open_series.dropna().empty:
+                previous_close = float(open_series.dropna().iloc[-1])
+            else:
+                previous_close = current_price
+
+            if not math.isfinite(previous_close):
+                previous_close = current_price
+
             change_percent = (
                 ((current_price - previous_close) / previous_close) * 100 if previous_close else 0.0
             )
@@ -673,7 +693,7 @@ async def get_market_indices(
 
 
 @app.get("/scans", tags=["System"])
-@limiter.limit("10/minute")
+@limiter.limit("30/minute")
 async def get_scan_history(request: Request, limit: int = 10):
     """Son tarama geçmişini döndürür."""
     from db_session import get_session
@@ -687,7 +707,7 @@ async def get_scan_history(request: Request, limit: int = 10):
 
 
 @app.get("/logs", tags=["System"])
-@limiter.limit("10/minute")
+@limiter.limit("30/minute")
 async def get_system_logs(request: Request, limit: int = 50):
     """Sistem loglarını döndürür (son N satır)."""
     try:

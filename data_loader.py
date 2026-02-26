@@ -2,7 +2,9 @@ import json
 import os
 import tempfile
 import time
+from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime
+from io import StringIO
 from pathlib import Path
 
 import pandas as pd
@@ -18,6 +20,10 @@ logger = get_logger(__name__)
 _binance_client = None
 _bist_force_yfinance_fallback = False
 _isyatirim_ca_bundle_ready = False
+_bist_yf_failure_cooldown_until: dict[str, float] = {}
+_bist_yf_failure_logged_reason: dict[str, str] = {}
+_YF_SHORT_COOLDOWN_SECONDS = 60 * 60
+_YF_LONG_COOLDOWN_SECONDS = 24 * 60 * 60
 
 ISYATIRIM_INTERMEDIATE_PEM = """-----BEGIN CERTIFICATE-----
 MIIElzCCA3+gAwIBAgIRAIPahmyfUtUakxi40OfAMWkwDQYJKoZIhvcNAQELBQAw
@@ -81,6 +87,12 @@ def _fetch_bist_data_yfinance(symbol: str, start_date: str = "01-01-2015") -> pd
     """
     isyatirim başarısız olduğunda BIST verisini yfinance ile çekmeye çalışır.
     """
+    symbol_root = symbol.upper().replace(".IS", "")
+    now_ts = time.time()
+    cooldown_until = _bist_yf_failure_cooldown_until.get(symbol_root, 0)
+    if cooldown_until > now_ts:
+        return None
+
     try:
         import yfinance as yf
     except Exception as e:
@@ -94,15 +106,38 @@ def _fetch_bist_data_yfinance(symbol: str, start_date: str = "01-01-2015") -> pd
 
     ticker = symbol if symbol.endswith(".IS") else f"{symbol}.IS"
     try:
-        df = yf.download(
-            tickers=ticker,
-            start=start_iso,
-            interval="1d",
-            progress=False,
-            auto_adjust=False,
-            threads=False,
+        # yfinance bazı hataları stdout/stderr'e basıyor; bunları yakalayıp log spam'i azaltıyoruz.
+        buffer = StringIO()
+        with redirect_stdout(buffer), redirect_stderr(buffer):
+            df = yf.download(
+                tickers=ticker,
+                start=start_iso,
+                interval="1d",
+                progress=False,
+                auto_adjust=False,
+                threads=False,
+            )
+
+        raw_output = buffer.getvalue().strip()
+        lower_output = raw_output.lower()
+        is_probably_delisted = (
+            "possibly delisted" in lower_output or "no price data found" in lower_output
         )
+        has_failed_download = "failed download" in lower_output or "nonetype" in lower_output
+
         if df is None or df.empty:
+            cooldown = (
+                _YF_LONG_COOLDOWN_SECONDS if is_probably_delisted else _YF_SHORT_COOLDOWN_SECONDS
+            )
+            reason = "possibly delisted" if is_probably_delisted else "download empty"
+            _bist_yf_failure_cooldown_until[symbol_root] = now_ts + cooldown
+            previous_reason = _bist_yf_failure_logged_reason.get(symbol_root)
+            if previous_reason != reason:
+                logger.warning(
+                    f"BIST yfinance fallback veri üretemedi ({symbol_root}): {reason}. "
+                    f"{int(cooldown / 60)} dakika sonra tekrar denenecek."
+                )
+                _bist_yf_failure_logged_reason[symbol_root] = reason
             return None
 
         # yfinance bazı sürümlerde MultiIndex döndürebilir.
@@ -111,14 +146,33 @@ def _fetch_bist_data_yfinance(symbol: str, start_date: str = "01-01-2015") -> pd
 
         required_cols = ["Open", "High", "Low", "Close", "Volume"]
         if not all(col in df.columns for col in required_cols):
+            _bist_yf_failure_cooldown_until[symbol_root] = now_ts + _YF_SHORT_COOLDOWN_SECONDS
             return None
 
         df = df[required_cols].copy()
         df.index = pd.to_datetime(df.index).tz_localize(None)
         df = df.astype(float).sort_index().dropna()
-        return df if not df.empty else None
+        if df.empty:
+            _bist_yf_failure_cooldown_until[symbol_root] = now_ts + _YF_SHORT_COOLDOWN_SECONDS
+            return None
+
+        if has_failed_download:
+            # Veri geldiyse indirme hatası metnini dikkate almıyoruz.
+            pass
+
+        _bist_yf_failure_cooldown_until.pop(symbol_root, None)
+        _bist_yf_failure_logged_reason.pop(symbol_root, None)
+        return df
     except Exception as e:
-        logger.error(f"yfinance BIST fallback hatası ({symbol}): {e}")
+        _bist_yf_failure_cooldown_until[symbol_root] = now_ts + _YF_SHORT_COOLDOWN_SECONDS
+        previous_reason = _bist_yf_failure_logged_reason.get(symbol_root)
+        reason = "exception"
+        if previous_reason != reason:
+            logger.warning(
+                f"yfinance BIST fallback geçici hata ({symbol_root}): {e}. "
+                f"{int(_YF_SHORT_COOLDOWN_SECONDS / 60)} dakika sonra tekrar denenecek."
+            )
+            _bist_yf_failure_logged_reason[symbol_root] = reason
         return None
 
 

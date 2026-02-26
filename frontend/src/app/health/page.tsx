@@ -12,13 +12,15 @@ export default function HealthPage() {
   const { data: logs, isLoading: logsLoading } = useQuery({
     queryKey: ["logs"],
     queryFn: () => fetchLogs(60),
-    refetchInterval: 5_000,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
   })
 
   const { data: recentScans, isLoading: scansLoading } = useQuery({
     queryKey: ["scanHistory", "health"],
     queryFn: () => fetchScanHistory(10),
     refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
   })
 
   const apiState = useMemo(() => {
