@@ -610,10 +610,27 @@ export function AdvancedChartPage({
     const pendingWorkerDispatchTimerRef = useRef<number | null>(null)
     const perfLogRef = useRef<Record<string, number>>({})
 
-    // Register indicator chart for crosshair sync
+    const syncIndicatorPanesToMainRange = useCallback(() => {
+        if (!chartInstance.current) return
+        const mainTimeScale = chartInstance.current.timeScale?.()
+        if (!mainTimeScale) return
+        const range = mainTimeScale.getVisibleLogicalRange?.()
+        if (!range) return
+
+        indicatorChartsRef.current.forEach((paneChart) => {
+            try {
+                paneChart.timeScale().setVisibleLogicalRange(range)
+            } catch (error) {
+                // Ignore stale indicator chart handles.
+            }
+        })
+    }, [])
+
+    // Register indicator chart for crosshair + time-range sync
     const registerIndicatorChart = useCallback((id: string, chart: any) => {
         indicatorChartsRef.current.set(id, chart)
-    }, [])
+        syncIndicatorPanesToMainRange()
+    }, [syncIndicatorPanesToMainRange])
 
     const showWatchlistToast = useCallback((message: string) => {
         setWatchlistNotice(message)
@@ -1361,9 +1378,10 @@ export function AdvancedChartPage({
             const handleVisibleRangeChange = () => {
                 // Skip expensive React re-renders while there are no custom drawings to project.
                 if (!hasProjectedDrawingsRef.current) {
+                    syncIndicatorPanesToMainRange()
                     return
                 }
-
+                syncIndicatorPanesToMainRange()
                 requestOverlayProjectionRefresh()
             }
             chart.timeScale().subscribeVisibleLogicalRangeChange(handleVisibleRangeChange)
@@ -1394,7 +1412,7 @@ export function AdvancedChartPage({
                 }
             }
         })
-    }, [isFullscreen, requestOverlayProjectionRefresh])
+    }, [isFullscreen, requestOverlayProjectionRefresh, syncIndicatorPanesToMainRange])
 
     // Update chart data
     useEffect(() => {
@@ -1529,6 +1547,7 @@ export function AdvancedChartPage({
                     lastSymbolRef.current = symbol
                     lastTimeframeRef.current = timeframe
                 }
+                syncIndicatorPanesToMainRange()
                 requestOverlayProjectionRefresh()
                 logPerf("main-chart-update", {
                     ms: Number((performance.now() - updateStart).toFixed(2)),
@@ -1541,7 +1560,7 @@ export function AdvancedChartPage({
                 console.error("Chart update error:", e)
             }
         })
-    }, [candles, signals, showSignals, activeIndicators, chartReady, symbol, timeframe, candlesSignature, signalsSignature, markerIndicatorSignature, activeTool, requestOverlayProjectionRefresh, workerComputationState.requestId, workerOverlaySignature, workerComputationState.overlays.combo, workerComputationState.overlays.hunter, logPerf])
+    }, [candles, signals, showSignals, activeIndicators, chartReady, symbol, timeframe, candlesSignature, signalsSignature, markerIndicatorSignature, activeTool, requestOverlayProjectionRefresh, workerComputationState.requestId, workerOverlaySignature, workerComputationState.overlays.combo, workerComputationState.overlays.hunter, logPerf, syncIndicatorPanesToMainRange])
 
     // Add indicator
     const addIndicator = useCallback((indicatorId: string) => {
@@ -2859,8 +2878,17 @@ function IndicatorPane({ indicator, candles, precomputedSeries, onRemove, mainCh
                     vertLine: { color: chartColors.crosshair, width: 1, style: 0 },
                     horzLine: { color: chartColors.crosshair, width: 1, style: 0 },
                 },
-                handleScroll: { mouseWheel: true, pressedMouseMove: true },
-                handleScale: { mouseWheel: true },
+                handleScroll: {
+                    mouseWheel: false,
+                    pressedMouseMove: false,
+                    horzTouchDrag: false,
+                    vertTouchDrag: false,
+                },
+                handleScale: {
+                    axisPressedMouseMove: false,
+                    mouseWheel: false,
+                    pinch: false,
+                },
             })
 
             let series: any = null
