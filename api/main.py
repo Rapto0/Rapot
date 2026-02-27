@@ -8,6 +8,7 @@ Kullanım:
 
 import math
 import os
+import unicodedata
 from datetime import datetime, timedelta
 
 from dotenv import load_dotenv
@@ -190,23 +191,25 @@ class AIAnalysisResponse(BaseModel):
 # ==================== ENDPOINTS ====================
 
 _SPECIAL_TAG_CODES = {"BELES", "COK_UCUZ", "PAHALI", "FAHIS_FIYAT"}
+_SPECIAL_TAG_WINDOW_SECONDS = int(os.getenv("SPECIAL_TAG_WINDOW_SECONDS", "300"))
+_SPECIAL_TAG_RULES: dict[str, list[tuple[str, set[str]]]] = {
+    "AL": [
+        ("BELES", {"1D", "2W-FRI", "ME"}),
+        ("COK_UCUZ", {"1D", "W-FRI", "3W-FRI"}),
+    ],
+    "SAT": [
+        ("FAHIS_FIYAT", {"1D", "W-FRI", "ME"}),
+        ("PAHALI", {"1D", "W-FRI"}),
+    ],
+}
 
 
 def _normalize_special_tag(value: str | None) -> str | None:
     if not value:
         return None
 
-    normalized = (
-        value.strip()
-        .upper()
-        .replace("Ç", "C")
-        .replace("Ğ", "G")
-        .replace("İ", "I")
-        .replace("Ö", "O")
-        .replace("Ş", "S")
-        .replace("Ü", "U")
-        .replace(" ", "_")
-    )
+    normalized = unicodedata.normalize("NFKD", value.strip())
+    normalized = normalized.encode("ascii", "ignore").decode("ascii").upper().replace(" ", "_")
 
     if normalized == "FAHIS":
         return "FAHIS_FIYAT"
@@ -215,23 +218,31 @@ def _normalize_special_tag(value: str | None) -> str | None:
     return None
 
 
-def _compute_special_tag(signal_type: str, timeframes: set[str]) -> str | None:
-    signal_type_normalized = (signal_type or "").upper()
-    normalized_timeframes = {tf.upper() for tf in timeframes}
-
-    if signal_type_normalized == "AL":
-        if {"1D", "2W-FRI", "ME"}.issubset(normalized_timeframes):
-            return "BELES"
-        if {"1D", "W-FRI", "3W-FRI"}.issubset(normalized_timeframes):
-            return "COK_UCUZ"
+def _compute_special_tag(
+    signal_type: str,
+    signal_time: datetime | None,
+    timeframe_events: list[tuple[str, datetime]],
+) -> str | None:
+    if not signal_time:
         return None
 
-    if signal_type_normalized == "SAT":
-        if {"1D", "W-FRI", "ME"}.issubset(normalized_timeframes):
-            return "FAHIS_FIYAT"
-        if {"1D", "W-FRI"}.issubset(normalized_timeframes):
-            return "PAHALI"
+    rules = _SPECIAL_TAG_RULES.get((signal_type or "").upper())
+    if not rules:
         return None
+
+    for tag, required_timeframes in rules:
+        is_match = True
+        for required_tf in required_timeframes:
+            has_matching_tf = any(
+                tf == required_tf
+                and abs((event_time - signal_time).total_seconds()) <= _SPECIAL_TAG_WINDOW_SECONDS
+                for tf, event_time in timeframe_events
+            )
+            if not has_matching_tf:
+                is_match = False
+                break
+        if is_match:
+            return tag
 
     return None
 
@@ -358,9 +369,14 @@ async def get_signals(
         if signals:
             key_set = {(s.symbol, s.market_type, s.strategy, s.signal_type) for s in signals}
             symbols = sorted({key[0] for key in key_set})
-            timeframe_by_key: dict[tuple[str, str, str, str], set[str]] = {}
+            timeframe_events_by_key: dict[
+                tuple[str, str, str, str], list[tuple[str, datetime]]
+            ] = {}
 
-            lookback_cutoff = datetime.utcnow() - timedelta(days=120)
+            signal_times = [s.created_at for s in signals if s.created_at]
+            min_signal_time = min(signal_times) if signal_times else datetime.utcnow()
+            max_signal_time = max(signal_times) if signal_times else datetime.utcnow()
+            window_padding = timedelta(seconds=_SPECIAL_TAG_WINDOW_SECONDS)
             timeframe_rows = (
                 session.query(
                     Signal.symbol,
@@ -368,9 +384,11 @@ async def get_signals(
                     Signal.strategy,
                     Signal.signal_type,
                     Signal.timeframe,
+                    Signal.created_at,
                 )
                 .filter(Signal.symbol.in_(symbols))
-                .filter(Signal.created_at >= lookback_cutoff)
+                .filter(Signal.created_at >= (min_signal_time - window_padding))
+                .filter(Signal.created_at <= (max_signal_time + window_padding))
                 .all()
             )
 
@@ -378,7 +396,11 @@ async def get_signals(
                 row_key = (row.symbol, row.market_type, row.strategy, row.signal_type)
                 if row_key not in key_set:
                     continue
-                timeframe_by_key.setdefault(row_key, set()).add((row.timeframe or "").upper())
+                if not row.created_at:
+                    continue
+                timeframe_events_by_key.setdefault(row_key, []).append(
+                    ((row.timeframe or "").upper(), row.created_at)
+                )
 
             for signal_row in signals:
                 key = (
@@ -389,7 +411,13 @@ async def get_signals(
                 )
                 special_tag_by_id[signal_row.id] = _compute_special_tag(
                     signal_row.signal_type,
-                    timeframe_by_key.get(key, {(signal_row.timeframe or "").upper()}),
+                    signal_row.created_at,
+                    timeframe_events_by_key.get(
+                        key,
+                        [((signal_row.timeframe or "").upper(), signal_row.created_at)]
+                        if signal_row.created_at
+                        else [],
+                    ),
                 )
 
         if normalized_special_tag:
