@@ -19,6 +19,34 @@ logger = get_logger(__name__)
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
 
+def run_special_tag_health_check() -> None:
+    """
+    Ozel etiketleme kapsama kontrolu.
+    candidate > tagged oldugunda alarm logu basar.
+    """
+    try:
+        from database import get_special_tag_coverage
+
+        coverage_rows = get_special_tag_coverage(
+            since_hours=24,
+            market_type="BIST",
+            strategy=None,
+            window_seconds=900,
+        )
+        issues = [row for row in coverage_rows if row.get("missing", 0) > 0]
+
+        if issues:
+            summary = ", ".join(
+                f"{row['strategy']}:{row['tag']} m={row['missing']} c={row['candidates']} t={row['tagged']}"
+                for row in issues
+            )
+            logger.warning(f"Ozel etiket kapsama alarmi (24h): {summary}")
+        else:
+            logger.info("Ozel etiket kapsama kontrolu OK (24h, BIST).")
+    except Exception as exc:
+        logger.error(f"Ozel etiket kapsama kontrolu hatasi: {exc}")
+
+
 def setup_scheduler(scan_func, interval_hours: int = None) -> None:
     """
     Periyodik tarama zamanlamasını ayarlar.
@@ -31,7 +59,9 @@ def setup_scheduler(scan_func, interval_hours: int = None) -> None:
         interval_hours = scan_settings.SCAN_INTERVAL_HOURS
 
     schedule.every(interval_hours).hours.do(scan_func)
+    schedule.every().hour.do(run_special_tag_health_check)
     logger.info(f"Scheduler kuruldu: her {interval_hours} saatte bir tarama")
+    logger.info("Scheduler kuruldu: her 1 saatte ozel etiket kapsama kontrolu")
 
 
 def run_bot_loop(scan_func, check_commands_func) -> None:
@@ -144,6 +174,7 @@ def start_bot(use_async: bool = True) -> None:
     # İlk tarama
     logger.info("İlk tarama başlatılıyor...")
     scan_func()
+    run_special_tag_health_check()
 
     # Zamanlayıcı kur
     setup_scheduler(scan_func)
