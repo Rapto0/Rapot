@@ -129,6 +129,7 @@ class SignalResponse(BaseModel):
     score: str | None = None
     price: float
     created_at: str | None = None
+    special_tag: str | None = None
 
     class Config:
         from_attributes = True
@@ -187,6 +188,52 @@ class AIAnalysisResponse(BaseModel):
 
 
 # ==================== ENDPOINTS ====================
+
+_SPECIAL_TAG_CODES = {"BELES", "COK_UCUZ", "PAHALI", "FAHIS_FIYAT"}
+
+
+def _normalize_special_tag(value: str | None) -> str | None:
+    if not value:
+        return None
+
+    normalized = (
+        value.strip()
+        .upper()
+        .replace("Ç", "C")
+        .replace("Ğ", "G")
+        .replace("İ", "I")
+        .replace("Ö", "O")
+        .replace("Ş", "S")
+        .replace("Ü", "U")
+        .replace(" ", "_")
+    )
+
+    if normalized == "FAHIS":
+        return "FAHIS_FIYAT"
+    if normalized in _SPECIAL_TAG_CODES:
+        return normalized
+    return None
+
+
+def _compute_special_tag(signal_type: str, timeframes: set[str]) -> str | None:
+    signal_type_normalized = (signal_type or "").upper()
+    normalized_timeframes = {tf.upper() for tf in timeframes}
+
+    if signal_type_normalized == "AL":
+        if {"1D", "2W-FRI", "ME"}.issubset(normalized_timeframes):
+            return "BELES"
+        if {"1D", "W-FRI", "3W-FRI"}.issubset(normalized_timeframes):
+            return "COK_UCUZ"
+        return None
+
+    if signal_type_normalized == "SAT":
+        if {"1D", "W-FRI", "ME"}.issubset(normalized_timeframes):
+            return "FAHIS_FIYAT"
+        if {"1D", "W-FRI"}.issubset(normalized_timeframes):
+            return "PAHALI"
+        return None
+
+    return None
 
 
 # ==================== AUTH ENDPOINTS ====================
@@ -277,12 +324,16 @@ async def get_signals(
     strategy: str | None = Query(None, description="Strateji filtresi (COMBO/HUNTER)"),
     signal_type: str | None = Query(None, description="Sinyal türü (AL/SAT)"),
     market_type: str | None = Query(None, description="Piyasa türü (BIST/Kripto)"),
+    special_tag: str | None = Query(
+        None,
+        description="Ozel etiket filtresi (BELES/COK_UCUZ/PAHALI/FAHIS_FIYAT)",
+    ),
     limit: int = Query(50, ge=1, le=1000, description="Maksimum kayıt sayısı"),
 ):
     """
     Sinyal listesini döndürür.
 
-    Opsiyonel filtreler: symbol, strategy, signal_type, market_type
+    Opsiyonel filtreler: symbol, strategy, signal_type, market_type, special_tag
     """
     from db_session import get_session
     from models import Signal
@@ -301,6 +352,53 @@ async def get_signals(
 
         signals = query.order_by(Signal.created_at.desc()).limit(limit).all()
 
+        normalized_special_tag = _normalize_special_tag(special_tag)
+
+        special_tag_by_id: dict[int, str | None] = {}
+        if signals:
+            key_set = {(s.symbol, s.market_type, s.strategy, s.signal_type) for s in signals}
+            symbols = sorted({key[0] for key in key_set})
+            timeframe_by_key: dict[tuple[str, str, str, str], set[str]] = {}
+
+            lookback_cutoff = datetime.utcnow() - timedelta(days=120)
+            timeframe_rows = (
+                session.query(
+                    Signal.symbol,
+                    Signal.market_type,
+                    Signal.strategy,
+                    Signal.signal_type,
+                    Signal.timeframe,
+                )
+                .filter(Signal.symbol.in_(symbols))
+                .filter(Signal.created_at >= lookback_cutoff)
+                .all()
+            )
+
+            for row in timeframe_rows:
+                row_key = (row.symbol, row.market_type, row.strategy, row.signal_type)
+                if row_key not in key_set:
+                    continue
+                timeframe_by_key.setdefault(row_key, set()).add((row.timeframe or "").upper())
+
+            for signal_row in signals:
+                key = (
+                    signal_row.symbol,
+                    signal_row.market_type,
+                    signal_row.strategy,
+                    signal_row.signal_type,
+                )
+                special_tag_by_id[signal_row.id] = _compute_special_tag(
+                    signal_row.signal_type,
+                    timeframe_by_key.get(key, {(signal_row.timeframe or "").upper()}),
+                )
+
+        if normalized_special_tag:
+            signals = [
+                signal_row
+                for signal_row in signals
+                if special_tag_by_id.get(signal_row.id) == normalized_special_tag
+            ]
+
         return [
             SignalResponse(
                 id=s.id,
@@ -312,6 +410,7 @@ async def get_signals(
                 score=s.score,
                 price=s.price,
                 created_at=s.created_at.isoformat() + "Z" if s.created_at else None,
+                special_tag=special_tag_by_id.get(s.id),
             )
             for s in signals
         ]

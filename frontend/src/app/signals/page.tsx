@@ -20,17 +20,20 @@ import { Search, RefreshCw, Download, Bell } from "lucide-react"
 type MarketFilter = "all" | "BIST" | "Kripto"
 type StrategyFilter = "all" | "COMBO" | "HUNTER"
 type DirectionFilter = "all" | "AL" | "SAT"
+type SpecialFilter = "all" | "BELES" | "COK_UCUZ" | "PAHALI" | "FAHIS_FIYAT"
 
 export default function SignalsPage() {
   const [marketFilter, setMarketFilter] = useState<MarketFilter>("all")
   const [strategyFilter, setStrategyFilter] = useState<StrategyFilter>("all")
   const [directionFilter, setDirectionFilter] = useState<DirectionFilter>("all")
+  const [specialFilter, setSpecialFilter] = useState<SpecialFilter>("all")
   const [searchQuery, setSearchQuery] = useState("")
 
   const { data: signals, isLoading, isError, refetch, isFetching } = useSignals({
     marketType: marketFilter,
     strategy: strategyFilter,
     direction: directionFilter,
+    specialTag: specialFilter,
     searchQuery,
   })
 
@@ -49,7 +52,9 @@ export default function SignalsPage() {
           <div>
             <div className="label-uppercase">Sinyaller</div>
             <h1 className="mt-1 text-lg font-semibold tracking-[-0.02em]">Canlı sinyal akışı</h1>
-            <p className="mt-1 text-xs text-muted-foreground">COMBO ve HUNTER stratejilerinden gelen kayıtlar.</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              COMBO ve HUNTER stratejilerinden gelen kayıtlar, özel durum etiketleriyle birlikte.
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => refetch()} disabled={isFetching}>
@@ -114,6 +119,19 @@ export default function SignalsPage() {
             value={directionFilter}
             onChange={(value) => setDirectionFilter(value as DirectionFilter)}
           />
+
+          <FilterGroup
+            label="Özel"
+            options={[
+              ["all", "Tümü"],
+              ["BELES", "BELEŞ"],
+              ["COK_UCUZ", "ÇOK UCUZ"],
+              ["PAHALI", "PAHALI"],
+              ["FAHIS_FIYAT", "FAHİŞ FİYAT"],
+            ]}
+            value={specialFilter}
+            onChange={(value) => setSpecialFilter(value as SpecialFilter)}
+          />
         </div>
       </section>
 
@@ -128,6 +146,7 @@ export default function SignalsPage() {
               <TableHead>Sembol</TableHead>
               <TableHead>Piyasa</TableHead>
               <TableHead>Strateji</TableHead>
+              <TableHead>Özel</TableHead>
               <TableHead>Yön</TableHead>
               <TableHead>Zaman Dilimi</TableHead>
               <TableHead>Skor</TableHead>
@@ -138,7 +157,7 @@ export default function SignalsPage() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={8} className="py-8 text-center text-xs text-muted-foreground">
+                <TableCell colSpan={9} className="py-8 text-center text-xs text-muted-foreground">
                   Yükleniyor...
                 </TableCell>
               </TableRow>
@@ -146,7 +165,7 @@ export default function SignalsPage() {
 
             {isError ? (
               <TableRow>
-                <TableCell colSpan={8} className="py-8 text-center text-xs text-loss">
+                <TableCell colSpan={9} className="py-8 text-center text-xs text-loss">
                   Sinyaller yüklenemedi.
                 </TableCell>
               </TableRow>
@@ -154,7 +173,7 @@ export default function SignalsPage() {
 
             {!isLoading && !isError && rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8}>
+                <TableCell colSpan={9}>
                   <EmptyState
                     icon={Bell}
                     title="Sinyal bulunamadı"
@@ -174,6 +193,15 @@ export default function SignalsPage() {
                   </TableCell>
                   <TableCell>
                     <Badge variant={signal.strategy === "HUNTER" ? "hunter" : "combo"}>{signal.strategy}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    {signal.specialTag ? (
+                      <span className={cn("signal-badge", specialTagTone(signal.specialTag))}>
+                        {specialTagLabel(signal.specialTag)}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">--</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <span className={cn("signal-badge", signal.signalType === "AL" ? "signal-buy" : "signal-sell")}>
@@ -247,4 +275,24 @@ function FilterGroup({
       </div>
     </div>
   )
+}
+
+function specialTagLabel(tag: "BELES" | "COK_UCUZ" | "PAHALI" | "FAHIS_FIYAT") {
+  switch (tag) {
+    case "BELES":
+      return "BELEŞ"
+    case "COK_UCUZ":
+      return "ÇOK UCUZ"
+    case "PAHALI":
+      return "PAHALI"
+    case "FAHIS_FIYAT":
+      return "FAHİŞ FİYAT"
+    default:
+      return tag
+  }
+}
+
+function specialTagTone(tag: "BELES" | "COK_UCUZ" | "PAHALI" | "FAHIS_FIYAT") {
+  if (tag === "BELES" || tag === "COK_UCUZ") return "signal-buy"
+  return "signal-sell"
 }

@@ -22,6 +22,7 @@ export interface ApiSignal {
     score: string | null;
     price: number;
     created_at: string | null;
+    special_tag?: string | null;
 }
 
 export interface ApiTrade {
@@ -125,6 +126,7 @@ export interface SignalsParams {
     strategy?: 'COMBO' | 'HUNTER';
     signal_type?: 'AL' | 'SAT';
     market_type?: 'BIST' | 'Kripto';
+    special_tag?: 'BELES' | 'COK_UCUZ' | 'PAHALI' | 'FAHIS_FIYAT';
     limit?: number;
 }
 
@@ -134,6 +136,7 @@ export async function fetchSignals(params: SignalsParams = {}): Promise<ApiSigna
     if (params.strategy) searchParams.set('strategy', params.strategy);
     if (params.signal_type) searchParams.set('signal_type', params.signal_type);
     if (params.market_type) searchParams.set('market_type', params.market_type);
+    if (params.special_tag) searchParams.set('special_tag', params.special_tag);
     if (params.limit) searchParams.set('limit', params.limit.toString());
 
     const query = searchParams.toString();
@@ -389,6 +392,7 @@ export function transformSignal(apiSignal: ApiSignal) {
         score: apiSignal.score || '',
         price: apiSignal.price,
         createdAt: apiSignal.created_at || new Date().toISOString(),
+        specialTag: (apiSignal.special_tag as 'BELES' | 'COK_UCUZ' | 'PAHALI' | 'FAHIS_FIYAT' | null | undefined) ?? null,
     };
 }
 

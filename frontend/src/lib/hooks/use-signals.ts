@@ -11,24 +11,27 @@ export interface Signal {
     score: string;
     price: number;
     createdAt: string;
+    specialTag: 'BELES' | 'COK_UCUZ' | 'PAHALI' | 'FAHIS_FIYAT' | null;
 }
 
 interface UseSignalsOptions {
     marketType?: 'all' | 'BIST' | 'Kripto';
     strategy?: 'all' | 'COMBO' | 'HUNTER';
     direction?: 'all' | 'AL' | 'SAT';
+    specialTag?: 'all' | 'BELES' | 'COK_UCUZ' | 'PAHALI' | 'FAHIS_FIYAT';
     searchQuery?: string;
     limit?: number;
 }
 
 // Fetch signals from API
 async function fetchSignalsData(options: UseSignalsOptions = {}): Promise<Signal[]> {
-    const { marketType, strategy, direction, limit = 1000 } = options;
+    const { marketType, strategy, direction, specialTag, limit = 1000 } = options;
 
     // Build API params - fetch more for pagination
     const params: SignalsParams = { limit };
     if (strategy && strategy !== 'all') params.strategy = strategy;
     if (direction && direction !== 'all') params.signal_type = direction;
+    if (specialTag && specialTag !== 'all') params.special_tag = specialTag;
 
     // If specific market type requested, use API filter
     if (marketType && marketType !== 'all') {
@@ -52,11 +55,17 @@ async function fetchSignalsData(options: UseSignalsOptions = {}): Promise<Signal
 }
 
 export function useSignals(options: UseSignalsOptions = {}) {
-    const { marketType = 'all', strategy = 'all', direction = 'all', searchQuery = '' } = options;
+    const {
+        marketType = 'all',
+        strategy = 'all',
+        direction = 'all',
+        specialTag = 'all',
+        searchQuery = '',
+    } = options;
 
     return useQuery({
-        queryKey: ['signals', marketType, strategy, direction],
-        queryFn: () => fetchSignalsData({ marketType, strategy, direction }),
+        queryKey: ['signals', marketType, strategy, direction, specialTag],
+        queryFn: () => fetchSignalsData({ marketType, strategy, direction, specialTag }),
         refetchInterval: 30000, // Refresh every 30 seconds for live signals
         staleTime: 10000, // Consider data stale after 10 seconds
         select: (data) => {
