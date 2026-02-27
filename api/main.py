@@ -361,9 +361,14 @@ async def get_signals(
         if market_type:
             query = query.filter(Signal.market_type == market_type)
 
-        signals = query.order_by(Signal.created_at.desc()).limit(limit).all()
-
         normalized_special_tag = _normalize_special_tag(special_tag)
+        candidate_limit = limit
+        if normalized_special_tag:
+            # Special tags are derived from timeframe intersections.
+            # Pull a wider candidate window first, then apply special-tag filter and final limit.
+            candidate_limit = min(10000, max(limit * 50, 2000))
+
+        signals = query.order_by(Signal.created_at.desc()).limit(candidate_limit).all()
 
         special_tag_by_id: dict[int, str | None] = {}
         if signals:
@@ -426,6 +431,7 @@ async def get_signals(
                 for signal_row in signals
                 if special_tag_by_id.get(signal_row.id) == normalized_special_tag
             ]
+            signals = signals[:limit]
 
         return [
             SignalResponse(
