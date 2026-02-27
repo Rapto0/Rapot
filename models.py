@@ -84,6 +84,9 @@ class Signal(Base):
     timeframe = Column(String(15), nullable=False)  # 1D, W-FRI, 2W-FRI, 3W-FRI, ME
     score = Column(String(50))  # Örn: "+4/-0" veya "7/7"
     price = Column(Float, default=0.0)
+    special_tag = Column(
+        String(20), nullable=True, index=True
+    )  # BELES, COK_UCUZ, PAHALI, FAHIS_FIYAT
     details = Column(Text)  # JSON string
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
@@ -110,6 +113,7 @@ class Signal(Base):
             "timeframe": self.timeframe,
             "score": self.score,
             "price": self.price,
+            "special_tag": self.special_tag,
             "details": self.details,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

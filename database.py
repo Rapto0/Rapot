@@ -31,6 +31,7 @@ class Signal:
     timeframe: str = ""
     score: str = ""
     price: float = 0.0
+    special_tag: str | None = None
     details: str = ""  # JSON string
     created_at: datetime = None
 
@@ -124,11 +125,17 @@ class Database:
                     timeframe TEXT NOT NULL,
                     score TEXT,
                     price REAL,
+                    special_tag TEXT,
                     details TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE(symbol, strategy, signal_type, timeframe, created_at)
                 )
             """)
+
+            cursor.execute("PRAGMA table_info(signals)")
+            signal_columns = {row[1] for row in cursor.fetchall()}
+            if "special_tag" not in signal_columns:
+                cursor.execute("ALTER TABLE signals ADD COLUMN special_tag TEXT")
 
             # Trades tablosu
             cursor.execute("""
@@ -173,6 +180,9 @@ class Database:
             # İndeksler
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_signals_symbol ON signals(symbol)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_signals_created ON signals(created_at)")
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_signals_special_tag ON signals(special_tag)"
+            )
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_trades_symbol ON trades(symbol)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_trades_status ON trades(status)")
 
@@ -192,8 +202,8 @@ class Database:
             cursor.execute(
                 """
                 INSERT OR IGNORE INTO signals
-                (symbol, market_type, strategy, signal_type, timeframe, score, price, details, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (symbol, market_type, strategy, signal_type, timeframe, score, price, special_tag, details, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     signal.symbol,
@@ -203,11 +213,61 @@ class Database:
                     signal.timeframe,
                     signal.score,
                     signal.price,
+                    signal.special_tag,
                     signal.details,
                     signal.created_at,
                 ),
             )
             return cursor.lastrowid
+
+    def set_latest_signal_special_tag(
+        self,
+        symbol: str,
+        market_type: str,
+        strategy: str,
+        signal_type: str,
+        timeframe: str,
+        special_tag: str,
+        within_seconds: int = 900,
+    ) -> bool:
+        """
+        En son eslesen sinyal kaydina ozel etiket yazar.
+        """
+        with self.get_cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT id, created_at
+                FROM signals
+                WHERE symbol = ? AND market_type = ? AND strategy = ? AND signal_type = ? AND timeframe = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (symbol, market_type, strategy, signal_type, timeframe),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return False
+
+            signal_id = row["id"]
+            created_at_raw = row["created_at"]
+            if created_at_raw is not None and within_seconds > 0:
+                try:
+                    created_at = (
+                        created_at_raw
+                        if isinstance(created_at_raw, datetime)
+                        else datetime.fromisoformat(str(created_at_raw))
+                    )
+                    if abs((datetime.now() - created_at).total_seconds()) > within_seconds:
+                        return False
+                except Exception:
+                    # Parse edilemeyen timestamp'te kaydi guncellemeyi atlamiyoruz.
+                    pass
+
+            cursor.execute(
+                "UPDATE signals SET special_tag = ? WHERE id = ?",
+                (special_tag, signal_id),
+            )
+            return cursor.rowcount > 0
 
     def get_signals(
         self, symbol: str | None = None, strategy: str | None = None, limit: int = 100
@@ -428,6 +488,7 @@ def save_signal(
     timeframe: str,
     score: str = "",
     price: float = 0.0,
+    special_tag: str | None = None,
     details: str = "",
 ) -> int:
     """Kolaylık fonksiyonu: Sinyal kaydet."""
@@ -439,9 +500,31 @@ def save_signal(
         timeframe=timeframe,
         score=score,
         price=price,
+        special_tag=special_tag,
         details=details,
     )
     return db.save_signal(signal)
+
+
+def set_signal_special_tag(
+    symbol: str,
+    market_type: str,
+    strategy: str,
+    signal_type: str,
+    timeframe: str,
+    special_tag: str,
+    within_seconds: int = 900,
+) -> bool:
+    """Kolaylik fonksiyonu: Son sinyal kaydina ozel etiket yazar."""
+    return db.set_latest_signal_special_tag(
+        symbol=symbol,
+        market_type=market_type,
+        strategy=strategy,
+        signal_type=signal_type,
+        timeframe=timeframe,
+        special_tag=special_tag,
+        within_seconds=within_seconds,
+    )
 
 
 def get_recent_signals(symbol: str | None = None, limit: int = 50) -> list[dict]:

@@ -121,6 +121,16 @@ def init_db() -> None:
     """
     engine = get_engine()
     Base.metadata.create_all(bind=engine)
+
+    # Backward-compatible migration for existing databases.
+    with engine.connect() as conn:
+        columns = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(signals)").fetchall()}
+        if "special_tag" not in columns:
+            conn.exec_driver_sql("ALTER TABLE signals ADD COLUMN special_tag VARCHAR(20)")
+        conn.exec_driver_sql(
+            "CREATE INDEX IF NOT EXISTS idx_signals_special_tag ON signals(special_tag)"
+        )
+        conn.commit()
     logger.info("Veritabanı tabloları oluşturuldu/kontrol edildi")
 
 

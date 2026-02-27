@@ -13,6 +13,7 @@ from ai_analyst import analyze_with_gemini
 from config import TIMEFRAMES, rate_limits
 from data_loader import get_all_binance_symbols, get_all_bist_symbols, resample_data
 from database import save_signal as db_save_signal
+from database import set_signal_special_tag as db_set_signal_special_tag
 from logger import get_logger
 from news_manager import fetch_market_news
 from price_cache import cached_get_bist_data, cached_get_crypto_data, price_cache
@@ -388,9 +389,32 @@ def process_symbol(
         )
         send_message(format_ai_message_for_telegram(symbol, ai_msg))
 
+    def mark_special_signal(
+        strategy_name: str, signal_dir: str, special_tag: str, timeframe: str
+    ) -> None:
+        try:
+            tagged = db_set_signal_special_tag(
+                symbol=symbol,
+                market_type=market_type,
+                strategy=strategy_name,
+                signal_type=signal_dir,
+                timeframe=timeframe,
+                special_tag=special_tag,
+                within_seconds=900,
+            )
+            if not tagged:
+                logger.warning(
+                    f"Ozel sinyal etiketi yazilamadi: {symbol} {strategy_name} {special_tag} ({timeframe})"
+                )
+        except Exception as exc:
+            logger.error(
+                f"Ozel sinyal etiketi kaydedilemedi ({symbol} {strategy_name} {special_tag}): {exc}"
+            )
+
     # ÇOK UCUZ
     if "1D" in combo_hits["buy"] and "W-FRI" in combo_hits["buy"] and "3W-FRI" in combo_hits["buy"]:
         trigger_ai_analysis("🔥🔥 COMBO: ÇOK UCUZ!", "AL", daily_data_combo)
+        mark_special_signal("COMBO", "AL", "COK_UCUZ", "3W-FRI")
 
     if (
         "1D" in hunter_hits["buy"]
@@ -398,24 +422,30 @@ def process_symbol(
         and "3W-FRI" in hunter_hits["buy"]
     ):
         trigger_ai_analysis("🔥🔥 HUNTER: ÇOK UCUZ!", "AL", daily_data_hunter)
+        mark_special_signal("HUNTER", "AL", "COK_UCUZ", "3W-FRI")
 
     # BELEŞ
     if "1D" in combo_hits["buy"] and "2W-FRI" in combo_hits["buy"] and "ME" in combo_hits["buy"]:
         trigger_ai_analysis("💎💎💎 COMBO: BELEŞ (TARİHİ FIRSAT)!", "AL", daily_data_combo)
+        mark_special_signal("COMBO", "AL", "BELES", "ME")
 
     if "1D" in hunter_hits["buy"] and "2W-FRI" in hunter_hits["buy"] and "ME" in hunter_hits["buy"]:
         trigger_ai_analysis("💎💎💎 HUNTER: BELEŞ (TARİHİ FIRSAT)!", "AL", daily_data_hunter)
+        mark_special_signal("HUNTER", "AL", "BELES", "ME")
 
     # PAHALI
     if "1D" in combo_hits["sell"] and "W-FRI" in combo_hits["sell"]:
         trigger_ai_analysis("⚠️⚠️ COMBO: PAHALI!", "SAT", daily_data_combo)
+        mark_special_signal("COMBO", "SAT", "PAHALI", "W-FRI")
 
     if "1D" in hunter_hits["sell"] and "W-FRI" in hunter_hits["sell"]:
         trigger_ai_analysis("⚠️⚠️ HUNTER: PAHALI!", "SAT", daily_data_hunter)
+        mark_special_signal("HUNTER", "SAT", "PAHALI", "W-FRI")
 
     # FAHİŞ FİYAT
     if "1D" in combo_hits["sell"] and "W-FRI" in combo_hits["sell"] and "ME" in combo_hits["sell"]:
         trigger_ai_analysis("🚨🚨🚨 COMBO: FAHİŞ FİYAT!", "SAT", daily_data_combo)
+        mark_special_signal("COMBO", "SAT", "FAHIS_FIYAT", "ME")
 
     if (
         "1D" in hunter_hits["sell"]
@@ -423,6 +453,7 @@ def process_symbol(
         and "ME" in hunter_hits["sell"]
     ):
         trigger_ai_analysis("🚨🚨🚨 HUNTER: FAHİŞ FİYAT!", "SAT", daily_data_hunter)
+        mark_special_signal("HUNTER", "SAT", "FAHIS_FIYAT", "ME")
 
 
 def scan_market(check_commands_callback=None) -> None:

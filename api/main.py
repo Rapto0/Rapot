@@ -191,17 +191,6 @@ class AIAnalysisResponse(BaseModel):
 # ==================== ENDPOINTS ====================
 
 _SPECIAL_TAG_CODES = {"BELES", "COK_UCUZ", "PAHALI", "FAHIS_FIYAT"}
-_SPECIAL_TAG_WINDOW_SECONDS = int(os.getenv("SPECIAL_TAG_WINDOW_SECONDS", "300"))
-_SPECIAL_TAG_RULES: dict[str, list[tuple[str, set[str]]]] = {
-    "AL": [
-        ("BELES", {"1D", "2W-FRI", "ME"}),
-        ("COK_UCUZ", {"1D", "W-FRI", "3W-FRI"}),
-    ],
-    "SAT": [
-        ("FAHIS_FIYAT", {"1D", "W-FRI", "ME"}),
-        ("PAHALI", {"1D", "W-FRI"}),
-    ],
-}
 
 
 def _normalize_special_tag(value: str | None) -> str | None:
@@ -215,35 +204,6 @@ def _normalize_special_tag(value: str | None) -> str | None:
         return "FAHIS_FIYAT"
     if normalized in _SPECIAL_TAG_CODES:
         return normalized
-    return None
-
-
-def _compute_special_tag(
-    signal_type: str,
-    signal_time: datetime | None,
-    timeframe_events: list[tuple[str, datetime]],
-) -> str | None:
-    if not signal_time:
-        return None
-
-    rules = _SPECIAL_TAG_RULES.get((signal_type or "").upper())
-    if not rules:
-        return None
-
-    for tag, required_timeframes in rules:
-        is_match = True
-        for required_tf in required_timeframes:
-            has_matching_tf = any(
-                tf == required_tf
-                and abs((event_time - signal_time).total_seconds()) <= _SPECIAL_TAG_WINDOW_SECONDS
-                for tf, event_time in timeframe_events
-            )
-            if not has_matching_tf:
-                is_match = False
-                break
-        if is_match:
-            return tag
-
     return None
 
 
@@ -362,76 +322,12 @@ async def get_signals(
             query = query.filter(Signal.market_type == market_type)
 
         normalized_special_tag = _normalize_special_tag(special_tag)
-        candidate_limit = limit
+        if special_tag is not None and normalized_special_tag is None:
+            return []
         if normalized_special_tag:
-            # Special tags are derived from timeframe intersections.
-            # Pull a wider candidate window first, then apply special-tag filter and final limit.
-            candidate_limit = min(10000, max(limit * 50, 2000))
+            query = query.filter(Signal.special_tag == normalized_special_tag)
 
-        signals = query.order_by(Signal.created_at.desc()).limit(candidate_limit).all()
-
-        special_tag_by_id: dict[int, str | None] = {}
-        if signals:
-            key_set = {(s.symbol, s.market_type, s.strategy, s.signal_type) for s in signals}
-            symbols = sorted({key[0] for key in key_set})
-            timeframe_events_by_key: dict[
-                tuple[str, str, str, str], list[tuple[str, datetime]]
-            ] = {}
-
-            signal_times = [s.created_at for s in signals if s.created_at]
-            min_signal_time = min(signal_times) if signal_times else datetime.utcnow()
-            max_signal_time = max(signal_times) if signal_times else datetime.utcnow()
-            window_padding = timedelta(seconds=_SPECIAL_TAG_WINDOW_SECONDS)
-            timeframe_rows = (
-                session.query(
-                    Signal.symbol,
-                    Signal.market_type,
-                    Signal.strategy,
-                    Signal.signal_type,
-                    Signal.timeframe,
-                    Signal.created_at,
-                )
-                .filter(Signal.symbol.in_(symbols))
-                .filter(Signal.created_at >= (min_signal_time - window_padding))
-                .filter(Signal.created_at <= (max_signal_time + window_padding))
-                .all()
-            )
-
-            for row in timeframe_rows:
-                row_key = (row.symbol, row.market_type, row.strategy, row.signal_type)
-                if row_key not in key_set:
-                    continue
-                if not row.created_at:
-                    continue
-                timeframe_events_by_key.setdefault(row_key, []).append(
-                    ((row.timeframe or "").upper(), row.created_at)
-                )
-
-            for signal_row in signals:
-                key = (
-                    signal_row.symbol,
-                    signal_row.market_type,
-                    signal_row.strategy,
-                    signal_row.signal_type,
-                )
-                special_tag_by_id[signal_row.id] = _compute_special_tag(
-                    signal_row.signal_type,
-                    signal_row.created_at,
-                    timeframe_events_by_key.get(
-                        key,
-                        [((signal_row.timeframe or "").upper(), signal_row.created_at)]
-                        if signal_row.created_at
-                        else [],
-                    ),
-                )
-
-        if normalized_special_tag:
-            signals = [
-                signal_row
-                for signal_row in signals
-                if special_tag_by_id.get(signal_row.id) == normalized_special_tag
-            ]
-            signals = signals[:limit]
+        signals = query.order_by(Signal.created_at.desc()).limit(limit).all()
 
         return [
             SignalResponse(
@@ -444,7 +340,7 @@ async def get_signals(
                 score=s.score,
                 price=s.price,
                 created_at=s.created_at.isoformat() + "Z" if s.created_at else None,
-                special_tag=special_tag_by_id.get(s.id),
+                special_tag=s.special_tag,
             )
             for s in signals
         ]
@@ -472,6 +368,7 @@ async def get_signal(signal_id: int):
             score=signal.score,
             price=signal.price,
             created_at=signal.created_at.isoformat() if signal.created_at else None,
+            special_tag=signal.special_tag,
         )
 
 
