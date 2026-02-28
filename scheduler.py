@@ -12,20 +12,38 @@ import schedule
 
 from config import scan_settings
 from logger import get_logger
-from telegram_notify import send_message
+from telegram_notify import MessagePriority, send_message
 
 logger = get_logger(__name__)
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
+SPECIAL_TAG_HEALTH_STATE_KEY = "special_tag_health_state"
+SPECIAL_TAG_HEALTH_SUMMARY_KEY = "special_tag_health_summary"
+
+
+def _format_special_tag_issue_summary(issues: list[dict]) -> str:
+    ordered = sorted(
+        issues,
+        key=lambda row: (int(row.get("missing", 0)), int(row.get("candidates", 0))),
+        reverse=True,
+    )
+    return "\n".join(
+        f"- {row['strategy']} {row['tag']}: missing={row['missing']} "
+        f"(candidate={row['candidates']}, tagged={row['tagged']})"
+        for row in ordered
+    )
+
 
 def run_special_tag_health_check() -> None:
     """
     Ozel etiketleme kapsama kontrolu.
-    candidate > tagged oldugunda alarm logu basar.
+    Sadece durum degisiminde Telegram bildirimi gonderir:
+    - Ilk bozulmada ALERT
+    - Duzelince RECOVERY OK
     """
     try:
-        from database import get_special_tag_coverage
+        from database import db, get_special_tag_coverage
 
         coverage_rows = get_special_tag_coverage(
             since_hours=24,
@@ -34,15 +52,31 @@ def run_special_tag_health_check() -> None:
             window_seconds=900,
         )
         issues = [row for row in coverage_rows if row.get("missing", 0) > 0]
+        previous_state = (db.get_stat(SPECIAL_TAG_HEALTH_STATE_KEY) or "").strip().lower()
 
         if issues:
-            summary = ", ".join(
-                f"{row['strategy']}:{row['tag']} m={row['missing']} c={row['candidates']} t={row['tagged']}"
-                for row in issues
-            )
+            summary = _format_special_tag_issue_summary(issues)
+            db.set_stat(SPECIAL_TAG_HEALTH_SUMMARY_KEY, summary)
+            db.set_stat(SPECIAL_TAG_HEALTH_STATE_KEY, "alert")
             logger.warning(f"Ozel etiket kapsama alarmi (24h): {summary}")
+
+            if previous_state != "alert":
+                send_message(
+                    "SPECIAL TAG ALERT\n"
+                    "Son 24 saatte ozel etiket kapsama hatasi tespit edildi.\n"
+                    f"{summary}",
+                    priority=MessagePriority.CRITICAL,
+                )
         else:
             logger.info("Ozel etiket kapsama kontrolu OK (24h, BIST).")
+            db.set_stat(SPECIAL_TAG_HEALTH_STATE_KEY, "ok")
+            db.set_stat(SPECIAL_TAG_HEALTH_SUMMARY_KEY, "")
+
+            if previous_state == "alert":
+                send_message(
+                    "SPECIAL TAG RECOVERY OK\n" "Son 24 saatte ozel etiket kapsama farki kalmadi.",
+                    priority=MessagePriority.HIGH,
+                )
     except Exception as exc:
         logger.error(f"Ozel etiket kapsama kontrolu hatasi: {exc}")
 
