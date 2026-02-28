@@ -13,6 +13,10 @@ try:
     from google import genai as google_genai
 except Exception:  # pragma: no cover
     google_genai = None
+try:
+    from google.genai import types as google_genai_types
+except Exception:  # pragma: no cover
+    google_genai_types = None
 
 from ai_schema import (
     AIAnalysisPayload,
@@ -97,18 +101,28 @@ def build_model_candidates(
     return unique_models
 
 
-def _get_generation_config(backend: str | None = None) -> dict[str, Any]:
+def _get_generation_config(backend: str | None = None) -> Any:
     runtime = get_ai_runtime_settings()
-    config = {
+    if backend == "google.genai":
+        if google_genai_types is not None:
+            return google_genai_types.GenerateContentConfig(
+                temperature=runtime["temperature"],
+                max_output_tokens=runtime["max_output_tokens"],
+                response_mime_type="application/json",
+                response_schema=AIAnalysisPayload,
+            )
+        return {
+            "temperature": runtime["temperature"],
+            "max_output_tokens": runtime["max_output_tokens"],
+            "response_mime_type": "application/json",
+            "response_schema": AIAnalysisPayload,
+        }
+    return {
         "temperature": runtime["temperature"],
         "max_output_tokens": runtime["max_output_tokens"],
         "response_mime_type": "application/json",
+        "response_schema": AI_RESPONSE_SCHEMA,
     }
-    if backend == "google.genai":
-        config["response_json_schema"] = AI_RESPONSE_SCHEMA
-    else:
-        config["response_schema"] = AI_RESPONSE_SCHEMA
-    return config
 
 
 def _ensure_gemini_backend() -> tuple[str | None, str]:
@@ -222,6 +236,20 @@ def _extract_response_payload(response: Any) -> dict[str, Any] | str:
 
     if isinstance(response, dict):
         return response
+
+    candidates = getattr(response, "candidates", None)
+    if candidates:
+        for candidate in candidates:
+            content = getattr(candidate, "content", None)
+            parts = getattr(content, "parts", None) if content is not None else None
+            if parts is None and isinstance(content, dict):
+                parts = content.get("parts")
+            for part in parts or []:
+                part_text = getattr(part, "text", None)
+                if part_text is None and isinstance(part, dict):
+                    part_text = part.get("text")
+                if part_text:
+                    return _extract_json_object(str(part_text))
 
     response_text = getattr(response, "text", None) if not isinstance(response, str) else response
     if response_text is None:

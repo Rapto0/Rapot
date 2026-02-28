@@ -10,6 +10,12 @@ import pytest
 import ai_analyst
 
 
+def _config_value(config, name: str):
+    if isinstance(config, dict):
+        return config.get(name)
+    return getattr(config, name, None)
+
+
 class TestAIAnalystPhaseOne:
     @pytest.mark.unit
     def test_generation_config_enforces_json_schema(self, monkeypatch):
@@ -18,22 +24,25 @@ class TestAIAnalystPhaseOne:
 
         config = ai_analyst._get_generation_config("google.generativeai")
 
-        assert config["response_mime_type"] == "application/json"
-        assert config["response_schema"]["type"] == "object"
-        assert "sentiment_score" in config["response_schema"]["properties"]
-        assert "technical_view" in config["response_schema"]["properties"]
+        assert _config_value(config, "response_mime_type") == "application/json"
+        response_schema = _config_value(config, "response_schema")
+        assert response_schema["type"] == "object"
+        assert "sentiment_score" in response_schema["properties"]
+        assert "technical_view" in response_schema["properties"]
 
     @pytest.mark.unit
-    def test_generation_config_uses_response_json_schema_for_google_genai(self, monkeypatch):
+    def test_generation_config_uses_response_schema_for_google_genai(self, monkeypatch):
         monkeypatch.setattr(ai_analyst.settings, "ai_temperature", 0.2)
         monkeypatch.setattr(ai_analyst.settings, "ai_max_output_tokens", 1024)
 
         config = ai_analyst._get_generation_config("google.genai")
 
-        assert config["response_mime_type"] == "application/json"
-        assert "response_json_schema" in config
-        assert "response_schema" not in config
-        assert config["response_json_schema"]["type"] == "object"
+        assert _config_value(config, "response_mime_type") == "application/json"
+        response_schema = _config_value(config, "response_schema")
+        if ai_analyst.google_genai_types is None:
+            assert response_schema is ai_analyst.AIAnalysisPayload
+        else:
+            assert response_schema is ai_analyst.AIAnalysisPayload
 
     @pytest.mark.unit
     def test_build_model_candidates_deduplicates_values(self, monkeypatch):
@@ -201,6 +210,37 @@ class TestAIAnalystPhaseOne:
 
         assert payload["provider"] == "gemini"
         assert payload["explanation"] == "mixed text"
+
+    @pytest.mark.unit
+    def test_normalize_ai_response_extracts_json_from_candidate_parts(self):
+        class DummyPart:
+            text = (
+                '{"sentiment_score":55,"sentiment_label":"NOTR","summary":["ok"],'
+                '"explanation":"candidate text","key_levels":{"support":["1"],"resistance":["2"]},'
+                '"risk_level":"Orta"}'
+            )
+
+        class DummyContent:
+            parts = [DummyPart()]
+
+        class DummyCandidate:
+            content = DummyContent()
+
+        class DummyResponse:
+            parsed = None
+            text = ""
+            candidates = [DummyCandidate()]
+
+        normalized = ai_analyst._normalize_ai_response(
+            response=DummyResponse(),
+            provider="gemini",
+            model_name="gemini-2.5-flash",
+            backend="google.genai",
+        )
+        payload = json.loads(normalized)
+
+        assert payload["provider"] == "gemini"
+        assert payload["explanation"] == "candidate text"
 
     @pytest.mark.unit
     def test_analyze_with_gemini_embeds_multitimeframe_payload_in_prompt(self, monkeypatch):
