@@ -61,14 +61,10 @@ STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
 }
 
 TELEGRAM_MESSAGE_LIMIT = 3500
-TELEGRAM_COMPACT_INDICATORS: dict[str, tuple[str, ...]] = {
-    "COMBO": ("MACD", "RSI", "WR", "CCI"),
-    "HUNTER": ("RSI", "MACD", "W%R", "CCI", "RSI2"),
-}
 TELEGRAM_GROUP_ORDER: dict[str, tuple[tuple[str, tuple[str, ...]], ...]] = {
     "COMBO": (("Cekirdek", ("MACD", "RSI", "WR", "CCI")),),
     "HUNTER": (
-        ("Momentum", ("RSI", "RSI2", "CMO")),
+        ("Momentum", ("RSI", "RSI_Fast", "RSI2", "CMO")),
         ("Trend", ("MACD", "ROC", "ZScore")),
         ("Range", ("W%R", "CCI", "ULT")),
         ("Band", ("BBP", "KeltPB", "DeM")),
@@ -410,10 +406,6 @@ def _build_strategy_summary_chunks(
     timeframe_code: str | None = None,
 ) -> list[str]:
     header = _build_telegram_header(report, "OZET", timeframe_code)
-    indicator_order = report["indicator_order"]
-    compact_indicators = TELEGRAM_COMPACT_INDICATORS.get(
-        report["strategy"], tuple(indicator_order[:4])
-    )
     blocks: list[str] = []
 
     for timeframe in _select_report_timeframes(report, timeframe_code):
@@ -436,17 +428,6 @@ def _build_strategy_summary_chunks(
                 f"Aktif {html.escape(str(timeframe['active_indicators']))}"
             ),
         ]
-
-        compact_line = " | ".join(
-            (
-                f"{TELEGRAM_INDICATOR_LABELS.get(indicator_key, indicator_key)} "
-                f"{_format_indicator_value(timeframe['indicators'].get(indicator_key))}"
-            )
-            for indicator_key in compact_indicators
-            if indicator_key in indicator_order
-        )
-        if compact_line:
-            block_lines.append(f"• {html.escape(compact_line)}")
 
         blocks.append("\n".join(block_lines))
 

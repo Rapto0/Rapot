@@ -161,15 +161,6 @@ def send_strategy_inspector_report(
     timeframe_code: str | None = None,
 ) -> None:
     """Run the strategy inspector and send the report to Telegram."""
-    progress = f"Inspector basladi: {symbol} {strategy}"
-    if market_type:
-        progress += f" {market_type}"
-    if timeframe_code:
-        progress += f" {timeframe_code}"
-    elif detail:
-        progress += " DETAY"
-    send_message(progress)
-
     report = inspect_strategy(symbol=symbol, strategy=strategy, market_type=market_type)
     for chunk in build_strategy_inspector_chunks(
         report,

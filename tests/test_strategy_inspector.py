@@ -91,7 +91,8 @@ def test_build_strategy_inspector_chunks_contains_symbol_and_strategy():
     assert "<pre>" not in chunks[0]
     assert "Mod: OZET" in chunks[0]
     assert "Momentum" not in chunks[0]
-    assert "RSI14" in chunks[0]
+    assert "RSI14" not in chunks[0]
+    assert "Fiyat" in chunks[0]
 
 
 def test_build_strategy_inspector_chunks_detail_single_timeframe():
@@ -109,6 +110,7 @@ def test_build_strategy_inspector_chunks_detail_single_timeframe():
     assert "Momentum" in chunks[0]
     assert "Trend" in chunks[0]
     assert "1 HAFTALIK" not in chunks[0]
+    assert "RSIF" in chunks[0]
 
 
 def test_normalize_inspector_timeframe_aliases():
