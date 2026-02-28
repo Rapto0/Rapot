@@ -14,14 +14,24 @@ class TestAIAnalystPhaseOne:
     @pytest.mark.unit
     def test_build_model_candidates_deduplicates_values(self, monkeypatch):
         monkeypatch.setattr(ai_analyst.settings, "ai_model", "gemini-2.5-flash")
+        monkeypatch.setattr(ai_analyst.settings, "ai_enable_fallback", True)
         monkeypatch.setattr(ai_analyst.settings, "ai_fallback_model", "gemini-2.5-flash")
 
         assert ai_analyst.build_model_candidates() == ["gemini-2.5-flash"]
 
     @pytest.mark.unit
-    def test_analyze_with_gemini_uses_fallback_model(self, monkeypatch):
+    def test_build_model_candidates_skips_fallback_by_default(self, monkeypatch):
+        monkeypatch.setattr(ai_analyst.settings, "ai_model", "gemini-2.5-flash")
+        monkeypatch.setattr(ai_analyst.settings, "ai_enable_fallback", False)
+        monkeypatch.setattr(ai_analyst.settings, "ai_fallback_model", "gemini-2.5-flash-lite")
+
+        assert ai_analyst.build_model_candidates() == ["gemini-2.5-flash"]
+
+    @pytest.mark.unit
+    def test_analyze_with_gemini_uses_fallback_model_only_when_enabled(self, monkeypatch):
         monkeypatch.setattr(ai_analyst.settings, "ai_provider", "gemini")
         monkeypatch.setattr(ai_analyst.settings, "ai_model", "gemini-2.5-flash")
+        monkeypatch.setattr(ai_analyst.settings, "ai_enable_fallback", True)
         monkeypatch.setattr(ai_analyst.settings, "ai_fallback_model", "gemini-2.5-flash-lite")
         monkeypatch.setattr(ai_analyst.settings, "gemini_api_key", "test-key")
         monkeypatch.setattr(ai_analyst, "gemini_client", object())
@@ -89,6 +99,7 @@ class TestAIAnalystPhaseOne:
     def test_analyze_with_gemini_returns_structured_error_for_invalid_json(self, monkeypatch):
         monkeypatch.setattr(ai_analyst.settings, "ai_provider", "gemini")
         monkeypatch.setattr(ai_analyst.settings, "ai_model", "gemini-2.5-flash")
+        monkeypatch.setattr(ai_analyst.settings, "ai_enable_fallback", False)
         monkeypatch.setattr(ai_analyst.settings, "ai_fallback_model", None)
         monkeypatch.setattr(ai_analyst.settings, "gemini_api_key", "test-key")
         monkeypatch.setattr(ai_analyst, "gemini_client", object())
@@ -122,6 +133,7 @@ class TestAIAnalystPhaseOne:
     def test_analyze_with_gemini_embeds_multitimeframe_payload_in_prompt(self, monkeypatch):
         monkeypatch.setattr(ai_analyst.settings, "ai_provider", "gemini")
         monkeypatch.setattr(ai_analyst.settings, "ai_model", "gemini-2.5-flash")
+        monkeypatch.setattr(ai_analyst.settings, "ai_enable_fallback", False)
         monkeypatch.setattr(ai_analyst.settings, "ai_fallback_model", None)
         monkeypatch.setattr(ai_analyst.settings, "gemini_api_key", "test-key")
         monkeypatch.setattr(ai_analyst, "gemini_client", object())

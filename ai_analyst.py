@@ -61,6 +61,7 @@ def get_ai_runtime_settings() -> dict[str, Any]:
     return {
         "provider": _normalize_ai_provider(settings.ai_provider),
         "model": (settings.ai_model or "gemini-2.5-flash").strip(),
+        "enable_fallback": bool(settings.ai_enable_fallback),
         "fallback_model": (settings.ai_fallback_model or "").strip() or None,
         "temperature": settings.ai_temperature,
         "max_output_tokens": settings.ai_max_output_tokens,
@@ -69,13 +70,21 @@ def get_ai_runtime_settings() -> dict[str, Any]:
 
 
 def build_model_candidates(
-    primary_model: str | None = None, fallback_model: str | None = None
+    primary_model: str | None = None,
+    fallback_model: str | None = None,
+    enable_fallback: bool | None = None,
 ) -> list[str]:
     runtime = get_ai_runtime_settings()
-    models = [
-        (primary_model or runtime["model"] or "").strip(),
-        (fallback_model if fallback_model is not None else runtime["fallback_model"] or "").strip(),
-    ]
+    should_use_fallback = (
+        enable_fallback if enable_fallback is not None else runtime["enable_fallback"]
+    )
+    models = [(primary_model or runtime["model"] or "").strip()]
+    if should_use_fallback:
+        models.append(
+            (
+                fallback_model if fallback_model is not None else runtime["fallback_model"] or ""
+            ).strip()
+        )
 
     unique_models: list[str] = []
     seen: set[str] = set()

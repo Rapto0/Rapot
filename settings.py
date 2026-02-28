@@ -56,8 +56,12 @@ class Settings(BaseSettings):
     ai_timeout: int = Field(30, ge=10, le=120, description="AI analiz timeout (saniye)")
     ai_provider: str = Field("gemini", description="AI provider (ornek: gemini)")
     ai_model: str = Field("gemini-2.5-flash", description="Varsayilan AI model adi")
+    ai_enable_fallback: bool = Field(
+        False,
+        description="AI fallback model denemesini ac/kapat",
+    )
     ai_fallback_model: str | None = Field(
-        "gemini-2.5-flash-lite", description="Birincil model basarisiz olursa denenecek model"
+        None, description="Birincil model basarisiz olursa denenecek model"
     )
     ai_temperature: float = Field(0.2, ge=0.0, le=2.0, description="AI sicaklik degeri")
     ai_max_output_tokens: int = Field(

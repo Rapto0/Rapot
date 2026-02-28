@@ -7,10 +7,11 @@ import asyncio
 import json
 import logging
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable
+from typing import Any
 
 import aiohttp
 
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 class StreamType(Enum):
     """WebSocket stream types."""
+
     TICKER = "ticker"
     MINI_TICKER = "miniTicker"
     DEPTH = "depth"
@@ -30,6 +32,7 @@ class StreamType(Enum):
 @dataclass
 class TickerData:
     """Standardized ticker data structure."""
+
     symbol: str
     price: float
     price_change: float
@@ -57,6 +60,7 @@ class TickerData:
 @dataclass
 class TradeData:
     """Standardized trade data structure."""
+
     symbol: str
     trade_id: int
     price: float
@@ -78,6 +82,7 @@ class TradeData:
 @dataclass
 class KlineData:
     """Standardized kline/candlestick data."""
+
     symbol: str
     interval: str
     open_time: int
@@ -161,9 +166,7 @@ class BinanceWebSocketManager:
             if self._running:
                 logger.info(f"Reconnecting in {self._reconnect_delay}s...")
                 await asyncio.sleep(self._reconnect_delay)
-                self._reconnect_delay = min(
-                    self._reconnect_delay * 2, self._max_reconnect_delay
-                )
+                self._reconnect_delay = min(self._reconnect_delay * 2, self._max_reconnect_delay)
 
     async def _connect(self):
         """Establish WebSocket connection."""
@@ -191,16 +194,53 @@ class BinanceWebSocketManager:
                 logger.warning("WebSocket closed by server")
                 break
 
-    async def _handle_message(self, data: dict):
+    async def _handle_message(self, data: Any):
         """Process incoming WebSocket message."""
+        if isinstance(data, list):
+            for item in data:
+                await self._handle_message(item)
+            return
+
+        if not isinstance(data, dict):
+            logger.warning("Ignoring unexpected WebSocket payload type: %s", type(data).__name__)
+            return
+
         if "stream" in data:
-            stream_name = data["stream"]
-            payload = data["data"]
+            stream_name = str(data["stream"])
+            payload = data.get("data")
         else:
-            stream_name = data.get("e", "unknown")
+            stream_name = str(data.get("e", "unknown"))
             payload = data
 
-        event_type = payload.get("e", "")
+        await self._handle_payload(payload, stream_name)
+
+    async def _handle_payload(self, payload: Any, stream_name: str):
+        """Process a normalized WebSocket payload."""
+        if isinstance(payload, list):
+            for item in payload:
+                await self._handle_payload(item, stream_name)
+            return
+
+        if not isinstance(payload, dict):
+            logger.warning(
+                "Ignoring unexpected WebSocket message payload type for %s: %s",
+                stream_name,
+                type(payload).__name__,
+            )
+            return
+
+        event_type = str(payload.get("e", "") or "")
+        if not event_type:
+            if "miniTicker" in stream_name:
+                event_type = "24hrMiniTicker"
+            elif stream_name.endswith("@ticker"):
+                event_type = "24hrTicker"
+            elif "@trade" in stream_name:
+                event_type = "trade"
+            elif "@aggTrade" in stream_name:
+                event_type = "aggTrade"
+            elif "@kline_" in stream_name:
+                event_type = "kline"
 
         # Parse and distribute data
         if event_type == "24hrMiniTicker":
@@ -344,10 +384,7 @@ class BinanceWebSocketManager:
 
     def get_cached_tickers(self) -> dict[str, dict]:
         """Get all cached ticker data."""
-        return {
-            symbol: ticker.to_dict()
-            for symbol, ticker in self._ticker_cache.items()
-        }
+        return {symbol: ticker.to_dict() for symbol, ticker in self._ticker_cache.items()}
 
     def get_ticker(self, symbol: str) -> dict | None:
         """Get cached ticker for a specific symbol."""
