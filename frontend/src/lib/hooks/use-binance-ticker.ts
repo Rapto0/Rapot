@@ -9,10 +9,24 @@ interface TickerData {
     P: string // Price Change Percent
 }
 
-export function useBinanceTicker(symbols: string[]) {
+interface UseBinanceTickerOptions {
+    paused?: boolean
+    flushIntervalMs?: number
+}
+
+export function useBinanceTicker(symbols: string[], options?: UseBinanceTickerOptions) {
+    const paused = options?.paused === true
+    const flushIntervalMs = Math.max(100, options?.flushIntervalMs ?? 250)
     const [prices, setPrices] = useState<Record<string, { price: number; change: number; priceChange: number }>>({})
     const ws = useRef<WebSocket | null>(null)
     const reconnectTimerRef = useRef<number | null>(null)
+    const flushTimerRef = useRef<number | null>(null)
+    const pendingUpdatesRef = useRef<Record<string, { price: number; change: number; priceChange: number }>>({})
+    const perfLogRef = useRef<{ lastAt: number; flushes: number; symbols: number }>({
+        lastAt: 0,
+        flushes: 0,
+        symbols: 0,
+    })
 
     const symbolsKey = useMemo(() => {
         const unique = Array.from(
@@ -32,12 +46,17 @@ export function useBinanceTicker(symbols: string[]) {
     )
 
     useEffect(() => {
-        if (normalizedSymbols.length === 0) {
+        if (paused || normalizedSymbols.length === 0) {
             if (reconnectTimerRef.current !== null) {
                 window.clearTimeout(reconnectTimerRef.current)
                 reconnectTimerRef.current = null
             }
-            ws.current?.close(1000, "No symbols")
+            if (flushTimerRef.current !== null) {
+                window.clearTimeout(flushTimerRef.current)
+                flushTimerRef.current = null
+            }
+            pendingUpdatesRef.current = {}
+            ws.current?.close(1000, paused ? "Paused" : "No symbols")
             ws.current = null
             return
         }
@@ -45,6 +64,64 @@ export function useBinanceTicker(symbols: string[]) {
         let disposed = false
         let reconnectDelay = 1000
         let socket: WebSocket | null = null
+        const activeSymbols = new Set(normalizedSymbols)
+
+        const flushPendingUpdates = () => {
+            if (flushTimerRef.current !== null) {
+                window.clearTimeout(flushTimerRef.current)
+                flushTimerRef.current = null
+            }
+
+            const pending = pendingUpdatesRef.current
+            const entries = Object.entries(pending)
+            if (entries.length === 0) return
+            pendingUpdatesRef.current = {}
+
+            setPrices((prev) => {
+                let changed = false
+                const next = { ...prev }
+
+                for (const [symbol, payload] of entries) {
+                    // Ignore stale updates after symbols list changed.
+                    if (!activeSymbols.has(symbol)) continue
+
+                    const current = prev[symbol]
+                    if (
+                        current &&
+                        current.price === payload.price &&
+                        current.change === payload.change &&
+                        current.priceChange === payload.priceChange
+                    ) {
+                        continue
+                    }
+                    next[symbol] = payload
+                    changed = true
+                }
+
+                return changed ? next : prev
+            })
+
+            if (process.env.NODE_ENV !== "production") {
+                const now = performance.now()
+                perfLogRef.current.flushes += 1
+                perfLogRef.current.symbols = entries.length
+                if (now - perfLogRef.current.lastAt >= 3000) {
+                    perfLogRef.current.lastAt = now
+                    console.debug("[ws-perf] binance-ticker", {
+                        symbols: normalizedSymbols.length,
+                        flushIntervalMs,
+                        pendingSymbols: perfLogRef.current.symbols,
+                        flushCountWindow: perfLogRef.current.flushes,
+                    })
+                    perfLogRef.current.flushes = 0
+                }
+            }
+        }
+
+        const scheduleFlush = () => {
+            if (flushTimerRef.current !== null) return
+            flushTimerRef.current = window.setTimeout(flushPendingUpdates, flushIntervalMs)
+        }
 
         const connect = () => {
             if (disposed) return
@@ -78,21 +155,8 @@ export function useBinanceTicker(symbols: string[]) {
                         priceChange: parseFloat(ticker.p),
                     }
 
-                    setPrices((prev) => {
-                        const current = prev[symbol]
-                        if (
-                            current &&
-                            current.price === nextValue.price &&
-                            current.change === nextValue.change &&
-                            current.priceChange === nextValue.priceChange
-                        ) {
-                            return prev
-                        }
-                        return {
-                            ...prev,
-                            [symbol]: nextValue,
-                        }
-                    })
+                    pendingUpdatesRef.current[symbol] = nextValue
+                    scheduleFlush()
                 } catch {
                     // Ignore malformed packets from network edges/proxies.
                 }
@@ -123,6 +187,11 @@ export function useBinanceTicker(symbols: string[]) {
                 window.clearTimeout(reconnectTimerRef.current)
                 reconnectTimerRef.current = null
             }
+            if (flushTimerRef.current !== null) {
+                window.clearTimeout(flushTimerRef.current)
+                flushTimerRef.current = null
+            }
+            pendingUpdatesRef.current = {}
 
             if (socket) {
                 socket.onopen = null
@@ -138,7 +207,7 @@ export function useBinanceTicker(symbols: string[]) {
                 ws.current = null
             }
         }
-    }, [normalizedSymbols, symbolsKey])
+    }, [normalizedSymbols, symbolsKey, paused, flushIntervalMs])
 
     return prices
 }

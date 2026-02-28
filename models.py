@@ -84,6 +84,9 @@ class Signal(Base):
     timeframe = Column(String(15), nullable=False)  # 1D, W-FRI, 2W-FRI, 3W-FRI, ME
     score = Column(String(50))  # Örn: "+4/-0" veya "7/7"
     price = Column(Float, default=0.0)
+    special_tag = Column(
+        String(20), nullable=True, index=True
+    )  # BELES, COK_UCUZ, PAHALI, FAHIS_FIYAT
     details = Column(Text)  # JSON string
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
@@ -110,6 +113,7 @@ class Signal(Base):
             "timeframe": self.timeframe,
             "score": self.score,
             "price": self.price,
+            "special_tag": self.special_tag,
             "details": self.details,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
@@ -267,6 +271,21 @@ class AIAnalysis(Base):
     signal_type = Column(String(5))  # AL, SAT
     analysis_text = Column(Text, nullable=False)  # AI tarafından üretilen yorum
     technical_data = Column(Text)  # JSON string - teknik göstergeler
+    provider = Column(String(20))
+    model = Column(String(100))
+    backend = Column(String(50))
+    prompt_version = Column(String(50))
+    sentiment_score = Column(Integer)
+    sentiment_label = Column(String(20))
+    confidence_score = Column(Integer)
+    risk_level = Column(String(20))
+    technical_bias = Column(String(20))
+    technical_strength = Column(Integer)
+    news_bias = Column(String(20))
+    news_strength = Column(Integer)
+    headline_count = Column(Integer)
+    latency_ms = Column(Integer)
+    error_code = Column(String(40))
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
     # Relationship
@@ -289,5 +308,20 @@ class AIAnalysis(Base):
             "signal_type": self.signal_type,
             "analysis_text": self.analysis_text,
             "technical_data": self.technical_data,
+            "provider": self.provider,
+            "model": self.model,
+            "backend": self.backend,
+            "prompt_version": self.prompt_version,
+            "sentiment_score": self.sentiment_score,
+            "sentiment_label": self.sentiment_label,
+            "confidence_score": self.confidence_score,
+            "risk_level": self.risk_level,
+            "technical_bias": self.technical_bias,
+            "technical_strength": self.technical_strength,
+            "news_bias": self.news_bias,
+            "news_strength": self.news_strength,
+            "headline_count": self.headline_count,
+            "latency_ms": self.latency_ms,
+            "error_code": self.error_code,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }

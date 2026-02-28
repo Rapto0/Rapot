@@ -5,13 +5,12 @@ import { usePathname } from "next/navigation"
 import type { ComponentType } from "react"
 import { cn } from "@/lib/utils"
 import {
-  LayoutDashboard,
   Search,
   Bell,
   History,
   Activity,
   Settings,
-  LineChart,
+  Brain,
   CalendarDays,
   BarChart3,
   Home,
@@ -25,13 +24,12 @@ type NavItem = {
 
 const navigation: NavItem[] = [
   { name: "Ana Sayfa", href: "/", icon: Home },
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Grafik", href: "/chart", icon: BarChart3 },
   { name: "Tarayıcı", href: "/scanner", icon: Search },
   { name: "Sinyaller", href: "/signals", icon: Bell },
   { name: "İşlemler", href: "/trades", icon: History },
   { name: "Bot Sağlığı", href: "/health", icon: Activity },
-  { name: "TradingView", href: "/tradingview", icon: LineChart },
+  { name: "AI", href: "/ai", icon: Brain },
   { name: "Takvim", href: "/calendar", icon: CalendarDays },
 ]
 

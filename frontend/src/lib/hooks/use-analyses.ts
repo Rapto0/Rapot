@@ -12,6 +12,21 @@ export interface AIAnalysis {
     signalType: 'AL' | 'SAT' | null;
     analysisText: string;
     technicalData: Record<string, any> | null;
+    provider: string | null;
+    model: string | null;
+    backend: string | null;
+    promptVersion: string | null;
+    sentimentScore: number | null;
+    sentimentLabel: string | null;
+    confidenceScore: number | null;
+    riskLevel: string | null;
+    technicalBias: string | null;
+    technicalStrength: number | null;
+    newsBias: string | null;
+    newsStrength: number | null;
+    headlineCount: number | null;
+    latencyMs: number | null;
+    errorCode: string | null;
     createdAt: string;
 }
 

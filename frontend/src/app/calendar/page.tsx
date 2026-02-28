@@ -1,64 +1,151 @@
-"use client"
+﻿"use client"
 
-import { DateNavigator } from "@/components/calendar/date-navigator"
-import { FilterTabs } from "@/components/calendar/filter-tabs"
-import { CalendarEventRow } from "@/components/calendar/event-row"
-import { ScrollArea } from "@/components/ui/scroll-area"
+import { useMemo, useState } from "react"
+import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 
-const EVENTS = [
-    { time: "10:00", country: "TR", volatility: 2, title: "Yabancı Turist Sayısı (Yıllık)", actual: "4.5%", forecast: "3.2%", previous: "2.1%" },
-    { time: "10:30", country: "EU", volatility: 3, title: "Almanya İmalat PMI", actual: "45.4", forecast: "43.7", previous: "43.3" },
-    { time: "11:00", country: "EU", volatility: 2, title: "Euro Bölgesi Bileşik PMI", actual: "47.9", forecast: "48.0", previous: "47.6" },
-    { time: "12:00", country: "UK", volatility: 3, title: "İngiltere Hizmet PMI", actual: "53.8", forecast: "53.2", previous: "53.4" },
-    { time: "15:30", country: "USA", volatility: 1, title: "Chicago Fed Ulusal Aktivite Endeksi", actual: "0.02", forecast: "-0.10", previous: "0.03" },
-    { time: "16:45", country: "USA", volatility: 3, title: "S&P Global İmalat PMI", actual: "50.3", forecast: "47.9", previous: "47.9" },
-    { time: "16:45", country: "USA", volatility: 3, title: "S&P Global Hizmet PMI", actual: "52.9", forecast: "51.0", previous: "51.4" },
-    { time: "18:00", country: "USA", volatility: 2, title: "Richmond İmalat Endeksi", actual: "-15", forecast: "-7", previous: "-11" },
-    { time: "21:00", country: "USA", volatility: 1, title: "2 Yıllık Tahvil İhalesi", actual: "4.365%", forecast: "", previous: "4.314%" }
+type EventImpact = "Düşük" | "Orta" | "Yüksek"
+type EventRegion = "TR" | "EU" | "UK" | "USA" | "JP"
+
+type CalendarEvent = {
+  id: number
+  date: string
+  time: string
+  region: EventRegion
+  impact: EventImpact
+  title: string
+  actual: string
+  forecast: string
+  previous: string
+}
+
+const CALENDAR_EVENTS: CalendarEvent[] = [
+  { id: 1, date: "2026-02-24", time: "10:00", region: "TR", impact: "Orta", title: "Yabancı turist sayısı", actual: "4.5%", forecast: "3.2%", previous: "2.1%" },
+  { id: 2, date: "2026-02-24", time: "10:30", region: "EU", impact: "Yüksek", title: "Almanya imalat PMI", actual: "45.4", forecast: "43.7", previous: "43.3" },
+  { id: 3, date: "2026-02-24", time: "12:00", region: "UK", impact: "Orta", title: "İngiltere hizmet PMI", actual: "53.8", forecast: "53.2", previous: "53.4" },
+  { id: 4, date: "2026-02-24", time: "16:45", region: "USA", impact: "Yüksek", title: "S&P Global hizmet PMI", actual: "52.9", forecast: "51.0", previous: "51.4" },
+  { id: 5, date: "2026-02-24", time: "18:00", region: "USA", impact: "Düşük", title: "Richmond imalat endeksi", actual: "-15", forecast: "-7", previous: "-11" },
+  { id: 6, date: "2026-02-25", time: "08:00", region: "JP", impact: "Orta", title: "BoJ faiz kararı", actual: "", forecast: "-0.10%", previous: "-0.10%" },
+  { id: 7, date: "2026-02-25", time: "10:00", region: "TR", impact: "Yüksek", title: "TCMB faiz kararı", actual: "", forecast: "45.00%", previous: "42.50%" },
+  { id: 8, date: "2026-02-25", time: "16:30", region: "USA", impact: "Yüksek", title: "GSYİH (çeyreklik)", actual: "", forecast: "2.0%", previous: "4.9%" },
 ]
 
+const impactOrder: EventImpact[] = ["Düşük", "Orta", "Yüksek"]
+
 export default function CalendarPage() {
-    return (
-        <div className="flex h-screen w-full flex-col bg-[#131722] text-[#d1d4dc] overflow-hidden">
-            {/* Header */}
-            <div className="bg-[#131722] pt-4 px-6 pb-2">
-                <h1 className="text-2xl font-bold">Ekonomik Takvim</h1>
-                <p className="text-sm text-[#787b86] mt-1">Küresel piyasaları etkileyebilecek önemli ekonomik olaylar.</p>
-            </div>
+  const [selectedDate, setSelectedDate] = useState<string>("all")
+  const [selectedImpact, setSelectedImpact] = useState<EventImpact | "all">("all")
 
-            {/* Controls */}
-            <DateNavigator />
-            <FilterTabs />
+  const dates = useMemo(() => Array.from(new Set(CALENDAR_EVENTS.map((event) => event.date))), [])
 
-            {/* Header for List */}
-            <div className="flex items-center py-2 px-4 bg-[#1e222d] border-b border-[#2a2e39] text-xs font-bold text-[#787b86] uppercase tracking-wider">
-                <div className="w-16">Saat</div>
-                <div className="w-24">Ülke</div>
-                <div className="flex-1">Olay</div>
-                <div className="w-24 text-right">Güncel</div>
-                <div className="w-24 text-right">Tahmin</div>
-                <div className="w-24 text-right">Önceki</div>
-            </div>
+  const filteredEvents = useMemo(() => {
+    return CALENDAR_EVENTS.filter((event) => {
+      if (selectedDate !== "all" && event.date !== selectedDate) return false
+      if (selectedImpact !== "all" && event.impact !== selectedImpact) return false
+      return true
+    })
+  }, [selectedDate, selectedImpact])
 
-            {/* Event List */}
-            <ScrollArea className="flex-1 bg-[#131722]">
-                <div className="flex flex-col">
-                    <div className="sticky top-0 z-10 bg-[#131722] py-2 px-4 border-b border-[#2a2e39]">
-                        <span className="text-sm font-bold text-[#d1d4dc]">Çarşamba, 23 Ocak</span>
-                    </div>
-                    {EVENTS.map((event, index) => (
-                        <CalendarEventRow key={index} {...event} volatility={event.volatility as 1 | 2 | 3} />
-                    ))}
+  return (
+    <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-3 p-3">
+      <section className="border border-border bg-surface p-4">
+        <div className="label-uppercase">Takvim</div>
+        <h1 className="mt-1 text-lg font-semibold tracking-[-0.02em]">Ekonomik takvim</h1>
+        <p className="mt-1 text-xs text-muted-foreground">Piyasa etkisi yüksek veri ve karar akışı.</p>
+      </section>
 
-                    <div className="sticky top-0 z-10 bg-[#131722] py-2 px-4 border-b border-[#2a2e39] mt-4">
-                        <span className="text-sm font-bold text-[#d1d4dc]">Perşembe, 24 Ocak</span>
-                    </div>
-                    {/* Mock events for next day */}
-                    <CalendarEventRow time="08:00" country="JP" volatility={2} title="BoJ Faiz Oranı Kararı" actual="" forecast="-0.10%" previous="-0.10%" />
-                    <CalendarEventRow time="10:00" country="TR" volatility={3} title="TCMB Faiz Kararı" actual="" forecast="45.00%" previous="42.50%" />
-                    <CalendarEventRow time="16:30" country="USA" volatility={3} title="GSYİH (Çeyreklik)" actual="" forecast="2.0%" previous="4.9%" />
-                </div>
-            </ScrollArea>
+      <section className="border border-border bg-surface p-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <FilterBlock
+            title="Tarih"
+            options={[["all", "Tümü"], ...dates.map((date) => [date, formatDateLabel(date)] as [string, string])]}
+            value={selectedDate}
+            onChange={setSelectedDate}
+          />
+          <FilterBlock
+            title="Etki"
+            options={[["all", "Tümü"], ...impactOrder.map((value) => [value, value] as [string, string])]}
+            value={selectedImpact}
+            onChange={(value) => setSelectedImpact(value as EventImpact | "all")}
+          />
         </div>
-    )
+      </section>
+
+      <section className="border border-border bg-surface">
+        <div className="grid grid-cols-[80px_80px_110px_1fr_100px_100px_100px] border-b border-border px-3 py-2 text-[10px] uppercase tracking-[0.06em] text-muted-foreground">
+          <span>Saat</span>
+          <span>Bölge</span>
+          <span>Etki</span>
+          <span>Olay</span>
+          <span className="text-right">Güncel</span>
+          <span className="text-right">Tahmin</span>
+          <span className="text-right">Önceki</span>
+        </div>
+
+        {filteredEvents.length === 0 ? (
+          <div className="px-3 py-8 text-center text-xs text-muted-foreground">Kayıt bulunamadı.</div>
+        ) : (
+          <div className="divide-y divide-border">
+            {filteredEvents.map((event) => (
+              <div key={event.id} className="grid grid-cols-[80px_80px_110px_1fr_100px_100px_100px] items-center gap-2 px-3 py-2">
+                <span className="mono-numbers text-xs text-foreground">{event.time}</span>
+                <span className="text-xs text-muted-foreground">{event.region}</span>
+                <span
+                  className={cn(
+                    "signal-badge w-fit",
+                    event.impact === "Yüksek" ? "signal-sell" : event.impact === "Orta" ? "signal-neutral" : "border border-border bg-base text-muted-foreground"
+                  )}
+                >
+                  {event.impact}
+                </span>
+                <span className="truncate text-xs text-foreground">{event.title}</span>
+                <span className="mono-numbers text-right text-xs text-foreground">{event.actual || "--"}</span>
+                <span className="mono-numbers text-right text-xs text-muted-foreground">{event.forecast || "--"}</span>
+                <span className="mono-numbers text-right text-xs text-muted-foreground">{event.previous || "--"}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  )
+}
+
+function FilterBlock({
+  title,
+  options,
+  value,
+  onChange,
+}: {
+  title: string
+  options: [string, string][]
+  value: string
+  onChange: (value: string) => void
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-muted-foreground">{title}</span>
+      <div className="flex items-center gap-1">
+        {options.map(([optionValue, label]) => (
+          <Button
+            key={optionValue}
+            type="button"
+            size="sm"
+            variant={value === optionValue ? "default" : "outline"}
+            onClick={() => onChange(optionValue)}
+          >
+            {label}
+          </Button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function formatDateLabel(dateValue: string) {
+  const date = new Date(`${dateValue}T00:00:00`)
+  return date.toLocaleDateString("tr-TR", {
+    day: "2-digit",
+    month: "short",
+  })
 }

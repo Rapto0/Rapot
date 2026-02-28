@@ -121,7 +121,57 @@ def init_db() -> None:
     """
     engine = get_engine()
     Base.metadata.create_all(bind=engine)
+
+    # Backward-compatible migration for existing databases.
+    ensure_sqlite_columns(
+        engine,
+        "signals",
+        {"special_tag": "VARCHAR(20)"},
+        indexes=("CREATE INDEX IF NOT EXISTS idx_signals_special_tag ON signals(special_tag)",),
+    )
+    ensure_sqlite_columns(
+        engine,
+        "ai_analyses",
+        {
+            "provider": "VARCHAR(20)",
+            "model": "VARCHAR(100)",
+            "backend": "VARCHAR(50)",
+            "prompt_version": "VARCHAR(50)",
+            "sentiment_score": "INTEGER",
+            "sentiment_label": "VARCHAR(20)",
+            "confidence_score": "INTEGER",
+            "risk_level": "VARCHAR(20)",
+            "technical_bias": "VARCHAR(20)",
+            "technical_strength": "INTEGER",
+            "news_bias": "VARCHAR(20)",
+            "news_strength": "INTEGER",
+            "headline_count": "INTEGER",
+            "latency_ms": "INTEGER",
+            "error_code": "VARCHAR(40)",
+        },
+    )
     logger.info("Veritabanı tabloları oluşturuldu/kontrol edildi")
+
+
+def ensure_sqlite_columns(
+    engine,
+    table_name: str,
+    columns: dict[str, str],
+    indexes: tuple[str, ...] = (),
+) -> None:
+    """SQLite tablo kolonlarını geriye uyumlu şekilde tamamlar."""
+    with engine.connect() as conn:
+        existing_columns = {
+            row[1] for row in conn.exec_driver_sql(f"PRAGMA table_info({table_name})").fetchall()
+        }
+        for column_name, column_type in columns.items():
+            if column_name not in existing_columns:
+                conn.exec_driver_sql(
+                    f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type}"
+                )
+        for index_sql in indexes:
+            conn.exec_driver_sql(index_sql)
+        conn.commit()
 
 
 def drop_all_tables() -> None:

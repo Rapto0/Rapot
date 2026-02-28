@@ -4,9 +4,10 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import {
-  LayoutDashboard,
   Search,
   Bell,
+  BarChart3,
+  Brain,
   History,
   Settings,
   Home,
@@ -14,9 +15,10 @@ import {
 
 const mobileNavItems = [
   { name: "Ana", href: "/", icon: Home },
-  { name: "Panel", href: "/dashboard", icon: LayoutDashboard },
+  { name: "Grafik", href: "/chart", icon: BarChart3 },
   { name: "Tarayıcı", href: "/scanner", icon: Search },
   { name: "Sinyal", href: "/signals", icon: Bell },
+  { name: "AI", href: "/ai", icon: Brain },
   { name: "Ayar", href: "/settings", icon: Settings },
 ]
 
@@ -25,7 +27,7 @@ export function MobileNav() {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-surface md:hidden">
-      <div className="grid h-14 grid-cols-5">
+      <div className="grid h-14 grid-cols-6">
         {mobileNavItems.map((item) => {
           const active = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href))
           return (
@@ -50,6 +52,14 @@ export function MobileNav() {
 
 export function MobileHeader() {
   const pathname = usePathname()
+  const labelMap: Record<string, string> = {
+    "/": "Ana",
+    "/chart": "Grafik",
+    "/scanner": "Tarayici",
+    "/signals": "Sinyaller",
+    "/ai": "AI",
+    "/settings": "Ayarlar",
+  }
 
   return (
     <header className="fixed left-0 right-0 top-0 z-50 flex h-10 items-center justify-between border-b border-border bg-surface px-3 md:hidden">
@@ -62,7 +72,9 @@ export function MobileHeader() {
 
       <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
         <History className="h-3.5 w-3.5" />
-        <span className="label-uppercase">{pathname === "/" ? "Ana" : pathname.replace("/", "")}</span>
+        <span className="label-uppercase">
+          {labelMap[pathname] || (pathname === "/" ? "Ana" : pathname.replace("/", ""))}
+        </span>
       </div>
     </header>
   )

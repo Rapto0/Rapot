@@ -22,6 +22,7 @@ export interface ApiSignal {
     score: string | null;
     price: number;
     created_at: string | null;
+    special_tag?: string | null;
 }
 
 export interface ApiTrade {
@@ -54,6 +55,21 @@ export interface ApiAIAnalysis {
     signal_type: string | null;
     analysis_text: string;
     technical_data: string | null;
+    provider?: string | null;
+    model?: string | null;
+    backend?: string | null;
+    prompt_version?: string | null;
+    sentiment_score?: number | null;
+    sentiment_label?: string | null;
+    confidence_score?: number | null;
+    risk_level?: string | null;
+    technical_bias?: string | null;
+    technical_strength?: number | null;
+    news_bias?: string | null;
+    news_strength?: number | null;
+    headline_count?: number | null;
+    latency_ms?: number | null;
+    error_code?: string | null;
     created_at: string | null;
 }
 
@@ -82,6 +98,85 @@ export interface ApiBotStatus {
         last_error: string | null;
     };
     timestamp: string;
+}
+
+export interface ApiSpecialTagHealthRow {
+    tag: 'BELES' | 'COK_UCUZ' | 'PAHALI' | 'FAHIS_FIYAT';
+    strategy: 'COMBO' | 'HUNTER';
+    signal_type: 'AL' | 'SAT';
+    target_timeframe: string;
+    candidates: number;
+    tagged: number;
+    missing: number;
+}
+
+export interface ApiSpecialTagHealth {
+    status: 'ok' | 'alert';
+    stored_state: string | null;
+    market_type: 'BIST' | 'Kripto' | 'ALL' | null;
+    strategy: 'COMBO' | 'HUNTER' | null;
+    checked_window_hours: number;
+    checked_window_seconds: number;
+    missing_total: number;
+    last_checked_at: string | null;
+    summary: string | null;
+    rows: ApiSpecialTagHealthRow[];
+}
+
+export interface ApiStrategyInspectorTimeframe {
+    code: string;
+    label: string;
+    available: boolean;
+    signal_status: 'AL' | 'SAT' | 'NOTR' | 'YOK' | string;
+    reason: string | null;
+    price: number | string | null;
+    date: string | null;
+    active_indicators: string | null;
+    primary_score: string | null;
+    primary_score_label: string;
+    secondary_score: string | null;
+    secondary_score_label: string;
+    raw_score: string | null;
+    indicators: Record<string, number | string | null>;
+}
+
+export interface ApiStrategyInspector {
+    symbol: string;
+    market_type: 'BIST' | 'Kripto' | string;
+    strategy: 'COMBO' | 'HUNTER' | string;
+    indicator_order: string[];
+    indicator_labels: Record<string, string>;
+    generated_at: string;
+    timeframes: ApiStrategyInspectorTimeframe[];
+}
+
+export interface ApiStructuredAnalysis {
+    sentiment_score: number;
+    sentiment_label: string;
+    confidence_score: number;
+    risk_level: string;
+    summary: string[];
+    explanation: string;
+    technical_view: {
+        bias: string;
+        strength: number;
+        conflicts: string[];
+    };
+    news_view: {
+        bias: string;
+        strength: number;
+        headline_count: number;
+    };
+    key_levels: {
+        support: string[];
+        resistance: string[];
+    };
+    provider?: string | null;
+    model?: string | null;
+    backend?: string | null;
+    prompt_version?: string | null;
+    error?: string | null;
+    error_code?: string | null;
 }
 
 // ==================== API CLIENT ====================
@@ -125,6 +220,7 @@ export interface SignalsParams {
     strategy?: 'COMBO' | 'HUNTER';
     signal_type?: 'AL' | 'SAT';
     market_type?: 'BIST' | 'Kripto';
+    special_tag?: 'BELES' | 'COK_UCUZ' | 'PAHALI' | 'FAHIS_FIYAT';
     limit?: number;
 }
 
@@ -134,6 +230,7 @@ export async function fetchSignals(params: SignalsParams = {}): Promise<ApiSigna
     if (params.strategy) searchParams.set('strategy', params.strategy);
     if (params.signal_type) searchParams.set('signal_type', params.signal_type);
     if (params.market_type) searchParams.set('market_type', params.market_type);
+    if (params.special_tag) searchParams.set('special_tag', params.special_tag);
     if (params.limit) searchParams.set('limit', params.limit.toString());
 
     const query = searchParams.toString();
@@ -305,6 +402,51 @@ export async function fetchLogs(limit: number = 50): Promise<LogEntry[]> {
     return fetchApi<LogEntry[]>(`${API_BASE_URL}/logs?limit=${limit}`);
 }
 
+export interface SpecialTagHealthParams {
+    market_type?: 'BIST' | 'Kripto' | 'ALL';
+    strategy?: 'COMBO' | 'HUNTER';
+    since_hours?: number;
+    window_seconds?: number;
+}
+
+export async function fetchSpecialTagHealth(
+    params: SpecialTagHealthParams = {}
+): Promise<ApiSpecialTagHealth> {
+    const searchParams = new URLSearchParams();
+    if (params.market_type) searchParams.set('market_type', params.market_type);
+    if (params.strategy) searchParams.set('strategy', params.strategy);
+    if (params.since_hours) searchParams.set('since_hours', params.since_hours.toString());
+    if (params.window_seconds !== undefined) {
+        searchParams.set('window_seconds', params.window_seconds.toString());
+    }
+
+    const query = searchParams.toString();
+    return fetchApi<ApiSpecialTagHealth>(
+        `${API_BASE_URL}/ops/special-tag-health${query ? `?${query}` : ''}`
+    );
+}
+
+export interface StrategyInspectorParams {
+    symbol: string;
+    strategy: 'COMBO' | 'HUNTER';
+    market_type?: 'AUTO' | 'BIST' | 'Kripto';
+}
+
+export async function fetchStrategyInspector(
+    params: StrategyInspectorParams
+): Promise<ApiStrategyInspector> {
+    const searchParams = new URLSearchParams();
+    searchParams.set('symbol', params.symbol);
+    searchParams.set('strategy', params.strategy);
+    if (params.market_type && params.market_type !== 'AUTO') {
+        searchParams.set('market_type', params.market_type);
+    }
+
+    return fetchApi<ApiStrategyInspector>(
+        `${API_BASE_URL}/ops/strategy-inspector?${searchParams.toString()}`
+    );
+}
+
 // ==================== ANALYSIS API ====================
 
 export async function analyzeSymbol(symbol: string, marketType: string = 'BIST'): Promise<{ message: string; status: string }> {
@@ -348,15 +490,47 @@ export async function fetchSignalAnalysis(signalId: number): Promise<ApiAIAnalys
 export interface StructuredAIAnalysisResponse {
     symbol: string;
     market_type: string;
+    strategy: string;
+    timeframe: string;
     score: string;
     summary: string;
-    structured_analysis: any; // Using any for flexibility now, can type it later
+    structured_analysis: ApiStructuredAnalysis;
+    inspection: ApiStrategyInspector;
     updated_at: string;
 }
 
-export async function fetchAIAnalysis(symbol: string, marketType: string = 'BIST'): Promise<StructuredAIAnalysisResponse> {
+function safeParseTechnicalData(value: string | null): Record<string, any> | null {
+    if (!value) return null;
+    try {
+        const parsed = JSON.parse(value);
+        return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch {
+        return null;
+    }
+}
+
+export interface AIAnalysisParams {
+    symbol: string;
+    market_type?: 'BIST' | 'Kripto' | 'AUTO';
+    strategy?: 'COMBO' | 'HUNTER';
+    timeframe?: 'ALL' | '1D' | '1W' | '2W' | '3W' | '1M';
+}
+
+export async function fetchAIAnalysis(params: AIAnalysisParams): Promise<StructuredAIAnalysisResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.set('symbol', params.symbol);
+    if (params.market_type && params.market_type !== 'AUTO') {
+        searchParams.set('market_type', params.market_type);
+    }
+    if (params.strategy) {
+        searchParams.set('strategy', params.strategy);
+    }
+    if (params.timeframe && params.timeframe !== 'ALL') {
+        searchParams.set('timeframe', params.timeframe);
+    }
+
     return fetchApi<StructuredAIAnalysisResponse>(
-        `${API_BASE_URL}/market/analysis?symbol=${symbol}&market_type=${marketType}`
+        `${API_BASE_URL}/market/analysis?${searchParams.toString()}`
     );
 }
 
@@ -370,7 +544,22 @@ export function transformAnalysis(apiAnalysis: ApiAIAnalysis) {
         scenarioName: apiAnalysis.scenario_name || '',
         signalType: apiAnalysis.signal_type as 'AL' | 'SAT' | null,
         analysisText: apiAnalysis.analysis_text,
-        technicalData: apiAnalysis.technical_data ? JSON.parse(apiAnalysis.technical_data) : null,
+        technicalData: safeParseTechnicalData(apiAnalysis.technical_data),
+        provider: apiAnalysis.provider ?? null,
+        model: apiAnalysis.model ?? null,
+        backend: apiAnalysis.backend ?? null,
+        promptVersion: apiAnalysis.prompt_version ?? null,
+        sentimentScore: apiAnalysis.sentiment_score ?? null,
+        sentimentLabel: apiAnalysis.sentiment_label ?? null,
+        confidenceScore: apiAnalysis.confidence_score ?? null,
+        riskLevel: apiAnalysis.risk_level ?? null,
+        technicalBias: apiAnalysis.technical_bias ?? null,
+        technicalStrength: apiAnalysis.technical_strength ?? null,
+        newsBias: apiAnalysis.news_bias ?? null,
+        newsStrength: apiAnalysis.news_strength ?? null,
+        headlineCount: apiAnalysis.headline_count ?? null,
+        latencyMs: apiAnalysis.latency_ms ?? null,
+        errorCode: apiAnalysis.error_code ?? null,
         createdAt: apiAnalysis.created_at || new Date().toISOString(),
     };
 }
@@ -389,6 +578,7 @@ export function transformSignal(apiSignal: ApiSignal) {
         score: apiSignal.score || '',
         price: apiSignal.price,
         createdAt: apiSignal.created_at || new Date().toISOString(),
+        specialTag: (apiSignal.special_tag as 'BELES' | 'COK_UCUZ' | 'PAHALI' | 'FAHIS_FIYAT' | null | undefined) ?? null,
     };
 }
 

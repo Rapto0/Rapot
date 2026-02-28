@@ -6,12 +6,16 @@ Fetches and caches BIST data with automatic refresh.
 import asyncio
 import json
 import logging
+import ssl
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import aiohttp
+from aiohttp import TCPConnector
+
+from isyatirim_ssl import get_isyatirim_ssl_context
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +23,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class BISTStock:
     """BIST stock data structure."""
+
     symbol: str
     name: str
     price: float
@@ -67,6 +72,7 @@ class BISTDataService:
         self._cache: dict[str, BISTStock] = {}
         self._cache_time: datetime | None = None
         self._session: aiohttp.ClientSession | None = None
+        self._ssl_context: ssl.SSLContext | None = None
         self._running = False
         self._callbacks: list = []
         self._symbols: list[str] = []
@@ -83,12 +89,36 @@ class BISTDataService:
         else:
             # Default BIST 30 symbols
             self._symbols = [
-                "AKBNK", "ARCLK", "ASELS", "BIMAS", "EKGYO",
-                "EREGL", "FROTO", "GARAN", "GUBRF", "HEKTS",
-                "ISCTR", "KCHOL", "KOZAA", "KOZAL", "KRDMD",
-                "PETKM", "PGSUS", "SAHOL", "SASA", "SISE",
-                "TAVHL", "TCELL", "THYAO", "TKFEN", "TOASO",
-                "TTKOM", "TUPRS", "VAKBN", "VESTL", "YKBNK",
+                "AKBNK",
+                "ARCLK",
+                "ASELS",
+                "BIMAS",
+                "EKGYO",
+                "EREGL",
+                "FROTO",
+                "GARAN",
+                "GUBRF",
+                "HEKTS",
+                "ISCTR",
+                "KCHOL",
+                "KOZAA",
+                "KOZAL",
+                "KRDMD",
+                "PETKM",
+                "PGSUS",
+                "SAHOL",
+                "SASA",
+                "SISE",
+                "TAVHL",
+                "TCELL",
+                "THYAO",
+                "TKFEN",
+                "TOASO",
+                "TTKOM",
+                "TUPRS",
+                "VAKBN",
+                "VESTL",
+                "YKBNK",
             ]
             logger.info("Using default BIST 30 symbols")
 
@@ -98,12 +128,15 @@ class BISTDataService:
             return
 
         self._running = True
+        self._ssl_context = get_isyatirim_ssl_context()
+        connector = TCPConnector(ssl=self._ssl_context) if self._ssl_context else None
         self._session = aiohttp.ClientSession(
+            connector=connector,
             headers={
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
                 "Accept": "application/json",
                 "Accept-Language": "tr-TR,tr;q=0.9,en;q=0.8",
-            }
+            },
         )
         asyncio.create_task(self._refresh_loop())
         logger.info("BISTDataService started")
@@ -176,7 +209,7 @@ class BISTDataService:
         try:
             # Simulated data based on typical BIST behavior
             # In production, this would call actual API endpoints
-            url = f"https://www.isyatirim.com.tr/_Layouts/15/IsYatirim.Website/Common/ChartData.aspx/IndexChartData"
+            url = "https://www.isyatirim.com.tr/_Layouts/15/IsYatirim.Website/Common/ChartData.aspx/IndexChartData"
             params = {
                 "endeks": f"{symbol}.E.BIST",
                 "doession": "",
@@ -270,28 +303,17 @@ class BISTDataService:
 
     def get_top_gainers(self, limit: int = 10) -> list[dict]:
         """Get top gaining stocks."""
-        stocks = sorted(
-            self._cache.values(),
-            key=lambda x: x.change_percent,
-            reverse=True
-        )
+        stocks = sorted(self._cache.values(), key=lambda x: x.change_percent, reverse=True)
         return [s.to_dict() for s in stocks[:limit]]
 
     def get_top_losers(self, limit: int = 10) -> list[dict]:
         """Get top losing stocks."""
-        stocks = sorted(
-            self._cache.values(),
-            key=lambda x: x.change_percent
-        )
+        stocks = sorted(self._cache.values(), key=lambda x: x.change_percent)
         return [s.to_dict() for s in stocks[:limit]]
 
     def get_most_active(self, limit: int = 10) -> list[dict]:
         """Get most active stocks by volume."""
-        stocks = sorted(
-            self._cache.values(),
-            key=lambda x: x.volume,
-            reverse=True
-        )
+        stocks = sorted(self._cache.values(), key=lambda x: x.volume, reverse=True)
         return [s.to_dict() for s in stocks[:limit]]
 
     @property

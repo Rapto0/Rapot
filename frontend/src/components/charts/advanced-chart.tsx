@@ -6,17 +6,17 @@ import { fetchCandles, fetchBistSymbols, fetchTicker } from "@/lib/api/client"
 import { useBinanceTicker } from "@/lib/hooks/use-binance-ticker"
 import { cn } from "@/lib/utils"
 import {
-    calculateRSI,
-    calculateMACD,
-    calculateWilliamsR,
-    calculateCCI,
-    calculateCombo,
-    calculateHunter,
     AVAILABLE_INDICATORS,
     type Candle,
     type IndicatorMeta,
     type IndicatorParamSchema,
 } from "@/lib/indicators"
+import type {
+    IndicatorWorkerComputeRequest,
+    IndicatorWorkerComputeResponse,
+    WorkerIndicatorDescriptor,
+    WorkerPaneSeriesResult,
+} from "@/lib/types/indicator-worker"
 import {
     Search,
     TrendingUp,
@@ -127,6 +127,16 @@ interface TextDrawing {
     id: string
     point: ChartAnchorPoint
     text: string
+}
+
+interface WorkerComputationState {
+    requestId: number
+    computeMs: number
+    panes: Record<string, WorkerPaneSeriesResult>
+    overlays: {
+        combo: Array<{ time: string, signal: "AL" | "SAT" }>
+        hunter: Array<{ time: string, signal: "AL" | "SAT" }>
+    }
 }
 
 const INDICATOR_SETTINGS_STORAGE_KEY = "rapot.dashboard.indicators.v1"
@@ -307,6 +317,9 @@ const CRYPTO_WATCHLIST = [
     "BTCUSDT", "ETHUSDT", "BNBUSDT", "XRPUSDT", "ADAUSDT",
     "DOGEUSDT", "SOLUSDT", "DOTUSDT", "MATICUSDT", "LTCUSDT",
 ]
+
+const DEV_PERF_ENABLED = process.env.NODE_ENV !== "production"
+const DEV_PERF_THROTTLE_MS = 2000
 
 // ==================== CHART THEME ====================
 
@@ -565,6 +578,12 @@ export function AdvancedChartPage({
         close: number
         volume: number
     } | null>(null)
+    const [workerComputationState, setWorkerComputationState] = useState<WorkerComputationState>({
+        requestId: 0,
+        computeMs: 0,
+        panes: {},
+        overlays: { combo: [], hunter: [] },
+    })
 
     // Refs
     const chartContainerRef = useRef<HTMLDivElement>(null)
@@ -584,19 +603,80 @@ export function AdvancedChartPage({
     const rulerDraftStartRef = useRef<ChartAnchorPoint | null>(null)
     const rulerMoveRafRef = useRef<number | null>(null)
     const pendingRulerAnchorRef = useRef<ChartAnchorPoint | null>(null)
+    const overlaySyncRafRef = useRef<number | null>(null)
+    const hasProjectedDrawingsRef = useRef(false)
+    const indicatorWorkerRef = useRef<Worker | null>(null)
+    const latestWorkerRequestIdRef = useRef(0)
+    const pendingWorkerDispatchTimerRef = useRef<number | null>(null)
+    const perfLogRef = useRef<Record<string, number>>({})
 
-    // Register indicator chart for crosshair sync
+    const syncIndicatorPanesToMainRange = useCallback(() => {
+        if (!chartInstance.current) return
+        const mainTimeScale = chartInstance.current.timeScale?.()
+        if (!mainTimeScale) return
+        const logicalRange = mainTimeScale.getVisibleLogicalRange?.() || null
+        const visibleRange = mainTimeScale.getVisibleRange?.() || null
+        if (!logicalRange && !visibleRange) return
+
+        indicatorChartsRef.current.forEach((paneChart) => {
+            try {
+                const paneTimeScale = paneChart.timeScale?.()
+                if (!paneTimeScale) return
+                if (logicalRange && typeof paneTimeScale.setVisibleLogicalRange === "function") {
+                    paneTimeScale.setVisibleLogicalRange(logicalRange)
+                    return
+                }
+                if (visibleRange && typeof paneTimeScale.setVisibleRange === "function") {
+                    paneTimeScale.setVisibleRange(visibleRange)
+                }
+            } catch (error) {
+                // Ignore stale indicator chart handles.
+            }
+        })
+    }, [])
+
+    // Register indicator chart for crosshair + time-range sync
     const registerIndicatorChart = useCallback((id: string, chart: any) => {
         indicatorChartsRef.current.set(id, chart)
-    }, [])
+        syncIndicatorPanesToMainRange()
+    }, [syncIndicatorPanesToMainRange])
 
     const showWatchlistToast = useCallback((message: string) => {
         setWatchlistNotice(message)
     }, [])
 
+    const logPerf = useCallback((key: string, payload: Record<string, unknown>) => {
+        if (!DEV_PERF_ENABLED) return
+        const now = performance.now()
+        const last = perfLogRef.current[key] || 0
+        if (now - last < DEV_PERF_THROTTLE_MS) return
+        perfLogRef.current[key] = now
+        console.debug(`[chart-perf] ${key}`, payload)
+    }, [])
+
+    const requestOverlayProjectionRefresh = useCallback(() => {
+        if (overlaySyncRafRef.current !== null) {
+            return
+        }
+        overlaySyncRafRef.current = window.requestAnimationFrame(() => {
+            overlaySyncRafRef.current = null
+            setOverlayRenderNonce((value) => value + 1)
+        })
+    }, [])
+
     useEffect(() => {
         activeToolRef.current = activeTool
     }, [activeTool])
+
+    useEffect(() => {
+        hasProjectedDrawingsRef.current =
+            rulerDrawings.length > 0 ||
+            pencilDrawings.length > 0 ||
+            textDrawings.length > 0 ||
+            rulerDraftStart !== null ||
+            rulerDraftEnd !== null ||
+            activePencilPoints !== null
+    }, [rulerDrawings, pencilDrawings, textDrawings, rulerDraftStart, rulerDraftEnd, activePencilPoints])
 
     useEffect(() => {
         rulerDraftStartRef.current = rulerDraftStart
@@ -742,6 +822,10 @@ export function AdvancedChartPage({
 
     useEffect(() => {
         return () => {
+            if (overlaySyncRafRef.current !== null) {
+                window.cancelAnimationFrame(overlaySyncRafRef.current)
+                overlaySyncRafRef.current = null
+            }
             if (rulerMoveRafRef.current !== null) {
                 window.cancelAnimationFrame(rulerMoveRafRef.current)
                 rulerMoveRafRef.current = null
@@ -969,7 +1053,10 @@ export function AdvancedChartPage({
     })
 
     // Live crypto prices for watchlist
-    const cryptoPrices = useBinanceTicker(CRYPTO_WATCHLIST)
+    const cryptoPrices = useBinanceTicker(CRYPTO_WATCHLIST, {
+        paused: activeTool !== "none",
+        flushIntervalMs: 320,
+    })
 
     const candles: Candle[] = useMemo(() => {
         const rawCandles = candlesResponse?.candles || []
@@ -1014,6 +1101,124 @@ export function AdvancedChartPage({
             .sort()
         return tracked.join("|")
     }, [activeIndicators])
+
+    const workerIndicators = useMemo<WorkerIndicatorDescriptor[]>(() => (
+        activeIndicators
+            .map((indicator) => ({
+                id: indicator.id,
+                params: indicator.params,
+                visible: indicator.visible,
+                isOverlay: indicator.meta.isOverlay,
+            }))
+            .sort((a, b) => a.id.localeCompare(b.id))
+    ), [activeIndicators])
+
+    const workerIndicatorSignature = useMemo(
+        () => workerIndicators
+            .map((indicator) => {
+                const params = Object.entries(indicator.params)
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([key, value]) => `${key}=${value}`)
+                    .join(",")
+                return `${indicator.id}:${indicator.visible ? "1" : "0"}:${indicator.isOverlay ? "overlay" : "pane"}:${params}`
+            })
+            .join("|"),
+        [workerIndicators]
+    )
+
+    const workerOverlaySignature = useMemo(() => {
+        const combo = workerComputationState.overlays.combo
+        const hunter = workerComputationState.overlays.hunter
+        const comboFirst = combo[0]
+        const comboLast = combo[combo.length - 1]
+        const hunterFirst = hunter[0]
+        const hunterLast = hunter[hunter.length - 1]
+        return [
+            `combo:${combo.length}:${comboFirst?.time || ""}:${comboFirst?.signal || ""}:${comboLast?.time || ""}:${comboLast?.signal || ""}`,
+            `hunter:${hunter.length}:${hunterFirst?.time || ""}:${hunterFirst?.signal || ""}:${hunterLast?.time || ""}:${hunterLast?.signal || ""}`,
+        ].join("|")
+    }, [workerComputationState.overlays.combo, workerComputationState.overlays.hunter])
+
+    useEffect(() => {
+        if (typeof window === "undefined") return
+        let worker: Worker | null = null
+        try {
+            worker = new Worker(new URL("../../workers/indicator-worker.ts", import.meta.url), { type: "module" })
+            indicatorWorkerRef.current = worker
+        } catch (error) {
+            console.error("Indicator worker could not be started:", error)
+            indicatorWorkerRef.current = null
+            return
+        }
+
+        worker.onmessage = (event: MessageEvent<IndicatorWorkerComputeResponse>) => {
+            const message = event.data
+            if (!message || message.type !== "compute-indicators-result") {
+                return
+            }
+            if (message.requestId < latestWorkerRequestIdRef.current) {
+                return
+            }
+            setWorkerComputationState({
+                requestId: message.requestId,
+                computeMs: message.computeMs,
+                panes: message.panes,
+                overlays: message.overlays,
+            })
+            logPerf("indicator-worker", {
+                requestId: message.requestId,
+                computeMs: Number(message.computeMs.toFixed(2)),
+                paneCount: Object.keys(message.panes).length,
+                comboSignals: message.overlays.combo.length,
+                hunterSignals: message.overlays.hunter.length,
+            })
+        }
+
+        worker.onerror = (error) => {
+            console.error("Indicator worker error:", error)
+        }
+
+        return () => {
+            if (pendingWorkerDispatchTimerRef.current !== null) {
+                window.clearTimeout(pendingWorkerDispatchTimerRef.current)
+                pendingWorkerDispatchTimerRef.current = null
+            }
+            worker?.terminate()
+            indicatorWorkerRef.current = null
+        }
+    }, [logPerf])
+
+    useEffect(() => {
+        if (!indicatorWorkerRef.current) return
+
+        if (pendingWorkerDispatchTimerRef.current !== null) {
+            window.clearTimeout(pendingWorkerDispatchTimerRef.current)
+            pendingWorkerDispatchTimerRef.current = null
+        }
+
+        pendingWorkerDispatchTimerRef.current = window.setTimeout(() => {
+            const worker = indicatorWorkerRef.current
+            if (!worker) return
+
+            const requestId = latestWorkerRequestIdRef.current + 1
+            latestWorkerRequestIdRef.current = requestId
+
+            const message: IndicatorWorkerComputeRequest = {
+                type: "compute-indicators",
+                requestId,
+                candles,
+                indicators: workerIndicators,
+            }
+            worker.postMessage(message)
+        }, 60)
+
+        return () => {
+            if (pendingWorkerDispatchTimerRef.current !== null) {
+                window.clearTimeout(pendingWorkerDispatchTimerRef.current)
+                pendingWorkerDispatchTimerRef.current = null
+            }
+        }
+    }, [candles, candlesSignature, workerIndicators, workerIndicatorSignature])
 
     // Calculate price info
     const currentPrice = candles.length > 0 ? candles[candles.length - 1].close : 0
@@ -1180,7 +1385,13 @@ export function AdvancedChartPage({
             setChartReady(true)
 
             const handleVisibleRangeChange = () => {
-                setOverlayRenderNonce((value) => value + 1)
+                // Skip expensive React re-renders while there are no custom drawings to project.
+                if (!hasProjectedDrawingsRef.current) {
+                    syncIndicatorPanesToMainRange()
+                    return
+                }
+                syncIndicatorPanesToMainRange()
+                requestOverlayProjectionRefresh()
             }
             chart.timeScale().subscribeVisibleLogicalRangeChange(handleVisibleRangeChange)
 
@@ -1210,11 +1421,12 @@ export function AdvancedChartPage({
                 }
             }
         })
-    }, [isFullscreen])
+    }, [isFullscreen, requestOverlayProjectionRefresh, syncIndicatorPanesToMainRange])
 
     // Update chart data
     useEffect(() => {
         if (!chartReady || candles.length === 0 || !seriesInstance.current) return
+        const updateStart = performance.now()
 
         // Dynamic import for v5 markers API
         import("lightweight-charts").then(({ createSeriesMarkers }) => {
@@ -1245,7 +1457,14 @@ export function AdvancedChartPage({
                 // Add signal markers (including Combo/Hunter overlays)
                 const shouldSkipHeavyMarkerOps = activeToolRef.current !== "none"
                 if (!shouldSkipHeavyMarkerOps) {
-                    const markers: any[] = []
+                    const markers: Array<{
+                        time: string | number
+                        position: "belowBar" | "aboveBar"
+                        shape: "arrowUp" | "arrowDown"
+                        color: string
+                        text: string
+                        size: number
+                    }> = []
 
                     // Original signals
                     if (showSignals && signals.length > 0) {
@@ -1264,36 +1483,32 @@ export function AdvancedChartPage({
                     // Combo overlay markers
                     const comboIndicator = activeIndicators.find(i => i.id === 'combo' && i.visible)
                     if (comboIndicator) {
-                        const comboSignals = calculateCombo(candles, comboIndicator.params)
+                        const comboSignals = workerComputationState.overlays.combo
                         comboSignals.forEach((sig) => {
-                            if (sig.signal) {
-                                markers.push({
-                                    time: formatTime(sig.time),
-                                    position: sig.signal === 'AL' ? 'belowBar' : 'aboveBar',
-                                    shape: sig.signal === 'AL' ? 'arrowUp' : 'arrowDown',
-                                    color: sig.signal === 'AL' ? '#00e676' : '#ff5252',
-                                    text: sig.signal === 'AL' ? 'DİP' : 'SAT',
-                                    size: 2,
-                                })
-                            }
+                            markers.push({
+                                time: formatTime(sig.time),
+                                position: sig.signal === 'AL' ? 'belowBar' : 'aboveBar',
+                                shape: sig.signal === 'AL' ? 'arrowUp' : 'arrowDown',
+                                color: sig.signal === 'AL' ? '#00e676' : '#ff5252',
+                                text: sig.signal === 'AL' ? 'DİP' : 'SAT',
+                                size: 2,
+                            })
                         })
                     }
 
                     // Hunter overlay markers
                     const hunterIndicator = activeIndicators.find(i => i.id === 'hunter' && i.visible)
                     if (hunterIndicator) {
-                        const hunterSignals = calculateHunter(candles, hunterIndicator.params)
+                        const hunterSignals = workerComputationState.overlays.hunter
                         hunterSignals.forEach((sig) => {
-                            if (sig.signal) {
-                                markers.push({
-                                    time: formatTime(sig.time),
-                                    position: sig.signal === 'AL' ? 'belowBar' : 'aboveBar',
-                                    shape: sig.signal === 'AL' ? 'arrowUp' : 'arrowDown',
-                                    color: sig.signal === 'AL' ? '#76ff03' : '#ff1744',
-                                    text: sig.signal === 'AL' ? 'DİP' : 'TEPE',
-                                    size: 2,
-                                })
-                            }
+                            markers.push({
+                                time: formatTime(sig.time),
+                                position: sig.signal === 'AL' ? 'belowBar' : 'aboveBar',
+                                shape: sig.signal === 'AL' ? 'arrowUp' : 'arrowDown',
+                                color: sig.signal === 'AL' ? '#76ff03' : '#ff1744',
+                                text: sig.signal === 'AL' ? 'DİP' : 'TEPE',
+                                size: 2,
+                            })
                         })
                     }
 
@@ -1341,12 +1556,20 @@ export function AdvancedChartPage({
                     lastSymbolRef.current = symbol
                     lastTimeframeRef.current = timeframe
                 }
-                setOverlayRenderNonce((value) => value + 1)
+                syncIndicatorPanesToMainRange()
+                requestOverlayProjectionRefresh()
+                logPerf("main-chart-update", {
+                    ms: Number((performance.now() - updateStart).toFixed(2)),
+                    candles: candleData.length,
+                    workerRequestId: workerComputationState.requestId,
+                    comboSignals: workerComputationState.overlays.combo.length,
+                    hunterSignals: workerComputationState.overlays.hunter.length,
+                })
             } catch (e) {
                 console.error("Chart update error:", e)
             }
         })
-    }, [candles, signals, showSignals, activeIndicators, chartReady, symbol, timeframe, candlesSignature, signalsSignature, markerIndicatorSignature, activeTool])
+    }, [candles, signals, showSignals, activeIndicators, chartReady, symbol, timeframe, candlesSignature, signalsSignature, markerIndicatorSignature, activeTool, requestOverlayProjectionRefresh, workerComputationState.requestId, workerOverlaySignature, workerComputationState.overlays.combo, workerComputationState.overlays.hunter, logPerf, syncIndicatorPanesToMainRange])
 
     // Add indicator
     const addIndicator = useCallback((indicatorId: string) => {
@@ -1793,12 +2016,12 @@ export function AdvancedChartPage({
         <div
             ref={fullscreenContainerRef}
             className={cn(
-                "relative flex rounded-sm overflow-hidden bg-background glass-panel-intense",
+                "relative flex h-full min-h-0 overflow-hidden rounded-sm bg-background glass-panel-intense",
                 isFullscreen ? "fixed inset-0 z-50 rounded-none" : ""
             )}
         >
             {/* Main Chart Area */}
-            <div className="flex-1 flex flex-col min-w-0">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                 {/* Header */}
                 <div className="flex items-center justify-between px-4 py-3 border-b border-border/30">
                     {/* Symbol Selector */}
@@ -1875,7 +2098,7 @@ export function AdvancedChartPage({
                                     onClick={() => setTimeframe(tf.value)}
                                     className={cn(
                                         "px-3 py-1.5 rounded-sm text-sm font-medium transition-all",
-                                        timeframe === tf.value ? "bg-primary/20 text-primary neon-text" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                                        timeframe === tf.value ? "bg-raised text-foreground" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                                     )}
                                 >{tf.label}</button>
                             ))}
@@ -2032,7 +2255,7 @@ export function AdvancedChartPage({
                 )}
 
                 {/* Chart Area */}
-                <div className="flex-1 relative" style={{ minHeight: isFullscreen ? 'calc(100vh - 200px)' : '500px' }}>
+                <div className="relative flex-1 min-h-[320px]">
                     {visibleOverlayIndicators.length > 0 && (
                         <div className="absolute left-3 top-3 z-20 flex flex-col gap-1 pointer-events-none">
                             {visibleOverlayIndicators.map((ind) => (
@@ -2077,7 +2300,7 @@ export function AdvancedChartPage({
                     <div
                         ref={chartContainerRef}
                         className="w-full h-full cursor-crosshair"
-                        style={{ touchAction: 'none', minHeight: 'inherit' }}
+                        style={{ touchAction: 'none' }}
                     />
 
                     <div
@@ -2182,6 +2405,7 @@ export function AdvancedChartPage({
                         key={ind.id}
                         indicator={ind}
                         candles={candles}
+                        precomputedSeries={workerComputationState.panes[ind.id] || null}
                         onRemove={() => {
                             removeIndicator(ind.id)
                             indicatorChartsRef.current.delete(ind.id)
@@ -2209,8 +2433,8 @@ export function AdvancedChartPage({
 
             {/* Right Panel - Watchlist (TradingView Style) */}
             {showRightPanel && (
-                <div className="w-[280px] border-l border-border/30 flex bg-surface text-foreground">
-                    <div className="flex-1 flex flex-col min-w-0">
+                <div className="flex w-[300px] border-l border-border/30 bg-surface text-foreground xl:w-[320px]">
+                    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                         <div className="relative flex items-center gap-1 px-2 py-2 border-b border-border">
                             <div className="relative">
                                 <button
@@ -2362,8 +2586,8 @@ export function AdvancedChartPage({
                                     <div
                                         key={`${row.marketType}-${row.rawSymbol}-${index}`}
                                         className={cn(
-                                            "group grid grid-cols-[1.4fr_1fr_0.8fr_20px] items-center gap-2 px-3 py-2 hover:bg-[#1a2230] transition-colors",
-                                            symbol === row.rawSymbol && marketType === row.marketType && "bg-[#1f2e44]"
+                                            "group grid grid-cols-[1.4fr_1fr_0.8fr_20px] items-center gap-2 px-3 py-2 transition-colors hover:bg-raised",
+                                            symbol === row.rawSymbol && marketType === row.marketType && "bg-raised"
                                         )}
                                     >
                                         <button
@@ -2572,13 +2796,14 @@ export function AdvancedChartPage({
 interface IndicatorPaneProps {
     indicator: ActiveIndicator
     candles: Candle[]
+    precomputedSeries: WorkerPaneSeriesResult | null
     onRemove: () => void
     mainChartRef: React.MutableRefObject<any>
     hoveredUnixTime: number | null
     onChartReady?: (indicatorId: string, chart: any) => void
 }
 
-function IndicatorPane({ indicator, candles, onRemove, mainChartRef, hoveredUnixTime, onChartReady }: IndicatorPaneProps) {
+function IndicatorPane({ indicator, candles, precomputedSeries, onRemove, mainChartRef, hoveredUnixTime, onChartReady }: IndicatorPaneProps) {
     const containerRef = useRef<HTMLDivElement>(null)
     const chartRef = useRef<any>(null)
     const primarySeriesRef = useRef<any>(null)
@@ -2662,8 +2887,17 @@ function IndicatorPane({ indicator, candles, onRemove, mainChartRef, hoveredUnix
                     vertLine: { color: chartColors.crosshair, width: 1, style: 0 },
                     horzLine: { color: chartColors.crosshair, width: 1, style: 0 },
                 },
-                handleScroll: { mouseWheel: true, pressedMouseMove: true },
-                handleScale: { mouseWheel: true },
+                handleScroll: {
+                    mouseWheel: false,
+                    pressedMouseMove: false,
+                    horzTouchDrag: false,
+                    vertTouchDrag: false,
+                },
+                handleScale: {
+                    axisPressedMouseMove: false,
+                    mouseWheel: false,
+                    pinch: false,
+                },
             })
 
             let series: any = null
@@ -2680,39 +2914,103 @@ function IndicatorPane({ indicator, candles, onRemove, mainChartRef, hoveredUnix
                     .sort((a, b) => a.timeKey - b.timeKey)
             }
 
-            if (indicator.id === 'rsi') {
-                const rsiData = calculateRSI(candles, indicator.params.period || 14)
-                series = chart.addSeries(LineSeries, { color: chartColors.indicators.rsi, lineWidth: 2, priceScaleId: 'right' })
-                const lineData = deduplicateByTime(rsiData.filter(d => !isNaN(d.value)).map(d => ({ time: formatTime(d.time), value: d.value })))
-                series.setData(lineData as any)
+            const candleTimeline = deduplicateByTime(
+                candles.map((item) => ({ time: formatTime(item.time) }))
+            ).map((item) => item.time)
+
+            const alignLineToTimeline = (line: Array<{ time: string | number, value: number }>) => {
+                if (candleTimeline.length === 0) return line as Array<{ time: string | number } | { time: string | number, value: number }>
+                const valueByTime = new Map<number, number>()
+                for (const point of line) {
+                    const timeKey = typeof point.time === "number" ? point.time : parseChartTimeToUnix(point.time)
+                    valueByTime.set(timeKey, point.value)
+                }
+                return candleTimeline.map((time) => {
+                    const timeKey = typeof time === "number" ? time : parseChartTimeToUnix(time)
+                    const value = valueByTime.get(timeKey)
+                    if (value === undefined) {
+                        return { time }
+                    }
+                    return { time, value }
+                })
+            }
+
+            const alignHistogramToTimeline = (histogram: Array<{ time: string | number, value: number, color: string }>) => {
+                if (candleTimeline.length === 0) return histogram as Array<{ time: string | number } | { time: string | number, value: number, color: string }>
+                const valueByTime = new Map<number, { value: number, color: string }>()
+                for (const point of histogram) {
+                    const timeKey = typeof point.time === "number" ? point.time : parseChartTimeToUnix(point.time)
+                    valueByTime.set(timeKey, { value: point.value, color: point.color })
+                }
+                return candleTimeline.map((time) => {
+                    const timeKey = typeof time === "number" ? time : parseChartTimeToUnix(time)
+                    const value = valueByTime.get(timeKey)
+                    if (!value) {
+                        return { time }
+                    }
+                    return { time, value: value.value, color: value.color }
+                })
+            }
+
+            if (indicator.id === "rsi") {
+                series = chart.addSeries(LineSeries, { color: chartColors.indicators.rsi, lineWidth: 2, priceScaleId: "right" })
+                let lineData: Array<{ time: string | number, value: number }> = []
+                if (precomputedSeries?.kind === "line") {
+                    lineData = deduplicateByTime(
+                        precomputedSeries.line.map((point) => ({ time: formatTime(point.time), value: point.value }))
+                    )
+                }
+                series.setData(alignLineToTimeline(lineData) as any)
                 setPrimarySeriesPoints(lineData)
-            } else if (indicator.id === 'macd') {
-                const macdData = calculateMACD(
-                    candles,
-                    indicator.params.fast || 12,
-                    indicator.params.slow || 26,
-                    indicator.params.signal || 9
-                )
+            } else if (indicator.id === "macd") {
                 const macdSeries = chart.addSeries(LineSeries, { color: chartColors.indicators.macd, lineWidth: 2 })
-                const macdLine = deduplicateByTime(macdData.filter(d => !isNaN(d.macd)).map(d => ({ time: formatTime(d.time), value: d.macd })))
-                macdSeries.setData(macdLine as any)
                 const signalSeries = chart.addSeries(LineSeries, { color: chartColors.indicators.macdSignal, lineWidth: 2 })
-                signalSeries.setData(deduplicateByTime(macdData.filter(d => !isNaN(d.signal)).map(d => ({ time: formatTime(d.time), value: d.signal }))) as any)
                 const histSeries = chart.addSeries(HistogramSeries, { color: chartColors.indicators.macdHistogram })
-                histSeries.setData(deduplicateByTime(macdData.filter(d => !isNaN(d.histogram)).map(d => ({ time: formatTime(d.time), value: d.histogram, color: d.histogram >= 0 ? 'rgba(0, 200, 83, 0.5)' : 'rgba(255, 61, 0, 0.5)' }))) as any)
+
+                let macdLine: Array<{ time: string | number, value: number }> = []
+                let signalLine: Array<{ time: string | number, value: number }> = []
+                let histogram: Array<{ time: string | number, value: number, color: string }> = []
+
+                if (precomputedSeries?.kind === "macd") {
+                    macdLine = deduplicateByTime(
+                        precomputedSeries.macd.map((point) => ({ time: formatTime(point.time), value: point.value }))
+                    )
+                    signalLine = deduplicateByTime(
+                        precomputedSeries.signal.map((point) => ({ time: formatTime(point.time), value: point.value }))
+                    )
+                    histogram = deduplicateByTime(
+                        precomputedSeries.histogram.map((point) => ({
+                            time: formatTime(point.time),
+                            value: point.value,
+                            color: point.color,
+                        }))
+                    )
+                }
+
+                macdSeries.setData(alignLineToTimeline(macdLine) as any)
+                signalSeries.setData(alignLineToTimeline(signalLine) as any)
+                histSeries.setData(alignHistogramToTimeline(histogram) as any)
                 series = macdSeries
                 setPrimarySeriesPoints(macdLine)
-            } else if (indicator.id === 'wr') {
-                const wrData = calculateWilliamsR(candles, indicator.params.period || 14)
+            } else if (indicator.id === "wr") {
                 series = chart.addSeries(LineSeries, { color: chartColors.indicators.wr, lineWidth: 2 })
-                const lineData = deduplicateByTime(wrData.filter(d => !isNaN(d.value)).map(d => ({ time: formatTime(d.time), value: d.value })))
-                series.setData(lineData as any)
+                let lineData: Array<{ time: string | number, value: number }> = []
+                if (precomputedSeries?.kind === "line") {
+                    lineData = deduplicateByTime(
+                        precomputedSeries.line.map((point) => ({ time: formatTime(point.time), value: point.value }))
+                    )
+                }
+                series.setData(alignLineToTimeline(lineData) as any)
                 setPrimarySeriesPoints(lineData)
-            } else if (indicator.id === 'cci') {
-                const cciData = calculateCCI(candles, indicator.params.period || 20)
+            } else if (indicator.id === "cci") {
                 series = chart.addSeries(LineSeries, { color: chartColors.indicators.cci, lineWidth: 2 })
-                const lineData = deduplicateByTime(cciData.filter(d => !isNaN(d.value)).map(d => ({ time: formatTime(d.time), value: d.value })))
-                series.setData(lineData as any)
+                let lineData: Array<{ time: string | number, value: number }> = []
+                if (precomputedSeries?.kind === "line") {
+                    lineData = deduplicateByTime(
+                        precomputedSeries.line.map((point) => ({ time: formatTime(point.time), value: point.value }))
+                    )
+                }
+                series.setData(alignLineToTimeline(lineData) as any)
                 setPrimarySeriesPoints(lineData)
             }
 
@@ -2725,10 +3023,16 @@ function IndicatorPane({ indicator, candles, onRemove, mainChartRef, hoveredUnix
                 if (isDisposedRef.current || !mainChartRef.current || isSyncingRef.current) return
                 try {
                     const mainTimeScale = mainChartRef.current.timeScale()
-                    const range = mainTimeScale.getVisibleLogicalRange()
-                    if (range && chartRef.current) {
+                    const logicalRange = mainTimeScale.getVisibleLogicalRange?.() || null
+                    const visibleRange = mainTimeScale.getVisibleRange?.() || null
+                    if ((visibleRange || logicalRange) && chartRef.current) {
                         isSyncingRef.current = true
-                        chartRef.current.timeScale().setVisibleLogicalRange(range)
+                        const paneTimeScale = chartRef.current.timeScale()
+                        if (logicalRange && typeof paneTimeScale.setVisibleLogicalRange === "function") {
+                            paneTimeScale.setVisibleLogicalRange(logicalRange)
+                        } else if (visibleRange && typeof paneTimeScale.setVisibleRange === "function") {
+                            paneTimeScale.setVisibleRange(visibleRange)
+                        }
                         isSyncingRef.current = false
                     }
                 } catch (e) {
@@ -2788,7 +3092,7 @@ function IndicatorPane({ indicator, candles, onRemove, mainChartRef, hoveredUnix
                 primarySeriesPointsRef.current = []
             }
         })
-    }, [indicator, candleSignature, mainChartRef, onChartReady, candles])
+    }, [indicator, candleSignature, mainChartRef, onChartReady, candles, precomputedSeries])
 
     useEffect(() => {
         if (!containerRef.current || !chartRef.current || isDisposedRef.current) return

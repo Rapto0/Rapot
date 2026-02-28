@@ -9,6 +9,7 @@ import aiohttp
 import pandas as pd
 
 from config import rate_limits
+from data_loader import get_bist_data
 from logger import get_logger
 from settings import settings
 
@@ -21,11 +22,10 @@ _binance_client = None
 def _get_binance_client():
     """Binance client'ı lazy olarak başlatır."""
     global _binance_client
-    if _binance_client is None:
-        if settings.binance_api_key and settings.binance_secret_key:
-            from binance.client import Client
+    if _binance_client is None and settings.binance_api_key and settings.binance_secret_key:
+        from binance.client import Client
 
-            _binance_client = Client(settings.binance_api_key, settings.binance_secret_key)
+        _binance_client = Client(settings.binance_api_key, settings.binance_secret_key)
     return _binance_client
 
 
@@ -66,44 +66,8 @@ async def fetch_bist_data_async(
 
 def _fetch_bist_sync(symbol: str, start_date: str) -> pd.DataFrame | None:
     """Sync BIST veri çekme (executor'da çalışır)."""
-    from isyatirimhisse import fetch_stock_data
-
     try:
-        # isyatirimhisse expects 'symbols' as a list
-        # Note: No end_date - library will get data until today
-        df = fetch_stock_data(symbols=[symbol], start_date=start_date)
-
-        if df is None or df.empty:
-            return None
-
-        # Sütun dönüşümü - isyatirimhisse Türkçe sütun isimleri kullanır
-        df = df.rename(
-            columns={
-                "HGDG_KAPANIS": "Close",
-                "HGDG_MIN": "Low",
-                "HGDG_MAX": "High",
-                "HGDG_HACIM": "Volume",
-                "HGDG_TARIH": "Date",
-            }
-        )
-
-        # Open sütunu yoksa Close'tan oluştur
-        if "Open" not in df.columns and "Close" in df.columns:
-            df["Open"] = df["Close"]
-
-        # Date sütunundan index oluştur
-        if "Date" in df.columns:
-            df["Date"] = pd.to_datetime(df["Date"])
-            df.set_index("Date", inplace=True)
-
-        # Sayısal sütunları float'a çevir
-        cols_to_fix = [c for c in ["Open", "High", "Low", "Close", "Volume"] if c in df.columns]
-        if cols_to_fix:
-            df[cols_to_fix] = df[cols_to_fix].astype(float)
-
-        df = df.sort_index()
-        return df
-
+        return get_bist_data(symbol=symbol, start_date=start_date)
     except Exception as e:
         logger.debug(f"BIST sync hatası ({symbol}): {e}")
         return None

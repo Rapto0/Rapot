@@ -12,6 +12,7 @@ import aiohttp
 import pandas as pd
 
 from config import rate_limits
+from data_loader import get_bist_data
 from logger import get_logger
 
 logger = get_logger(__name__)
@@ -198,27 +199,11 @@ class BatchDataLoader:
 
     def _fetch_bist_sync(self, symbol: str, start_date: str) -> pd.DataFrame | None:
         """Sync BIST veri çekme (executor'da çalışır)."""
-        from isyatirimhisse import fetch_stock_data
-
         try:
             import time
 
             time.sleep(rate_limits.BIST_DELAY)
-
-            end_date = datetime.now().strftime("%d-%m-%Y")
-            df = fetch_stock_data(
-                symbol=symbol,
-                start_date=start_date,
-                end_date=end_date,
-                exchange="0",
-                frequency="1d",
-            )
-
-            if df is not None and not df.empty:
-                df.index = pd.to_datetime(df.index)
-                df = df.sort_index()
-                return df
-            return None
+            return get_bist_data(symbol=symbol, start_date=start_date)
         except Exception as e:
             logger.debug(f"BIST sync hatası ({symbol}): {e}")
             return None

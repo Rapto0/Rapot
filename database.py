@@ -18,6 +18,33 @@ logger = get_logger(__name__)
 # Veritabanı dosyası
 DB_PATH = Path(__file__).parent / "trading_bot.db"
 
+SPECIAL_TAG_RULES: tuple[dict[str, Any], ...] = (
+    {
+        "tag": "BELES",
+        "signal_type": "AL",
+        "target_timeframe": "ME",
+        "required_timeframes": ("1D", "2W-FRI", "ME"),
+    },
+    {
+        "tag": "COK_UCUZ",
+        "signal_type": "AL",
+        "target_timeframe": "3W-FRI",
+        "required_timeframes": ("1D", "W-FRI", "3W-FRI"),
+    },
+    {
+        "tag": "PAHALI",
+        "signal_type": "SAT",
+        "target_timeframe": "W-FRI",
+        "required_timeframes": ("1D", "W-FRI"),
+    },
+    {
+        "tag": "FAHIS_FIYAT",
+        "signal_type": "SAT",
+        "target_timeframe": "ME",
+        "required_timeframes": ("1D", "W-FRI", "ME"),
+    },
+)
+
 
 @dataclass
 class Signal:
@@ -31,6 +58,7 @@ class Signal:
     timeframe: str = ""
     score: str = ""
     price: float = 0.0
+    special_tag: str | None = None
     details: str = ""  # JSON string
     created_at: datetime = None
 
@@ -124,11 +152,17 @@ class Database:
                     timeframe TEXT NOT NULL,
                     score TEXT,
                     price REAL,
+                    special_tag TEXT,
                     details TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE(symbol, strategy, signal_type, timeframe, created_at)
                 )
             """)
+
+            cursor.execute("PRAGMA table_info(signals)")
+            signal_columns = {row[1] for row in cursor.fetchall()}
+            if "special_tag" not in signal_columns:
+                cursor.execute("ALTER TABLE signals ADD COLUMN special_tag TEXT")
 
             # Trades tablosu
             cursor.execute("""
@@ -173,6 +207,9 @@ class Database:
             # İndeksler
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_signals_symbol ON signals(symbol)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_signals_created ON signals(created_at)")
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_signals_special_tag ON signals(special_tag)"
+            )
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_trades_symbol ON trades(symbol)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_trades_status ON trades(status)")
 
@@ -192,8 +229,8 @@ class Database:
             cursor.execute(
                 """
                 INSERT OR IGNORE INTO signals
-                (symbol, market_type, strategy, signal_type, timeframe, score, price, details, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (symbol, market_type, strategy, signal_type, timeframe, score, price, special_tag, details, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
                 (
                     signal.symbol,
@@ -203,11 +240,250 @@ class Database:
                     signal.timeframe,
                     signal.score,
                     signal.price,
+                    signal.special_tag,
                     signal.details,
                     signal.created_at,
                 ),
             )
             return cursor.lastrowid
+
+    def set_latest_signal_special_tag(
+        self,
+        symbol: str,
+        market_type: str,
+        strategy: str,
+        signal_type: str,
+        timeframe: str,
+        special_tag: str,
+        within_seconds: int = 900,
+    ) -> bool:
+        """
+        En son eslesen sinyal kaydina ozel etiket yazar.
+        """
+        with self.get_cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT id, created_at
+                FROM signals
+                WHERE symbol = ? AND market_type = ? AND strategy = ? AND signal_type = ? AND timeframe = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (symbol, market_type, strategy, signal_type, timeframe),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return False
+
+            signal_id = row["id"]
+            created_at_raw = row["created_at"]
+            if created_at_raw is not None and within_seconds > 0:
+                try:
+                    created_at = (
+                        created_at_raw
+                        if isinstance(created_at_raw, datetime)
+                        else datetime.fromisoformat(str(created_at_raw))
+                    )
+                    if abs((datetime.now() - created_at).total_seconds()) > within_seconds:
+                        return False
+                except Exception:
+                    # Parse edilemeyen timestamp'te kaydi guncellemeyi atlamiyoruz.
+                    pass
+
+            cursor.execute(
+                "UPDATE signals SET special_tag = ? WHERE id = ?",
+                (special_tag, signal_id),
+            )
+            return cursor.rowcount > 0
+
+    @staticmethod
+    def _build_special_tag_candidate_filter(
+        signal_type: str,
+        target_timeframe: str,
+        required_timeframes: tuple[str, ...],
+        window_seconds: int,
+        market_type: str | None = None,
+        strategy: str | None = None,
+        since_hours: int | None = None,
+    ) -> tuple[str, list[Any]]:
+        clauses: list[str] = ["t.signal_type = ?", "t.timeframe = ?"]
+        params: list[Any] = [signal_type, target_timeframe]
+
+        if market_type:
+            clauses.append("t.market_type = ?")
+            params.append(market_type)
+
+        if strategy:
+            clauses.append("t.strategy = ?")
+            params.append(strategy)
+
+        if since_hours is not None and since_hours > 0:
+            clauses.append("t.created_at >= datetime('now', ?)")
+            params.append(f"-{since_hours} hours")
+
+        for timeframe in required_timeframes:
+            if timeframe == target_timeframe:
+                continue
+            clauses.append(
+                """
+                EXISTS (
+                    SELECT 1
+                    FROM signals req
+                    WHERE req.symbol = t.symbol
+                      AND req.market_type = t.market_type
+                      AND req.strategy = t.strategy
+                      AND req.signal_type = t.signal_type
+                      AND req.timeframe = ?
+                      AND ABS(strftime('%s', req.created_at) - strftime('%s', t.created_at)) <= ?
+                )
+                """.strip()
+            )
+            params.extend([timeframe, window_seconds])
+
+        return " AND ".join(clauses), params
+
+    def get_special_tag_coverage(
+        self,
+        since_hours: int | None = 24,
+        market_type: str | None = "BIST",
+        strategy: str | None = None,
+        window_seconds: int = 900,
+    ) -> list[dict[str, Any]]:
+        """
+        Ozel sinyal etiketlerinin kapsama durumunu dondurur.
+
+        Returns:
+            [
+              {
+                "tag": "BELES",
+                "strategy": "COMBO",
+                "signal_type": "AL",
+                "target_timeframe": "ME",
+                "candidates": 10,
+                "tagged": 8,
+                "missing": 2
+              },
+              ...
+            ]
+        """
+        coverage: list[dict[str, Any]] = []
+        strategies = (strategy,) if strategy else ("COMBO", "HUNTER")
+
+        with self.get_cursor() as cursor:
+            for strategy_name in strategies:
+                for rule in SPECIAL_TAG_RULES:
+                    where_sql, where_params = self._build_special_tag_candidate_filter(
+                        signal_type=rule["signal_type"],
+                        target_timeframe=rule["target_timeframe"],
+                        required_timeframes=rule["required_timeframes"],
+                        window_seconds=window_seconds,
+                        market_type=market_type,
+                        strategy=strategy_name,
+                        since_hours=since_hours,
+                    )
+
+                    cursor.execute(
+                        f"SELECT COUNT(*) FROM signals t WHERE {where_sql}",
+                        where_params,
+                    )
+                    candidates = int(cursor.fetchone()[0] or 0)
+
+                    cursor.execute(
+                        f"SELECT COUNT(*) FROM signals t WHERE {where_sql} AND t.special_tag = ?",
+                        [*where_params, rule["tag"]],
+                    )
+                    tagged = int(cursor.fetchone()[0] or 0)
+
+                    coverage.append(
+                        {
+                            "tag": rule["tag"],
+                            "strategy": strategy_name,
+                            "signal_type": rule["signal_type"],
+                            "target_timeframe": rule["target_timeframe"],
+                            "candidates": candidates,
+                            "tagged": tagged,
+                            "missing": max(0, candidates - tagged),
+                        }
+                    )
+
+        return coverage
+
+    def backfill_special_tags(
+        self,
+        since_hours: int | None = None,
+        market_type: str | None = "BIST",
+        strategy: str | None = None,
+        window_seconds: int = 900,
+        dry_run: bool = False,
+        override_existing: bool = False,
+    ) -> dict[str, Any]:
+        """
+        Eski kayitlarda eksik ozel etiketleri kurallara gore doldurur.
+        Idempotent olacak sekilde varsayilan olarak sadece bos etiketleri gunceller.
+        """
+        result_rows: list[dict[str, Any]] = []
+        total_candidates = 0
+        total_updated = 0
+        strategies = (strategy,) if strategy else ("COMBO", "HUNTER")
+
+        with self.get_cursor() as cursor:
+            for strategy_name in strategies:
+                for rule in SPECIAL_TAG_RULES:
+                    where_sql, where_params = self._build_special_tag_candidate_filter(
+                        signal_type=rule["signal_type"],
+                        target_timeframe=rule["target_timeframe"],
+                        required_timeframes=rule["required_timeframes"],
+                        window_seconds=window_seconds,
+                        market_type=market_type,
+                        strategy=strategy_name,
+                        since_hours=since_hours,
+                    )
+
+                    tag_filter = ""
+                    if not override_existing:
+                        tag_filter = " AND (t.special_tag IS NULL OR t.special_tag = '')"
+
+                    cursor.execute(
+                        f"SELECT t.id FROM signals t WHERE {where_sql}{tag_filter}",
+                        where_params,
+                    )
+                    ids = [int(row[0]) for row in cursor.fetchall()]
+                    candidates = len(ids)
+                    updated = 0
+
+                    if ids and not dry_run:
+                        cursor.executemany(
+                            "UPDATE signals SET special_tag = ? WHERE id = ?",
+                            [(rule["tag"], signal_id) for signal_id in ids],
+                        )
+                        updated = cursor.rowcount if cursor.rowcount is not None else len(ids)
+                    elif ids and dry_run:
+                        updated = candidates
+
+                    total_candidates += candidates
+                    total_updated += updated
+                    result_rows.append(
+                        {
+                            "tag": rule["tag"],
+                            "strategy": strategy_name,
+                            "signal_type": rule["signal_type"],
+                            "target_timeframe": rule["target_timeframe"],
+                            "candidates": candidates,
+                            "updated": updated,
+                        }
+                    )
+
+        return {
+            "dry_run": dry_run,
+            "since_hours": since_hours,
+            "market_type": market_type,
+            "strategy": strategy,
+            "window_seconds": window_seconds,
+            "override_existing": override_existing,
+            "total_candidates": total_candidates,
+            "total_updated": total_updated,
+            "rows": result_rows,
+        }
 
     def get_signals(
         self, symbol: str | None = None, strategy: str | None = None, limit: int = 100
@@ -428,6 +704,7 @@ def save_signal(
     timeframe: str,
     score: str = "",
     price: float = 0.0,
+    special_tag: str | None = None,
     details: str = "",
 ) -> int:
     """Kolaylık fonksiyonu: Sinyal kaydet."""
@@ -439,9 +716,65 @@ def save_signal(
         timeframe=timeframe,
         score=score,
         price=price,
+        special_tag=special_tag,
         details=details,
     )
     return db.save_signal(signal)
+
+
+def set_signal_special_tag(
+    symbol: str,
+    market_type: str,
+    strategy: str,
+    signal_type: str,
+    timeframe: str,
+    special_tag: str,
+    within_seconds: int = 900,
+) -> bool:
+    """Kolaylik fonksiyonu: Son sinyal kaydina ozel etiket yazar."""
+    return db.set_latest_signal_special_tag(
+        symbol=symbol,
+        market_type=market_type,
+        strategy=strategy,
+        signal_type=signal_type,
+        timeframe=timeframe,
+        special_tag=special_tag,
+        within_seconds=within_seconds,
+    )
+
+
+def get_special_tag_coverage(
+    since_hours: int | None = 24,
+    market_type: str | None = "BIST",
+    strategy: str | None = None,
+    window_seconds: int = 900,
+) -> list[dict[str, Any]]:
+    """Kolaylik fonksiyonu: Ozel etiket kapsama istatistikleri."""
+    return db.get_special_tag_coverage(
+        since_hours=since_hours,
+        market_type=market_type,
+        strategy=strategy,
+        window_seconds=window_seconds,
+    )
+
+
+def backfill_special_tags(
+    since_hours: int | None = None,
+    market_type: str | None = "BIST",
+    strategy: str | None = None,
+    window_seconds: int = 900,
+    dry_run: bool = False,
+    override_existing: bool = False,
+) -> dict[str, Any]:
+    """Kolaylik fonksiyonu: Eksik ozel etiketleri geriye donuk doldur."""
+    return db.backfill_special_tags(
+        since_hours=since_hours,
+        market_type=market_type,
+        strategy=strategy,
+        window_seconds=window_seconds,
+        dry_run=dry_run,
+        override_existing=override_existing,
+    )
 
 
 def get_recent_signals(symbol: str | None = None, limit: int = 50) -> list[dict]:

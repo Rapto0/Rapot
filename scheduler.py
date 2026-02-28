@@ -12,11 +12,73 @@ import schedule
 
 from config import scan_settings
 from logger import get_logger
-from telegram_notify import send_message
+from telegram_notify import MessagePriority, send_message
 
 logger = get_logger(__name__)
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
+
+SPECIAL_TAG_HEALTH_STATE_KEY = "special_tag_health_state"
+SPECIAL_TAG_HEALTH_SUMMARY_KEY = "special_tag_health_summary"
+
+
+def _format_special_tag_issue_summary(issues: list[dict]) -> str:
+    ordered = sorted(
+        issues,
+        key=lambda row: (int(row.get("missing", 0)), int(row.get("candidates", 0))),
+        reverse=True,
+    )
+    return "\n".join(
+        f"- {row['strategy']} {row['tag']}: missing={row['missing']} "
+        f"(candidate={row['candidates']}, tagged={row['tagged']})"
+        for row in ordered
+    )
+
+
+def run_special_tag_health_check() -> None:
+    """
+    Ozel etiketleme kapsama kontrolu.
+    Sadece durum degisiminde Telegram bildirimi gonderir:
+    - Ilk bozulmada ALERT
+    - Duzelince RECOVERY OK
+    """
+    try:
+        from database import db, get_special_tag_coverage
+
+        coverage_rows = get_special_tag_coverage(
+            since_hours=24,
+            market_type="BIST",
+            strategy=None,
+            window_seconds=900,
+        )
+        issues = [row for row in coverage_rows if row.get("missing", 0) > 0]
+        previous_state = (db.get_stat(SPECIAL_TAG_HEALTH_STATE_KEY) or "").strip().lower()
+
+        if issues:
+            summary = _format_special_tag_issue_summary(issues)
+            db.set_stat(SPECIAL_TAG_HEALTH_SUMMARY_KEY, summary)
+            db.set_stat(SPECIAL_TAG_HEALTH_STATE_KEY, "alert")
+            logger.warning(f"Ozel etiket kapsama alarmi (24h): {summary}")
+
+            if previous_state != "alert":
+                send_message(
+                    "SPECIAL TAG ALERT\n"
+                    "Son 24 saatte ozel etiket kapsama hatasi tespit edildi.\n"
+                    f"{summary}",
+                    priority=MessagePriority.CRITICAL,
+                )
+        else:
+            logger.info("Ozel etiket kapsama kontrolu OK (24h, BIST).")
+            db.set_stat(SPECIAL_TAG_HEALTH_STATE_KEY, "ok")
+            db.set_stat(SPECIAL_TAG_HEALTH_SUMMARY_KEY, "")
+
+            if previous_state == "alert":
+                send_message(
+                    "SPECIAL TAG RECOVERY OK\n" "Son 24 saatte ozel etiket kapsama farki kalmadi.",
+                    priority=MessagePriority.HIGH,
+                )
+    except Exception as exc:
+        logger.error(f"Ozel etiket kapsama kontrolu hatasi: {exc}")
 
 
 def setup_scheduler(scan_func, interval_hours: int = None) -> None:
@@ -31,7 +93,9 @@ def setup_scheduler(scan_func, interval_hours: int = None) -> None:
         interval_hours = scan_settings.SCAN_INTERVAL_HOURS
 
     schedule.every(interval_hours).hours.do(scan_func)
+    schedule.every().hour.do(run_special_tag_health_check)
     logger.info(f"Scheduler kuruldu: her {interval_hours} saatte bir tarama")
+    logger.info("Scheduler kuruldu: her 1 saatte ozel etiket kapsama kontrolu")
 
 
 def run_bot_loop(scan_func, check_commands_func) -> None:
@@ -89,11 +153,19 @@ def start_bot(use_async: bool = True) -> None:
         use_async: True ise async tarama kullan (varsayılan: True, main.py'den False geçiliyor)
     """
     from command_handler import check_commands
+    from db_session import init_db
     from market_scanner import get_scan_count, scan_market
 
     mode = "⚡ Async" if use_async else "🔄 Sync"
     logger.info(f"🚀 Bot Başlatılıyor... ({mode} Mode)")
     print(f"🚀 Bot Başlatılıyor... ({mode} Mode)")
+
+    try:
+        init_db()
+        logger.info("Bot başlangıcında veritabanı şeması doğrulandı.")
+    except Exception as e:
+        logger.error(f"Veritabanı başlatılamadı, bot durduruluyor: {e}")
+        raise
 
     # Health API'yi başlat
     try:
@@ -127,15 +199,16 @@ def start_bot(use_async: bool = True) -> None:
             get_scan_count_callback=get_scan_count,
         )
 
+    def run_sync_scan():
+        scan_market(check_commands_callback=check_commands_wrapper)
+
     # Tarama fonksiyonu seç
-    if use_async:
-        scan_func = run_async_scan_wrapper
-    else:
-        scan_func = lambda: scan_market(check_commands_callback=check_commands_wrapper)
+    scan_func = run_async_scan_wrapper if use_async else run_sync_scan
 
     # İlk tarama
     logger.info("İlk tarama başlatılıyor...")
     scan_func()
+    run_special_tag_health_check()
 
     # Zamanlayıcı kur
     setup_scheduler(scan_func)

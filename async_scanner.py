@@ -178,17 +178,6 @@ async def process_signals_batch(results: list[dict[str, Any]], notify: bool = Tr
                 price=signal["price"],
             )
 
-            # Telegram bildirimi
-            if notify:
-                if signal["type"] == "AL":
-                    emoji = "🟢" if signal["strategy"] == "COMBO" else "🚀"
-                    msg = f"{emoji} <b>{signal['strategy']} AL</b> #{symbol} ({market_type})\nVade: {signal['tf_label']}\nSkor: {signal['score']}"
-                else:
-                    msg = f"🔴 <b>{signal['strategy']} SAT</b> #{symbol} ({market_type})\nVade: {signal['tf_label']}\nSkor: {signal['score']}"
-
-                send_message(msg)
-                await asyncio.sleep(0.3)  # Rate limit
-
     return total_signals
 
 
