@@ -85,6 +85,29 @@ export interface ApiBotStatus {
     timestamp: string;
 }
 
+export interface ApiSpecialTagHealthRow {
+    tag: 'BELES' | 'COK_UCUZ' | 'PAHALI' | 'FAHIS_FIYAT';
+    strategy: 'COMBO' | 'HUNTER';
+    signal_type: 'AL' | 'SAT';
+    target_timeframe: string;
+    candidates: number;
+    tagged: number;
+    missing: number;
+}
+
+export interface ApiSpecialTagHealth {
+    status: 'ok' | 'alert';
+    stored_state: string | null;
+    market_type: 'BIST' | 'Kripto' | 'ALL' | null;
+    strategy: 'COMBO' | 'HUNTER' | null;
+    checked_window_hours: number;
+    checked_window_seconds: number;
+    missing_total: number;
+    last_checked_at: string | null;
+    summary: string | null;
+    rows: ApiSpecialTagHealthRow[];
+}
+
 // ==================== API CLIENT ====================
 
 class ApiError extends Error {
@@ -308,6 +331,30 @@ export async function fetchLogs(limit: number = 50): Promise<LogEntry[]> {
     return fetchApi<LogEntry[]>(`${API_BASE_URL}/logs?limit=${limit}`);
 }
 
+export interface SpecialTagHealthParams {
+    market_type?: 'BIST' | 'Kripto' | 'ALL';
+    strategy?: 'COMBO' | 'HUNTER';
+    since_hours?: number;
+    window_seconds?: number;
+}
+
+export async function fetchSpecialTagHealth(
+    params: SpecialTagHealthParams = {}
+): Promise<ApiSpecialTagHealth> {
+    const searchParams = new URLSearchParams();
+    if (params.market_type) searchParams.set('market_type', params.market_type);
+    if (params.strategy) searchParams.set('strategy', params.strategy);
+    if (params.since_hours) searchParams.set('since_hours', params.since_hours.toString());
+    if (params.window_seconds !== undefined) {
+        searchParams.set('window_seconds', params.window_seconds.toString());
+    }
+
+    const query = searchParams.toString();
+    return fetchApi<ApiSpecialTagHealth>(
+        `${API_BASE_URL}/ops/special-tag-health${query ? `?${query}` : ''}`
+    );
+}
+
 // ==================== ANALYSIS API ====================
 
 export async function analyzeSymbol(symbol: string, marketType: string = 'BIST'): Promise<{ message: string; status: string }> {
@@ -353,7 +400,7 @@ export interface StructuredAIAnalysisResponse {
     market_type: string;
     score: string;
     summary: string;
-    structured_analysis: any; // Using any for flexibility now, can type it later
+    structured_analysis: unknown;
     updated_at: string;
 }
 

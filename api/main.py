@@ -136,6 +136,33 @@ class SignalResponse(BaseModel):
         from_attributes = True
 
 
+class SpecialTagHealthRuleResponse(BaseModel):
+    """Ozel etiket kapsama kural satiri."""
+
+    tag: str
+    strategy: str
+    signal_type: str
+    target_timeframe: str
+    candidates: int
+    tagged: int
+    missing: int
+
+
+class SpecialTagHealthResponse(BaseModel):
+    """Ozel etiket kapsama ozet durumu."""
+
+    status: str
+    stored_state: str | None = None
+    market_type: str | None = None
+    strategy: str | None = None
+    checked_window_hours: int
+    checked_window_seconds: int
+    missing_total: int
+    last_checked_at: str | None = None
+    summary: str | None = None
+    rows: list[SpecialTagHealthRuleResponse]
+
+
 class TradeResponse(BaseModel):
     """Trade yanıtı."""
 
@@ -191,6 +218,8 @@ class AIAnalysisResponse(BaseModel):
 # ==================== ENDPOINTS ====================
 
 _SPECIAL_TAG_CODES = {"BELES", "COK_UCUZ", "PAHALI", "FAHIS_FIYAT"}
+_SPECIAL_TAG_HEALTH_STATE_KEY = "special_tag_health_state"
+_SPECIAL_TAG_HEALTH_SUMMARY_KEY = "special_tag_health_summary"
 
 
 def _normalize_special_tag(value: str | None) -> str | None:
@@ -284,6 +313,88 @@ async def health_check(request: Request):
         uptime_seconds=uptime,
         database=db_status,
         version="1.0.0",
+    )
+
+
+@app.get("/ops/special-tag-health", response_model=SpecialTagHealthResponse, tags=["Operations"])
+@limiter.limit("20/minute")
+async def get_special_tag_health(
+    request: Request,
+    market_type: str = Query("BIST", description="Piyasa tipi (BIST/Kripto/ALL)"),
+    strategy: str | None = Query(None, description="Strateji filtresi (COMBO/HUNTER)"),
+    since_hours: int = Query(24, ge=1, le=720, description="Geri bakis penceresi (saat)"),
+    window_seconds: int = Query(
+        900, ge=0, le=86400, description="Kural eslesme toleransi (saniye)"
+    ),
+):
+    """
+    Ozel sinyal etiketleme kapsama durumunu dondurur.
+
+    Ops kullanimi icindir. Scheduler tarafindaki health check ile ayni veri kaynagini kullanir.
+    """
+    from database import db, get_special_tag_coverage
+
+    normalized_market = market_type.strip().upper()
+    if normalized_market == "ALL":
+        effective_market_type = None
+        market_label = "ALL"
+    elif normalized_market == "BIST":
+        effective_market_type = "BIST"
+        market_label = "BIST"
+    elif normalized_market in {"KRIPTO", "KRPITO", "KRYPTO"}:
+        effective_market_type = "Kripto"
+        market_label = "Kripto"
+    else:
+        raise HTTPException(
+            status_code=400, detail="Gecersiz market_type. BIST, Kripto veya ALL kullanin."
+        )
+
+    normalized_strategy = strategy.strip().upper() if strategy else None
+    if normalized_strategy not in {None, "COMBO", "HUNTER"}:
+        raise HTTPException(
+            status_code=400, detail="Gecersiz strategy. COMBO veya HUNTER kullanin."
+        )
+
+    coverage_rows = get_special_tag_coverage(
+        since_hours=since_hours,
+        market_type=effective_market_type,
+        strategy=normalized_strategy,
+        window_seconds=window_seconds,
+    )
+    missing_total = sum(int(row.get("missing", 0)) for row in coverage_rows)
+
+    with db.get_cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT MAX(updated_at)
+            FROM bot_stats
+            WHERE stat_name IN (?, ?)
+            """,
+            (_SPECIAL_TAG_HEALTH_STATE_KEY, _SPECIAL_TAG_HEALTH_SUMMARY_KEY),
+        )
+        last_checked_raw = cursor.fetchone()[0]
+
+    if isinstance(last_checked_raw, datetime):
+        last_checked_at = last_checked_raw.isoformat()
+    elif last_checked_raw:
+        last_checked_at = str(last_checked_raw)
+    else:
+        last_checked_at = None
+
+    stored_state = db.get_stat(_SPECIAL_TAG_HEALTH_STATE_KEY)
+    summary = db.get_stat(_SPECIAL_TAG_HEALTH_SUMMARY_KEY)
+
+    return SpecialTagHealthResponse(
+        status="alert" if missing_total > 0 else "ok",
+        stored_state=stored_state,
+        market_type=market_label,
+        strategy=normalized_strategy,
+        checked_window_hours=since_hours,
+        checked_window_seconds=window_seconds,
+        missing_total=missing_total,
+        last_checked_at=last_checked_at,
+        summary=summary or None,
+        rows=[SpecialTagHealthRuleResponse(**row) for row in coverage_rows],
     )
 
 

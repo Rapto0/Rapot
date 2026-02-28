@@ -4,12 +4,14 @@ import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Check, ListPlus, RefreshCw, Search, Settings2, Star, StarOff } from "lucide-react"
 import {
+  fetchSpecialTagHealth,
   fetchLogs,
   fetchScanHistory,
   fetchSignals,
   type ApiSignal,
   type LogEntry,
   type ScanHistory,
+  type ApiSpecialTagHealth,
 } from "@/lib/api/client"
 import { useBotHealth } from "@/lib/hooks/use-health"
 import { Button } from "@/components/ui/button"
@@ -226,6 +228,14 @@ export default function ScannerPage() {
     refetchIntervalInBackground: false,
   })
 
+  const specialTagHealthQuery = useQuery<ApiSpecialTagHealth>({
+    queryKey: ["scanner-v2", "special-tag-health"],
+    queryFn: () => fetchSpecialTagHealth({ market_type: "BIST", since_hours: 24, window_seconds: 900 }),
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+    refetchIntervalInBackground: false,
+  })
+
   const bistSignalsQuery = useQuery<ScannerSignal[]>({
     queryKey: ["scanner-v2", "signals", "BIST"],
     queryFn: async () => (await fetchSignals({ market_type: "BIST", limit: 700 })).map(mapApiSignal),
@@ -244,6 +254,7 @@ export default function ScannerPage() {
 
   const scans = useMemo(() => scansQuery.data ?? EMPTY_SCANS, [scansQuery.data])
   const logs = useMemo(() => logsQuery.data ?? EMPTY_LOGS, [logsQuery.data])
+  const specialTagHealth = specialTagHealthQuery.data ?? null
   const bistSignals = useMemo(() => bistSignalsQuery.data ?? EMPTY_SIGNALS, [bistSignalsQuery.data])
   const kriptoSignals = useMemo(() => kriptoSignalsQuery.data ?? EMPTY_SIGNALS, [kriptoSignalsQuery.data])
   const allSignals = useMemo(() => [...bistSignals, ...kriptoSignals].sort(sortSignalsByDateDesc), [bistSignals, kriptoSignals])
@@ -308,13 +319,22 @@ export default function ScannerPage() {
   }, [allSignals, selectedRow])
 
   const latestScan = scans[0] ?? null
+  const specialTagIssues = useMemo(
+    () => (specialTagHealth?.rows ?? []).filter((row) => row.missing > 0),
+    [specialTagHealth]
+  )
   const warningLogCount = logs.filter((entry) => toLogLevel(entry.level) === "WARNING").length
   const errorLogCount = logs.filter((entry) => toLogLevel(entry.level) === "ERROR").length
   const signals24h = allSignals.filter((signal) => Date.now() - (parseDate(signal.createdAt)?.getTime() ?? 0) <= 86_400_000).length
   const buyCountFiltered = filteredRows.reduce((sum, row) => sum + row.buySignals, 0)
   const sellCountFiltered = filteredRows.reduce((sum, row) => sum + row.sellSignals, 0)
 
-  const isRefreshing = scansQuery.isFetching || logsQuery.isFetching || bistSignalsQuery.isFetching || kriptoSignalsQuery.isFetching
+  const isRefreshing =
+    scansQuery.isFetching ||
+    logsQuery.isFetching ||
+    specialTagHealthQuery.isFetching ||
+    bistSignalsQuery.isFetching ||
+    kriptoSignalsQuery.isFetching
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -375,7 +395,13 @@ export default function ScannerPage() {
   }, [watchlistNotice])
 
   const refreshAll = async () => {
-    await Promise.all([scansQuery.refetch(), logsQuery.refetch(), bistSignalsQuery.refetch(), kriptoSignalsQuery.refetch()])
+    await Promise.all([
+      scansQuery.refetch(),
+      logsQuery.refetch(),
+      specialTagHealthQuery.refetch(),
+      bistSignalsQuery.refetch(),
+      kriptoSignalsQuery.refetch(),
+    ])
   }
 
   const applyViewPreset = (view: ViewKey) => {
@@ -710,6 +736,80 @@ export default function ScannerPage() {
 
         <Panel title="Sistem Sagligi" subtitle="Tarama ritmi ve kritik log ozetleri">
           <div className="space-y-2">
+            <div className={cn("border p-2", specialTagHealth?.missing_total ? "border-[rgba(255,77,109,0.4)] bg-[rgba(97,26,40,0.35)]" : "border-border bg-base")}>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <span className="label-uppercase">Ozel Etiket Kapsama</span>
+                <span
+                  className={cn(
+                    "signal-badge",
+                    specialTagHealthQuery.isLoading
+                      ? "signal-neutral"
+                      : specialTagHealthQuery.isError || specialTagHealth?.missing_total
+                        ? "signal-sell"
+                        : "signal-buy"
+                  )}
+                >
+                  {specialTagHealthQuery.isLoading
+                    ? "CHECKING"
+                    : specialTagHealthQuery.isError
+                      ? "UNAVAILABLE"
+                      : specialTagHealth?.missing_total
+                        ? "ALERT"
+                        : "OK"}
+                </span>
+              </div>
+
+              {specialTagHealthQuery.isError ? (
+                <div className="text-[11px] text-loss">Ops health endpoint okunamadi.</div>
+              ) : specialTagHealth ? (
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+                    <span className="text-muted-foreground">Missing toplam</span>
+                    <span className={cn("mono-numbers text-right", specialTagHealth.missing_total > 0 ? "text-loss" : "text-profit")}>
+                      {formatCount(specialTagHealth.missing_total)}
+                    </span>
+                    <span className="text-muted-foreground">Son kontrol</span>
+                    <span className="mono-numbers text-right">
+                      {specialTagHealth.last_checked_at ? getTimeAgo(specialTagHealth.last_checked_at) : "--"}
+                    </span>
+                    <span className="text-muted-foreground">Pencere</span>
+                    <span className="mono-numbers text-right">{specialTagHealth.checked_window_hours}sa / {specialTagHealth.checked_window_seconds}sn</span>
+                    <span className="text-muted-foreground">Kaynak state</span>
+                    <span className="mono-numbers text-right">{(specialTagHealth.stored_state || specialTagHealth.status).toUpperCase()}</span>
+                  </div>
+
+                  <div className="grid gap-1">
+                    {specialTagHealth.rows.map((row) => (
+                      <div key={`${row.strategy}:${row.tag}`} className="grid grid-cols-[1fr_auto_auto] items-center gap-2 border border-border bg-surface px-2 py-1 text-[10px]">
+                        <div className="min-w-0">
+                          <div className="truncate font-medium text-foreground">
+                            {row.strategy} {formatSpecialTagLabel(row.tag)}
+                          </div>
+                          <div className="mono-numbers text-muted-foreground">
+                            {row.signal_type} | {normalizeTimeframe(row.target_timeframe)}
+                          </div>
+                        </div>
+                        <div className="mono-numbers text-muted-foreground">
+                          {row.tagged}/{row.candidates}
+                        </div>
+                        <div className={cn("mono-numbers", row.missing > 0 ? "text-loss" : "text-profit")}>
+                          {row.missing > 0 ? `-${row.missing}` : "0"}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {specialTagIssues.length > 0 && specialTagHealth.summary ? (
+                    <div className="whitespace-pre-line border border-[rgba(255,77,109,0.28)] bg-[rgba(97,26,40,0.18)] px-2 py-1.5 text-[10px] text-loss">
+                      {specialTagHealth.summary}
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="text-[11px] text-muted-foreground">Health verisi bekleniyor.</div>
+              )}
+            </div>
+
             <div className="border border-border bg-base p-2">
               <div className="mb-2 flex items-center justify-between">
                 <span className="label-uppercase">Tarama Ozet</span>
@@ -823,6 +923,21 @@ function renderCellContent(column: ColumnId, row: ScreenerRow, watchSet: Set<str
       return <span className="mono-numbers text-muted-foreground">{row.lastScore || "--"}</span>
     case "lastSeen":
       return <span className="mono-numbers text-muted-foreground">{getTimeAgo(row.lastSeenIso)}</span>
+  }
+}
+
+function formatSpecialTagLabel(tag: ApiSpecialTagHealth["rows"][number]["tag"]) {
+  switch (tag) {
+    case "BELES":
+      return "Beles"
+    case "COK_UCUZ":
+      return "Cok Ucuz"
+    case "PAHALI":
+      return "Pahali"
+    case "FAHIS_FIYAT":
+      return "Fahis Fiyat"
+    default:
+      return tag
   }
 }
 
