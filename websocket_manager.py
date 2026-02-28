@@ -184,6 +184,10 @@ class BinanceWebSocketManager:
 
     async def _listen(self):
         """Listen for incoming WebSocket messages."""
+        if self._ws is None:
+            logger.debug("WebSocket listen skipped because connection is not established yet")
+            return
+
         async for msg in self._ws:
             if msg.type == aiohttp.WSMsgType.TEXT:
                 await self._handle_message(json.loads(msg.data))

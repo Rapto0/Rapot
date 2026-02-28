@@ -4,6 +4,15 @@ from websocket_manager import BinanceWebSocketManager
 
 
 @pytest.mark.asyncio
+async def test_listen_skips_when_websocket_is_not_connected():
+    manager = BinanceWebSocketManager()
+
+    await manager._listen()
+
+    assert manager._ws is None
+
+
+@pytest.mark.asyncio
 async def test_handle_message_processes_mini_ticker_array_payload():
     manager = BinanceWebSocketManager()
     events: list[tuple[str, dict]] = []
