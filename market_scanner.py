@@ -3,6 +3,7 @@ Market Scanner Modülü
 Piyasa tarama ve sinyal işleme fonksiyonları.
 """
 
+import html
 import time
 from typing import Any
 
@@ -198,17 +199,18 @@ def format_ai_message_for_telegram(symbol: str, ai_response: str) -> str:
     AI JSON çıktısını Telegram için okunabilir metne çevirir.
     JSON değilse ham metni korur.
     """
-    header = f"🧠 <b>AI KARARI ({symbol}):</b>"
+    safe_symbol = html.escape(str(symbol))
+    header = f"🧠 <b>AI KARARI ({safe_symbol}):</b>"
 
     try:
         payload = parse_ai_response(ai_response)
     except AIResponseSchemaError:
-        return f"{header}\n{ai_response}"
+        return f"{header}\n{html.escape(str(ai_response))}"
 
     error = payload.error
     if error:
         error_suffix = f" ({payload.error_code})" if payload.error_code else ""
-        return f"{header}\n⚠️ AI analizi üretilemedi: {error}{error_suffix}"
+        return f"{header}\n⚠️ AI analizi üretilemedi: {html.escape(str(error))}{html.escape(error_suffix)}"
 
     sentiment_label = payload.sentiment_label or "NOTR"
     sentiment_score = payload.sentiment_score
@@ -229,7 +231,7 @@ def format_ai_message_for_telegram(symbol: str, ai_response: str) -> str:
 
     explanation = payload.explanation or "Detayli aciklama uretilemedi."
     summary_items = payload.summary or ["Ozet maddesi uretilemedi."]
-    summary_lines = "\n".join(f"• {item}" for item in summary_items[:3])
+    summary_lines = "\n".join(f"• {html.escape(str(item))}" for item in summary_items[:3])
 
     def _short_explanation(text: str, max_sentences: int = 2, max_chars: int = 420) -> str:
         normalized = " ".join(str(text or "").split())
@@ -258,21 +260,21 @@ def format_ai_message_for_telegram(symbol: str, ai_response: str) -> str:
 
     def _join_levels(levels: Any) -> str:
         if isinstance(levels, str):
-            return levels.strip() or "-"
+            return html.escape(levels.strip()) or "-"
         if isinstance(levels, list):
-            cleaned = [str(level).strip() for level in levels if str(level).strip()]
+            cleaned = [html.escape(str(level).strip()) for level in levels if str(level).strip()]
             return ", ".join(cleaned) if cleaned else "-"
         return "-"
 
     support_text = _join_levels(payload.key_levels.support)
     resistance_text = _join_levels(payload.key_levels.resistance)
     risk_level = payload.risk_level or "Belirsiz"
-    compact_explanation = _short_explanation(explanation)
+    compact_explanation = html.escape(_short_explanation(explanation))
 
     meta_lines = [
-        f"{sentiment_icon} <b>{sentiment_label}</b>",
+        f"{sentiment_icon} <b>{html.escape(str(sentiment_label))}</b>",
         f"• Skor: {score_text}",
-        f"• Risk: {risk_level}",
+        f"• Risk: {html.escape(str(risk_level))}",
     ]
 
     level_lines = []

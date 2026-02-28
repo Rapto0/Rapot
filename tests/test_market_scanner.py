@@ -162,9 +162,9 @@ class TestFormatAIMessageForTelegram:
             "summary": [
                 "RSI aşırı alım bölgesinde.",
                 "HUNTER göstergesi pahalı sinyali veriyor.",
-                "Haber akışı kısa vadede oynaklık yaratabilir.",
+                "Haber akışı kısa vadede <oynaklık> & baskı yaratabilir.",
             ],
-            "explanation": "Teknik göstergeler kısa vadede satış baskısına işaret ediyor.",
+            "explanation": "Teknik göstergeler kısa vadede <satış> baskısına işaret ediyor & dikkat gerektiriyor.",
             "key_levels": {"support": ["21.50", "20.80"], "resistance": ["22.50", "23.00"]},
             "risk_level": "Orta",
         }
@@ -177,6 +177,8 @@ class TestFormatAIMessageForTelegram:
         assert "Yorum" in result
         assert "Risk: Orta" in result
         assert "Destek: 21.50, 20.80" in result
+        assert "&lt;oynaklık&gt; &amp; baskı" in result
+        assert "&lt;satış&gt; baskısına işaret ediyor &amp; dikkat gerektiriyor." in result
         assert '"sentiment_score"' not in result
 
     @pytest.mark.unit
