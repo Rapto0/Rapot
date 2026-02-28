@@ -84,6 +84,6 @@ def test_build_strategy_inspector_chunks_contains_symbol_and_strategy():
     assert chunks
     assert "THYAO" in chunks[0]
     assert "HUNTER" in chunks[0]
-    assert "<pre>" in chunks[0]
+    assert "<pre>" not in chunks[0]
     assert "Momentum" in chunks[0]
     assert "Trend" in chunks[0]

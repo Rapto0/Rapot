@@ -288,11 +288,11 @@ def _format_indicator_value(value: Any) -> str:
     return str(value)
 
 
-def _build_indicator_grid(
+def _build_indicator_lines(
     strategy: str,
     indicator_order: list[str],
     indicator_values: dict[str, Any],
-) -> str:
+) -> list[str]:
     groups = TELEGRAM_GROUP_ORDER.get(strategy, (("Veriler", tuple(indicator_order)),))
     rows: list[str] = []
 
@@ -303,14 +303,17 @@ def _build_indicator_grid(
                 continue
             short_label = TELEGRAM_INDICATOR_LABELS.get(indicator_key, indicator_key)
             formatted_value = _format_indicator_value(indicator_values.get(indicator_key))
-            parts.append(f"{short_label:>5} {formatted_value:>8}")
+            parts.append(f"{short_label} {formatted_value}")
 
         if not parts:
             continue
 
-        rows.append(f"{group_label:<9} " + "  ".join(parts))
+        rows.append(
+            f"<b>{html.escape(group_label)}</b> • "
+            + " | ".join(html.escape(part) for part in parts)
+        )
 
-    return "\n".join(rows)
+    return rows
 
 
 def build_strategy_inspector_chunks(report: dict[str, Any]) -> list[str]:
@@ -357,14 +360,13 @@ def build_strategy_inspector_chunks(report: dict[str, Any]) -> list[str]:
         if timeframe.get("raw_score"):
             meta_lines.append(f"• Ham Skor: {html.escape(str(timeframe['raw_score']))}")
 
-        indicator_grid = _build_indicator_grid(
+        indicator_lines = _build_indicator_lines(
             strategy=report["strategy"],
             indicator_order=indicator_order,
             indicator_values=timeframe["indicators"],
         )
         block_lines = [title, *meta_lines]
-        if indicator_grid:
-            block_lines.append(f"<pre>{html.escape(indicator_grid)}</pre>")
+        block_lines.extend(indicator_lines)
         blocks.append("\n".join(block_lines))
 
     chunks: list[str] = []
