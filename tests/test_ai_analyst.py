@@ -142,6 +142,55 @@ class TestAIAnalystPhaseOne:
         assert payload["prompt_version"] == ai_analyst.AI_PROMPT_VERSION
 
     @pytest.mark.unit
+    def test_normalize_ai_response_uses_parsed_payload_when_available(self):
+        class DummyResponse:
+            parsed = {
+                "sentiment_score": 55,
+                "sentiment_label": "NOTR",
+                "summary": ["ok"],
+                "explanation": "parsed payload",
+                "key_levels": {"support": ["1"], "resistance": ["2"]},
+                "risk_level": "Orta",
+            }
+            text = None
+
+        normalized = ai_analyst._normalize_ai_response(
+            response=DummyResponse(),
+            provider="gemini",
+            model_name="gemini-2.5-flash",
+            backend="google.genai",
+        )
+        payload = json.loads(normalized)
+
+        assert payload["provider"] == "gemini"
+        assert payload["model"] == "gemini-2.5-flash"
+        assert payload["backend"] == "google.genai"
+        assert payload["explanation"] == "parsed payload"
+
+    @pytest.mark.unit
+    def test_normalize_ai_response_extracts_json_from_mixed_text(self):
+        response_text = (
+            "Analiz tamamlandi.\n"
+            "```json\n"
+            '{"sentiment_score":55,"sentiment_label":"NOTR","summary":["ok"],'
+            '"explanation":"mixed text","key_levels":{"support":["1"],"resistance":["2"]},'
+            '"risk_level":"Orta"}\n'
+            "```\n"
+            "Bitti."
+        )
+
+        normalized = ai_analyst._normalize_ai_response(
+            response=response_text,
+            provider="gemini",
+            model_name="gemini-2.5-flash",
+            backend="google.genai",
+        )
+        payload = json.loads(normalized)
+
+        assert payload["provider"] == "gemini"
+        assert payload["explanation"] == "mixed text"
+
+    @pytest.mark.unit
     def test_analyze_with_gemini_embeds_multitimeframe_payload_in_prompt(self, monkeypatch):
         monkeypatch.setattr(ai_analyst.settings, "ai_provider", "gemini")
         monkeypatch.setattr(ai_analyst.settings, "ai_model", "gemini-2.5-flash")

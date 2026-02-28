@@ -139,7 +139,7 @@ def _ensure_gemini_backend() -> tuple[str | None, str]:
     return api_key, gemini_backend
 
 
-def _generate_with_google_genai(model_name: str, prompt: str) -> str | None:
+def _generate_with_google_genai(model_name: str, prompt: str) -> Any:
     if gemini_client is None:
         raise RuntimeError("Gemini client hazir degil")
 
@@ -154,10 +154,10 @@ def _generate_with_google_genai(model_name: str, prompt: str) -> str | None:
     except TypeError:
         response = gemini_client.models.generate_content(model=model_name, contents=prompt)
 
-    return getattr(response, "text", None)
+    return response
 
 
-def _generate_with_legacy_genai(model_name: str, prompt: str) -> str | None:
+def _generate_with_legacy_genai(model_name: str, prompt: str) -> Any:
     if legacy_genai is None:
         raise RuntimeError("Legacy Gemini client hazir degil")
 
@@ -173,10 +173,10 @@ def _generate_with_legacy_genai(model_name: str, prompt: str) -> str | None:
     except TypeError:
         response = model.generate_content(prompt)
 
-    return getattr(response, "text", None)
+    return response
 
 
-def _generate_model_response(model_name: str, prompt: str, backend: str) -> str | None:
+def _generate_model_response(model_name: str, prompt: str, backend: str) -> Any:
     if backend == "google.genai":
         return _generate_with_google_genai(model_name, prompt)
     if backend == "google.generativeai":
@@ -184,12 +184,49 @@ def _generate_model_response(model_name: str, prompt: str, backend: str) -> str 
     raise RuntimeError("Gemini backend unavailable")
 
 
-def _normalize_ai_response(response_text: str, provider: str, model_name: str, backend: str) -> str:
-    clean_text = response_text.replace("```json", "").replace("```", "").strip()
+def _extract_json_object(text: str) -> str:
+    clean_text = text.replace("```json", "").replace("```", "").strip()
     if not clean_text:
         raise AIResponseSchemaError("Gemini API bos yanit dondurdu", "empty_response")
 
-    payload = parse_ai_response(clean_text)
+    try:
+        json.loads(clean_text)
+        return clean_text
+    except (TypeError, json.JSONDecodeError):
+        pass
+
+    start = clean_text.find("{")
+    end = clean_text.rfind("}")
+    if start == -1 or end == -1 or start >= end:
+        raise AIResponseSchemaError("Gemini API bos yanit dondurdu", "invalid_json")
+
+    candidate = clean_text[start : end + 1].strip()
+    try:
+        json.loads(candidate)
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise AIResponseSchemaError("AI yaniti gecerli JSON degil", "invalid_json") from exc
+    return candidate
+
+
+def _extract_response_payload(response: Any) -> dict[str, Any] | str:
+    parsed = getattr(response, "parsed", None)
+    if parsed is not None:
+        if isinstance(parsed, dict):
+            return parsed
+        if hasattr(parsed, "model_dump"):
+            return parsed.model_dump(mode="json")
+
+    if isinstance(response, dict):
+        return response
+
+    response_text = getattr(response, "text", None) if not isinstance(response, str) else response
+    if response_text is None:
+        raise AIResponseSchemaError("Gemini API bos yanit dondurdu", "empty_response")
+    return _extract_json_object(str(response_text))
+
+
+def _normalize_ai_response(response: Any, provider: str, model_name: str, backend: str) -> str:
+    payload = parse_ai_response(_extract_response_payload(response))
     payload.provider = payload.provider or provider
     payload.model = payload.model or model_name
     payload.backend = payload.backend or backend
@@ -494,14 +531,14 @@ def analyze_with_gemini(
             last_error_code = "generation_error"
             for model_name in build_model_candidates():
                 try:
-                    response_text = _generate_model_response(model_name, prompt, backend)
-                    if not response_text:
+                    response_payload = _generate_model_response(model_name, prompt, backend)
+                    if not response_payload:
                         raise AIResponseSchemaError(
                             "Gemini API bos yanit dondurdu", "empty_response"
                         )
 
                     result["text"] = _normalize_ai_response(
-                        response_text=response_text,
+                        response=response_payload,
                         provider=provider,
                         model_name=model_name,
                         backend=backend,
