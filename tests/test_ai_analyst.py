@@ -243,6 +243,33 @@ class TestAIAnalystPhaseOne:
         assert payload["explanation"] == "candidate text"
 
     @pytest.mark.unit
+    def test_normalize_ai_response_reports_empty_candidate_diagnostics(self):
+        class DummyCandidate:
+            finish_reason = "SAFETY"
+            finish_message = "blocked"
+            content = type("DummyContent", (), {"parts": []})()
+
+        class DummyResponse:
+            parsed = None
+            text = None
+            prompt_feedback = "safety block"
+            candidates = [DummyCandidate()]
+
+        with pytest.raises(ai_analyst.AIResponseSchemaError) as exc:
+            ai_analyst._normalize_ai_response(
+                response=DummyResponse(),
+                provider="gemini",
+                model_name="gemini-2.5-flash",
+                backend="google.genai",
+            )
+
+        message = str(exc.value)
+        assert "Gemini API bos yanit dondurdu" in message
+        assert '"finish_reason": "SAFETY"' in message
+        assert '"prompt_feedback": "safety block"' in message
+        assert exc.value.error_code == "empty_response"
+
+    @pytest.mark.unit
     def test_analyze_with_gemini_embeds_multitimeframe_payload_in_prompt(self, monkeypatch):
         monkeypatch.setattr(ai_analyst.settings, "ai_provider", "gemini")
         monkeypatch.setattr(ai_analyst.settings, "ai_model", "gemini-2.5-flash")

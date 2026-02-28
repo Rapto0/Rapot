@@ -226,6 +226,82 @@ def _extract_json_object(text: str) -> str:
     return candidate
 
 
+def _response_field(obj: Any, key: str, default: Any = None) -> Any:
+    if obj is None:
+        return default
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default)
+
+
+def _response_diagnostics(response: Any) -> dict[str, Any]:
+    diagnostics: dict[str, Any] = {
+        "has_parsed": getattr(response, "parsed", None) is not None,
+        "text_length": None,
+        "candidate_count": 0,
+        "candidates": [],
+        "prompt_feedback": None,
+        "usage_metadata": None,
+    }
+
+    response_text = _response_field(response, "text")
+    if isinstance(response_text, str):
+        diagnostics["text_length"] = len(response_text)
+
+    prompt_feedback = _response_field(response, "prompt_feedback")
+    if prompt_feedback is not None:
+        diagnostics["prompt_feedback"] = str(prompt_feedback)
+
+    usage_metadata = _response_field(response, "usage_metadata")
+    if usage_metadata is not None:
+        diagnostics["usage_metadata"] = str(usage_metadata)
+
+    candidates = _response_field(response, "candidates", []) or []
+    diagnostics["candidate_count"] = len(candidates)
+    for candidate in candidates:
+        content = _response_field(candidate, "content")
+        parts = _response_field(content, "parts", []) or []
+        part_descriptions: list[dict[str, Any]] = []
+        for part in parts:
+            part_text = _response_field(part, "text")
+            inline_data = _response_field(part, "inline_data")
+            function_call = _response_field(part, "function_call")
+            part_descriptions.append(
+                {
+                    "has_text": bool(part_text),
+                    "text_length": len(part_text) if isinstance(part_text, str) else 0,
+                    "has_inline_data": inline_data is not None,
+                    "has_function_call": function_call is not None,
+                }
+            )
+
+        diagnostics["candidates"].append(
+            {
+                "finish_reason": str(_response_field(candidate, "finish_reason", "")),
+                "finish_message": _response_field(candidate, "finish_message"),
+                "parts_count": len(parts),
+                "parts": part_descriptions,
+            }
+        )
+
+    return diagnostics
+
+
+def _compact_response_diagnostics(response: Any) -> str:
+    diagnostics = _response_diagnostics(response)
+    first_candidate = diagnostics["candidates"][0] if diagnostics["candidates"] else {}
+    summary = {
+        "has_parsed": diagnostics["has_parsed"],
+        "text_length": diagnostics["text_length"],
+        "candidate_count": diagnostics["candidate_count"],
+        "finish_reason": first_candidate.get("finish_reason") or None,
+        "finish_message": first_candidate.get("finish_message") or None,
+        "parts_count": first_candidate.get("parts_count") or 0,
+        "prompt_feedback": diagnostics["prompt_feedback"],
+    }
+    return json.dumps(summary, ensure_ascii=False, default=str)
+
+
 def _extract_response_payload(response: Any) -> dict[str, Any] | str:
     parsed = getattr(response, "parsed", None)
     if parsed is not None:
@@ -253,7 +329,10 @@ def _extract_response_payload(response: Any) -> dict[str, Any] | str:
 
     response_text = getattr(response, "text", None) if not isinstance(response, str) else response
     if response_text is None:
-        raise AIResponseSchemaError("Gemini API bos yanit dondurdu", "empty_response")
+        raise AIResponseSchemaError(
+            f"Gemini API bos yanit dondurdu | {_compact_response_diagnostics(response)}",
+            "empty_response",
+        )
     return _extract_json_object(str(response_text))
 
 
@@ -562,12 +641,15 @@ def analyze_with_gemini(
             last_error: Exception | None = None
             last_error_code = "generation_error"
             for model_name in build_model_candidates():
+                diagnostics: dict[str, Any] = {}
                 try:
                     response_payload = _generate_model_response(model_name, prompt, backend)
                     if not response_payload:
                         raise AIResponseSchemaError(
                             "Gemini API bos yanit dondurdu", "empty_response"
                         )
+
+                    diagnostics = _response_diagnostics(response_payload)
 
                     result["text"] = _normalize_ai_response(
                         response=response_payload,
@@ -594,6 +676,13 @@ def analyze_with_gemini(
                         model_name,
                         e,
                         e.error_code,
+                    )
+                    logger.warning(
+                        "AI response diagnostics (%s, %s/%s): %s",
+                        symbol,
+                        provider,
+                        model_name,
+                        json.dumps(diagnostics, ensure_ascii=False, default=str),
                     )
                 except Exception as e:
                     last_error = e
