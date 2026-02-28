@@ -1,6 +1,6 @@
 ﻿"use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,6 +15,7 @@ import {
 import { useSignals } from "@/lib/hooks/use-signals"
 import { formatDate, cn } from "@/lib/utils"
 import { EmptyState } from "@/components/shared/error-boundary"
+import { StrategyInspectorPanel } from "@/components/signals/strategy-inspector-panel"
 import { Search, RefreshCw, Download, Bell } from "lucide-react"
 
 type MarketFilter = "all" | "BIST" | "Kripto"
@@ -28,6 +29,7 @@ export default function SignalsPage() {
   const [directionFilter, setDirectionFilter] = useState<DirectionFilter>("all")
   const [specialFilter, setSpecialFilter] = useState<SpecialFilter>("all")
   const [searchQuery, setSearchQuery] = useState("")
+  const [selectedSignalId, setSelectedSignalId] = useState<number | null>(null)
 
   const { data: signals, isLoading, isError, refetch, isFetching } = useSignals({
     marketType: marketFilter,
@@ -37,7 +39,11 @@ export default function SignalsPage() {
     searchQuery,
   })
 
-  const rows = signals ?? []
+  const rows = useMemo(() => signals ?? [], [signals])
+  const selectedSignal = useMemo(
+    () => rows.find((row) => row.id === selectedSignalId) ?? rows[0] ?? null,
+    [rows, selectedSignalId]
+  )
 
   const stats = {
     total: rows.length,
@@ -135,6 +141,11 @@ export default function SignalsPage() {
         </div>
       </section>
 
+      <StrategyInspectorPanel
+        selectedSymbol={selectedSignal?.symbol ?? null}
+        selectedMarketType={selectedSignal?.marketType ?? null}
+      />
+
       <section className="border border-border bg-surface">
         <div className="border-b border-border px-3 py-2">
           <span className="label-uppercase">Kayıtlar</span>
@@ -186,7 +197,14 @@ export default function SignalsPage() {
             {!isLoading &&
               !isError &&
               rows.map((signal) => (
-                <TableRow key={signal.id} className="hover:bg-raised">
+                <TableRow
+                  key={signal.id}
+                  className={cn(
+                    "cursor-pointer hover:bg-raised",
+                    selectedSignal?.id === signal.id && "bg-raised/70"
+                  )}
+                  onClick={() => setSelectedSignalId(signal.id)}
+                >
                   <TableCell className="font-semibold text-foreground">{signal.symbol}</TableCell>
                   <TableCell>
                     <Badge variant={signal.marketType === "BIST" ? "bist" : "crypto"}>{signal.marketType}</Badge>

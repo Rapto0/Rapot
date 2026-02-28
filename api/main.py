@@ -35,6 +35,10 @@ from api.auth import (  # noqa: E402
 from api.calendar_service import calendar_service  # noqa: E402
 from api.realtime import broadcast_bist_update, broadcast_ticker  # noqa: E402
 from api.realtime import router as realtime_router  # noqa: E402
+from strategy_inspector import (  # noqa: E402
+    StrategyInspectorError,
+    inspect_strategy,
+)
 
 # Rate Limiter
 limiter = Limiter(key_func=get_remote_address)
@@ -161,6 +165,37 @@ class SpecialTagHealthResponse(BaseModel):
     last_checked_at: str | None = None
     summary: str | None = None
     rows: list[SpecialTagHealthRuleResponse]
+
+
+class StrategyInspectorTimeframeResponse(BaseModel):
+    """Single timeframe inspection row."""
+
+    code: str
+    label: str
+    available: bool
+    signal_status: str
+    reason: str | None = None
+    price: float | int | None = None
+    date: str | None = None
+    active_indicators: str | None = None
+    primary_score: str | None = None
+    primary_score_label: str
+    secondary_score: str | None = None
+    secondary_score_label: str
+    raw_score: str | None = None
+    indicators: dict[str, float | int | str | None]
+
+
+class StrategyInspectorResponse(BaseModel):
+    """Strategy inspector response."""
+
+    symbol: str
+    market_type: str
+    strategy: str
+    indicator_order: list[str]
+    indicator_labels: dict[str, str]
+    generated_at: str
+    timeframes: list[StrategyInspectorTimeframeResponse]
 
 
 class TradeResponse(BaseModel):
@@ -395,6 +430,62 @@ async def get_special_tag_health(
         last_checked_at=last_checked_at,
         summary=summary or None,
         rows=[SpecialTagHealthRuleResponse(**row) for row in coverage_rows],
+    )
+
+
+@app.get(
+    "/ops/strategy-inspector",
+    response_model=StrategyInspectorResponse,
+    tags=["Operations"],
+)
+@limiter.limit("30/minute")
+async def get_strategy_inspector(
+    request: Request,
+    symbol: str = Query(..., min_length=1, max_length=20, description="Sembol"),
+    strategy: str = Query(..., description="Strateji (COMBO/HUNTER)"),
+    market_type: str | None = Query(
+        None,
+        description="Piyasa tipi (BIST/Kripto/AUTO)",
+    ),
+):
+    """
+    Tek sembol icin strateji indikator dump'i dondurur.
+
+    Telegram inspector araci ve frontend denetim paneli bu endpoint'i kullanir.
+    """
+    try:
+        report = inspect_strategy(symbol=symbol, strategy=strategy, market_type=market_type)
+    except StrategyInspectorError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # pragma: no cover - defensive API path
+        raise HTTPException(status_code=500, detail="Strategy inspector hesaplanamadi.") from exc
+
+    return StrategyInspectorResponse(
+        symbol=report["symbol"],
+        market_type=report["market_type"],
+        strategy=report["strategy"],
+        indicator_order=list(report["indicator_order"]),
+        indicator_labels=dict(report["indicator_labels"]),
+        generated_at=report["generated_at"],
+        timeframes=[
+            StrategyInspectorTimeframeResponse(
+                code=timeframe["code"],
+                label=timeframe["label"],
+                available=bool(timeframe["available"]),
+                signal_status=str(timeframe["signal_status"]),
+                reason=timeframe.get("reason"),
+                price=timeframe.get("price"),
+                date=timeframe.get("date"),
+                active_indicators=timeframe.get("active_indicators"),
+                primary_score=timeframe.get("primary_score"),
+                primary_score_label=str(timeframe["primary_score_label"]),
+                secondary_score=timeframe.get("secondary_score"),
+                secondary_score_label=str(timeframe["secondary_score_label"]),
+                raw_score=timeframe.get("raw_score"),
+                indicators=dict(timeframe.get("indicators", {})),
+            )
+            for timeframe in report["timeframes"]
+        ],
     )
 
 

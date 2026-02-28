@@ -108,6 +108,33 @@ export interface ApiSpecialTagHealth {
     rows: ApiSpecialTagHealthRow[];
 }
 
+export interface ApiStrategyInspectorTimeframe {
+    code: string;
+    label: string;
+    available: boolean;
+    signal_status: 'AL' | 'SAT' | 'NOTR' | 'YOK' | string;
+    reason: string | null;
+    price: number | string | null;
+    date: string | null;
+    active_indicators: string | null;
+    primary_score: string | null;
+    primary_score_label: string;
+    secondary_score: string | null;
+    secondary_score_label: string;
+    raw_score: string | null;
+    indicators: Record<string, number | string | null>;
+}
+
+export interface ApiStrategyInspector {
+    symbol: string;
+    market_type: 'BIST' | 'Kripto' | string;
+    strategy: 'COMBO' | 'HUNTER' | string;
+    indicator_order: string[];
+    indicator_labels: Record<string, string>;
+    generated_at: string;
+    timeframes: ApiStrategyInspectorTimeframe[];
+}
+
 // ==================== API CLIENT ====================
 
 class ApiError extends Error {
@@ -352,6 +379,27 @@ export async function fetchSpecialTagHealth(
     const query = searchParams.toString();
     return fetchApi<ApiSpecialTagHealth>(
         `${API_BASE_URL}/ops/special-tag-health${query ? `?${query}` : ''}`
+    );
+}
+
+export interface StrategyInspectorParams {
+    symbol: string;
+    strategy: 'COMBO' | 'HUNTER';
+    market_type?: 'AUTO' | 'BIST' | 'Kripto';
+}
+
+export async function fetchStrategyInspector(
+    params: StrategyInspectorParams
+): Promise<ApiStrategyInspector> {
+    const searchParams = new URLSearchParams();
+    searchParams.set('symbol', params.symbol);
+    searchParams.set('strategy', params.strategy);
+    if (params.market_type && params.market_type !== 'AUTO') {
+        searchParams.set('market_type', params.market_type);
+    }
+
+    return fetchApi<ApiStrategyInspector>(
+        `${API_BASE_URL}/ops/strategy-inspector?${searchParams.toString()}`
     );
 }
 
