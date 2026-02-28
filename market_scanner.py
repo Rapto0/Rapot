@@ -231,6 +231,31 @@ def format_ai_message_for_telegram(symbol: str, ai_response: str) -> str:
     summary_items = payload.summary or ["Ozet maddesi uretilemedi."]
     summary_lines = "\n".join(f"• {item}" for item in summary_items[:3])
 
+    def _short_explanation(text: str, max_sentences: int = 2, max_chars: int = 420) -> str:
+        normalized = " ".join(str(text or "").split())
+        if not normalized:
+            return "Detayli yorum uretilemedi."
+
+        sentences = []
+        current = []
+        for char in normalized:
+            current.append(char)
+            if char in ".!?":
+                sentence = "".join(current).strip()
+                if sentence:
+                    sentences.append(sentence)
+                current = []
+            if len(sentences) >= max_sentences:
+                break
+
+        if not sentences and current:
+            sentences.append("".join(current).strip())
+
+        compact = " ".join(sentences).strip() or normalized
+        if len(compact) > max_chars:
+            compact = compact[: max_chars - 3].rstrip() + "..."
+        return compact
+
     def _join_levels(levels: Any) -> str:
         if isinstance(levels, str):
             return levels.strip() or "-"
@@ -242,18 +267,30 @@ def format_ai_message_for_telegram(symbol: str, ai_response: str) -> str:
     support_text = _join_levels(payload.key_levels.support)
     resistance_text = _join_levels(payload.key_levels.resistance)
     risk_level = payload.risk_level or "Belirsiz"
+    compact_explanation = _short_explanation(explanation)
 
-    return (
-        f"{header}\n"
-        f"{sentiment_icon} <b>{sentiment_label}</b> ({score_text})\n\n"
-        f"{explanation}\n\n"
-        f"📌 <b>Öne Çıkanlar:</b>\n"
-        f"{summary_lines}\n\n"
-        f"📍 <b>Kritik Seviyeler:</b>\n"
-        f"• Destek: {support_text}\n"
-        f"• Direnç: {resistance_text}\n"
-        f"⚠️ <b>Risk:</b> {risk_level}"
-    )
+    meta_lines = [
+        f"{sentiment_icon} <b>{sentiment_label}</b>",
+        f"• Skor: {score_text}",
+        f"• Risk: {risk_level}",
+    ]
+
+    level_lines = []
+    if support_text != "-":
+        level_lines.append(f"• Destek: {support_text}")
+    if resistance_text != "-":
+        level_lines.append(f"• Direnç: {resistance_text}")
+
+    sections = [
+        header,
+        "\n".join(meta_lines),
+        f"📌 <b>Ozet:</b>\n{summary_lines}",
+        f"🧭 <b>Yorum:</b>\n{compact_explanation}",
+    ]
+    if level_lines:
+        sections.append("📍 <b>Seviyeler:</b>\n" + "\n".join(level_lines))
+
+    return "\n\n".join(sections)
 
 
 def process_symbol(
@@ -377,7 +414,7 @@ def process_symbol(
             matched_timeframes=trigger_rule,
             scenario_name=title_prefix,
         )
-        send_message(f"{title_prefix} #{symbol}\n🧠 AI; Teknik ve Haberleri inceliyor...")
+        send_message(f"{title_prefix} #{symbol}")
         news_data = fetch_market_news(symbol, market_type)
         ai_msg = analyze_with_gemini(
             symbol=symbol,

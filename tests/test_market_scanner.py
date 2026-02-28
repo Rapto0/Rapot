@@ -173,7 +173,9 @@ class TestFormatAIMessageForTelegram:
 
         assert "AI KARARI (AYES)" in result
         assert "<b>SAT</b>" in result
-        assert "Öne Çıkanlar" in result
+        assert "Ozet" in result
+        assert "Yorum" in result
+        assert "Risk: Orta" in result
         assert "Destek: 21.50, 20.80" in result
         assert '"sentiment_score"' not in result
 
@@ -299,7 +301,7 @@ class TestTelegramSignalFiltering:
 
         assert len(saved_signals) == 3
         assert tagged_signals
-        assert any("AI; Teknik ve Haberleri inceliyor" in message for message in sent_messages)
+        assert any("COMBO: ÇOK UCUZ!" in message for message in sent_messages)
 
     @pytest.mark.unit
     def test_special_signal_ai_uses_multitimeframe_payload(self, monkeypatch):
@@ -432,4 +434,4 @@ class TestTelegramSignalFiltering:
         assert ai_calls
         assert ai_calls[0]["technical_data"]["special_tag"] == "BELES"
         assert ai_calls[0]["technical_data"]["trigger_rule"] == ["1D", "2W-FRI", "ME"]
-        assert any("AI; Teknik ve Haberleri inceliyor" in message for message in sent_messages)
+        assert any("COMBO: BELEŞ" in message for message in sent_messages)
