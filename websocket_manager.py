@@ -170,7 +170,6 @@ class BinanceWebSocketManager:
         if not self._subscriptions:
             # Default: subscribe to all USDT pairs mini ticker
             await self.subscribe_all_tickers()
-            return
 
         streams = "/".join(self._subscriptions)
         url = f"{self.COMBINED_URL}?streams={streams}"
@@ -181,6 +180,10 @@ class BinanceWebSocketManager:
 
     async def _listen(self):
         """Listen for incoming WebSocket messages."""
+        if self._ws is None:
+            logger.warning("WebSocket connection not established, skipping listen")
+            return
+
         async for msg in self._ws:
             if msg.type == aiohttp.WSMsgType.TEXT:
                 await self._handle_message(json.loads(msg.data))
