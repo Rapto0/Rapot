@@ -1,6 +1,4 @@
 import json
-import os
-import tempfile
 import time
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime
@@ -11,6 +9,7 @@ import pandas as pd
 from isyatirimhisse import fetch_stock_data
 
 from config import rate_limits
+from isyatirim_ssl import ensure_isyatirim_ca_bundle
 from logger import get_logger
 from settings import settings
 
@@ -19,68 +18,10 @@ logger = get_logger(__name__)
 # Binance client - lazy initialization (sadece kripto taraması için)
 _binance_client = None
 _bist_force_yfinance_fallback = False
-_isyatirim_ca_bundle_ready = False
 _bist_yf_failure_cooldown_until: dict[str, float] = {}
 _bist_yf_failure_logged_reason: dict[str, str] = {}
 _YF_SHORT_COOLDOWN_SECONDS = 60 * 60
 _YF_LONG_COOLDOWN_SECONDS = 24 * 60 * 60
-
-ISYATIRIM_INTERMEDIATE_PEM = """-----BEGIN CERTIFICATE-----
-MIIElzCCA3+gAwIBAgIRAIPahmyfUtUakxi40OfAMWkwDQYJKoZIhvcNAQELBQAw
-TDEgMB4GA1UECxMXR2xvYmFsU2lnbiBSb290IENBIC0gUjMxEzARBgNVBAoTCkds
-b2JhbFNpZ24xEzARBgNVBAMTCkdsb2JhbFNpZ24wHhcNMjUwNzE2MDMwNTQ2WhcN
-MjcwNzE2MDAwMDAwWjBTMQswCQYDVQQGEwJCRTEZMBcGA1UEChMQR2xvYmFsU2ln
-biBudi1zYTEpMCcGA1UEAxMgR2xvYmFsU2lnbiBHQ0MgUjMgRVYgVExTIENBIDIw
-MjUwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDEG4l4CpUk556CyXIA
-B3ihV2b8sWMNGwnW0wCpuaHHA5rlXpSWE1AD6r9hyGhQOrc45nPOj6Fvsqw8dFZw
-FpAJzlk6FxhYP1ve8KPJvIpt6f5v28jOlzfs8c7dJ8ZmqKHB0Zj6RbAvA9vAl2A3
-j0mu+ooXN3/QaFvVihDV/SRyOfFBlhPAsRk8y97tLPWx7/4YzfE6NSLKsU1yF+tf
-BTttbaXTH/cWY/KQE3ZHTFRo6XouemjPBP9CDXeTR11tm37Bgn3QOj93FHdi1JJp
-eNBGEOGvM8qhTV/77kDiUyOvsp4jZOhas6kIRn8nWK7fCPNdFJYi1Ctvd7gnQ1gB
-lW71AgMBAAGjggFrMIIBZzAOBgNVHQ8BAf8EBAMCAYYwHQYDVR0lBBYwFAYIKwYB
-BQUHAwEGCCsGAQUFBwMCMBIGA1UdEwEB/wQIMAYBAf8CAQAwHQYDVR0OBBYEFGMQ
-f+QoM5r4R2BZUn5XEMdN+BcWMB8GA1UdIwQYMBaAFI/wS3+oLkUkrk1Q+mOai97i
-3Ru8MHsGCCsGAQUFBwEBBG8wbTAuBggrBgEFBQcwAYYiaHR0cDovL29jc3AyLmds
-b2JhbHNpZ24uY29tL3Jvb3RyMzA7BggrBgEFBQcwAoYvaHR0cDovL3NlY3VyZS5n
-bG9iYWxzaWduLmNvbS9jYWNlcnQvcm9vdC1yMy5jcnQwNgYDVR0fBC8wLTAroCmg
-J4YlaHR0cDovL2NybC5nbG9iYWxzaWduLmNvbS9yb290LXIzLmNybDAtBgNVHSAE
-JjAkMAcGBWeBDAEBMAwGCisGAQQBoDIKAQEwCwYJKwYBBAGgMgEBMA0GCSqGSIb3
-DQEBCwUAA4IBAQCtcTjIgw+tiW7E+sCTJ36nrC0IOxMpwE+nTaUG1xQJb+QE18vF
-cPvEiqv8OonEBkQJFQ1N5YdDu9kydDYXBmIheYD9Z//TlUBnLL7HBje1ugplB0xE
-jpU52q0XLxe6nHfeEKnslZ/Q/eDEsjZKxwF51SlGO6ap+09hfdbfMXDkTsfa+yXg
-dIxZRCud0QEBTZAow0iCs3rf5wVALhhh2ePEwqxEm1LkUhvkJMLSCobYcJ+vXprK
-JijbpPM602H1kqxNcD/nE7aCNm7g5GTaT04SCGYiQJ32r9mhx34peuYz05pY+AA3
-aVB22PDvfoNyGZyClRtNt4KKg8dGJlYEhc3D
------END CERTIFICATE-----"""
-
-
-def _ensure_isyatirim_ca_bundle() -> None:
-    """
-    requests/certifi bundle'ina Is Yatirim'in eksik gonderdigi ara sertifikayi ekler.
-    Boylece SSL dogrulama requests tarafinda kalici olarak duzelir.
-    """
-    global _isyatirim_ca_bundle_ready
-    if _isyatirim_ca_bundle_ready:
-        return
-
-    try:
-        import certifi
-
-        base_bundle = Path(certifi.where())
-        merged_bundle = Path(tempfile.gettempdir()) / "rapot_requests_ca_bundle_isyatirim.pem"
-
-        base_data = base_bundle.read_bytes()
-        intermediate_data = ISYATIRIM_INTERMEDIATE_PEM.encode("ascii")
-        if intermediate_data not in base_data:
-            merged_bundle.write_bytes(base_data.rstrip() + b"\n" + intermediate_data + b"\n")
-        else:
-            merged_bundle.write_bytes(base_data)
-
-        os.environ["REQUESTS_CA_BUNDLE"] = str(merged_bundle)
-        os.environ["SSL_CERT_FILE"] = str(merged_bundle)
-        _isyatirim_ca_bundle_ready = True
-    except Exception as e:
-        logger.warning(f"Is Yatirim CA bundle hazirlanamadi: {e}")
 
 
 def _fetch_bist_data_yfinance(symbol: str, start_date: str = "01-01-2015") -> pd.DataFrame | None:
@@ -283,7 +224,7 @@ def get_bist_data(symbol: str, start_date: str = "01-01-2015") -> pd.DataFrame |
     BIST Verisi Çeker (Retry Mekanizmalı)
     Hata alırsa 3 kez tekrar dener.
     """
-    _ensure_isyatirim_ca_bundle()
+    ensure_isyatirim_ca_bundle()
 
     global _bist_force_yfinance_fallback
 
