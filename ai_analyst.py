@@ -15,6 +15,7 @@ except Exception:  # pragma: no cover
     google_genai = None
 
 from ai_schema import (
+    AIAnalysisPayload,
     AIResponseSchemaError,
     build_ai_error_payload,
     dump_ai_payload,
@@ -33,6 +34,7 @@ logger = get_logger(__name__)
 # AI timeout from settings.py
 AI_TIMEOUT = settings.ai_timeout
 AI_PROMPT_VERSION = "v4-neutral-rule-context"
+AI_RESPONSE_SCHEMA = AIAnalysisPayload.model_json_schema()
 
 _SPECIAL_TAG_PROMPT_LABELS = {
     "BELES": "VALUE_COMPRESSION_EXTREME_BUY",
@@ -100,6 +102,8 @@ def _get_generation_config() -> dict[str, Any]:
     return {
         "temperature": runtime["temperature"],
         "max_output_tokens": runtime["max_output_tokens"],
+        "response_mime_type": "application/json",
+        "response_schema": AI_RESPONSE_SCHEMA,
     }
 
 

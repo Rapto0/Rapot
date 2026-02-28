@@ -12,6 +12,18 @@ import ai_analyst
 
 class TestAIAnalystPhaseOne:
     @pytest.mark.unit
+    def test_generation_config_enforces_json_schema(self, monkeypatch):
+        monkeypatch.setattr(ai_analyst.settings, "ai_temperature", 0.2)
+        monkeypatch.setattr(ai_analyst.settings, "ai_max_output_tokens", 1024)
+
+        config = ai_analyst._get_generation_config()
+
+        assert config["response_mime_type"] == "application/json"
+        assert config["response_schema"]["type"] == "object"
+        assert "sentiment_score" in config["response_schema"]["properties"]
+        assert "technical_view" in config["response_schema"]["properties"]
+
+    @pytest.mark.unit
     def test_build_model_candidates_deduplicates_values(self, monkeypatch):
         monkeypatch.setattr(ai_analyst.settings, "ai_model", "gemini-2.5-flash")
         monkeypatch.setattr(ai_analyst.settings, "ai_enable_fallback", True)
