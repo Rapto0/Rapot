@@ -7,6 +7,7 @@ import json
 import os
 import sys
 
+import pandas as pd
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -17,6 +18,7 @@ from market_scanner import (
     format_combo_debug,
     format_hunter_debug,
     generate_manual_report,
+    process_symbol,
 )
 
 
@@ -187,3 +189,93 @@ class TestFormatAIMessageForTelegram:
     def test_fallback_for_non_json(self):
         result = format_ai_message_for_telegram("AYES", "Düz metin AI yanıtı")
         assert "Düz metin AI yanıtı" in result
+
+
+class TestTelegramSignalFiltering:
+    @pytest.mark.unit
+    def test_regular_timeframe_signals_do_not_send_telegram(self, monkeypatch):
+        df = pd.DataFrame({"Close": [1.0] * 30})
+        sent_messages = []
+        saved_signals = []
+
+        monkeypatch.setattr("market_scanner.TIMEFRAMES", [("1D", "GÜNLÜK")])
+        monkeypatch.setattr("market_scanner.resample_data", lambda current_df, tf: current_df)
+        monkeypatch.setattr(
+            "market_scanner.calculate_combo_signal",
+            lambda current_df, tf: {
+                "buy": True,
+                "sell": False,
+                "details": {"Score": "+4/-0", "PRICE": 10, "DATE": "2026-02-28"},
+            },
+        )
+        monkeypatch.setattr(
+            "market_scanner.calculate_hunter_signal",
+            lambda current_df, tf: {
+                "buy": True,
+                "sell": False,
+                "details": {"DipScore": "7/7", "PRICE": 10, "DATE": "2026-02-28"},
+            },
+        )
+        monkeypatch.setattr(
+            "market_scanner.db_save_signal", lambda **kwargs: saved_signals.append(kwargs)
+        )
+        monkeypatch.setattr("market_scanner.increment_signal_count", lambda: None)
+        monkeypatch.setattr("market_scanner.send_message", sent_messages.append)
+
+        process_symbol(df, "THYAO", "BIST")
+
+        assert len(saved_signals) == 2
+        assert sent_messages == []
+
+    @pytest.mark.unit
+    def test_special_signals_still_send_ai_messages(self, monkeypatch):
+        df = pd.DataFrame({"Close": [1.0] * 30})
+        sent_messages = []
+        saved_signals = []
+        tagged_signals = []
+
+        monkeypatch.setattr(
+            "market_scanner.TIMEFRAMES",
+            [("1D", "GÜNLÜK"), ("W-FRI", "1 HAFTALIK"), ("3W-FRI", "3 HAFTALIK")],
+        )
+        monkeypatch.setattr("market_scanner.resample_data", lambda current_df, tf: current_df)
+        monkeypatch.setattr(
+            "market_scanner.calculate_combo_signal",
+            lambda current_df, tf: {
+                "buy": True,
+                "sell": False,
+                "details": {"Score": "+4/-0", "PRICE": 10, "DATE": "2026-02-28"},
+            },
+        )
+        monkeypatch.setattr(
+            "market_scanner.calculate_hunter_signal",
+            lambda current_df, tf: {
+                "buy": False,
+                "sell": False,
+                "details": {
+                    "DipScore": "0/7",
+                    "TopScore": "0/10",
+                    "PRICE": 10,
+                    "DATE": "2026-02-28",
+                },
+            },
+        )
+        monkeypatch.setattr(
+            "market_scanner.db_save_signal", lambda **kwargs: saved_signals.append(kwargs)
+        )
+        monkeypatch.setattr("market_scanner.increment_signal_count", lambda: None)
+        monkeypatch.setattr("market_scanner.send_message", sent_messages.append)
+        monkeypatch.setattr("market_scanner.fetch_market_news", lambda symbol, market_type: [])
+        monkeypatch.setattr(
+            "market_scanner.analyze_with_gemini", lambda **kwargs: '{"summary":["ok"]}'
+        )
+        monkeypatch.setattr(
+            "market_scanner.db_set_signal_special_tag",
+            lambda **kwargs: tagged_signals.append(kwargs) or True,
+        )
+
+        process_symbol(df, "THYAO", "BIST")
+
+        assert len(saved_signals) == 3
+        assert tagged_signals
+        assert any("AI; Teknik ve Haberleri inceliyor" in message for message in sent_messages)

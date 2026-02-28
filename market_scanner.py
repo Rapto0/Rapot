@@ -305,9 +305,7 @@ def process_symbol(
 
                 if res_combo["buy"]:
                     combo_hits["buy"][tf_code] = res_combo["details"]
-                    msg = f"🟢 <b>COMBO AL</b> #{symbol} ({market_type})\nVade: {tf_label}\nSkor: {res_combo['details']['Score']}"
                     print(f">>> COMBO AL: {symbol} {tf_label}")
-                    send_message(msg)
                     # Veritabanına kaydet
                     db_save_signal(
                         symbol=symbol,
@@ -342,9 +340,7 @@ def process_symbol(
 
                 if res_hunter["buy"]:
                     hunter_hits["buy"][tf_code] = res_hunter["details"]
-                    msg = f"🚀 <b>HUNTER DİP</b> #{symbol} ({market_type})\nVade: {tf_label}\nSkor: {res_hunter['details']['DipScore']}"
                     print(f">>> HUNTER DİP: {symbol} {tf_label}")
-                    send_message(msg)
                     # Veritabanına kaydet
                     db_save_signal(
                         symbol=symbol,
