@@ -3,7 +3,11 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 
-from strategy_inspector import build_strategy_inspector_chunks, inspect_strategy_dataframe
+from strategy_inspector import (
+    build_strategy_inspector_chunks,
+    inspect_strategy_dataframe,
+    normalize_inspector_timeframe,
+)
 
 
 def build_long_ohlcv(periods: int = 480) -> pd.DataFrame:
@@ -85,5 +89,30 @@ def test_build_strategy_inspector_chunks_contains_symbol_and_strategy():
     assert "THYAO" in chunks[0]
     assert "HUNTER" in chunks[0]
     assert "<pre>" not in chunks[0]
+    assert "Mod: OZET" in chunks[0]
+    assert "Momentum" not in chunks[0]
+    assert "RSI14" in chunks[0]
+
+
+def test_build_strategy_inspector_chunks_detail_single_timeframe():
+    report = inspect_strategy_dataframe(
+        df_daily=build_long_ohlcv(),
+        symbol="THYAO",
+        market_type="BIST",
+        strategy="HUNTER",
+    )
+
+    chunks = build_strategy_inspector_chunks(report, detail=True, timeframe_code="1D")
+
+    assert len(chunks) == 1
+    assert "Mod: DETAY" in chunks[0]
     assert "Momentum" in chunks[0]
     assert "Trend" in chunks[0]
+    assert "1 HAFTALIK" not in chunks[0]
+
+
+def test_normalize_inspector_timeframe_aliases():
+    assert normalize_inspector_timeframe("1D") == "1D"
+    assert normalize_inspector_timeframe("1w") == "W-FRI"
+    assert normalize_inspector_timeframe("2hf") == "2W-FRI"
+    assert normalize_inspector_timeframe("1ay") == "ME"

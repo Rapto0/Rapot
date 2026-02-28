@@ -15,6 +15,7 @@ from strategy_inspector import (
     StrategyInspectorError,
     build_strategy_inspector_chunks,
     inspect_strategy,
+    normalize_inspector_timeframe,
 )
 from telegram_notify import get_last_messages, send_message
 
@@ -22,12 +23,8 @@ logger = get_logger(__name__)
 
 BOT_START_TIME = datetime.now()
 
-INSPECTOR_MESSAGE_PATTERN = re.compile(
-    r"^(?P<symbol>[A-Z0-9.]{1,20})\s+"
-    r"(?P<strategy>combo|hunter)"
-    r"(?:\s+(?P<market>bist|kripto|krypto|auto))?$",
-    re.IGNORECASE,
-)
+INSPECTOR_MARKET_TOKENS = {"BIST", "KRIPTO", "KRYPTO", "AUTO"}
+INSPECTOR_DETAIL_TOKENS = {"DETAY", "DETAIL"}
 
 
 def get_uptime_hours() -> float:
@@ -113,13 +110,19 @@ def handle_analiz_command(msg: str) -> None:
     send_message("Kullanim: /analiz THYAO")
 
 
-def _parse_inspector_tokens(tokens: list[str]) -> tuple[str, str, str | None]:
+def _parse_inspector_tokens(
+    tokens: list[str],
+) -> tuple[str, str, str | None, bool, str | None]:
     if len(tokens) < 2:
-        raise StrategyInspectorError("Kullanim: /indikator THYAO HUNTER [BIST|KRIPTO]")
+        raise StrategyInspectorError(
+            "Kullanim: /indikator THYAO HUNTER [BIST|KRIPTO] [DETAY|1D|1W|2W|3W|1M]"
+        )
 
     symbol = tokens[0].upper()
     strategy = tokens[1].upper()
-    market_type = tokens[2].upper() if len(tokens) > 2 else None
+    market_type: str | None = None
+    detail = False
+    timeframe_code: str | None = None
 
     if not re.match(r"^[A-Z0-9.]{1,20}$", symbol):
         raise StrategyInspectorError("Gecersiz sembol formati.")
@@ -127,25 +130,52 @@ def _parse_inspector_tokens(tokens: list[str]) -> tuple[str, str, str | None]:
     if strategy not in {"COMBO", "HUNTER"}:
         raise StrategyInspectorError("Strateji COMBO veya HUNTER olmali.")
 
-    if market_type and market_type not in {"BIST", "KRIPTO", "KRYPTO", "AUTO"}:
-        raise StrategyInspectorError("Piyasa tipi BIST, KRIPTO veya AUTO olmali.")
+    for extra_token in tokens[2:]:
+        normalized_token = extra_token.upper()
+        if normalized_token in INSPECTOR_MARKET_TOKENS:
+            if market_type is not None:
+                raise StrategyInspectorError("Piyasa tipi bir kez verilmeli.")
+            market_type = normalized_token
+            continue
 
-    return symbol, strategy, market_type
+        if normalized_token in INSPECTOR_DETAIL_TOKENS:
+            detail = True
+            continue
+
+        if timeframe_code is not None:
+            raise StrategyInspectorError("Tek komutta tek periyot secilebilir.")
+
+        timeframe_code = normalize_inspector_timeframe(normalized_token)
+
+    if timeframe_code is not None:
+        detail = True
+
+    return symbol, strategy, market_type, detail, timeframe_code
 
 
 def send_strategy_inspector_report(
     symbol: str,
     strategy: str,
     market_type: str | None = None,
+    detail: bool = False,
+    timeframe_code: str | None = None,
 ) -> None:
     """Run the strategy inspector and send the report to Telegram."""
     progress = f"Inspector basladi: {symbol} {strategy}"
     if market_type:
         progress += f" {market_type}"
+    if timeframe_code:
+        progress += f" {timeframe_code}"
+    elif detail:
+        progress += " DETAY"
     send_message(progress)
 
     report = inspect_strategy(symbol=symbol, strategy=strategy, market_type=market_type)
-    for chunk in build_strategy_inspector_chunks(report):
+    for chunk in build_strategy_inspector_chunks(
+        report,
+        detail=detail,
+        timeframe_code=timeframe_code,
+    ):
         send_message(chunk)
 
 
@@ -154,8 +184,14 @@ def handle_strategy_inspector_command(msg: str) -> None:
     try:
         parts = msg.split()
         tokens = parts[1:] if parts and parts[0].startswith("/") else parts
-        symbol, strategy, market_type = _parse_inspector_tokens(tokens)
-        send_strategy_inspector_report(symbol, strategy, market_type)
+        symbol, strategy, market_type, detail, timeframe_code = _parse_inspector_tokens(tokens)
+        send_strategy_inspector_report(
+            symbol,
+            strategy,
+            market_type,
+            detail=detail,
+            timeframe_code=timeframe_code,
+        )
     except StrategyInspectorError as exc:
         send_message(f"Inspector hatasi: {exc}")
     except Exception as exc:  # pragma: no cover - defensive Telegram path
@@ -172,10 +208,10 @@ def check_commands(scan_market_callback=None, get_scan_count_callback=None) -> N
         /tara
         /asynctara
         /analiz SYMBOL
-        /indikator SYMBOL STRATEJI [BIST|KRIPTO]
-        /inspector SYMBOL STRATEJI [BIST|KRIPTO]
-        /strateji SYMBOL STRATEJI [BIST|KRIPTO]
-        SYMBOL STRATEJI [BIST|KRIPTO]
+        /indikator SYMBOL STRATEJI [BIST|KRIPTO] [DETAY|1D|1W|2W|3W|1M]
+        /inspector SYMBOL STRATEJI [BIST|KRIPTO] [DETAY|1D|1W|2W|3W|1M]
+        /strateji SYMBOL STRATEJI [BIST|KRIPTO] [DETAY|1D|1W|2W|3W|1M]
+        SYMBOL STRATEJI [BIST|KRIPTO] [DETAY|1D|1W|2W|3W|1M]
         /health
         /portfoy
         /islemler [SYMBOL]
@@ -240,6 +276,6 @@ def check_commands(scan_market_callback=None, get_scan_count_callback=None) -> N
             run_async_scan()
 
         else:
-            matched = INSPECTOR_MESSAGE_PATTERN.fullmatch(stripped)
-            if matched:
+            parts = stripped.split()
+            if 2 <= len(parts) <= 5 and parts[1].upper() in {"COMBO", "HUNTER"}:
                 handle_strategy_inspector_command(stripped)

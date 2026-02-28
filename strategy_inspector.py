@@ -61,6 +61,10 @@ STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
 }
 
 TELEGRAM_MESSAGE_LIMIT = 3500
+TELEGRAM_COMPACT_INDICATORS: dict[str, tuple[str, ...]] = {
+    "COMBO": ("MACD", "RSI", "WR", "CCI"),
+    "HUNTER": ("RSI", "MACD", "W%R", "CCI", "RSI2"),
+}
 TELEGRAM_GROUP_ORDER: dict[str, tuple[tuple[str, tuple[str, ...]], ...]] = {
     "COMBO": (("Cekirdek", ("MACD", "RSI", "WR", "CCI")),),
     "HUNTER": (
@@ -88,6 +92,25 @@ TELEGRAM_INDICATOR_LABELS: dict[str, str] = {
     "KeltPB": "Kel%",
     "RSI2": "RSI2",
     "WR": "W%R",
+}
+TELEGRAM_TIMEFRAME_ALIASES: dict[str, str] = {
+    "1D": "1D",
+    "1G": "1D",
+    "GUNLUK": "1D",
+    "W-FRI": "W-FRI",
+    "1W": "W-FRI",
+    "1HF": "W-FRI",
+    "HAFTALIK": "W-FRI",
+    "2W-FRI": "2W-FRI",
+    "2W": "2W-FRI",
+    "2HF": "2W-FRI",
+    "3W-FRI": "3W-FRI",
+    "3W": "3W-FRI",
+    "3HF": "3W-FRI",
+    "ME": "ME",
+    "1M": "ME",
+    "1AY": "ME",
+    "AYLIK": "ME",
 }
 
 
@@ -288,6 +311,35 @@ def _format_indicator_value(value: Any) -> str:
     return str(value)
 
 
+def normalize_inspector_timeframe(value: str | None) -> str | None:
+    if value is None:
+        return None
+
+    normalized = value.strip().upper()
+    if not normalized:
+        return None
+
+    timeframe_code = TELEGRAM_TIMEFRAME_ALIASES.get(normalized)
+    if timeframe_code is None:
+        raise StrategyInspectorError("Periyot 1D, 1W, 2W, 3W veya 1M olmali.")
+    return timeframe_code
+
+
+def _select_report_timeframes(
+    report: dict[str, Any],
+    timeframe_code: str | None = None,
+) -> list[dict[str, Any]]:
+    if timeframe_code is None:
+        return list(report["timeframes"])
+
+    selected = [
+        timeframe for timeframe in report["timeframes"] if timeframe["code"] == timeframe_code
+    ]
+    if not selected:
+        raise StrategyInspectorError(f"Periyot bulunamadi: {timeframe_code}")
+    return selected
+
+
 def _build_indicator_lines(
     strategy: str,
     indicator_order: list[str],
@@ -316,29 +368,107 @@ def _build_indicator_lines(
     return rows
 
 
-def build_strategy_inspector_chunks(report: dict[str, Any]) -> list[str]:
-    """
-    Convert structured inspector data into Telegram-friendly chunks.
-    """
-    header = (
+def _build_telegram_header(
+    report: dict[str, Any],
+    mode_label: str,
+    timeframe_code: str | None = None,
+) -> str:
+    if timeframe_code:
+        timeframe = _select_report_timeframes(report, timeframe_code)[0]
+        period_label = timeframe["label"]
+    else:
+        period_label = "1G / 1Hf / 2Hf / 3Hf / 1Ay"
+
+    return (
         f"🔬 <b>STRATEJI INSPECTOR</b>\n"
         f"<b>{html.escape(report['symbol'])}</b> | "
         f"{html.escape(report['market_type'])} | "
         f"{html.escape(report['strategy'])}\n"
-        f"Periyotlar: 1G / 1Hf / 2Hf / 3Hf / 1Ay"
+        f"Mod: {html.escape(mode_label)} | Periyot: {html.escape(period_label)}"
     )
 
+
+def _chunk_telegram_blocks(header: str, blocks: list[str]) -> list[str]:
+    chunks: list[str] = []
+    current_chunk = header
+    for block in blocks:
+        candidate = f"{current_chunk}\n\n{block}"
+        if len(candidate) > TELEGRAM_MESSAGE_LIMIT:
+            chunks.append(current_chunk)
+            current_chunk = f"🔬 <b>STRATEJI INSPECTOR DEVAM</b>\n\n{block}"
+        else:
+            current_chunk = candidate
+
+    if current_chunk:
+        chunks.append(current_chunk)
+
+    return chunks
+
+
+def _build_strategy_summary_chunks(
+    report: dict[str, Any],
+    timeframe_code: str | None = None,
+) -> list[str]:
+    header = _build_telegram_header(report, "OZET", timeframe_code)
     indicator_order = report["indicator_order"]
+    compact_indicators = TELEGRAM_COMPACT_INDICATORS.get(
+        report["strategy"], tuple(indicator_order[:4])
+    )
     blocks: list[str] = []
 
-    for timeframe in report["timeframes"]:
+    for timeframe in _select_report_timeframes(report, timeframe_code):
         title = (
             f"{_signal_emoji(timeframe['signal_status'])} "
             f"<b>{html.escape(timeframe['label'])}</b> | "
             f"<b>{html.escape(timeframe['signal_status'])}</b>"
         )
         if not timeframe["available"]:
-            blocks.append(f"{title}\n" f"• Sebep: {html.escape(str(timeframe['reason']))}")
+            blocks.append(f"{title}\n• Sebep: {html.escape(str(timeframe['reason']))}")
+            continue
+
+        block_lines = [
+            title,
+            (
+                f"• Tarih: {html.escape(str(timeframe['date']))} | "
+                f"Fiyat {_format_indicator_value(timeframe['price'])} | "
+                f"Dip {_format_indicator_value(timeframe['primary_score'])} | "
+                f"Tepe {_format_indicator_value(timeframe['secondary_score'])} | "
+                f"Aktif {html.escape(str(timeframe['active_indicators']))}"
+            ),
+        ]
+
+        compact_line = " | ".join(
+            (
+                f"{TELEGRAM_INDICATOR_LABELS.get(indicator_key, indicator_key)} "
+                f"{_format_indicator_value(timeframe['indicators'].get(indicator_key))}"
+            )
+            for indicator_key in compact_indicators
+            if indicator_key in indicator_order
+        )
+        if compact_line:
+            block_lines.append(f"• {html.escape(compact_line)}")
+
+        blocks.append("\n".join(block_lines))
+
+    return _chunk_telegram_blocks(header, blocks)
+
+
+def _build_strategy_detail_chunks(
+    report: dict[str, Any],
+    timeframe_code: str | None = None,
+) -> list[str]:
+    header = _build_telegram_header(report, "DETAY", timeframe_code)
+    indicator_order = report["indicator_order"]
+    blocks: list[str] = []
+
+    for timeframe in _select_report_timeframes(report, timeframe_code):
+        title = (
+            f"{_signal_emoji(timeframe['signal_status'])} "
+            f"<b>{html.escape(timeframe['label'])}</b> | "
+            f"<b>{html.escape(timeframe['signal_status'])}</b>"
+        )
+        if not timeframe["available"]:
+            blocks.append(f"{title}\n• Sebep: {html.escape(str(timeframe['reason']))}")
             continue
 
         score_line = (
@@ -365,21 +495,19 @@ def build_strategy_inspector_chunks(report: dict[str, Any]) -> list[str]:
             indicator_order=indicator_order,
             indicator_values=timeframe["indicators"],
         )
-        block_lines = [title, *meta_lines]
-        block_lines.extend(indicator_lines)
-        blocks.append("\n".join(block_lines))
+        blocks.append("\n".join([title, *meta_lines, *indicator_lines]))
 
-    chunks: list[str] = []
-    current_chunk = header
-    for block in blocks:
-        candidate = f"{current_chunk}\n\n{block}"
-        if len(candidate) > TELEGRAM_MESSAGE_LIMIT:
-            chunks.append(current_chunk)
-            current_chunk = f"🔬 <b>STRATEJI INSPECTOR DEVAM</b>\n\n{block}"
-        else:
-            current_chunk = candidate
+    return _chunk_telegram_blocks(header, blocks)
 
-    if current_chunk:
-        chunks.append(current_chunk)
 
-    return chunks
+def build_strategy_inspector_chunks(
+    report: dict[str, Any],
+    detail: bool = False,
+    timeframe_code: str | None = None,
+) -> list[str]:
+    """
+    Convert structured inspector data into Telegram-friendly chunks.
+    """
+    if detail or timeframe_code is not None:
+        return _build_strategy_detail_chunks(report, timeframe_code=timeframe_code)
+    return _build_strategy_summary_chunks(report, timeframe_code=timeframe_code)
