@@ -16,12 +16,24 @@ class TestAIAnalystPhaseOne:
         monkeypatch.setattr(ai_analyst.settings, "ai_temperature", 0.2)
         monkeypatch.setattr(ai_analyst.settings, "ai_max_output_tokens", 1024)
 
-        config = ai_analyst._get_generation_config()
+        config = ai_analyst._get_generation_config("google.generativeai")
 
         assert config["response_mime_type"] == "application/json"
         assert config["response_schema"]["type"] == "object"
         assert "sentiment_score" in config["response_schema"]["properties"]
         assert "technical_view" in config["response_schema"]["properties"]
+
+    @pytest.mark.unit
+    def test_generation_config_uses_response_json_schema_for_google_genai(self, monkeypatch):
+        monkeypatch.setattr(ai_analyst.settings, "ai_temperature", 0.2)
+        monkeypatch.setattr(ai_analyst.settings, "ai_max_output_tokens", 1024)
+
+        config = ai_analyst._get_generation_config("google.genai")
+
+        assert config["response_mime_type"] == "application/json"
+        assert "response_json_schema" in config
+        assert "response_schema" not in config
+        assert config["response_json_schema"]["type"] == "object"
 
     @pytest.mark.unit
     def test_build_model_candidates_deduplicates_values(self, monkeypatch):

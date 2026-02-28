@@ -97,14 +97,18 @@ def build_model_candidates(
     return unique_models
 
 
-def _get_generation_config() -> dict[str, Any]:
+def _get_generation_config(backend: str | None = None) -> dict[str, Any]:
     runtime = get_ai_runtime_settings()
-    return {
+    config = {
         "temperature": runtime["temperature"],
         "max_output_tokens": runtime["max_output_tokens"],
         "response_mime_type": "application/json",
-        "response_schema": AI_RESPONSE_SCHEMA,
     }
+    if backend == "google.genai":
+        config["response_json_schema"] = AI_RESPONSE_SCHEMA
+    else:
+        config["response_schema"] = AI_RESPONSE_SCHEMA
+    return config
 
 
 def _ensure_gemini_backend() -> tuple[str | None, str]:
@@ -143,7 +147,7 @@ def _generate_with_google_genai(model_name: str, prompt: str) -> Any:
     if gemini_client is None:
         raise RuntimeError("Gemini client hazir degil")
 
-    generation_config = _get_generation_config()
+    generation_config = _get_generation_config("google.genai")
 
     try:
         response = gemini_client.models.generate_content(
@@ -161,7 +165,7 @@ def _generate_with_legacy_genai(model_name: str, prompt: str) -> Any:
     if legacy_genai is None:
         raise RuntimeError("Legacy Gemini client hazir degil")
 
-    generation_config = _get_generation_config()
+    generation_config = _get_generation_config("google.generativeai")
 
     try:
         model = legacy_genai.GenerativeModel(model_name, generation_config=generation_config)
