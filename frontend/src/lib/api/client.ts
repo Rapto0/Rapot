@@ -55,6 +55,21 @@ export interface ApiAIAnalysis {
     signal_type: string | null;
     analysis_text: string;
     technical_data: string | null;
+    provider?: string | null;
+    model?: string | null;
+    backend?: string | null;
+    prompt_version?: string | null;
+    sentiment_score?: number | null;
+    sentiment_label?: string | null;
+    confidence_score?: number | null;
+    risk_level?: string | null;
+    technical_bias?: string | null;
+    technical_strength?: number | null;
+    news_bias?: string | null;
+    news_strength?: number | null;
+    headline_count?: number | null;
+    latency_ms?: number | null;
+    error_code?: string | null;
     created_at: string | null;
 }
 
@@ -133,6 +148,35 @@ export interface ApiStrategyInspector {
     indicator_labels: Record<string, string>;
     generated_at: string;
     timeframes: ApiStrategyInspectorTimeframe[];
+}
+
+export interface ApiStructuredAnalysis {
+    sentiment_score: number;
+    sentiment_label: string;
+    confidence_score: number;
+    risk_level: string;
+    summary: string[];
+    explanation: string;
+    technical_view: {
+        bias: string;
+        strength: number;
+        conflicts: string[];
+    };
+    news_view: {
+        bias: string;
+        strength: number;
+        headline_count: number;
+    };
+    key_levels: {
+        support: string[];
+        resistance: string[];
+    };
+    provider?: string | null;
+    model?: string | null;
+    backend?: string | null;
+    prompt_version?: string | null;
+    error?: string | null;
+    error_code?: string | null;
 }
 
 // ==================== API CLIENT ====================
@@ -446,15 +490,47 @@ export async function fetchSignalAnalysis(signalId: number): Promise<ApiAIAnalys
 export interface StructuredAIAnalysisResponse {
     symbol: string;
     market_type: string;
+    strategy: string;
+    timeframe: string;
     score: string;
     summary: string;
-    structured_analysis: unknown;
+    structured_analysis: ApiStructuredAnalysis;
+    inspection: ApiStrategyInspector;
     updated_at: string;
 }
 
-export async function fetchAIAnalysis(symbol: string, marketType: string = 'BIST'): Promise<StructuredAIAnalysisResponse> {
+function safeParseTechnicalData(value: string | null): Record<string, any> | null {
+    if (!value) return null;
+    try {
+        const parsed = JSON.parse(value);
+        return parsed && typeof parsed === 'object' ? parsed : null;
+    } catch {
+        return null;
+    }
+}
+
+export interface AIAnalysisParams {
+    symbol: string;
+    market_type?: 'BIST' | 'Kripto' | 'AUTO';
+    strategy?: 'COMBO' | 'HUNTER';
+    timeframe?: 'ALL' | '1D' | '1W' | '2W' | '3W' | '1M';
+}
+
+export async function fetchAIAnalysis(params: AIAnalysisParams): Promise<StructuredAIAnalysisResponse> {
+    const searchParams = new URLSearchParams();
+    searchParams.set('symbol', params.symbol);
+    if (params.market_type && params.market_type !== 'AUTO') {
+        searchParams.set('market_type', params.market_type);
+    }
+    if (params.strategy) {
+        searchParams.set('strategy', params.strategy);
+    }
+    if (params.timeframe && params.timeframe !== 'ALL') {
+        searchParams.set('timeframe', params.timeframe);
+    }
+
     return fetchApi<StructuredAIAnalysisResponse>(
-        `${API_BASE_URL}/market/analysis?symbol=${symbol}&market_type=${marketType}`
+        `${API_BASE_URL}/market/analysis?${searchParams.toString()}`
     );
 }
 
@@ -468,7 +544,22 @@ export function transformAnalysis(apiAnalysis: ApiAIAnalysis) {
         scenarioName: apiAnalysis.scenario_name || '',
         signalType: apiAnalysis.signal_type as 'AL' | 'SAT' | null,
         analysisText: apiAnalysis.analysis_text,
-        technicalData: apiAnalysis.technical_data ? JSON.parse(apiAnalysis.technical_data) : null,
+        technicalData: safeParseTechnicalData(apiAnalysis.technical_data),
+        provider: apiAnalysis.provider ?? null,
+        model: apiAnalysis.model ?? null,
+        backend: apiAnalysis.backend ?? null,
+        promptVersion: apiAnalysis.prompt_version ?? null,
+        sentimentScore: apiAnalysis.sentiment_score ?? null,
+        sentimentLabel: apiAnalysis.sentiment_label ?? null,
+        confidenceScore: apiAnalysis.confidence_score ?? null,
+        riskLevel: apiAnalysis.risk_level ?? null,
+        technicalBias: apiAnalysis.technical_bias ?? null,
+        technicalStrength: apiAnalysis.technical_strength ?? null,
+        newsBias: apiAnalysis.news_bias ?? null,
+        newsStrength: apiAnalysis.news_strength ?? null,
+        headlineCount: apiAnalysis.headline_count ?? null,
+        latencyMs: apiAnalysis.latency_ms ?? null,
+        errorCode: apiAnalysis.error_code ?? null,
         createdAt: apiAnalysis.created_at || new Date().toISOString(),
     };
 }

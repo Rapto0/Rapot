@@ -10,7 +10,7 @@ import {
   History,
   Activity,
   Settings,
-  LineChart,
+  Brain,
   CalendarDays,
   BarChart3,
   Home,
@@ -29,7 +29,7 @@ const navigation: NavItem[] = [
   { name: "Sinyaller", href: "/signals", icon: Bell },
   { name: "İşlemler", href: "/trades", icon: History },
   { name: "Bot Sağlığı", href: "/health", icon: Activity },
-  { name: "TradingView", href: "/tradingview", icon: LineChart },
+  { name: "AI", href: "/ai", icon: Brain },
   { name: "Takvim", href: "/calendar", icon: CalendarDays },
 ]
 

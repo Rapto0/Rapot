@@ -6,7 +6,7 @@ Tüm environment değişkenleri ve konfigürasyonlar burada yönetilir.
 from functools import lru_cache
 
 from pydantic import Field
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -54,12 +54,22 @@ class Settings(BaseSettings):
 
     # ==================== AI ====================
     ai_timeout: int = Field(30, ge=10, le=120, description="AI analiz timeout (saniye)")
+    ai_provider: str = Field("gemini", description="AI provider (ornek: gemini)")
+    ai_model: str = Field("gemini-2.5-flash", description="Varsayilan AI model adi")
+    ai_fallback_model: str | None = Field(
+        "gemini-2.5-flash-lite", description="Birincil model basarisiz olursa denenecek model"
+    )
+    ai_temperature: float = Field(0.2, ge=0.0, le=2.0, description="AI sicaklik degeri")
+    ai_max_output_tokens: int = Field(
+        1024, ge=128, le=8192, description="AI maksimum cikti token limiti"
+    )
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        extra = "ignore"  # Ekstra alanları yoksay
-        case_sensitive = False  # Environment variable'ları case-insensitive yap
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        case_sensitive=False,
+    )
 
 
 @lru_cache

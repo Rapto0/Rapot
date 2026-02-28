@@ -3,13 +3,13 @@ Market Scanner Modülü
 Piyasa tarama ve sinyal işleme fonksiyonları.
 """
 
-import json
 import time
 from typing import Any
 
 import pandas as pd
 
 from ai_analyst import analyze_with_gemini
+from ai_schema import AIResponseSchemaError, parse_ai_response
 from config import TIMEFRAMES, rate_limits
 from data_loader import get_all_binance_symbols, get_all_bist_symbols, resample_data
 from database import save_signal as db_save_signal
@@ -18,6 +18,7 @@ from logger import get_logger
 from news_manager import fetch_market_news
 from price_cache import cached_get_bist_data, cached_get_crypto_data, price_cache
 from signals import calculate_combo_signal, calculate_hunter_signal
+from strategy_inspector import build_strategy_ai_payload, inspect_strategy_dataframe
 from telegram_notify import send_message
 
 logger = get_logger(__name__)
@@ -200,22 +201,20 @@ def format_ai_message_for_telegram(symbol: str, ai_response: str) -> str:
     header = f"🧠 <b>AI KARARI ({symbol}):</b>"
 
     try:
-        data = json.loads(ai_response)
-    except (json.JSONDecodeError, TypeError):
+        payload = parse_ai_response(ai_response)
+    except AIResponseSchemaError:
         return f"{header}\n{ai_response}"
 
-    if not isinstance(data, dict):
-        return f"{header}\n{ai_response}"
-
-    error = data.get("error")
+    error = payload.error
     if error:
-        return f"{header}\n⚠️ AI analizi üretilemedi: {error}"
+        error_suffix = f" ({payload.error_code})" if payload.error_code else ""
+        return f"{header}\n⚠️ AI analizi üretilemedi: {error}{error_suffix}"
 
-    sentiment_label = str(data.get("sentiment_label", "NÖTR")).strip() or "NÖTR"
-    sentiment_score = data.get("sentiment_score")
+    sentiment_label = payload.sentiment_label or "NOTR"
+    sentiment_score = payload.sentiment_score
     if isinstance(sentiment_score, float):
         score_text = f"{sentiment_score:.1f}/100"
-    elif isinstance(sentiment_score, int) or sentiment_score is not None:
+    elif isinstance(sentiment_score, int):
         score_text = f"{sentiment_score}/100"
     else:
         score_text = "Skor yok"
@@ -228,20 +227,9 @@ def format_ai_message_for_telegram(symbol: str, ai_response: str) -> str:
     else:
         sentiment_icon = "⚪️"
 
-    explanation = str(data.get("explanation", "")).strip() or "Detaylı açıklama üretilemedi."
-
-    raw_summary = data.get("summary", [])
-    if isinstance(raw_summary, str):
-        summary_items = [raw_summary.strip()] if raw_summary.strip() else []
-    elif isinstance(raw_summary, list):
-        summary_items = [str(item).strip() for item in raw_summary if str(item).strip()]
-    else:
-        summary_items = []
-    if not summary_items:
-        summary_items = ["Özet maddesi üretilemedi."]
+    explanation = payload.explanation or "Detayli aciklama uretilemedi."
+    summary_items = payload.summary or ["Ozet maddesi uretilemedi."]
     summary_lines = "\n".join(f"• {item}" for item in summary_items[:3])
-
-    key_levels = data.get("key_levels") if isinstance(data.get("key_levels"), dict) else {}
 
     def _join_levels(levels: Any) -> str:
         if isinstance(levels, str):
@@ -251,9 +239,9 @@ def format_ai_message_for_telegram(symbol: str, ai_response: str) -> str:
             return ", ".join(cleaned) if cleaned else "-"
         return "-"
 
-    support_text = _join_levels(key_levels.get("support", []))
-    resistance_text = _join_levels(key_levels.get("resistance", []))
-    risk_level = str(data.get("risk_level", "Belirsiz")).strip() or "Belirsiz"
+    support_text = _join_levels(payload.key_levels.support)
+    resistance_text = _join_levels(payload.key_levels.resistance)
+    risk_level = payload.risk_level or "Belirsiz"
 
     return (
         f"{header}\n"
@@ -288,8 +276,7 @@ def process_symbol(
 
     combo_hits = {"buy": {}, "sell": {}}
     hunter_hits = {"buy": {}, "sell": {}}
-    daily_data_combo = None
-    daily_data_hunter = None
+    strategy_reports: dict[str, dict[str, Any]] = {}
 
     for tf_code, tf_label in TIMEFRAMES:
         try:
@@ -300,9 +287,6 @@ def process_symbol(
             # --- COMBO ---
             res_combo = calculate_combo_signal(df_resampled, tf_code)
             if res_combo:
-                if tf_code == "1D":
-                    daily_data_combo = res_combo["details"]
-
                 if res_combo["buy"]:
                     combo_hits["buy"][tf_code] = res_combo["details"]
                     print(f">>> COMBO AL: {symbol} {tf_label}")
@@ -335,9 +319,6 @@ def process_symbol(
             # --- HUNTER ---
             res_hunter = calculate_hunter_signal(df_resampled, tf_code)
             if res_hunter:
-                if tf_code == "1D":
-                    daily_data_hunter = res_hunter["details"]
-
                 if res_hunter["buy"]:
                     hunter_hits["buy"][tf_code] = res_hunter["details"]
                     print(f">>> HUNTER DİP: {symbol} {tf_label}")
@@ -371,16 +352,38 @@ def process_symbol(
             logger.error(f"HATA: {symbol} - {tf_label}: {str(e)}")
 
     # --- ÖZEL SİNYALLER & YAPAY ZEKA ANALİZİ ---
+    def get_strategy_report(strategy_name: str) -> dict[str, Any]:
+        if strategy_name not in strategy_reports:
+            strategy_reports[strategy_name] = inspect_strategy_dataframe(
+                df_daily=df_daily.copy(),
+                symbol=symbol,
+                market_type=market_type,
+                strategy=strategy_name,
+            )
+        return strategy_reports[strategy_name]
+
     def trigger_ai_analysis(
-        title_prefix: str, signal_dir: str, data_dict: dict[str, Any] | None
+        title_prefix: str,
+        strategy_name: str,
+        signal_dir: str,
+        special_tag: str,
+        trigger_rule: list[str],
     ) -> None:
+        technical_payload = build_strategy_ai_payload(
+            report=get_strategy_report(strategy_name),
+            signal_type=signal_dir,
+            special_tag=special_tag,
+            trigger_rule=trigger_rule,
+            matched_timeframes=trigger_rule,
+            scenario_name=title_prefix,
+        )
         send_message(f"{title_prefix} #{symbol}\n🧠 AI; Teknik ve Haberleri inceliyor...")
         news_data = fetch_market_news(symbol, market_type)
         ai_msg = analyze_with_gemini(
             symbol=symbol,
             scenario_name=title_prefix,
             signal_type=signal_dir,
-            technical_data=data_dict,
+            technical_data=technical_payload,
             news_context=news_data,
         )
         send_message(format_ai_message_for_telegram(symbol, ai_msg))
@@ -410,7 +413,13 @@ def process_symbol(
     # ÇOK UCUZ
     if "1D" in combo_hits["buy"] and "W-FRI" in combo_hits["buy"] and "3W-FRI" in combo_hits["buy"]:
         mark_special_signal("COMBO", "AL", "COK_UCUZ", "3W-FRI")
-        trigger_ai_analysis("🔥🔥 COMBO: ÇOK UCUZ!", "AL", daily_data_combo)
+        trigger_ai_analysis(
+            "🔥🔥 COMBO: ÇOK UCUZ!",
+            "COMBO",
+            "AL",
+            "COK_UCUZ",
+            ["1D", "W-FRI", "3W-FRI"],
+        )
 
     if (
         "1D" in hunter_hits["buy"]
@@ -418,30 +427,66 @@ def process_symbol(
         and "3W-FRI" in hunter_hits["buy"]
     ):
         mark_special_signal("HUNTER", "AL", "COK_UCUZ", "3W-FRI")
-        trigger_ai_analysis("🔥🔥 HUNTER: ÇOK UCUZ!", "AL", daily_data_hunter)
+        trigger_ai_analysis(
+            "🔥🔥 HUNTER: ÇOK UCUZ!",
+            "HUNTER",
+            "AL",
+            "COK_UCUZ",
+            ["1D", "W-FRI", "3W-FRI"],
+        )
 
     # BELEŞ
     if "1D" in combo_hits["buy"] and "2W-FRI" in combo_hits["buy"] and "ME" in combo_hits["buy"]:
         mark_special_signal("COMBO", "AL", "BELES", "ME")
-        trigger_ai_analysis("💎💎💎 COMBO: BELEŞ (TARİHİ FIRSAT)!", "AL", daily_data_combo)
+        trigger_ai_analysis(
+            "💎💎💎 COMBO: BELEŞ (TARİHİ FIRSAT)!",
+            "COMBO",
+            "AL",
+            "BELES",
+            ["1D", "2W-FRI", "ME"],
+        )
 
     if "1D" in hunter_hits["buy"] and "2W-FRI" in hunter_hits["buy"] and "ME" in hunter_hits["buy"]:
         mark_special_signal("HUNTER", "AL", "BELES", "ME")
-        trigger_ai_analysis("💎💎💎 HUNTER: BELEŞ (TARİHİ FIRSAT)!", "AL", daily_data_hunter)
+        trigger_ai_analysis(
+            "💎💎💎 HUNTER: BELEŞ (TARİHİ FIRSAT)!",
+            "HUNTER",
+            "AL",
+            "BELES",
+            ["1D", "2W-FRI", "ME"],
+        )
 
     # PAHALI
     if "1D" in combo_hits["sell"] and "W-FRI" in combo_hits["sell"]:
         mark_special_signal("COMBO", "SAT", "PAHALI", "W-FRI")
-        trigger_ai_analysis("⚠️⚠️ COMBO: PAHALI!", "SAT", daily_data_combo)
+        trigger_ai_analysis(
+            "⚠️⚠️ COMBO: PAHALI!",
+            "COMBO",
+            "SAT",
+            "PAHALI",
+            ["1D", "W-FRI"],
+        )
 
     if "1D" in hunter_hits["sell"] and "W-FRI" in hunter_hits["sell"]:
         mark_special_signal("HUNTER", "SAT", "PAHALI", "W-FRI")
-        trigger_ai_analysis("⚠️⚠️ HUNTER: PAHALI!", "SAT", daily_data_hunter)
+        trigger_ai_analysis(
+            "⚠️⚠️ HUNTER: PAHALI!",
+            "HUNTER",
+            "SAT",
+            "PAHALI",
+            ["1D", "W-FRI"],
+        )
 
     # FAHİŞ FİYAT
     if "1D" in combo_hits["sell"] and "W-FRI" in combo_hits["sell"] and "ME" in combo_hits["sell"]:
         mark_special_signal("COMBO", "SAT", "FAHIS_FIYAT", "ME")
-        trigger_ai_analysis("🚨🚨🚨 COMBO: FAHİŞ FİYAT!", "SAT", daily_data_combo)
+        trigger_ai_analysis(
+            "🚨🚨🚨 COMBO: FAHİŞ FİYAT!",
+            "COMBO",
+            "SAT",
+            "FAHIS_FIYAT",
+            ["1D", "W-FRI", "ME"],
+        )
 
     if (
         "1D" in hunter_hits["sell"]
@@ -449,7 +494,13 @@ def process_symbol(
         and "ME" in hunter_hits["sell"]
     ):
         mark_special_signal("HUNTER", "SAT", "FAHIS_FIYAT", "ME")
-        trigger_ai_analysis("🚨🚨🚨 HUNTER: FAHİŞ FİYAT!", "SAT", daily_data_hunter)
+        trigger_ai_analysis(
+            "🚨🚨🚨 HUNTER: FAHİŞ FİYAT!",
+            "HUNTER",
+            "SAT",
+            "FAHIS_FIYAT",
+            ["1D", "W-FRI", "ME"],
+        )
 
 
 def scan_market(check_commands_callback=None) -> None:

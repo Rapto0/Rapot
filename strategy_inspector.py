@@ -108,6 +108,7 @@ TELEGRAM_TIMEFRAME_ALIASES: dict[str, str] = {
     "1AY": "ME",
     "AYLIK": "ME",
 }
+TIMEFRAME_ORDER: dict[str, int] = {code: index for index, (code, _) in enumerate(TIMEFRAMES)}
 
 
 class StrategyInspectorError(ValueError):
@@ -289,6 +290,84 @@ def inspect_strategy(
         market_type=resolved_market_type,
         strategy=strategy,
     )
+
+
+def _normalize_timeframe_codes(codes: list[str] | tuple[str, ...] | None) -> list[str]:
+    if not codes:
+        return []
+
+    normalized_codes: list[str] = []
+    seen: set[str] = set()
+    for code in codes:
+        normalized_code = str(code).strip().upper()
+        if normalized_code and normalized_code in TIMEFRAME_ORDER and normalized_code not in seen:
+            normalized_codes.append(normalized_code)
+            seen.add(normalized_code)
+
+    normalized_codes.sort(key=lambda current_code: TIMEFRAME_ORDER[current_code])
+    return normalized_codes
+
+
+def _copy_timeframe_payload(timeframe: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "code": timeframe.get("code"),
+        "label": timeframe.get("label"),
+        "available": timeframe.get("available"),
+        "signal_status": timeframe.get("signal_status"),
+        "reason": timeframe.get("reason"),
+        "price": timeframe.get("price"),
+        "date": timeframe.get("date"),
+        "active_indicators": timeframe.get("active_indicators"),
+        "primary_score": timeframe.get("primary_score"),
+        "primary_score_label": timeframe.get("primary_score_label"),
+        "secondary_score": timeframe.get("secondary_score"),
+        "secondary_score_label": timeframe.get("secondary_score_label"),
+        "raw_score": timeframe.get("raw_score"),
+        "indicators": dict(timeframe.get("indicators", {})),
+    }
+
+
+def build_strategy_ai_payload(
+    report: dict[str, Any],
+    signal_type: str,
+    special_tag: str | None = None,
+    trigger_rule: list[str] | tuple[str, ...] | None = None,
+    matched_timeframes: list[str] | tuple[str, ...] | None = None,
+    scenario_name: str | None = None,
+) -> dict[str, Any]:
+    normalized_trigger_rule = _normalize_timeframe_codes(list(trigger_rule or []))
+    normalized_matched_codes = _normalize_timeframe_codes(
+        list(matched_timeframes or normalized_trigger_rule)
+    )
+
+    timeframe_index = {
+        timeframe["code"]: timeframe
+        for timeframe in report.get("timeframes", [])
+        if timeframe.get("code")
+    }
+    selected_timeframes = [
+        _copy_timeframe_payload(timeframe_index[current_code])
+        for current_code in normalized_matched_codes
+        if current_code in timeframe_index
+    ]
+
+    return {
+        "symbol": report["symbol"],
+        "market_type": report["market_type"],
+        "strategy": report["strategy"],
+        "scenario_name": scenario_name,
+        "signal_type": signal_type,
+        "special_tag": special_tag,
+        "trigger_rule": normalized_trigger_rule,
+        "matched_timeframes": selected_timeframes,
+        "indicator_order": list(report.get("indicator_order", [])),
+        "indicator_labels": dict(report.get("indicator_labels", {})),
+        "timeframes": [
+            _copy_timeframe_payload(timeframe) for timeframe in report.get("timeframes", [])
+        ],
+        "generated_at": report.get("generated_at"),
+        "source": "strategy_inspector",
+    }
 
 
 def _signal_emoji(signal_status: str) -> str:

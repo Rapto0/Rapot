@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 
 from strategy_inspector import (
+    build_strategy_ai_payload,
     build_strategy_inspector_chunks,
     inspect_strategy_dataframe,
     normalize_inspector_timeframe,
@@ -118,3 +119,37 @@ def test_normalize_inspector_timeframe_aliases():
     assert normalize_inspector_timeframe("1w") == "W-FRI"
     assert normalize_inspector_timeframe("2hf") == "2W-FRI"
     assert normalize_inspector_timeframe("1ay") == "ME"
+
+
+def test_build_strategy_ai_payload_contains_multitimeframe_context():
+    report = inspect_strategy_dataframe(
+        df_daily=build_long_ohlcv(),
+        symbol="THYAO",
+        market_type="BIST",
+        strategy="HUNTER",
+    )
+
+    payload = build_strategy_ai_payload(
+        report=report,
+        signal_type="AL",
+        special_tag="BELES",
+        trigger_rule=["1D", "2W-FRI", "ME"],
+        matched_timeframes=["ME", "1D", "2W-FRI"],
+        scenario_name="Test Senaryo",
+    )
+
+    assert payload["symbol"] == "THYAO"
+    assert payload["market_type"] == "BIST"
+    assert payload["strategy"] == "HUNTER"
+    assert payload["signal_type"] == "AL"
+    assert payload["special_tag"] == "BELES"
+    assert payload["scenario_name"] == "Test Senaryo"
+    assert payload["trigger_rule"] == ["1D", "2W-FRI", "ME"]
+    assert [timeframe["code"] for timeframe in payload["matched_timeframes"]] == [
+        "1D",
+        "2W-FRI",
+        "ME",
+    ]
+    assert len(payload["timeframes"]) == 5
+    assert len(payload["indicator_order"]) == 15
+    assert payload["indicator_labels"]["RSI_Fast"] == "RSI Fast"

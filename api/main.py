@@ -18,7 +18,7 @@ load_dotenv()
 import yfinance as yf  # noqa: E402
 from fastapi import Depends, FastAPI, HTTPException, Query, Request  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
-from pydantic import BaseModel  # noqa: E402
+from pydantic import BaseModel, ConfigDict  # noqa: E402
 from slowapi import Limiter, _rate_limit_exceeded_handler  # noqa: E402
 from slowapi.errors import RateLimitExceeded  # noqa: E402
 from slowapi.util import get_remote_address  # noqa: E402
@@ -37,7 +37,9 @@ from api.realtime import broadcast_bist_update, broadcast_ticker  # noqa: E402
 from api.realtime import router as realtime_router  # noqa: E402
 from strategy_inspector import (  # noqa: E402
     StrategyInspectorError,
+    build_strategy_ai_payload,
     inspect_strategy,
+    normalize_inspector_timeframe,
 )
 
 # Rate Limiter
@@ -63,6 +65,9 @@ async def lifespan(app: FastAPI):
     Uygulama yaşam döngüsü.
     Opsiyonel olarak bot scheduler döngüsünü arka plan thread'inde başlatır.
     """
+    _run_startup_sequence()
+    await _start_realtime_services()
+
     if RUN_EMBEDDED_BOT:
         # Bot Thread Başlat
         def run_scheduler():
@@ -79,9 +84,12 @@ async def lifespan(app: FastAPI):
         bot_thread = threading.Thread(target=run_scheduler, daemon=True)
         bot_thread.start()
 
-    yield
-
-    print("API shutting down.")
+    try:
+        yield
+    finally:
+        await _stop_realtime_services()
+        print("API shutting down.")
+        print("Otonom Analiz API kapatildi")
 
 
 # FastAPI uygulaması
@@ -136,8 +144,7 @@ class SignalResponse(BaseModel):
     created_at: str | None = None
     special_tag: str | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SpecialTagHealthRuleResponse(BaseModel):
@@ -198,6 +205,20 @@ class StrategyInspectorResponse(BaseModel):
     timeframes: list[StrategyInspectorTimeframeResponse]
 
 
+class MarketAnalysisResponse(BaseModel):
+    """Manual AI analysis response."""
+
+    symbol: str
+    market_type: str
+    strategy: str
+    timeframe: str
+    score: str
+    summary: str
+    structured_analysis: dict
+    inspection: StrategyInspectorResponse
+    updated_at: str
+
+
 class TradeResponse(BaseModel):
     """Trade yanıtı."""
 
@@ -211,8 +232,7 @@ class TradeResponse(BaseModel):
     status: str
     created_at: str | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class StatsResponse(BaseModel):
@@ -244,10 +264,24 @@ class AIAnalysisResponse(BaseModel):
     signal_type: str | None = None
     analysis_text: str
     technical_data: str | None = None
+    provider: str | None = None
+    model: str | None = None
+    backend: str | None = None
+    prompt_version: str | None = None
+    sentiment_score: int | None = None
+    sentiment_label: str | None = None
+    confidence_score: int | None = None
+    risk_level: str | None = None
+    technical_bias: str | None = None
+    technical_strength: int | None = None
+    news_bias: str | None = None
+    news_strength: int | None = None
+    headline_count: int | None = None
+    latency_ms: int | None = None
+    error_code: str | None = None
     created_at: str | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ==================== ENDPOINTS ====================
@@ -269,6 +303,61 @@ def _normalize_special_tag(value: str | None) -> str | None:
     if normalized in _SPECIAL_TAG_CODES:
         return normalized
     return None
+
+
+def _build_ai_analysis_response(analysis) -> AIAnalysisResponse:
+    """AI analiz kaydını geriye uyumlu metadata ile response'a çevirir."""
+    derived_metadata: dict[str, object | None] = {}
+    if (
+        analysis.provider is None
+        or analysis.model is None
+        or analysis.sentiment_label is None
+        or analysis.confidence_score is None
+        or analysis.risk_level is None
+    ):
+        try:
+            from ai_analyst import extract_analysis_metadata
+
+            derived_metadata = extract_analysis_metadata(analysis.analysis_text)
+        except Exception:
+            derived_metadata = {}
+
+    return AIAnalysisResponse(
+        id=analysis.id,
+        signal_id=analysis.signal_id,
+        symbol=analysis.symbol,
+        market_type=analysis.market_type,
+        scenario_name=analysis.scenario_name,
+        signal_type=analysis.signal_type,
+        analysis_text=analysis.analysis_text,
+        technical_data=analysis.technical_data,
+        provider=analysis.provider or derived_metadata.get("provider"),
+        model=analysis.model or derived_metadata.get("model"),
+        backend=analysis.backend or derived_metadata.get("backend"),
+        prompt_version=analysis.prompt_version or derived_metadata.get("prompt_version"),
+        sentiment_score=analysis.sentiment_score
+        if analysis.sentiment_score is not None
+        else derived_metadata.get("sentiment_score"),
+        sentiment_label=analysis.sentiment_label or derived_metadata.get("sentiment_label"),
+        confidence_score=analysis.confidence_score
+        if analysis.confidence_score is not None
+        else derived_metadata.get("confidence_score"),
+        risk_level=analysis.risk_level or derived_metadata.get("risk_level"),
+        technical_bias=analysis.technical_bias or derived_metadata.get("technical_bias"),
+        technical_strength=analysis.technical_strength
+        if analysis.technical_strength is not None
+        else derived_metadata.get("technical_strength"),
+        news_bias=analysis.news_bias or derived_metadata.get("news_bias"),
+        news_strength=analysis.news_strength
+        if analysis.news_strength is not None
+        else derived_metadata.get("news_strength"),
+        headline_count=analysis.headline_count
+        if analysis.headline_count is not None
+        else derived_metadata.get("headline_count"),
+        latency_ms=analysis.latency_ms,
+        error_code=analysis.error_code or derived_metadata.get("error_code"),
+        created_at=analysis.created_at.isoformat() if analysis.created_at else None,
+    )
 
 
 # ==================== AUTH ENDPOINTS ====================
@@ -722,20 +811,7 @@ async def get_analyses(
 
         analyses = query.order_by(AIAnalysis.created_at.desc()).limit(limit).all()
 
-        return [
-            AIAnalysisResponse(
-                id=a.id,
-                signal_id=a.signal_id,
-                symbol=a.symbol,
-                market_type=a.market_type,
-                scenario_name=a.scenario_name,
-                signal_type=a.signal_type,
-                analysis_text=a.analysis_text,
-                technical_data=a.technical_data,
-                created_at=a.created_at.isoformat() if a.created_at else None,
-            )
-            for a in analyses
-        ]
+        return [_build_ai_analysis_response(a) for a in analyses]
 
 
 @app.get("/analyses/{analysis_id}", response_model=AIAnalysisResponse, tags=["AI Analysis"])
@@ -750,17 +826,7 @@ async def get_analysis(analysis_id: int):
         if not analysis:
             raise HTTPException(status_code=404, detail="Analiz bulunamadı")
 
-        return AIAnalysisResponse(
-            id=analysis.id,
-            signal_id=analysis.signal_id,
-            symbol=analysis.symbol,
-            market_type=analysis.market_type,
-            scenario_name=analysis.scenario_name,
-            signal_type=analysis.signal_type,
-            analysis_text=analysis.analysis_text,
-            technical_data=analysis.technical_data,
-            created_at=analysis.created_at.isoformat() if analysis.created_at else None,
-        )
+        return _build_ai_analysis_response(analysis)
 
 
 @app.get(
@@ -777,17 +843,7 @@ async def get_signal_analysis(signal_id: int):
         if not analysis:
             return None
 
-        return AIAnalysisResponse(
-            id=analysis.id,
-            signal_id=analysis.signal_id,
-            symbol=analysis.symbol,
-            market_type=analysis.market_type,
-            scenario_name=analysis.scenario_name,
-            signal_type=analysis.signal_type,
-            analysis_text=analysis.analysis_text,
-            technical_data=analysis.technical_data,
-            created_at=analysis.created_at.isoformat() if analysis.created_at else None,
-        )
+        return _build_ai_analysis_response(analysis)
 
 
 @app.get("/market/overview", tags=["Market Data"])
@@ -1027,59 +1083,142 @@ async def get_market_ticker(request: Request):
         return []
 
 
-@app.get("/api/market/analysis")
+def _select_manual_analysis_timeframes(
+    report: dict, timeframe_code: str | None
+) -> tuple[str, list[dict]]:
+    normalized_timeframe = normalize_inspector_timeframe(timeframe_code)
+    if normalized_timeframe is None:
+        return "ALL", list(report["timeframes"])
+
+    selected_timeframes = [
+        timeframe for timeframe in report["timeframes"] if timeframe["code"] == normalized_timeframe
+    ]
+    if not selected_timeframes:
+        raise StrategyInspectorError(f"Periyot bulunamadi: {normalized_timeframe}")
+    return normalized_timeframe, selected_timeframes
+
+
+def _derive_manual_signal_type(selected_timeframes: list[dict]) -> str:
+    buy_count = sum(
+        1 for timeframe in selected_timeframes if timeframe.get("signal_status") == "AL"
+    )
+    sell_count = sum(
+        1 for timeframe in selected_timeframes if timeframe.get("signal_status") == "SAT"
+    )
+
+    if buy_count > sell_count:
+        return "AL"
+    if sell_count > buy_count:
+        return "SAT"
+    return "NOTR"
+
+
+def _build_strategy_inspector_response(report: dict) -> StrategyInspectorResponse:
+    return StrategyInspectorResponse(
+        symbol=report["symbol"],
+        market_type=report["market_type"],
+        strategy=report["strategy"],
+        indicator_order=list(report["indicator_order"]),
+        indicator_labels=dict(report["indicator_labels"]),
+        generated_at=report["generated_at"],
+        timeframes=[
+            StrategyInspectorTimeframeResponse(
+                code=timeframe["code"],
+                label=timeframe["label"],
+                available=bool(timeframe["available"]),
+                signal_status=timeframe["signal_status"],
+                reason=timeframe.get("reason"),
+                price=timeframe.get("price"),
+                date=timeframe.get("date"),
+                active_indicators=timeframe.get("active_indicators"),
+                primary_score=timeframe.get("primary_score"),
+                primary_score_label=timeframe["primary_score_label"],
+                secondary_score=timeframe.get("secondary_score"),
+                secondary_score_label=timeframe["secondary_score_label"],
+                raw_score=timeframe.get("raw_score"),
+                indicators=dict(timeframe.get("indicators", {})),
+            )
+            for timeframe in report["timeframes"]
+        ],
+    )
+
+
+@app.get("/api/market/analysis", response_model=MarketAnalysisResponse, tags=["AI Analysis"])
 def get_market_analysis(
-    market_type: str = Query(..., description="Market tipi: crypto veya bist"),
+    market_type: str | None = Query(
+        None,
+        description="Piyasa tipi: BIST, Kripto veya AUTO",
+    ),
     symbol: str = Query(..., description="Sembol"),
+    strategy: str = Query("HUNTER", description="Strateji: COMBO veya HUNTER"),
+    timeframe: str | None = Query(
+        None,
+        description="Periyot: 1D, 1W, 2W, 3W, 1M veya ALL",
+    ),
 ):
     """
-    Belirli bir sembol için detaylı teknik analiz ve AI yorumu getirir (CANLI).
+    Belirli bir sembol icin gercek teknik veriyle AI yorumu getirir.
     """
     try:
-        import json
-        from datetime import datetime
-
         from ai_analyst import analyze_with_gemini
+        from ai_schema import AIResponseSchemaError, build_ai_error_payload, parse_ai_response
 
-        # 1. Temel teknik verileri al (Şimdilik mock, ilerde price_cache'den alınabilir)
-        # Basitlik için sembolik veri gönderiyoruz, AI bunu yorumlayacak
-        technical_data = {"PRICE": "Canlı Fiyat", "RSI": "50 (Nötr)", "MACD": "0 (Nötr)"}
-
-        # 2. AI Analizi Başlat
-        # Not: Senaryo ve Sinyal şimdilik 'Manuel Sorgu' varsayılıyor
-        analysis_json = analyze_with_gemini(
-            symbol=symbol,
-            scenario_name="Kullanıcı Talebi",
-            signal_type="NÖTR",
-            technical_data=technical_data,
-            market_type=market_type,
-            save_to_db=True,
+        report = inspect_strategy(symbol=symbol, strategy=strategy, market_type=market_type)
+        resolved_timeframe, selected_timeframes = _select_manual_analysis_timeframes(
+            report, timeframe
+        )
+        signal_type = _derive_manual_signal_type(selected_timeframes)
+        technical_data = build_strategy_ai_payload(
+            report=report,
+            signal_type=signal_type,
+            trigger_rule=[item["code"] for item in selected_timeframes],
+            matched_timeframes=[item["code"] for item in selected_timeframes],
+            scenario_name=f"MANUAL_{report['strategy']}_{resolved_timeframe}",
         )
 
-        # 3. JSON Yanıtı Parse Et
+        analysis_json = analyze_with_gemini(
+            symbol=report["symbol"],
+            scenario_name=f"MANUAL_{report['strategy']}_{resolved_timeframe}",
+            signal_type=signal_type,
+            technical_data=technical_data,
+            market_type=report["market_type"],
+            save_to_db=False,
+        )
+
         try:
-            analysis_data = json.loads(analysis_json)
-        except json.JSONDecodeError:
-            # Fallback
-            analysis_data = {
-                "sentiment_score": 50,
-                "sentiment_label": "NÖTR",
-                "summary": ["Veri işlenemedi."],
-                "explanation": "AI yanıtı formatlanamadı.",
-                "error": "JSON Error",
-            }
+            analysis_data = parse_ai_response(analysis_json).model_dump(mode="json")
+        except AIResponseSchemaError as exc:
+            analysis_data = parse_ai_response(
+                build_ai_error_payload(
+                    error=str(exc),
+                    error_code=exc.error_code,
+                    provider="gemini",
+                    model_name=None,
+                    backend=None,
+                    prompt_version=None,
+                    summary="Veri islenemedi.",
+                    explanation="AI yaniti formatlanamadi.",
+                )
+            ).model_dump(mode="json")
 
-        return {
-            "symbol": symbol,
-            "market_type": market_type,
-            "score": analysis_data.get("sentiment_label", "NÖTR"),
-            "summary": analysis_data.get("explanation", ""),
-            "structured_analysis": analysis_data,  # Frontend bu objeyi kullanacak
-            "updated_at": datetime.now().isoformat(),
-        }
+        return MarketAnalysisResponse(
+            symbol=report["symbol"],
+            market_type=report["market_type"],
+            strategy=report["strategy"],
+            timeframe=resolved_timeframe,
+            score=analysis_data.get("sentiment_label", "NOTR"),
+            summary=analysis_data.get("explanation", ""),
+            structured_analysis=analysis_data,
+            inspection=_build_strategy_inspector_response(
+                {**report, "timeframes": selected_timeframes}
+            ),
+            updated_at=datetime.now().isoformat(),
+        )
 
+    except StrategyInspectorError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as e:
-        print(f"Analiz hatası: {e}")
+        print(f"Analiz hatasi: {e}")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -1406,44 +1545,38 @@ def get_calendar(from_date: str = Query(None), to_date: str = Query(None)):
 # ==================== STARTUP/SHUTDOWN ====================
 
 
-@app.on_event("startup")
-async def startup_event():
-    """API başlangıcında çalışır."""
+def _run_startup_sequence() -> None:
+    """Uygulama baslangicinda gerekli senkron hazirligi yapar."""
     from db_session import init_db
 
     init_db()
 
-    # Start Real-time Services
+
+async def _start_realtime_services() -> None:
+    """Real-time servislerini baslatir."""
     try:
         from bist_service import bist_service
         from websocket_manager import ws_manager
 
-        # Register callbacks for broadcasting
         ws_manager.on("ticker", broadcast_ticker)
         bist_service.on_update(broadcast_bist_update)
 
-        # Start services
         await ws_manager.start()
         await bist_service.start()
-        print("📡 Real-time WebSocket services started")
+        print("Real-time WebSocket services started")
+        print("Otonom Analiz API baslatildi")
     except Exception as e:
-        print(f"⚠️ Real-time services failed to start: {e}")
-
-    print("🚀 Otonom Analiz API başlatıldı")
+        print(f"Real-time services failed to start: {e}")
 
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    """API kapanışında çalışır."""
-    # Stop Real-time Services
+async def _stop_realtime_services() -> None:
+    """Real-time servislerini kapatir."""
     try:
         from bist_service import bist_service
         from websocket_manager import ws_manager
 
         await ws_manager.stop()
         await bist_service.stop()
-        print("📡 Real-time services stopped")
+        print("Real-time services stopped")
     except Exception as e:
-        print(f"⚠️ Error stopping real-time services: {e}")
-
-    print("🛑 Otonom Analiz API kapatıldı")
+        print(f"Error stopping real-time services: {e}")
