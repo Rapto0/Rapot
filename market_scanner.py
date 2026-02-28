@@ -406,6 +406,13 @@ def process_symbol(
         special_tag: str,
         trigger_rule: list[str],
     ) -> None:
+        logger.info(
+            "Ozel sinyal tetiklendi: %s %s %s %s",
+            symbol,
+            strategy_name,
+            special_tag,
+            ",".join(trigger_rule),
+        )
         technical_payload = build_strategy_ai_payload(
             report=get_strategy_report(strategy_name),
             signal_type=signal_dir,
@@ -414,7 +421,9 @@ def process_symbol(
             matched_timeframes=trigger_rule,
             scenario_name=title_prefix,
         )
-        send_message(f"{title_prefix} #{symbol}")
+        title_message = f"{title_prefix} #{symbol}"
+        if not send_message(title_message):
+            logger.error("Ozel sinyal baslik mesaji gonderilemedi: %s", title_message)
         news_data = fetch_market_news(symbol, market_type)
         ai_msg = analyze_with_gemini(
             symbol=symbol,
@@ -423,7 +432,9 @@ def process_symbol(
             technical_data=technical_payload,
             news_context=news_data,
         )
-        send_message(format_ai_message_for_telegram(symbol, ai_msg))
+        final_message = format_ai_message_for_telegram(symbol, ai_msg)
+        if not send_message(final_message):
+            logger.error("Ozel sinyal AI mesaji gonderilemedi: %s %s", symbol, special_tag)
 
     def mark_special_signal(
         strategy_name: str, signal_dir: str, special_tag: str, timeframe: str
