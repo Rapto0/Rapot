@@ -9,8 +9,6 @@ Bu dosya, Rapot kod tabanıyla çalışan AI asistanları için kapsamlı bir k�
 - Google Gemini ile AI destekli teknik analiz
 - TradingView kalitesinde profesyonel web dashboard
 - Trading sinyalleri için Telegram bot bildirimleri
-- Ekonomik takvim entegrasyonu
-- WebSocket ile gerçek zamanlı fiyat akışı
 
 **Ana Dil:** Türkçe (iki dilli UI)
 
@@ -24,15 +22,12 @@ Bu dosya, Rapot kod tabanıyla çalışan AI asistanları için kapsamlı bir k�
 │  ├─ Dashboard UI                ├─ FastAPI REST API    │
 │  ├─ TradingView Charts          ├─ Market Scanner      │
 │  ├─ Signal Management           ├─ Signal Calculator   │
-│  ├─ Economic Calendar           ├─ AI Analyst (Gemini) │
-│  ├─ Portfolio Panel             ├─ Telegram Bot        │
-│  └─ WebSocket Client            ├─ WebSocket Manager   │
-│                                 ├─ Health Monitoring   │
-│                                 ├─ News Manager        │
-│                                 └─ Trade Manager       │
+│  └─ WebSocket Client            ├─ AI Analyst (Gemini) │
+│                                 ├─ Telegram Bot        │
+│                                 └─ Health Monitoring   │
 │                                                         │
 │  DATABASE: SQLite (trading_bot.db)                     │
-│  DEPLOYMENT: VPS + PM2 (DigitalOcean 138.68.71.27)    │
+│  DEPLOYMENT: VPS + Docker Engine                       │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -44,83 +39,29 @@ Bu dosya, Rapot kod tabanıyla çalışan AI asistanları için kapsamlı bir k�
 │   ├── Dockerfile             # Frontend Docker image
 │   ├── src/
 │   │   ├── app/               # App Router pages
-│   │   │   ├── page.tsx       # Landing / ana sayfa
 │   │   │   ├── dashboard/     # Ana analiz dashboard
 │   │   │   ├── signals/       # Sinyal yönetimi
 │   │   │   ├── trades/        # Trade geçmişi
 │   │   │   ├── scanner/       # Market tarama durumu
 │   │   │   ├── health/        # Bot sağlık izleme
 │   │   │   ├── settings/      # Ayarlar
-│   │   │   ├── chart/         # TradingView grafikleri
-│   │   │   ├── calendar/      # Ekonomik takvim sayfası
-│   │   │   └── tradingview/   # TradingView tam ekran
+│   │   │   └── chart/         # TradingView grafikleri
 │   │   ├── components/        # React bileşenleri
 │   │   │   ├── dashboard/     # Dashboard widget'ları
-│   │   │   │   ├── ai-analysis-widget.tsx   # AI analiz paneli
-│   │   │   │   ├── bot-dashboard.tsx        # Bot durum paneli
-│   │   │   │   ├── economic-calendar.tsx    # Ekonomik takvim widget
-│   │   │   │   ├── global-ticker.tsx        # Global fiyat ticker
-│   │   │   │   ├── kpi-cards.tsx            # Performans kartları
-│   │   │   │   ├── market-overview.tsx      # Piyasa genel bakış
-│   │   │   │   ├── portfolio-panel.tsx      # Portföy yönetimi
-│   │   │   │   ├── recent-signals.tsx       # Son sinyaller
-│   │   │   │   ├── signal-terminal.tsx      # Sinyal terminali
-│   │   │   │   └── ticker-tape.tsx          # Kayan fiyat bandı
 │   │   │   ├── charts/        # Grafik bileşenleri
-│   │   │   │   ├── advanced-chart.tsx       # Ana grafik (Lightweight Charts v5)
-│   │   │   │   └── MiniSparkline.tsx        # Mini sparkline grafik
-│   │   │   ├── calendar/      # Takvim bileşenleri
-│   │   │   │   ├── date-navigator.tsx
-│   │   │   │   ├── event-row.tsx
-│   │   │   │   └── filter-tabs.tsx
-│   │   │   ├── layout/        # Sayfa düzeni
-│   │   │   │   ├── header.tsx              # Üst bar (ticker tape + bildirimler)
-│   │   │   │   ├── sidebar.tsx             # Sol menü
-│   │   │   │   ├── sidebar-context.tsx     # Sidebar state context
-│   │   │   │   ├── main-content.tsx        # Ana içerik wrapper
-│   │   │   │   └── mobile-nav.tsx          # Mobil navigasyon
-│   │   │   ├── tradingview/   # TradingView sayfası bileşenleri
-│   │   │   │   ├── filter-bar.tsx
-│   │   │   │   ├── nav-rail.tsx
-│   │   │   │   ├── right-sidebar.tsx
-│   │   │   │   ├── screener-table.tsx
-│   │   │   │   ├── sidebar-detail.tsx
-│   │   │   │   └── sidebar-watchlist.tsx
-│   │   │   ├── shared/        # Paylaşılan bileşenler
-│   │   │   │   └── error-boundary.tsx
+│   │   │   ├── layout/        # Header, Sidebar, Nav
 │   │   │   └── ui/            # Shadcn/UI bileşenleri
-│   │   │       ├── badge, button, card, input, scroll-area
-│   │   │       ├── separator, skeleton, switch, table, tabs
-│   │   │       ├── toast, connection-status
-│   │   │       └── ...
 │   │   ├── lib/
 │   │   │   ├── api/           # API client fonksiyonları
-│   │   │   │   ├── client.ts  # Tüm API çağrıları
-│   │   │   │   └── index.ts   # Export barrel
 │   │   │   ├── hooks/         # Custom React hooks
-│   │   │   │   ├── use-analyses.ts      # AI analiz hook
-│   │   │   │   ├── use-binance-ticker.ts # Binance WebSocket fiyat
-│   │   │   │   ├── use-chart-data.ts    # Grafik veri hook
-│   │   │   │   ├── use-dashboard.ts     # Dashboard KPI hook
-│   │   │   │   ├── use-health.ts        # Sağlık kontrolü hook
-│   │   │   │   ├── use-realtime.ts      # Zustand store + WebSocket
-│   │   │   │   ├── use-signals.ts       # Sinyal hook
-│   │   │   │   ├── use-trades.ts        # Trade hook
-│   │   │   │   └── use-websocket.ts     # WebSocket bağlantı hook
-│   │   │   ├── actions/       # Server actions
-│   │   │   │   └── market-data.ts
 │   │   │   ├── indicators.ts  # COMBO/HUNTER hesaplamaları
-│   │   │   ├── mock-data.ts   # Test/demo verileri
-│   │   │   ├── utils.ts       # Yardımcı fonksiyonlar
 │   │   │   └── stores/        # Zustand state stores
-│   │   │       └── index.ts
 │   │   └── types/             # TypeScript tanımları
 │   └── package.json
 │
 ├── api/                        # FastAPI Backend
 │   ├── main.py                # REST endpoints
 │   ├── auth.py                # JWT authentication
-│   ├── realtime.py            # WebSocket/SSE endpoints
 │   └── calendar_service.py    # Ekonomik takvim
 │
 ├── # Python Backend Modülleri (root level)
@@ -128,29 +69,14 @@ Bu dosya, Rapot kod tabanıyla çalışan AI asistanları için kapsamlı bir k�
 │   ├── scheduler.py           # Görev zamanlama
 │   ├── market_scanner.py      # Piyasa tarama motoru
 │   ├── signals.py             # Sinyal hesaplama (COMBO/HUNTER)
-│   ├── data_loader.py         # Tarihsel veri çekme (sync)
-│   ├── async_data_loader.py   # Tarihsel veri çekme (async)
-│   ├── async_scanner.py       # Async piyasa tarayıcı
-│   ├── batch_data_loader.py   # Toplu veri çekme
+│   ├── data_loader.py         # Tarihsel veri çekme
 │   ├── ai_analyst.py          # Gemini AI entegrasyonu
 │   ├── database.py            # Database işlemleri
-│   ├── db_session.py          # Database session yönetimi
 │   ├── models.py              # SQLAlchemy ORM modelleri
 │   ├── config.py              # Trading konfigürasyonu
 │   ├── settings.py            # Ortam ayarları (Pydantic)
 │   ├── telegram_notify.py     # Telegram bildirimleri
-│   ├── command_handler.py     # Telegram komut işleyici
-│   ├── backtesting_system.py  # Backtest motoru
-│   ├── bist_service.py        # BIST veri servisi
-│   ├── trade_manager.py       # Trade yönetimi
-│   ├── news_manager.py        # Haber yönetimi
-│   ├── price_cache.py         # Fiyat önbellek
-│   ├── websocket_manager.py   # WebSocket yönetimi
-│   ├── health_api.py          # Sağlık API endpoint'leri
-│   ├── logger.py              # Loglama sistemi
-│   ├── migrate_db.py          # Database migration
-│   ├── prometheus_metrics.py  # Prometheus metrikleri
-│   └── test_binance.py        # Binance bağlantı testi
+│   └── backtesting_system.py  # Backtest motoru
 │
 ├── tests/                      # Test suite
 │   ├── conftest.py            # pytest konfigürasyonu
@@ -163,8 +89,6 @@ Bu dosya, Rapot kod tabanıyla çalışan AI asistanları için kapsamlı bir k�
 │
 ├── docker-compose.yml          # Container orchestration
 ├── Dockerfile                  # Python container
-├── ecosystem.config.js         # PM2 process manager config
-├── start-api.sh               # API başlatma scripti (venv)
 ├── requirements.txt            # Python bağımlılıkları
 └── pyproject.toml              # Python proje config
 ```
@@ -175,7 +99,7 @@ Bu dosya, Rapot kod tabanıyla çalışan AI asistanları için kapsamlı bir k�
 | Teknoloji | Versiyon | Amaç |
 |-----------|----------|------|
 | Next.js | 16.1.4 | React framework (App Router) |
-| React | 19.2.3 | UI kütüphanesi |
+| React | 19.x | UI kütüphanesi |
 | TypeScript | 5 | Tip güvenliği |
 | Tailwind CSS | v4 | Stil |
 | Lightweight Charts | 5.1.0 | Profesyonel mum grafikleri |
@@ -231,26 +155,7 @@ ruff format .              # Auto-format
 pre-commit run --all-files # Tüm pre-commit hooks
 ```
 
-### VPS Deployment (PM2)
-```bash
-# SSH ile VPS'e bağlan
-ssh root@138.68.71.27
-
-# Kodu güncelle ve deploy et
-cd /home/user/Rapot
-git pull origin main
-cd frontend && npm run build
-pm2 restart all
-
-# PM2 komutları
-pm2 status                 # Tüm servislerin durumu
-pm2 logs api               # API logları
-pm2 logs frontend          # Frontend logları
-pm2 restart api            # API yeniden başlat
-pm2 restart frontend       # Frontend yeniden başlat
-```
-
-### Docker (Alternatif Deployment)
+### Docker (VPS Deployment)
 ```bash
 docker-compose up -d           # Tüm servisleri başlat
 docker-compose logs -f api     # API loglarını izle
@@ -258,16 +163,6 @@ docker-compose logs -f frontend # Frontend loglarını izle
 docker-compose down            # Servisleri durdur
 docker-compose build --no-cache # Yeniden build
 ```
-
-## PM2 Servisleri
-
-`ecosystem.config.js` içinde iki servis:
-1. **api** (port 8000): FastAPI backend (`start-api.sh` üzerinden)
-2. **frontend** (port 3000): Next.js dashboard (`npm run dev -- -H 0.0.0.0`)
-
-VPS: DigitalOcean Droplet `138.68.71.27`
-- Python venv: `/opt/rapot-venv`
-- Proje dizini: `/home/user/Rapot`
 
 ## Docker Servisleri
 
@@ -392,20 +287,10 @@ DATABASE_PATH=trading_bot.db
    - Bullish: `#00c853`
    - Bearish: `#ff3d00`
 
-## Performans Kuralları
-
-Dashboard performansı için dikkat edilecek noktalar:
-- **Polling interval'ları:** Minimum 30sn (bot status), 60sn (health, stats, trades)
-- **Global refetchInterval:** Kapalı - her query kendi interval'ını yönetir
-- **WebSocket dependency:** `JSON.stringify` yerine `useMemo` ile stabil key kullan
-- **useAnimatedNumber:** `displayValue`'yu dependency array'e KOYMA (sonsuz döngü yapar)
-- **Indicator hesaplamaları:** `calculateCombo`/`calculateHunter` mutlaka `useMemo` ile sarılmalı
-- **Header saat:** 10sn interval yeterli, 1sn tarayıcıyı kilitler
-
 ## Debugging
 
-- PM2 logları: `pm2 logs api` / `pm2 logs frontend`
-- Docker logları: `docker-compose logs -f api` / `frontend` / `bot`
+- API logları: `docker-compose logs -f api`
+- Frontend logları: `docker-compose logs -f frontend`
+- Bot logları: `docker-compose logs -f bot`
 - Browser: DevTools + React DevTools
 - Health check: `http://localhost:8000/health`
-- VPS erişim: `http://138.68.71.27:3000` (dashboard) / `:8000` (API)

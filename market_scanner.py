@@ -3,20 +3,23 @@ Market Scanner Modülü
 Piyasa tarama ve sinyal işleme fonksiyonları.
 """
 
-import json
+import html
 import time
 from typing import Any
 
 import pandas as pd
 
 from ai_analyst import analyze_with_gemini
+from ai_schema import AIResponseSchemaError, parse_ai_response
 from config import TIMEFRAMES, rate_limits
 from data_loader import get_all_binance_symbols, get_all_bist_symbols, resample_data
 from database import save_signal as db_save_signal
+from database import set_signal_special_tag as db_set_signal_special_tag
 from logger import get_logger
 from news_manager import fetch_market_news
 from price_cache import cached_get_bist_data, cached_get_crypto_data, price_cache
 from signals import calculate_combo_signal, calculate_hunter_signal
+from strategy_inspector import build_strategy_ai_payload, inspect_strategy_dataframe
 from telegram_notify import send_message
 
 logger = get_logger(__name__)
@@ -193,139 +196,103 @@ def generate_manual_report(
 
 def format_ai_message_for_telegram(symbol: str, ai_response: str) -> str:
     """
-    AI JSON çıktısını Telegram için profesyonel formatta metne çevirir.
+    AI JSON çıktısını Telegram için okunabilir metne çevirir.
     JSON değilse ham metni korur.
     """
-    from datetime import datetime
+    safe_symbol = html.escape(str(symbol))
+    header = f"🧠 <b>AI KARARI ({safe_symbol}):</b>"
 
     try:
-        data = json.loads(ai_response)
-    except (json.JSONDecodeError, TypeError):
-        return f"🧠 <b>AI ANALİZİ ({symbol}):</b>\n{ai_response}"
+        payload = parse_ai_response(ai_response)
+    except AIResponseSchemaError:
+        return f"{header}\n{html.escape(str(ai_response))}"
 
-    if not isinstance(data, dict):
-        return f"🧠 <b>AI ANALİZİ ({symbol}):</b>\n{ai_response}"
-
-    error = data.get("error")
+    error = payload.error
     if error:
-        return f"🧠 <b>AI ANALİZİ ({symbol}):</b>\n⚠️ AI analizi üretilemedi: {error}"
+        error_suffix = f" ({payload.error_code})" if payload.error_code else ""
+        return f"{header}\n⚠️ AI analizi üretilemedi: {html.escape(str(error))}{html.escape(error_suffix)}"
 
-    # Temel veriler
-    sentiment_label = str(data.get("sentiment_label", "NÖTR")).strip() or "NÖTR"
-    sentiment_score = data.get("sentiment_score", 50)
-    confidence = data.get("confidence", 0)
-    risk_level = str(data.get("risk_level", "Belirsiz")).strip() or "Belirsiz"
-    timeframe = str(data.get("timeframe", "")).strip()
-    action_note = str(data.get("action_note", "")).strip()
-    technical_summary = str(data.get("technical_summary", "")).strip()
+    sentiment_label = payload.sentiment_label or "NOTR"
+    sentiment_score = payload.sentiment_score
+    if isinstance(sentiment_score, float):
+        score_text = f"{sentiment_score:.1f}/100"
+    elif isinstance(sentiment_score, int):
+        score_text = f"{sentiment_score}/100"
+    else:
+        score_text = "Skor yok"
 
-    # Skor formatı
-    score_text = f"{int(sentiment_score)}" if isinstance(sentiment_score, (int, float)) else "50"
-
-    # İkon ve güç çubuğu belirleme
     upper_label = sentiment_label.upper()
-    if "GÜÇLÜ AL" in upper_label:
-        sentiment_icon = "🟢🟢"
-        signal_bar = "█████████░"
-    elif "AL" in upper_label:
+    if "AL" in upper_label:
         sentiment_icon = "🟢"
-        signal_bar = "███████░░░"
-    elif "GÜÇLÜ SAT" in upper_label:
-        sentiment_icon = "🔴🔴"
-        signal_bar = "█████████░"
     elif "SAT" in upper_label:
         sentiment_icon = "🔴"
-        signal_bar = "███████░░░"
     else:
         sentiment_icon = "⚪️"
-        signal_bar = "█████░░░░░"
 
-    # Risk ikonu
-    risk_icons = {"Düşük": "🟢", "Orta": "🟡", "Yüksek": "🔴"}
-    risk_icon = risk_icons.get(risk_level, "⚪️")
+    explanation = payload.explanation or "Detayli aciklama uretilemedi."
+    summary_items = payload.summary or ["Ozet maddesi uretilemedi."]
+    summary_lines = "\n".join(f"• {html.escape(str(item))}" for item in summary_items[:3])
 
-    # Açıklama
-    explanation = str(data.get("explanation", "")).strip() or "Detaylı açıklama üretilemedi."
+    def _short_explanation(text: str, max_sentences: int = 2, max_chars: int = 420) -> str:
+        normalized = " ".join(str(text or "").split())
+        if not normalized:
+            return "Detayli yorum uretilemedi."
 
-    # Özet maddeleri
-    raw_summary = data.get("summary", [])
-    if isinstance(raw_summary, str):
-        summary_items = [raw_summary.strip()] if raw_summary.strip() else []
-    elif isinstance(raw_summary, list):
-        summary_items = [str(item).strip() for item in raw_summary if str(item).strip()]
-    else:
-        summary_items = []
-    if not summary_items:
-        summary_items = ["Analiz özeti üretilemedi."]
-    summary_lines = "\n".join(f"  • {item}" for item in summary_items[:3])
+        sentences = []
+        current = []
+        for char in normalized:
+            current.append(char)
+            if char in ".!?":
+                sentence = "".join(current).strip()
+                if sentence:
+                    sentences.append(sentence)
+                current = []
+            if len(sentences) >= max_sentences:
+                break
 
-    # Seviyeler
-    key_levels = data.get("key_levels") if isinstance(data.get("key_levels"), dict) else {}
+        if not sentences and current:
+            sentences.append("".join(current).strip())
 
-    def _format_levels(levels: Any) -> str:
+        compact = " ".join(sentences).strip() or normalized
+        if len(compact) > max_chars:
+            compact = compact[: max_chars - 3].rstrip() + "..."
+        return compact
+
+    def _join_levels(levels: Any) -> str:
         if isinstance(levels, str):
-            return levels.strip() or "-"
+            return html.escape(levels.strip()) or "-"
         if isinstance(levels, list):
-            cleaned = [str(level).strip() for level in levels if str(level).strip()]
-            return " | ".join(cleaned[:2]) if cleaned else "-"
+            cleaned = [html.escape(str(level).strip()) for level in levels if str(level).strip()]
+            return ", ".join(cleaned) if cleaned else "-"
         return "-"
 
-    support_text = _format_levels(key_levels.get("support", []))
-    resistance_text = _format_levels(key_levels.get("resistance", []))
+    support_text = _join_levels(payload.key_levels.support)
+    resistance_text = _join_levels(payload.key_levels.resistance)
+    risk_level = payload.risk_level or "Belirsiz"
+    compact_explanation = html.escape(_short_explanation(explanation))
 
-    # Zaman damgası
-    now = datetime.now().strftime("%d.%m.%Y %H:%M")
-
-    # Mesaj oluştur
-    lines = [
-        "━━━━━━━━━━━━━━━━━━━━━━━━",
-        f"🧠 <b>AI ANALİZİ: {symbol}</b>",
-        "━━━━━━━━━━━━━━━━━━━━━━━━",
-        "",
-        f"{sentiment_icon} <b>{sentiment_label}</b> • Skor: {score_text}/100",
+    meta_lines = [
+        f"{sentiment_icon} <b>{html.escape(str(sentiment_label))}</b>",
+        f"• Skor: {score_text}",
+        f"• Risk: {html.escape(str(risk_level))}",
     ]
 
-    if confidence:
-        lines.append(f"   Güven: {signal_bar} {confidence}%")
+    level_lines = []
+    if support_text != "-":
+        level_lines.append(f"• Destek: {support_text}")
+    if resistance_text != "-":
+        level_lines.append(f"• Direnç: {resistance_text}")
 
-    lines.append("")
+    sections = [
+        header,
+        "\n".join(meta_lines),
+        f"📌 <b>Ozet:</b>\n{summary_lines}",
+        f"🧭 <b>Yorum:</b>\n{compact_explanation}",
+    ]
+    if level_lines:
+        sections.append("📍 <b>Seviyeler:</b>\n" + "\n".join(level_lines))
 
-    if technical_summary:
-        lines.extend([
-            "📊 <b>TEKNİK ÖZET</b>",
-            f"   {technical_summary}",
-            "",
-        ])
-
-    lines.extend([
-        "💬 <b>YORUM</b>",
-        f"   {explanation}",
-        "",
-        "📌 <b>ÖNE ÇIKANLAR</b>",
-        summary_lines,
-        "",
-        "📍 <b>KRİTİK SEVİYELER</b>",
-        f"   🟢 Destek  : {support_text}",
-        f"   🔴 Direnç  : {resistance_text}",
-        "",
-    ])
-
-    risk_line = f"{risk_icon} <b>Risk:</b> {risk_level}"
-    if timeframe:
-        risk_line += f" • {timeframe}"
-    lines.append(risk_line)
-
-    # Aksiyon notu varsa ekle
-    if action_note:
-        lines.extend(["", f"💡 <i>{action_note}</i>"])
-
-    lines.extend([
-        "",
-        "━━━━━━━━━━━━━━━━━━━━━━━━",
-        f"🤖 <i>Rapot AI • {now}</i>",
-    ])
-
-    return "\n".join(lines)
+    return "\n\n".join(sections)
 
 
 def process_symbol(
@@ -348,8 +315,7 @@ def process_symbol(
 
     combo_hits = {"buy": {}, "sell": {}}
     hunter_hits = {"buy": {}, "sell": {}}
-    daily_data_combo = None
-    daily_data_hunter = None
+    strategy_reports: dict[str, dict[str, Any]] = {}
 
     for tf_code, tf_label in TIMEFRAMES:
         try:
@@ -360,14 +326,9 @@ def process_symbol(
             # --- COMBO ---
             res_combo = calculate_combo_signal(df_resampled, tf_code)
             if res_combo:
-                if tf_code == "1D":
-                    daily_data_combo = res_combo["details"]
-
                 if res_combo["buy"]:
                     combo_hits["buy"][tf_code] = res_combo["details"]
-                    msg = f"🟢 <b>COMBO AL</b> #{symbol} ({market_type})\nVade: {tf_label}\nSkor: {res_combo['details']['Score']}"
                     print(f">>> COMBO AL: {symbol} {tf_label}")
-                    send_message(msg)
                     # Veritabanına kaydet
                     db_save_signal(
                         symbol=symbol,
@@ -397,14 +358,9 @@ def process_symbol(
             # --- HUNTER ---
             res_hunter = calculate_hunter_signal(df_resampled, tf_code)
             if res_hunter:
-                if tf_code == "1D":
-                    daily_data_hunter = res_hunter["details"]
-
                 if res_hunter["buy"]:
                     hunter_hits["buy"][tf_code] = res_hunter["details"]
-                    msg = f"🚀 <b>HUNTER DİP</b> #{symbol} ({market_type})\nVade: {tf_label}\nSkor: {res_hunter['details']['DipScore']}"
                     print(f">>> HUNTER DİP: {symbol} {tf_label}")
-                    send_message(msg)
                     # Veritabanına kaydet
                     db_save_signal(
                         symbol=symbol,
@@ -435,55 +391,166 @@ def process_symbol(
             logger.error(f"HATA: {symbol} - {tf_label}: {str(e)}")
 
     # --- ÖZEL SİNYALLER & YAPAY ZEKA ANALİZİ ---
+    def get_strategy_report(strategy_name: str) -> dict[str, Any]:
+        if strategy_name not in strategy_reports:
+            strategy_reports[strategy_name] = inspect_strategy_dataframe(
+                df_daily=df_daily.copy(),
+                symbol=symbol,
+                market_type=market_type,
+                strategy=strategy_name,
+            )
+        return strategy_reports[strategy_name]
+
     def trigger_ai_analysis(
-        title_prefix: str, signal_dir: str, data_dict: dict[str, Any] | None
+        title_prefix: str,
+        strategy_name: str,
+        signal_dir: str,
+        special_tag: str,
+        trigger_rule: list[str],
     ) -> None:
-        send_message(f"{title_prefix} #{symbol}\n🧠 AI; Teknik ve Haberleri inceliyor...")
+        logger.info(
+            "Ozel sinyal tetiklendi: %s %s %s %s",
+            symbol,
+            strategy_name,
+            special_tag,
+            ",".join(trigger_rule),
+        )
+        technical_payload = build_strategy_ai_payload(
+            report=get_strategy_report(strategy_name),
+            signal_type=signal_dir,
+            special_tag=special_tag,
+            trigger_rule=trigger_rule,
+            matched_timeframes=trigger_rule,
+            scenario_name=title_prefix,
+        )
+        title_message = f"{title_prefix} #{symbol}"
+        if not send_message(title_message):
+            logger.error("Ozel sinyal baslik mesaji gonderilemedi: %s", title_message)
         news_data = fetch_market_news(symbol, market_type)
         ai_msg = analyze_with_gemini(
             symbol=symbol,
             scenario_name=title_prefix,
             signal_type=signal_dir,
-            technical_data=data_dict,
+            technical_data=technical_payload,
             news_context=news_data,
         )
-        send_message(format_ai_message_for_telegram(symbol, ai_msg))
+        final_message = format_ai_message_for_telegram(symbol, ai_msg)
+        if not send_message(final_message):
+            logger.error("Ozel sinyal AI mesaji gonderilemedi: %s %s", symbol, special_tag)
+
+    def mark_special_signal(
+        strategy_name: str, signal_dir: str, special_tag: str, timeframe: str
+    ) -> None:
+        try:
+            tagged = db_set_signal_special_tag(
+                symbol=symbol,
+                market_type=market_type,
+                strategy=strategy_name,
+                signal_type=signal_dir,
+                timeframe=timeframe,
+                special_tag=special_tag,
+                within_seconds=0,
+            )
+            if not tagged:
+                logger.warning(
+                    f"Ozel sinyal etiketi yazilamadi: {symbol} {strategy_name} {special_tag} ({timeframe})"
+                )
+        except Exception as exc:
+            logger.error(
+                f"Ozel sinyal etiketi kaydedilemedi ({symbol} {strategy_name} {special_tag}): {exc}"
+            )
 
     # ÇOK UCUZ
     if "1D" in combo_hits["buy"] and "W-FRI" in combo_hits["buy"] and "3W-FRI" in combo_hits["buy"]:
-        trigger_ai_analysis("🔥🔥 COMBO: ÇOK UCUZ!", "AL", daily_data_combo)
+        mark_special_signal("COMBO", "AL", "COK_UCUZ", "3W-FRI")
+        trigger_ai_analysis(
+            "🔥🔥 COMBO: ÇOK UCUZ!",
+            "COMBO",
+            "AL",
+            "COK_UCUZ",
+            ["1D", "W-FRI", "3W-FRI"],
+        )
 
     if (
         "1D" in hunter_hits["buy"]
         and "W-FRI" in hunter_hits["buy"]
         and "3W-FRI" in hunter_hits["buy"]
     ):
-        trigger_ai_analysis("🔥🔥 HUNTER: ÇOK UCUZ!", "AL", daily_data_hunter)
+        mark_special_signal("HUNTER", "AL", "COK_UCUZ", "3W-FRI")
+        trigger_ai_analysis(
+            "🔥🔥 HUNTER: ÇOK UCUZ!",
+            "HUNTER",
+            "AL",
+            "COK_UCUZ",
+            ["1D", "W-FRI", "3W-FRI"],
+        )
 
     # BELEŞ
     if "1D" in combo_hits["buy"] and "2W-FRI" in combo_hits["buy"] and "ME" in combo_hits["buy"]:
-        trigger_ai_analysis("💎💎💎 COMBO: BELEŞ (TARİHİ FIRSAT)!", "AL", daily_data_combo)
+        mark_special_signal("COMBO", "AL", "BELES", "ME")
+        trigger_ai_analysis(
+            "💎💎💎 COMBO: BELEŞ (TARİHİ FIRSAT)!",
+            "COMBO",
+            "AL",
+            "BELES",
+            ["1D", "2W-FRI", "ME"],
+        )
 
     if "1D" in hunter_hits["buy"] and "2W-FRI" in hunter_hits["buy"] and "ME" in hunter_hits["buy"]:
-        trigger_ai_analysis("💎💎💎 HUNTER: BELEŞ (TARİHİ FIRSAT)!", "AL", daily_data_hunter)
+        mark_special_signal("HUNTER", "AL", "BELES", "ME")
+        trigger_ai_analysis(
+            "💎💎💎 HUNTER: BELEŞ (TARİHİ FIRSAT)!",
+            "HUNTER",
+            "AL",
+            "BELES",
+            ["1D", "2W-FRI", "ME"],
+        )
 
     # PAHALI
     if "1D" in combo_hits["sell"] and "W-FRI" in combo_hits["sell"]:
-        trigger_ai_analysis("⚠️⚠️ COMBO: PAHALI!", "SAT", daily_data_combo)
+        mark_special_signal("COMBO", "SAT", "PAHALI", "W-FRI")
+        trigger_ai_analysis(
+            "⚠️⚠️ COMBO: PAHALI!",
+            "COMBO",
+            "SAT",
+            "PAHALI",
+            ["1D", "W-FRI"],
+        )
 
     if "1D" in hunter_hits["sell"] and "W-FRI" in hunter_hits["sell"]:
-        trigger_ai_analysis("⚠️⚠️ HUNTER: PAHALI!", "SAT", daily_data_hunter)
+        mark_special_signal("HUNTER", "SAT", "PAHALI", "W-FRI")
+        trigger_ai_analysis(
+            "⚠️⚠️ HUNTER: PAHALI!",
+            "HUNTER",
+            "SAT",
+            "PAHALI",
+            ["1D", "W-FRI"],
+        )
 
     # FAHİŞ FİYAT
     if "1D" in combo_hits["sell"] and "W-FRI" in combo_hits["sell"] and "ME" in combo_hits["sell"]:
-        trigger_ai_analysis("🚨🚨🚨 COMBO: FAHİŞ FİYAT!", "SAT", daily_data_combo)
+        mark_special_signal("COMBO", "SAT", "FAHIS_FIYAT", "ME")
+        trigger_ai_analysis(
+            "🚨🚨🚨 COMBO: FAHİŞ FİYAT!",
+            "COMBO",
+            "SAT",
+            "FAHIS_FIYAT",
+            ["1D", "W-FRI", "ME"],
+        )
 
     if (
         "1D" in hunter_hits["sell"]
         and "W-FRI" in hunter_hits["sell"]
         and "ME" in hunter_hits["sell"]
     ):
-        trigger_ai_analysis("🚨🚨🚨 HUNTER: FAHİŞ FİYAT!", "SAT", daily_data_hunter)
+        mark_special_signal("HUNTER", "SAT", "FAHIS_FIYAT", "ME")
+        trigger_ai_analysis(
+            "🚨🚨🚨 HUNTER: FAHİŞ FİYAT!",
+            "HUNTER",
+            "SAT",
+            "FAHIS_FIYAT",
+            ["1D", "W-FRI", "ME"],
+        )
 
 
 def scan_market(check_commands_callback=None) -> None:
