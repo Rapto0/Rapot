@@ -7,6 +7,7 @@ Reusable strategy and indicator inspection flow for Telegram, API and frontend.
 from __future__ import annotations
 
 import datetime as dt
+import html
 from typing import Any
 
 import pandas as pd
@@ -60,6 +61,34 @@ STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
 }
 
 TELEGRAM_MESSAGE_LIMIT = 3500
+TELEGRAM_GROUP_ORDER: dict[str, tuple[tuple[str, tuple[str, ...]], ...]] = {
+    "COMBO": (("Cekirdek", ("MACD", "RSI", "WR", "CCI")),),
+    "HUNTER": (
+        ("Momentum", ("RSI", "RSI2", "CMO")),
+        ("Trend", ("MACD", "ROC", "ZScore")),
+        ("Range", ("W%R", "CCI", "ULT")),
+        ("Band", ("BBP", "KeltPB", "DeM")),
+        ("Akis", ("BOP", "PSY")),
+    ),
+}
+TELEGRAM_INDICATOR_LABELS: dict[str, str] = {
+    "RSI": "RSI14",
+    "RSI_Fast": "RSIF",
+    "CMO": "CMO",
+    "BOP": "BOP",
+    "MACD": "MACD",
+    "W%R": "W%R",
+    "CCI": "CCI",
+    "ULT": "ULT",
+    "BBP": "BB%",
+    "ROC": "ROC",
+    "DeM": "DeM",
+    "PSY": "PSY",
+    "ZScore": "Z",
+    "KeltPB": "Kel%",
+    "RSI2": "RSI2",
+    "WR": "W%R",
+}
 
 
 class StrategyInspectorError(ValueError):
@@ -259,53 +288,84 @@ def _format_indicator_value(value: Any) -> str:
     return str(value)
 
 
+def _build_indicator_grid(
+    strategy: str,
+    indicator_order: list[str],
+    indicator_values: dict[str, Any],
+) -> str:
+    groups = TELEGRAM_GROUP_ORDER.get(strategy, (("Veriler", tuple(indicator_order)),))
+    rows: list[str] = []
+
+    for group_label, group_indicators in groups:
+        parts: list[str] = []
+        for indicator_key in group_indicators:
+            if indicator_key not in indicator_order:
+                continue
+            short_label = TELEGRAM_INDICATOR_LABELS.get(indicator_key, indicator_key)
+            formatted_value = _format_indicator_value(indicator_values.get(indicator_key))
+            parts.append(f"{short_label:>5} {formatted_value:>8}")
+
+        if not parts:
+            continue
+
+        rows.append(f"{group_label:<9} " + "  ".join(parts))
+
+    return "\n".join(rows)
+
+
 def build_strategy_inspector_chunks(report: dict[str, Any]) -> list[str]:
     """
     Convert structured inspector data into Telegram-friendly chunks.
     """
     header = (
         f"🔬 <b>STRATEJI INSPECTOR</b>\n"
-        f"Sembol: <b>{report['symbol']}</b>\n"
-        f"Piyasa: <b>{report['market_type']}</b>\n"
-        f"Strateji: <b>{report['strategy']}</b>\n"
+        f"<b>{html.escape(report['symbol'])}</b> | "
+        f"{html.escape(report['market_type'])} | "
+        f"{html.escape(report['strategy'])}\n"
         f"Periyotlar: 1G / 1Hf / 2Hf / 3Hf / 1Ay"
     )
 
     indicator_order = report["indicator_order"]
-    indicator_labels = report["indicator_labels"]
     blocks: list[str] = []
 
     for timeframe in report["timeframes"]:
         title = (
             f"{_signal_emoji(timeframe['signal_status'])} "
-            f"<b>{timeframe['label']}</b> | {timeframe['signal_status']}"
+            f"<b>{html.escape(timeframe['label'])}</b> | "
+            f"<b>{html.escape(timeframe['signal_status'])}</b>"
         )
         if not timeframe["available"]:
-            blocks.append(f"{title}\nSebep: {timeframe['reason']}")
+            blocks.append(f"{title}\n" f"• Sebep: {html.escape(str(timeframe['reason']))}")
             continue
 
+        score_line = (
+            f"{timeframe['primary_score_label']}: "
+            f"{_format_indicator_value(timeframe['primary_score'])} | "
+            f"{timeframe['secondary_score_label']}: "
+            f"{_format_indicator_value(timeframe['secondary_score'])}"
+        )
         meta_lines = [
-            f"Tarih: {timeframe['date']} | Fiyat: {_format_indicator_value(timeframe['price'])}",
             (
-                f"{timeframe['primary_score_label']}: {timeframe['primary_score']} | "
-                f"{timeframe['secondary_score_label']}: {timeframe['secondary_score']}"
+                f"• Tarih: {html.escape(str(timeframe['date']))} | "
+                f"Fiyat: {_format_indicator_value(timeframe['price'])}"
             ),
-            f"Aktif: {timeframe['active_indicators']}",
+            (
+                f"• {html.escape(score_line)} | "
+                f"Aktif: {html.escape(str(timeframe['active_indicators']))}"
+            ),
         ]
         if timeframe.get("raw_score"):
-            meta_lines.append(f"Ham Skor: {timeframe['raw_score']}")
+            meta_lines.append(f"• Ham Skor: {html.escape(str(timeframe['raw_score']))}")
 
-        indicator_pairs: list[str] = []
-        for indicator_key in indicator_order:
-            indicator_pairs.append(
-                f"{indicator_labels[indicator_key]}={_format_indicator_value(timeframe['indicators'].get(indicator_key))}"
-            )
-
-        grouped_pairs = [
-            " | ".join(indicator_pairs[index : index + 3])
-            for index in range(0, len(indicator_pairs), 3)
-        ]
-        blocks.append("\n".join([title, *meta_lines, *grouped_pairs]))
+        indicator_grid = _build_indicator_grid(
+            strategy=report["strategy"],
+            indicator_order=indicator_order,
+            indicator_values=timeframe["indicators"],
+        )
+        block_lines = [title, *meta_lines]
+        if indicator_grid:
+            block_lines.append(f"<pre>{html.escape(indicator_grid)}</pre>")
+        blocks.append("\n".join(block_lines))
 
     chunks: list[str] = []
     current_chunk = header
