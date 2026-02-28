@@ -6,7 +6,7 @@ Reusable strategy and indicator inspection flow for Telegram, API and frontend.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+import datetime as dt
 from typing import Any
 
 import pandas as pd
@@ -223,7 +223,9 @@ def inspect_strategy_dataframe(
         "timeframes": timeframe_results,
         "indicator_order": [key for key, _ in indicator_pairs],
         "indicator_labels": dict(indicator_pairs),
-        "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "generated_at": dt.datetime.now(dt.timezone.utc)  # noqa: UP017
+        .isoformat()
+        .replace("+00:00", "Z"),
     }
 
 
