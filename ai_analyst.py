@@ -149,32 +149,46 @@ def analyze_with_gemini(
                 news_text = news_context
 
             prompt = f"""
-            Sen uzman bir borsa stratejistisin. Elimde teknik olarak '{signal_type}' sinyali veren bir varlık var.
-            Bunu detaylı analiz et ve JSON formatında yanıtla.
+            Sen Türkiye'nin en deneyimli borsa stratejistisin. Elimde teknik olarak '{signal_type}' sinyali veren bir varlık var.
+            Profesyonel bir yatırımcıya hitap eder gibi detaylı analiz et.
 
-            Varlık: {symbol}
-            Teknik Durum: {scenario_name} (Yön: {signal_type})
+            🏷️ VARLIK: {symbol}
+            📈 STRATEJİ: {scenario_name}
+            🎯 YÖN: {signal_type}
 
-            📊 GÜNLÜK Teknik Veriler:
-            - Fiyat: {technical_data.get("PRICE", "Yok")}
+            📊 TEKNİK VERİLER:
+            - Güncel Fiyat: {technical_data.get("PRICE", "Yok")}
             - RSI (14): {technical_data.get("RSI", "Yok")}
+            - RSI Hızlı (7): {technical_data.get("RSI_FAST", "Yok")}
             - MACD: {technical_data.get("MACD", "Yok")}
+            - MACD Sinyal: {technical_data.get("MACD_SIGNAL", "Yok")}
+            - Williams %R: {technical_data.get("WILLIAMS_R", "Yok")}
+            - CCI: {technical_data.get("CCI", "Yok")}
+            - Hacim Değişimi: {technical_data.get("VOLUME_CHANGE", "Yok")}
 
-            📰 GÜNCEL HABER AKIŞI:
+            📰 GÜNCEL HABERLER:
             {news_text}
 
             GÖREVİN:
-            Aşağıdaki JSON şemasına birebir uyarak yanıt ver. Markdown kullanma, sadece saf JSON döndür.
+            Aşağıdaki JSON şemasına BİREBİR uyarak yanıt ver. Markdown kullanma, sadece saf JSON döndür.
             {{
-                "sentiment_score": (0-100 arası sayı, 0=Ayı/Korku, 50=Nötr, 100=Boğa/Açgözlülük),
+                "sentiment_score": (0-100 arası tam sayı, 0=Çok Ayı, 25=Ayı, 50=Nötr, 75=Boğa, 100=Çok Boğa),
                 "sentiment_label": ("GÜÇLÜ AL", "AL", "NÖTR", "SAT", "GÜÇLÜ SAT"),
-                "summary": ["Çarpıcı analiz maddesi 1", "Madde 2", "Madde 3"],
-                "explanation": "Yatırımcıya hitap eden, teknik ve temeli birleştiren detaylı paragraf (max 3 cümle).",
+                "confidence": (0-100 arası güven skoru - sinyalin ne kadar güvenilir olduğu),
+                "summary": [
+                    "En önemli teknik bulgu (RSI, MACD vb. ile)",
+                    "İkinci önemli gözlem",
+                    "Üçüncü kritik nokta"
+                ],
+                "explanation": "Profesyonel yatırımcıya hitap eden, teknik göstergeleri yorumlayan, net ve özlü 2-3 cümlelik analiz. Türkçe ve akıcı olmalı.",
+                "technical_summary": "Kısa teknik özet: RSI=XX (aşırı alım/satım), MACD (pozitif/negatif kesişim), W%R (bölge)",
                 "key_levels": {{
-                    "support": ["destek seviyesi 1", "destek seviyesi 2"],
-                    "resistance": ["direnç seviyesi 1", "direnç seviyesi 2"]
+                    "support": ["birinci destek", "ikinci destek"],
+                    "resistance": ["birinci direnç", "ikinci direnç"]
                 }},
-                "risk_level": ("Düşük", "Orta", "Yüksek")
+                "risk_level": ("Düşük", "Orta", "Yüksek"),
+                "timeframe": ("Kısa Vade (1-3 gün)", "Orta Vade (1-2 hafta)", "Uzun Vade (1+ ay)"),
+                "action_note": "Yatırımcıya özel tavsiye notu (ör: 'Stop-loss 11.50 altında', 'Hacim teyidi bekleyin' vb.)"
             }}
             """
 

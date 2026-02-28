@@ -193,42 +193,61 @@ def generate_manual_report(
 
 def format_ai_message_for_telegram(symbol: str, ai_response: str) -> str:
     """
-    AI JSON çıktısını Telegram için okunabilir metne çevirir.
+    AI JSON çıktısını Telegram için profesyonel formatta metne çevirir.
     JSON değilse ham metni korur.
     """
-    header = f"🧠 <b>AI KARARI ({symbol}):</b>"
+    from datetime import datetime
 
     try:
         data = json.loads(ai_response)
     except (json.JSONDecodeError, TypeError):
-        return f"{header}\n{ai_response}"
+        return f"🧠 <b>AI ANALİZİ ({symbol}):</b>\n{ai_response}"
 
     if not isinstance(data, dict):
-        return f"{header}\n{ai_response}"
+        return f"🧠 <b>AI ANALİZİ ({symbol}):</b>\n{ai_response}"
 
     error = data.get("error")
     if error:
-        return f"{header}\n⚠️ AI analizi üretilemedi: {error}"
+        return f"🧠 <b>AI ANALİZİ ({symbol}):</b>\n⚠️ AI analizi üretilemedi: {error}"
 
+    # Temel veriler
     sentiment_label = str(data.get("sentiment_label", "NÖTR")).strip() or "NÖTR"
-    sentiment_score = data.get("sentiment_score")
-    if isinstance(sentiment_score, float):
-        score_text = f"{sentiment_score:.1f}/100"
-    elif isinstance(sentiment_score, int) or sentiment_score is not None:
-        score_text = f"{sentiment_score}/100"
-    else:
-        score_text = "Skor yok"
+    sentiment_score = data.get("sentiment_score", 50)
+    confidence = data.get("confidence", 0)
+    risk_level = str(data.get("risk_level", "Belirsiz")).strip() or "Belirsiz"
+    timeframe = str(data.get("timeframe", "")).strip()
+    action_note = str(data.get("action_note", "")).strip()
+    technical_summary = str(data.get("technical_summary", "")).strip()
 
+    # Skor formatı
+    score_text = f"{int(sentiment_score)}" if isinstance(sentiment_score, (int, float)) else "50"
+
+    # İkon ve güç çubuğu belirleme
     upper_label = sentiment_label.upper()
-    if "AL" in upper_label:
+    if "GÜÇLÜ AL" in upper_label:
+        sentiment_icon = "🟢🟢"
+        signal_bar = "█████████░"
+    elif "AL" in upper_label:
         sentiment_icon = "🟢"
+        signal_bar = "███████░░░"
+    elif "GÜÇLÜ SAT" in upper_label:
+        sentiment_icon = "🔴🔴"
+        signal_bar = "█████████░"
     elif "SAT" in upper_label:
         sentiment_icon = "🔴"
+        signal_bar = "███████░░░"
     else:
         sentiment_icon = "⚪️"
+        signal_bar = "█████░░░░░"
 
+    # Risk ikonu
+    risk_icons = {"Düşük": "🟢", "Orta": "🟡", "Yüksek": "🔴"}
+    risk_icon = risk_icons.get(risk_level, "⚪️")
+
+    # Açıklama
     explanation = str(data.get("explanation", "")).strip() or "Detaylı açıklama üretilemedi."
 
+    # Özet maddeleri
     raw_summary = data.get("summary", [])
     if isinstance(raw_summary, str):
         summary_items = [raw_summary.strip()] if raw_summary.strip() else []
@@ -237,34 +256,76 @@ def format_ai_message_for_telegram(symbol: str, ai_response: str) -> str:
     else:
         summary_items = []
     if not summary_items:
-        summary_items = ["Özet maddesi üretilemedi."]
-    summary_lines = "\n".join(f"• {item}" for item in summary_items[:3])
+        summary_items = ["Analiz özeti üretilemedi."]
+    summary_lines = "\n".join(f"  • {item}" for item in summary_items[:3])
 
+    # Seviyeler
     key_levels = data.get("key_levels") if isinstance(data.get("key_levels"), dict) else {}
 
-    def _join_levels(levels: Any) -> str:
+    def _format_levels(levels: Any) -> str:
         if isinstance(levels, str):
             return levels.strip() or "-"
         if isinstance(levels, list):
             cleaned = [str(level).strip() for level in levels if str(level).strip()]
-            return ", ".join(cleaned) if cleaned else "-"
+            return " | ".join(cleaned[:2]) if cleaned else "-"
         return "-"
 
-    support_text = _join_levels(key_levels.get("support", []))
-    resistance_text = _join_levels(key_levels.get("resistance", []))
-    risk_level = str(data.get("risk_level", "Belirsiz")).strip() or "Belirsiz"
+    support_text = _format_levels(key_levels.get("support", []))
+    resistance_text = _format_levels(key_levels.get("resistance", []))
 
-    return (
-        f"{header}\n"
-        f"{sentiment_icon} <b>{sentiment_label}</b> ({score_text})\n\n"
-        f"{explanation}\n\n"
-        f"📌 <b>Öne Çıkanlar:</b>\n"
-        f"{summary_lines}\n\n"
-        f"📍 <b>Kritik Seviyeler:</b>\n"
-        f"• Destek: {support_text}\n"
-        f"• Direnç: {resistance_text}\n"
-        f"⚠️ <b>Risk:</b> {risk_level}"
-    )
+    # Zaman damgası
+    now = datetime.now().strftime("%d.%m.%Y %H:%M")
+
+    # Mesaj oluştur
+    lines = [
+        "━━━━━━━━━━━━━━━━━━━━━━━━",
+        f"🧠 <b>AI ANALİZİ: {symbol}</b>",
+        "━━━━━━━━━━━━━━━━━━━━━━━━",
+        "",
+        f"{sentiment_icon} <b>{sentiment_label}</b> • Skor: {score_text}/100",
+    ]
+
+    if confidence:
+        lines.append(f"   Güven: {signal_bar} {confidence}%")
+
+    lines.append("")
+
+    if technical_summary:
+        lines.extend([
+            "📊 <b>TEKNİK ÖZET</b>",
+            f"   {technical_summary}",
+            "",
+        ])
+
+    lines.extend([
+        "💬 <b>YORUM</b>",
+        f"   {explanation}",
+        "",
+        "📌 <b>ÖNE ÇIKANLAR</b>",
+        summary_lines,
+        "",
+        "📍 <b>KRİTİK SEVİYELER</b>",
+        f"   🟢 Destek  : {support_text}",
+        f"   🔴 Direnç  : {resistance_text}",
+        "",
+    ])
+
+    risk_line = f"{risk_icon} <b>Risk:</b> {risk_level}"
+    if timeframe:
+        risk_line += f" • {timeframe}"
+    lines.append(risk_line)
+
+    # Aksiyon notu varsa ekle
+    if action_note:
+        lines.extend(["", f"💡 <i>{action_note}</i>"])
+
+    lines.extend([
+        "",
+        "━━━━━━━━━━━━━━━━━━━━━━━━",
+        f"🤖 <i>Rapot AI • {now}</i>",
+    ])
+
+    return "\n".join(lines)
 
 
 def process_symbol(
