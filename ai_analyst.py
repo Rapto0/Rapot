@@ -70,6 +70,7 @@ def get_ai_runtime_settings() -> dict[str, Any]:
         "enable_fallback": bool(settings.ai_enable_fallback),
         "fallback_model": (settings.ai_fallback_model or "").strip() or None,
         "temperature": settings.ai_temperature,
+        "thinking_budget": settings.ai_thinking_budget,
         "max_output_tokens": settings.ai_max_output_tokens,
         "timeout": settings.ai_timeout,
     }
@@ -105,17 +106,24 @@ def _get_generation_config(backend: str | None = None) -> Any:
     runtime = get_ai_runtime_settings()
     if backend == "google.genai":
         if google_genai_types is not None:
+            thinking_config = None
+            if hasattr(google_genai_types, "ThinkingConfig"):
+                thinking_config = google_genai_types.ThinkingConfig(
+                    thinking_budget=runtime["thinking_budget"]
+                )
             return google_genai_types.GenerateContentConfig(
                 temperature=runtime["temperature"],
                 max_output_tokens=runtime["max_output_tokens"],
                 response_mime_type="application/json",
                 response_schema=AIAnalysisPayload,
+                thinking_config=thinking_config,
             )
         return {
             "temperature": runtime["temperature"],
             "max_output_tokens": runtime["max_output_tokens"],
             "response_mime_type": "application/json",
             "response_schema": AIAnalysisPayload,
+            "thinking_config": {"thinking_budget": runtime["thinking_budget"]},
         }
     return {
         "temperature": runtime["temperature"],
@@ -441,6 +449,64 @@ def _format_rich_timeframe_summary(timeframe: dict[str, Any]) -> str:
     )
 
 
+def _select_prompt_timeframes(technical_data: dict[str, Any]) -> list[dict[str, Any]]:
+    timeframes = list(technical_data.get("timeframes", []))
+    if not timeframes:
+        return []
+
+    matched_codes = {
+        str(timeframe.get("code"))
+        for timeframe in technical_data.get("matched_timeframes", [])
+        if timeframe.get("code")
+    }
+    if matched_codes:
+        selected = [timeframe for timeframe in timeframes if timeframe.get("code") in matched_codes]
+        if selected:
+            return selected
+
+    return timeframes[:3]
+
+
+def _compact_indicator_snapshot(
+    timeframe: dict[str, Any],
+    indicator_order: list[str],
+    limit: int = 4,
+) -> str:
+    indicators = timeframe.get("indicators") or {}
+    if not isinstance(indicators, dict) or not indicators:
+        return "Yok"
+
+    preferred = ["RSI", "RSI_Fast", "MACD", "W%R", "CCI", "ROC", "RSI2", "BBP", "CMO"]
+    selected_keys: list[str] = []
+    for key in preferred + indicator_order:
+        if key in indicators and key not in selected_keys:
+            selected_keys.append(key)
+        if len(selected_keys) >= limit:
+            break
+
+    parts = []
+    for key in selected_keys:
+        value = indicators.get(key)
+        formatted = f"{value:.2f}" if isinstance(value, float) else str(value)
+        parts.append(f"{key}={formatted}")
+    return ", ".join(parts) if parts else "Yok"
+
+
+def _truncate_news_context(
+    news_context: str | None, max_lines: int = 6, max_chars: int = 900
+) -> str:
+    if not news_context:
+        return "Haber verisi yok veya cekilemedi. Sadece teknige odaklan."
+
+    lines = [line.strip() for line in str(news_context).splitlines() if line.strip()]
+    if len(lines) > max_lines:
+        lines = lines[:max_lines]
+    text = "\n".join(lines)
+    if len(text) > max_chars:
+        text = text[: max_chars - 3].rstrip() + "..."
+    return text or "Haber verisi yok veya cekilemedi. Sadece teknige odaklan."
+
+
 def _build_technical_context_prompt(technical_data: dict[str, Any]) -> str:
     if technical_data.get("timeframes") and technical_data.get("strategy"):
         prompt_technical_data = _build_prompt_technical_payload(technical_data)
@@ -450,12 +516,14 @@ def _build_technical_context_prompt(technical_data: dict[str, Any]) -> str:
             f"{timeframe.get('label', timeframe.get('code', 'YOK'))} ({timeframe.get('code', 'YOK')})"
             for timeframe in matched_timeframes
         ]
-        timeframe_summaries = [
-            _format_rich_timeframe_summary(timeframe)
-            for timeframe in technical_data.get("timeframes", [])
-        ]
-        raw_payload = json.dumps(prompt_technical_data, ensure_ascii=False)
         rule_label = "Tetik Kurali" if technical_data.get("special_tag") else "Analiz Periyotlari"
+        indicator_order = list(prompt_technical_data.get("indicator_order", []))
+        selected_timeframes = _select_prompt_timeframes(prompt_technical_data)
+        timeframe_blocks = []
+        for timeframe in selected_timeframes:
+            summary = _format_rich_timeframe_summary(timeframe)
+            indicators = _compact_indicator_snapshot(timeframe, indicator_order)
+            timeframe_blocks.append(f"{summary} | Gosterge={indicators}")
 
         return (
             "TEKNIK BAGLAM (coklu timeframe):\n"
@@ -464,11 +532,8 @@ def _build_technical_context_prompt(technical_data: dict[str, Any]) -> str:
             f"- Sinyal Yonu: {prompt_technical_data.get('signal_type', 'Yok')}\n"
             f"- {rule_label}: {', '.join(trigger_rule) if trigger_rule else 'Yok'}\n"
             f"- Eslesen Periyotlar: {', '.join(matched_labels) if matched_labels else 'Yok'}\n"
-            f"- Gosterge Sirasi: {', '.join(technical_data.get('indicator_order', []))}\n"
-            "Tum Periyot Ozetleri:\n"
-            f"{chr(10).join(timeframe_summaries)}\n\n"
-            "JSON Teknik Veri:\n"
-            f"{raw_payload}\n"
+            "Secili Periyot Ozetleri:\n"
+            f"{chr(10).join(timeframe_blocks)}\n"
             "Bu veri yapisinda trigger_rule ve matched_timeframes alanlari ozel sinyalin hangi timeframe"
             " kesisiminden geldigini gosterir. Ozel etiket adlarini otomatik firsat/tehlike kabul etme;"
             " tek bir timeframe yerine tum baglami birlikte ve bagimsiz yorumla."
@@ -588,9 +653,7 @@ def analyze_with_gemini(
 
     def _generate():
         try:
-            news_text = "Haber verisi yok veya cekilemedi. Sadece teknige odaklan."
-            if news_context:
-                news_text = news_context
+            news_text = _truncate_news_context(news_context)
 
             signal_context = _build_prompt_signal_context(
                 scenario_name, signal_type, technical_data
@@ -613,29 +676,12 @@ def analyze_with_gemini(
             - Ozel etiketleri pazarlama dili olarak degil, kural motoru siniflandirmasi olarak ele al.
             - Teknik veri ile haber akisi celisiyorsa bunu acikca belirt ve confidence skorunu dusur.
             - Sadece saglanan teknik veri ve haber akisi uzerinden bagimsiz yorum yap.
-            Asagidaki JSON semasina birebir uyarak yanit ver. Markdown kullanma, sadece saf JSON dondur.
-            {{
-                "sentiment_score": (0-100 arasi sayi, 0=Ayi/Korku, 50=Notr, 100=Boga/Acgozluluk),
-                "sentiment_label": ("GUCLU AL", "AL", "NOTR", "SAT", "GUCLU SAT"),
-                "confidence_score": (0-100 arasi sayi, 0=Guvensiz, 100=Cok guvenli),
-                "summary": ["Carpici analiz maddesi 1", "Madde 2", "Madde 3"],
-                "explanation": "Yatirimciya hitap eden, teknik ve temeli birlestiren detayli paragraf (max 3 cumle).",
-                "technical_view": {{
-                    "bias": ("GUCLU AL", "AL", "NOTR", "SAT", "GUCLU SAT"),
-                    "strength": (0-100 arasi sayi),
-                    "conflicts": ["teknik celiski 1", "teknik celiski 2"]
-                }},
-                "news_view": {{
-                    "bias": ("GUCLU AL", "AL", "NOTR", "SAT", "GUCLU SAT"),
-                    "strength": (0-100 arasi sayi),
-                    "headline_count": (0 veya pozitif sayi)
-                }},
-                "key_levels": {{
-                    "support": ["destek seviyesi 1", "destek seviyesi 2"],
-                    "resistance": ["direnc seviyesi 1", "direnc seviyesi 2"]
-                }},
-                "risk_level": ("Dusuk", "Orta", "Yuksek")
-            }}
+            - Sadece gecerli JSON dondur. Markdown, aciklama metni veya code fence kullanma.
+            - JSON mutlaka su alanlari icersin:
+              sentiment_score, sentiment_label, confidence_score, summary, explanation,
+              technical_view, news_view, key_levels, risk_level
+            - summary en fazla 3 kisa madde olsun.
+            - key_levels.support ve key_levels.resistance en fazla 2 seviye olsun.
             """
 
             last_error: Exception | None = None

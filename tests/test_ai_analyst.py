@@ -34,6 +34,7 @@ class TestAIAnalystPhaseOne:
     def test_generation_config_uses_response_schema_for_google_genai(self, monkeypatch):
         monkeypatch.setattr(ai_analyst.settings, "ai_temperature", 0.2)
         monkeypatch.setattr(ai_analyst.settings, "ai_max_output_tokens", 1024)
+        monkeypatch.setattr(ai_analyst.settings, "ai_thinking_budget", 0)
 
         config = ai_analyst._get_generation_config("google.genai")
 
@@ -41,8 +42,11 @@ class TestAIAnalystPhaseOne:
         response_schema = _config_value(config, "response_schema")
         if ai_analyst.google_genai_types is None:
             assert response_schema is ai_analyst.AIAnalysisPayload
+            assert _config_value(config, "thinking_config") == {"thinking_budget": 0}
         else:
             assert response_schema is ai_analyst.AIAnalysisPayload
+            thinking_config = _config_value(config, "thinking_config")
+            assert _config_value(thinking_config, "thinking_budget") == 0
 
     @pytest.mark.unit
     def test_build_model_candidates_deduplicates_values(self, monkeypatch):
@@ -345,9 +349,20 @@ class TestAIAnalystPhaseOne:
         assert "Notr Olay Kodu: VALUE_COMPRESSION_EXTREME_BUY" in prompts[0]
         assert "Tetik Kurali: 1D, 2W-FRI, ME" in prompts[0]
         assert "Eslesen Periyotlar: GUNLUK (1D), 2 HAFTALIK (2W-FRI), 1 AYLIK (ME)" in prompts[0]
-        assert '"special_tag": "VALUE_COMPRESSION_EXTREME_BUY"' in prompts[0]
-        assert "BELEŞ" not in prompts[0]
-        assert "TARİHİ FIRSAT" not in prompts[0]
+        assert "JSON Teknik Veri" not in prompts[0]
+        assert "Gosterge=RSI=20" in prompts[0]
+        assert '"special_tag": "VALUE_COMPRESSION_EXTREME_BUY"' not in prompts[0]
+        assert "BELEÅ" not in prompts[0]
+        assert "TARÄ°HÄ° FIRSAT" not in prompts[0]
+
+    @pytest.mark.unit
+    def test_truncate_news_context_limits_lines_and_length(self):
+        news_text = "\n".join(f"Baslik {index} - {'x' * 50}" for index in range(1, 12))
+
+        truncated = ai_analyst._truncate_news_context(news_text, max_lines=3, max_chars=120)
+
+        assert truncated.count("\n") <= 2
+        assert len(truncated) <= 120
 
 
 def test_save_analysis_to_db_persists_structured_metadata(monkeypatch):

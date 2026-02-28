@@ -64,8 +64,14 @@ class Settings(BaseSettings):
         None, description="Birincil model basarisiz olursa denenecek model"
     )
     ai_temperature: float = Field(0.2, ge=0.0, le=2.0, description="AI sicaklik degeri")
+    ai_thinking_budget: int = Field(
+        0,
+        ge=0,
+        le=24576,
+        description="Gemini dusunme token butcesi (0 = kapali)",
+    )
     ai_max_output_tokens: int = Field(
-        1024, ge=128, le=8192, description="AI maksimum cikti token limiti"
+        2048, ge=128, le=8192, description="AI maksimum cikti token limiti"
     )
 
     model_config = SettingsConfigDict(
