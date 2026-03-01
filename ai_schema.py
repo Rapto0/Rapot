@@ -202,6 +202,8 @@ class AIAnalysisPayload(BaseModel):
     @classmethod
     def _validate_error(cls, value: Any) -> str | None:
         text = str(value or "").strip()
+        if text.lower() in {"null", "none", "nan"}:
+            return None
         return text or None
 
     @field_validator("error_code", mode="before")

@@ -431,11 +431,17 @@ def _display_risk_level(risk_level: str) -> str:
 
 
 def _format_ai_error_message(header: str, payload: Any) -> str:
-    reason = str(payload.error or "AI analizi üretilemedi.").strip()
+    reason = str(payload.error or "AI analizi uretilemedi.").strip()
     error_code = str(payload.error_code or "").strip().lower()
-    if error_code in {"invalid_json", "empty_response"}:
-        reason = "Model geçerli bir yanıt döndürmedi."
-    return f"{header}\n⚠️ AI analizi şu anda üretilemedi.\nNeden: {html.escape(reason)}"
+    if reason.lower() in {"", "null", "none", "nan"}:
+        reason = "Model gecerli bir yanit dondurmedi."
+    if error_code in {"invalid_json", "empty_response", "schema_validation"}:
+        reason = "Model gecerli bir yanit dondurmedi."
+    return (
+        f"{header}\n"
+        f"\u26a0\ufe0f AI analizi \u015fu anda \u00fcretilemedi.\n"
+        f"Neden: {html.escape(reason)}"
+    )
 
 
 def format_ai_message_for_telegram(
@@ -460,7 +466,7 @@ def format_ai_message_for_telegram(
         return f"{header}\n{html.escape(str(ai_response))}"
 
     error = payload.error
-    if error:
+    if error or payload.error_code:
         return _format_ai_error_message(header, payload)
 
     sentiment_label = payload.sentiment_label or "NOTR"

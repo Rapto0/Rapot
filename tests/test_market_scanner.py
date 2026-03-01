@@ -191,6 +191,25 @@ class TestFormatAIMessageForTelegram:
         assert "Timeout" in result
 
     @pytest.mark.unit
+    def test_normalizes_null_error_reason(self):
+        result = format_ai_message_for_telegram(
+            "AYES",
+            json.dumps({"error": "null", "error_code": "invalid_json", "sentiment_score": 50}),
+        )
+        assert "Neden:" in result
+        assert "null" not in result.lower()
+        assert "gecerli" in result.lower()
+
+    @pytest.mark.unit
+    def test_uses_error_code_when_error_field_missing(self):
+        result = format_ai_message_for_telegram(
+            "AYES",
+            json.dumps({"error": None, "error_code": "empty_response", "sentiment_score": 50}),
+        )
+        assert "AI analizi" in result
+        assert "gecerli" in result.lower()
+
+    @pytest.mark.unit
     def test_fallback_for_non_json(self):
         result = format_ai_message_for_telegram("AYES", "Duz metin AI yaniti")
         assert "Duz metin AI yaniti" in result
