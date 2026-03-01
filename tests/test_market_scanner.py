@@ -169,19 +169,25 @@ class TestFormatAIMessageForTelegram:
             "risk_level": "Orta",
         }
 
-        result = format_ai_message_for_telegram("AYES", json.dumps(payload))
+        result = format_ai_message_for_telegram(
+            "AYES",
+            json.dumps(payload),
+            technical_levels={"support": ["21.50", "20.80"], "resistance": ["22.50", "23.00"]},
+        )
 
         assert "AI KARARI (AYES)" in result
         assert "TEKN" in result
         assert "ANAL" in result
         assert "IKANLAR" in result
-        assert "Teknik Uyum" in result
+        assert "Teknik Uyum" not in result
         assert "Risk: Orta" in result
         assert "Destek  : 21.50 | 20.80" in result
         assert "&lt;oynak" in result
         assert "&lt;sat" in result
         assert "dikkat" in result
         assert '"sentiment_score"' not in result
+        assert "RİSK SEVİYESİ" not in result
+        assert "Rapot AI" not in result
 
     @pytest.mark.unit
     def test_support_only_levels_use_directional_heading(self):
@@ -198,14 +204,18 @@ class TestFormatAIMessageForTelegram:
             "risk_level": "Orta",
         }
 
-        result = format_ai_message_for_telegram("TEST", json.dumps(payload))
+        result = format_ai_message_for_telegram(
+            "TEST",
+            json.dumps(payload),
+            technical_levels={"support": ["1.20", "1.15"], "resistance": []},
+        )
 
         assert "DESTEK B" in result
         assert "KRITIK SEVIYELER" not in result.upper()
-        assert "Haber teyidi yok; analiz teknik veriye dayaniyor." in result
+        assert "Haber teyidi yok" in result
 
     @pytest.mark.unit
-    def test_normalizes_overflow_score_and_risk_note(self):
+    def test_formats_explanatory_score_and_news_only_summary(self):
         report = {
             "timeframes": [
                 {
@@ -235,13 +245,17 @@ class TestFormatAIMessageForTelegram:
             signal_dir="SAT",
             special_tag="PAHALI",
             report=report,
+            technical_levels={"support": ["95.00", "88.00"], "resistance": ["108.00", "115.00"]},
         )
 
-        assert "Skor: 10/10+" in result
-        assert "1G + 1H + 1A periyotlar" in result
+        assert "Skor: 13 puan / 10 eşik" in result
         assert "Haber teyidi yok; analiz teknik veriye dayaniyor." in result
-        assert "teyitsiz işleme girmeyin" in result
-        assert "..." not in result
+        assert "Teknik Uyum" not in result
+        assert "RİSK SEVİYESİ" not in result
+        assert "Rapot AI" not in result
+        assert "RSI" not in result.split("ÖNE ÇIKANLAR", 1)[1]
+        assert "Destek  : 95.00 | 88.00" in result
+        assert "Direnç  : 108.00 | 115.00" in result
 
     @pytest.mark.unit
     def test_handles_error_payload(self):

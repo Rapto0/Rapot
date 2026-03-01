@@ -7,7 +7,6 @@ import html
 import textwrap
 import time
 import unicodedata
-from datetime import datetime
 from typing import Any
 
 import pandas as pd
@@ -239,7 +238,7 @@ def _fold_text(text: str) -> str:
     return ascii_like.lower()
 
 
-def _parse_fraction_score(score_value: Any) -> tuple[str, int] | None:
+def _parse_fraction_score(score_value: Any) -> tuple[str, str, int] | None:
     if score_value is None:
         return None
     text = str(score_value).strip()
@@ -254,17 +253,9 @@ def _parse_fraction_score(score_value: Any) -> tuple[str, int] | None:
     if denominator <= 0:
         return None
     percentage = max(0, min(100, int(round((numerator / denominator) * 100))))
-    if numerator.is_integer() and denominator.is_integer() and numerator > denominator:
-        base = int(denominator)
-        return f"{base}/{base}+", percentage
     if numerator.is_integer() and denominator.is_integer():
-        return f"{int(numerator)}/{int(denominator)}", percentage
-    return f"{numerator:g}/{denominator:g}", percentage
-
-
-def _build_power_bar(percentage: int, segments: int = 10) -> str:
-    filled = max(0, min(segments, int(round((percentage / 100) * segments))))
-    return ("\u2588" * filled) + ("\u2591" * (segments - filled))
+        return str(int(numerator)), str(int(denominator)), percentage
+    return f"{numerator:g}", f"{denominator:g}", percentage
 
 
 def _signal_meta(
@@ -304,21 +295,16 @@ def _signal_meta(
 
     parsed_score = _parse_fraction_score(score_value)
     if parsed_score:
-        score_text, power_pct = parsed_score
-        strength_text = "Tam Sinyal" if power_pct >= 100 else "Güçlü Sinyal"
+        actual_score, threshold_score, _ = parsed_score
+        score_text = f"{actual_score} puan / {threshold_score} eşik"
     else:
-        power_pct = int(payload.confidence_score or payload.sentiment_score or 50)
-        score_text = f"{int(payload.sentiment_score or 50)}/100"
-        strength_text = "AI Güveni"
+        score_text = f"{int(payload.sentiment_score or 50)} güven / 100"
 
     return {
         "display_name": display_name,
         "display_hint": display_hint,
         "direction_label": direction_label,
         "score_text": score_text,
-        "strength_text": strength_text,
-        "power_pct": str(power_pct),
-        "power_bar": _build_power_bar(power_pct),
     }
 
 
@@ -360,19 +346,23 @@ def _shorten_summary_item(text: str, max_chars: int = 95) -> str:
 
 
 def _classify_summary_item(text: str) -> str:
-    lowered = text.lower()
-    if any(token in lowered for token in ["haber", "akisi", "akışı", "news"]):
+    lowered = _fold_text(text)
+    if any(
+        token in lowered
+        for token in [
+            "haber",
+            "akisi",
+            "news",
+            "kap",
+            "tedbir",
+            "aciklama",
+            "gozalti",
+            "operasyon",
+            "sermaye",
+            "regulasyon",
+        ]
+    ):
         return "news"
-    if any(
-        token in lowered
-        for token in ["gunluk", "günlük", "hafta", "aylik", "aylık", "periyot", "zaman dilim"]
-    ):
-        return "timeframe"
-    if any(
-        token in lowered
-        for token in ["rsi", "macd", "w%r", "cci", "gosterge", "gösterge", "asiri", "aşırı"]
-    ):
-        return "indicator"
     return "general"
 
 
@@ -417,84 +407,26 @@ def _normalize_summary_item(text: str) -> str:
     return compact
 
 
-def _build_summary_lines(summary_items: list[str]) -> str:
+def _build_news_lines(summary_items: list[str]) -> str:
     picked: list[str] = []
-    used_categories: set[str] = set()
     used_texts: set[str] = set()
 
     for item in summary_items:
+        if _classify_summary_item(item) != "news":
+            continue
         normalized = _normalize_summary_item(item)
         text_key = normalized.lower()
         if text_key in used_texts:
             continue
-        category = _classify_summary_item(normalized)
-        if category in used_categories and category != "general":
-            continue
         picked.append(normalized)
         used_texts.add(text_key)
-        used_categories.add(category)
         if len(picked) >= 2:
             break
 
     if not picked:
-        picked = ["One cikan madde uretilemedi."]
+        picked = ["Haber teyidi yok; analiz teknik veriye dayanıyor."]
 
     return "\n".join(f"• {html.escape(item)}" for item in picked[:2])
-
-
-def _target_timeframe_snapshot(
-    report: dict[str, Any] | None, special_tag: str | None
-) -> dict[str, Any] | None:
-    timeframe_code = SPECIAL_TAG_TARGET_TIMEFRAME.get(str(special_tag or "").upper())
-    if not report or not timeframe_code:
-        return None
-    for timeframe in report.get("timeframes", []):
-        if timeframe.get("code") == timeframe_code:
-            return timeframe
-    return None
-
-
-def _filter_numeric_levels(
-    levels: list[str], reference_price: float | None, kind: str
-) -> list[str]:
-    parsed: list[tuple[float, str]] = []
-    for raw_level in levels:
-        text = str(raw_level).strip()
-        if not text:
-            continue
-        try:
-            parsed.append((float(text.replace(",", ".")), text))
-        except ValueError:
-            continue
-
-    if not parsed:
-        return []
-
-    filtered = parsed
-    if reference_price and reference_price > 0:
-        if kind == "support":
-            filtered = [
-                item
-                for item in parsed
-                if (reference_price * 0.35) <= item[0] <= (reference_price * 1.02)
-            ]
-            filtered.sort(key=lambda item: item[0], reverse=True)
-        else:
-            filtered = [
-                item
-                for item in parsed
-                if (reference_price * 0.98) <= item[0] <= (reference_price * 1.80)
-            ]
-            filtered.sort(key=lambda item: item[0])
-
-    if not filtered:
-        filtered = parsed
-        if kind == "support":
-            filtered.sort(key=lambda item: item[0], reverse=True)
-        else:
-            filtered.sort(key=lambda item: item[0])
-
-    return [text for _, text in filtered[:2]]
 
 
 def _build_level_block(levels: list[str], prefix: str) -> str | None:
@@ -502,6 +434,61 @@ def _build_level_block(levels: list[str], prefix: str) -> str | None:
     if not cleaned:
         return None
     return f"{prefix}{' | '.join(cleaned)}"
+
+
+def _format_level_value(value: float) -> str:
+    if value >= 100:
+        return f"{value:.2f}"
+    if value >= 1:
+        return f"{value:.3f}".rstrip("0").rstrip(".")
+    return f"{value:.4f}".rstrip("0").rstrip(".")
+
+
+def _select_recent_levels(values: list[float], *, reverse: bool) -> list[str]:
+    ordered = sorted(values, reverse=reverse)
+    selected: list[str] = []
+    seen_keys: set[float] = set()
+    for value in ordered:
+        rounded_key = round(value, 4)
+        if rounded_key in seen_keys:
+            continue
+        selected.append(_format_level_value(value))
+        seen_keys.add(rounded_key)
+        if len(selected) >= 2:
+            break
+    return selected
+
+
+def _derive_technical_levels(
+    df_daily: pd.DataFrame | None, special_tag: str | None
+) -> dict[str, list[str]]:
+    if df_daily is None or df_daily.empty:
+        return {"support": [], "resistance": []}
+
+    timeframe_code = SPECIAL_TAG_TARGET_TIMEFRAME.get(str(special_tag or "").upper(), "1D")
+    df_source = resample_data(df_daily.copy(), timeframe_code)
+    if (
+        df_source is None
+        or df_source.empty
+        or len(df_source) < 3
+        or not {"High", "Low", "Close"}.issubset(df_source.columns)
+    ):
+        return {"support": [], "resistance": []}
+
+    recent = df_source.tail(24)
+    current_price = float(recent["Close"].iloc[-1])
+    historical = recent.iloc[:-1] if len(recent) > 1 else recent
+    support_candidates = [
+        float(value) for value in historical["Low"].tolist() if value < current_price
+    ]
+    resistance_candidates = [
+        float(value) for value in historical["High"].tolist() if value > current_price
+    ]
+
+    return {
+        "support": _select_recent_levels(support_candidates, reverse=True),
+        "resistance": _select_recent_levels(resistance_candidates, reverse=False),
+    }
 
 
 def _resolve_levels_heading(has_support: bool, has_resistance: bool) -> str:
@@ -570,6 +557,7 @@ def format_ai_message_for_telegram(
     signal_dir: str | None = None,
     special_tag: str | None = None,
     report: dict[str, Any] | None = None,
+    technical_levels: dict[str, list[str]] | None = None,
 ) -> str:
     """
     AI JSON ciktisini Telegram icin okunabilir ve hiyerarsik metne cevirir.
@@ -601,26 +589,17 @@ def format_ai_message_for_telegram(
     explanation = _replace_internal_ai_tokens(
         payload.explanation or "Detayli aciklama uretilemedi."
     )
-    summary_items = payload.summary or ["Ozet maddesi uretilemedi."]
+    summary_items = payload.summary or []
     risk_level = _display_risk_level(payload.risk_level or "Belirsiz")
 
     signal_meta = _signal_meta(strategy_name, signal_dir, special_tag, report, payload)
     primary_comment = _shorten_summary_item(_extract_primary_comment(explanation), max_chars=125)
     box_lines = _wrap_box_text(primary_comment, max_lines=5)
-    summary_lines = _build_summary_lines(summary_items)
+    summary_lines = _build_news_lines(summary_items)
 
-    target_snapshot = _target_timeframe_snapshot(report, special_tag)
-    current_price = None
-    if target_snapshot:
-        try:
-            current_price = float(target_snapshot.get("price"))
-        except (TypeError, ValueError):
-            current_price = None
-
-    filtered_support = _filter_numeric_levels(payload.key_levels.support, current_price, "support")
-    filtered_resistance = _filter_numeric_levels(
-        payload.key_levels.resistance, current_price, "resistance"
-    )
+    level_source = technical_levels or {}
+    filtered_support = list(level_source.get("support", []))
+    filtered_resistance = list(level_source.get("resistance", []))
 
     support_line = _build_level_block(filtered_support, "\u2502 \U0001f7e2 Destek  : ")
     resistance_line = _build_level_block(filtered_resistance, "\u2502 \U0001f534 Direnç  : ")
@@ -633,8 +612,7 @@ def format_ai_message_for_telegram(
         "<b>\U0001f4ca TEKNİK DURUM</b>",
         f"\u251c\u2500 Strateji: {html.escape(signal_meta['display_name'])} ({html.escape(signal_meta['display_hint'])})",
         f"\u251c\u2500 Yön: {html.escape(signal_meta['direction_label'])}",
-        f"\u251c\u2500 Skor: {html.escape(signal_meta['score_text'])} ({html.escape(signal_meta['strength_text'])})",
-        f"\u2514\u2500 Teknik Uyum: {html.escape(signal_meta['power_bar'])} {html.escape(signal_meta['power_pct'])}%",
+        f"\u2514\u2500 Skor: {html.escape(signal_meta['score_text'])}",
         "",
         "<b>\U0001f9e0 AI ANALİZİ</b>",
         "\u250c" + ("\u2500" * 29),
@@ -656,18 +634,6 @@ def format_ai_message_for_telegram(
         if resistance_line:
             sections.append(html.escape(resistance_line))
         sections.append("\u2514" + ("\u2500" * 29))
-
-    sections.extend(
-        [
-            "",
-            f"\u26a0\ufe0f <b>RİSK SEVİYESİ:</b> {html.escape(_display_risk_level(str(risk_level).upper()))}",
-            f"\U0001f4a1 {html.escape(_build_risk_note(str(risk_level), str(sentiment_label)))}",
-            "",
-            "\u2501" * 28,
-            f"\U0001f916 Rapot AI \u2022 {html.escape(datetime.now().strftime('%d.%m.%Y %H:%M'))}",
-            "\u2501" * 28,
-        ]
-    )
 
     return "\n".join(sections)
 
@@ -818,6 +784,7 @@ def process_symbol(
             signal_dir=signal_dir,
             special_tag=special_tag,
             report=get_strategy_report(strategy_name),
+            technical_levels=_derive_technical_levels(df_daily, special_tag),
         )
         if not send_message(final_message):
             logger.error("Ozel sinyal AI mesaji gonderilemedi: %s %s", symbol, special_tag)
