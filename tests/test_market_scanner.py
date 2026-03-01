@@ -175,12 +175,34 @@ class TestFormatAIMessageForTelegram:
         assert "TEKN" in result
         assert "ANAL" in result
         assert "IKANLAR" in result
+        assert "Teknik Uyum" in result
         assert "Risk: Orta" in result
         assert "Destek  : 21.50 | 20.80" in result
         assert "&lt;oynak" in result
         assert "&lt;sat" in result
         assert "dikkat" in result
         assert '"sentiment_score"' not in result
+
+    @pytest.mark.unit
+    def test_support_only_levels_use_directional_heading(self):
+        payload = {
+            "sentiment_score": 75,
+            "sentiment_label": "AL",
+            "summary": [
+                "Gunluk ve haftalik yapida AL sinyali var.",
+                "Haber akisi mevcut degil.",
+                "RSI ve MACD toparlanma sinyali veriyor.",
+            ],
+            "explanation": "Varlik teknik olarak yukari yone egilim gostermektedir. Devam eden hareket teyit bekliyor.",
+            "key_levels": {"support": ["1.20", "1.15"], "resistance": []},
+            "risk_level": "Orta",
+        }
+
+        result = format_ai_message_for_telegram("TEST", json.dumps(payload))
+
+        assert "DESTEK B" in result
+        assert "KRITIK SEVIYELER" not in result.upper()
+        assert "Haber teyidi yok; analiz teknik veriye dayaniyor." in result
 
     @pytest.mark.unit
     def test_handles_error_payload(self):

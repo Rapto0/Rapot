@@ -323,6 +323,21 @@ def _wrap_box_text(text: str, width: int = 29, max_lines: int = 4) -> list[str]:
     return lines
 
 
+def _extract_primary_comment(text: str) -> str:
+    normalized = _replace_internal_ai_tokens(text)
+    compact = " ".join(normalized.split()).strip()
+    if not compact:
+        return "Detayli yorum uretilemedi."
+
+    for separator in [". ", ".\n", "! ", "!\n", "? ", "?\n"]:
+        if separator in compact:
+            sentence = compact.split(separator, 1)[0].strip()
+            if sentence:
+                return sentence.rstrip(".!?") + "."
+
+    return compact
+
+
 def _shorten_summary_item(text: str, max_chars: int = 95) -> str:
     normalized = _replace_internal_ai_tokens(text)
     first_sentence = normalized.split(".")[0].strip() or normalized
@@ -330,6 +345,58 @@ def _shorten_summary_item(text: str, max_chars: int = 95) -> str:
     if len(compact) > max_chars:
         compact = compact[: max_chars - 3].rstrip() + "..."
     return compact
+
+
+def _classify_summary_item(text: str) -> str:
+    lowered = text.lower()
+    if any(token in lowered for token in ["haber", "akisi", "akışı", "news"]):
+        return "news"
+    if any(
+        token in lowered
+        for token in ["gunluk", "günlük", "hafta", "aylik", "aylık", "periyot", "zaman dilim"]
+    ):
+        return "timeframe"
+    if any(
+        token in lowered
+        for token in ["rsi", "macd", "w%r", "cci", "gosterge", "gösterge", "asiri", "aşırı"]
+    ):
+        return "indicator"
+    return "general"
+
+
+def _normalize_summary_item(text: str) -> str:
+    compact = _shorten_summary_item(text)
+    lowered = compact.lower()
+    if "haber" in lowered and (
+        "yok" in lowered or "mevcut degil" in lowered or "mevcut değil" in lowered
+    ):
+        return "Haber teyidi yok; analiz teknik veriye dayaniyor."
+    return compact
+
+
+def _build_summary_lines(summary_items: list[str]) -> str:
+    picked: list[str] = []
+    used_categories: set[str] = set()
+    used_texts: set[str] = set()
+
+    for item in summary_items:
+        normalized = _normalize_summary_item(item)
+        text_key = normalized.lower()
+        if text_key in used_texts:
+            continue
+        category = _classify_summary_item(normalized)
+        if category in used_categories and category != "general":
+            continue
+        picked.append(normalized)
+        used_texts.add(text_key)
+        used_categories.add(category)
+        if len(picked) >= 2:
+            break
+
+    if not picked:
+        picked = ["One cikan madde uretilemedi."]
+
+    return "\n".join(f"• {html.escape(item)}" for item in picked[:2])
 
 
 def _target_timeframe_snapshot(
@@ -392,6 +459,14 @@ def _build_level_block(levels: list[str], prefix: str) -> str | None:
     if not cleaned:
         return None
     return f"{prefix}{' | '.join(cleaned)}"
+
+
+def _resolve_levels_heading(has_support: bool, has_resistance: bool) -> str:
+    if has_support and has_resistance:
+        return "<b>\U0001f4cd KR\u0130T\u0130K SEV\u0130YELER</b>"
+    if has_support:
+        return "<b>\U0001f4cd DESTEK B\u00d6LGES\u0130</b>"
+    return "<b>\U0001f4cd D\u0130REN\u00c7 B\u00d6LGES\u0130</b>"
 
 
 def _build_risk_note(risk_level: str, sentiment_label: str) -> str:
@@ -481,16 +556,14 @@ def format_ai_message_for_telegram(
     sentiment_display = _display_sentiment_label(sentiment_label)
 
     explanation = _replace_internal_ai_tokens(
-        payload.explanation or "Detaylı açıklama üretilemedi."
+        payload.explanation or "Detayli aciklama uretilemedi."
     )
-    summary_items = [
-        _shorten_summary_item(item) for item in (payload.summary or ["Özet maddesi üretilemedi."])
-    ]
+    summary_items = payload.summary or ["Ozet maddesi uretilemedi."]
     risk_level = _display_risk_level(payload.risk_level or "Belirsiz")
 
     signal_meta = _signal_meta(strategy_name, signal_dir, special_tag, report, payload)
-    box_lines = _wrap_box_text(explanation)
-    summary_lines = "\n".join(f"\u2022 {html.escape(str(item))}" for item in summary_items[:3])
+    box_lines = _wrap_box_text(_extract_primary_comment(explanation), max_lines=6)
+    summary_lines = _build_summary_lines(summary_items)
 
     target_snapshot = _target_timeframe_snapshot(report, special_tag)
     current_price = None
@@ -507,6 +580,8 @@ def format_ai_message_for_telegram(
 
     support_line = _build_level_block(filtered_support, "\u2502 \U0001f7e2 Destek  : ")
     resistance_line = _build_level_block(filtered_resistance, "\u2502 \U0001f534 Direnç  : ")
+    has_support = bool(support_line)
+    has_resistance = bool(resistance_line)
 
     sections = [
         header,
@@ -515,7 +590,7 @@ def format_ai_message_for_telegram(
         f"\u251c\u2500 Strateji: {html.escape(signal_meta['display_name'])} ({html.escape(signal_meta['display_hint'])})",
         f"\u251c\u2500 Yön: {html.escape(signal_meta['direction_label'])}",
         f"\u251c\u2500 Skor: {html.escape(signal_meta['score_text'])} ({html.escape(signal_meta['strength_text'])})",
-        f"\u2514\u2500 Güç: {html.escape(signal_meta['power_bar'])} {html.escape(signal_meta['power_pct'])}%",
+        f"\u2514\u2500 Teknik Uyum: {html.escape(signal_meta['power_bar'])} {html.escape(signal_meta['power_pct'])}%",
         "",
         "<b>\U0001f9e0 AI ANALİZİ</b>",
         "\u250c" + ("\u2500" * 29),
@@ -528,8 +603,10 @@ def format_ai_message_for_telegram(
         summary_lines,
     ]
 
-    if support_line or resistance_line:
-        sections.extend(["", "<b>\U0001f4cd KRİTİK SEVİYELER</b>", "\u250c" + ("\u2500" * 29)])
+    if has_support or has_resistance:
+        sections.extend(
+            ["", _resolve_levels_heading(has_support, has_resistance), "\u250c" + ("\u2500" * 29)]
+        )
         if support_line:
             sections.append(html.escape(support_line))
         if resistance_line:
