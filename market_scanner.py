@@ -4,7 +4,9 @@ Piyasa tarama ve sinyal işleme fonksiyonları.
 """
 
 import html
+import textwrap
 import time
+from datetime import datetime
 from typing import Any
 
 import pandas as pd
@@ -23,6 +25,30 @@ from strategy_inspector import build_strategy_ai_payload, inspect_strategy_dataf
 from telegram_notify import send_message
 
 logger = get_logger(__name__)
+
+
+SPECIAL_TAG_DISPLAY: dict[str, tuple[str, str]] = {
+    "BELES": ("BELES", "Tarihi Firsat"),
+    "COK_UCUZ": ("COK UCUZ", "Dip Bolgesi"),
+    "PAHALI": ("PAHALI", "Tepe Bolgesi"),
+    "FAHIS_FIYAT": ("FAHIS FIYAT", "Asiri Tepe"),
+}
+
+SPECIAL_TAG_TARGET_TIMEFRAME = {
+    "COK_UCUZ": "3W-FRI",
+    "BELES": "ME",
+    "PAHALI": "W-FRI",
+    "FAHIS_FIYAT": "ME",
+}
+
+NEUTRAL_TOKEN_DISPLAY = {
+    "VALUE_COMPRESSION_EXTREME_BUY": "BELES",
+    "VALUE_COMPRESSION_BUY": "COK UCUZ",
+    "VALUE_EXTENSION_SELL": "PAHALI",
+    "VALUE_EXTENSION_EXTREME_SELL": "FAHIS FIYAT",
+    "LONG_BIAS": "AL",
+    "SHORT_BIAS": "SAT",
+}
 
 
 class ScannerState:
@@ -194,13 +220,140 @@ def generate_manual_report(
     return msg
 
 
-def format_ai_message_for_telegram(symbol: str, ai_response: str) -> str:
+def _replace_internal_ai_tokens(text: str) -> str:
+    normalized = str(text or "")
+    for raw, clean in NEUTRAL_TOKEN_DISPLAY.items():
+        normalized = normalized.replace(raw, clean)
+        normalized = normalized.replace(f"'{raw}'", clean)
+        normalized = normalized.replace(f'"{raw}"', clean)
+    return " ".join(normalized.split())
+
+
+def _parse_fraction_score(score_value: Any) -> tuple[str, int] | None:
+    if score_value is None:
+        return None
+    text = str(score_value).strip()
+    if "/" not in text:
+        return None
+    left, right = text.split("/", 1)
+    try:
+        numerator = float(left.strip())
+        denominator = float(right.strip())
+    except ValueError:
+        return None
+    if denominator <= 0:
+        return None
+    percentage = max(0, min(100, int(round((numerator / denominator) * 100))))
+    if numerator.is_integer() and denominator.is_integer():
+        return f"{int(numerator)}/{int(denominator)}", percentage
+    return f"{numerator:g}/{denominator:g}", percentage
+
+
+def _build_power_bar(percentage: int, segments: int = 10) -> str:
+    filled = max(0, min(segments, int(round((percentage / 100) * segments))))
+    return ("\u2588" * filled) + ("\u2591" * (segments - filled))
+
+
+def _signal_meta(
+    strategy_name: str | None,
+    signal_dir: str | None,
+    special_tag: str | None,
+    report: dict[str, Any] | None,
+    payload: Any,
+) -> dict[str, str]:
+    display_name, display_hint = SPECIAL_TAG_DISPLAY.get(
+        str(special_tag or "").upper(),
+        (str(special_tag or strategy_name or "BILINMIYOR"), "Standart Kurgu"),
+    )
+
+    upper_signal = str(signal_dir or payload.sentiment_label or "NOTR").upper()
+    if upper_signal == "AL":
+        direction_label = "\U0001f7e2 AL"
+    elif upper_signal == "SAT":
+        direction_label = "\U0001f534 SAT"
+    else:
+        direction_label = "\u26aa NOTR"
+
+    timeframe_code = SPECIAL_TAG_TARGET_TIMEFRAME.get(str(special_tag or "").upper())
+    selected_timeframe = None
+    if report and timeframe_code:
+        for timeframe in report.get("timeframes", []):
+            if timeframe.get("code") == timeframe_code:
+                selected_timeframe = timeframe
+                break
+
+    score_value = None
+    if selected_timeframe:
+        if upper_signal == "SAT":
+            score_value = selected_timeframe.get("secondary_score")
+        else:
+            score_value = selected_timeframe.get("primary_score")
+
+    parsed_score = _parse_fraction_score(score_value)
+    if parsed_score:
+        score_text, power_pct = parsed_score
+        strength_text = "Tam Sinyal" if power_pct >= 100 else "Guclu Sinyal"
+    else:
+        power_pct = int(payload.confidence_score or payload.sentiment_score or 50)
+        score_text = f"{int(payload.sentiment_score or 50)}/100"
+        strength_text = "AI Guveni"
+
+    return {
+        "display_name": display_name,
+        "display_hint": display_hint,
+        "direction_label": direction_label,
+        "score_text": score_text,
+        "strength_text": strength_text,
+        "power_pct": str(power_pct),
+        "power_bar": _build_power_bar(power_pct),
+    }
+
+
+def _wrap_box_text(text: str, width: int = 29, max_lines: int = 4) -> list[str]:
+    cleaned = _replace_internal_ai_tokens(text)
+    wrapped = textwrap.wrap(cleaned, width=width, break_long_words=False, break_on_hyphens=False)
+    if not wrapped:
+        return ["Detayli yorum uretilemedi."]
+    lines = wrapped[:max_lines]
+    if len(wrapped) > max_lines and len(lines[-1]) > 3:
+        lines[-1] = lines[-1][: max(0, width - 3)].rstrip() + "..."
+    return lines
+
+
+def _build_level_block(levels: list[str], prefix: str) -> str | None:
+    cleaned = [str(level).strip() for level in levels if str(level).strip()]
+    if not cleaned:
+        return None
+    return f"{prefix}{' | '.join(cleaned)}"
+
+
+def _build_risk_note(risk_level: str, sentiment_label: str) -> str:
+    upper_risk = str(risk_level).upper()
+    upper_sentiment = str(sentiment_label).upper()
+    if upper_risk == "YUKSEK":
+        return "Pozisyon almadan once hacim ve momentum teyidi bekleyin."
+    if upper_sentiment in {"GUCLU AL", "AL"}:
+        return "Isleme girmeden once kirilim ve hacim teyidini izleyin."
+    if upper_sentiment in {"GUCLU SAT", "SAT"}:
+        return "Zayif hacimli geri donuslerde acele etmeyin."
+    return "Net yon teyidi gelmeden agresif pozisyon acmayin."
+
+
+def format_ai_message_for_telegram(
+    symbol: str,
+    ai_response: str,
+    *,
+    strategy_name: str | None = None,
+    signal_dir: str | None = None,
+    special_tag: str | None = None,
+    report: dict[str, Any] | None = None,
+) -> str:
     """
-    AI JSON çıktısını Telegram için okunabilir metne çevirir.
-    JSON değilse ham metni korur.
+    AI JSON ciktisini Telegram icin okunabilir ve hiyerarsik metne cevirir.
+    JSON degilse ham metni korur.
     """
     safe_symbol = html.escape(str(symbol))
-    header = f"🧠 <b>AI KARARI ({safe_symbol}):</b>"
+    header = f"\U0001f9e0 <b>AI KARARI ({safe_symbol}):</b>"
 
     try:
         payload = parse_ai_response(ai_response)
@@ -210,89 +363,84 @@ def format_ai_message_for_telegram(symbol: str, ai_response: str) -> str:
     error = payload.error
     if error:
         error_suffix = f" ({payload.error_code})" if payload.error_code else ""
-        return f"{header}\n⚠️ AI analizi üretilemedi: {html.escape(str(error))}{html.escape(error_suffix)}"
+        return f"{header}\n\u26a0\ufe0f AI analizi uretilemedi: {html.escape(str(error))}{html.escape(error_suffix)}"
 
     sentiment_label = payload.sentiment_label or "NOTR"
-    sentiment_score = payload.sentiment_score
-    if isinstance(sentiment_score, float):
-        score_text = f"{sentiment_score:.1f}/100"
-    elif isinstance(sentiment_score, int):
-        score_text = f"{sentiment_score}/100"
-    else:
-        score_text = "Skor yok"
-
     upper_label = sentiment_label.upper()
     if "AL" in upper_label:
-        sentiment_icon = "🟢"
+        sentiment_icon = "\U0001f7e2"
     elif "SAT" in upper_label:
-        sentiment_icon = "🔴"
+        sentiment_icon = "\U0001f534"
     else:
-        sentiment_icon = "⚪️"
+        sentiment_icon = "\u26aa"
 
-    explanation = payload.explanation or "Detayli aciklama uretilemedi."
-    summary_items = payload.summary or ["Ozet maddesi uretilemedi."]
-    summary_lines = "\n".join(f"• {html.escape(str(item))}" for item in summary_items[:3])
+    sentiment_display = (
+        "GUCLU AL"
+        if upper_label == "GUCLU AL"
+        else "GUCLU SAT"
+        if upper_label == "GUCLU SAT"
+        else sentiment_label
+    )
 
-    def _short_explanation(text: str, max_sentences: int = 2, max_chars: int = 420) -> str:
-        normalized = " ".join(str(text or "").split())
-        if not normalized:
-            return "Detayli yorum uretilemedi."
-
-        sentences = []
-        current = []
-        for char in normalized:
-            current.append(char)
-            if char in ".!?":
-                sentence = "".join(current).strip()
-                if sentence:
-                    sentences.append(sentence)
-                current = []
-            if len(sentences) >= max_sentences:
-                break
-
-        if not sentences and current:
-            sentences.append("".join(current).strip())
-
-        compact = " ".join(sentences).strip() or normalized
-        if len(compact) > max_chars:
-            compact = compact[: max_chars - 3].rstrip() + "..."
-        return compact
-
-    def _join_levels(levels: Any) -> str:
-        if isinstance(levels, str):
-            return html.escape(levels.strip()) or "-"
-        if isinstance(levels, list):
-            cleaned = [html.escape(str(level).strip()) for level in levels if str(level).strip()]
-            return ", ".join(cleaned) if cleaned else "-"
-        return "-"
-
-    support_text = _join_levels(payload.key_levels.support)
-    resistance_text = _join_levels(payload.key_levels.resistance)
-    risk_level = payload.risk_level or "Belirsiz"
-    compact_explanation = html.escape(_short_explanation(explanation))
-
-    meta_lines = [
-        f"{sentiment_icon} <b>{html.escape(str(sentiment_label))}</b>",
-        f"• Skor: {score_text}",
-        f"• Risk: {html.escape(str(risk_level))}",
+    explanation = _replace_internal_ai_tokens(
+        payload.explanation or "Detayli aciklama uretilemedi."
+    )
+    summary_items = [
+        _replace_internal_ai_tokens(item)
+        for item in (payload.summary or ["Ozet maddesi uretilemedi."])
     ]
+    risk_level = payload.risk_level or "Belirsiz"
 
-    level_lines = []
-    if support_text != "-":
-        level_lines.append(f"• Destek: {support_text}")
-    if resistance_text != "-":
-        level_lines.append(f"• Direnç: {resistance_text}")
+    signal_meta = _signal_meta(strategy_name, signal_dir, special_tag, report, payload)
+    box_lines = _wrap_box_text(explanation)
+    summary_lines = "\n".join(f"\u2022 {html.escape(str(item))}" for item in summary_items[:3])
+
+    support_line = _build_level_block(payload.key_levels.support, "\u2502 \U0001f7e2 Destek  : ")
+    resistance_line = _build_level_block(
+        payload.key_levels.resistance, "\u2502 \U0001f534 Direnc  : "
+    )
 
     sections = [
         header,
-        "\n".join(meta_lines),
-        f"📌 <b>Ozet:</b>\n{summary_lines}",
-        f"🧭 <b>Yorum:</b>\n{compact_explanation}",
+        "\u2501" * 28,
+        "<b>\U0001f4ca TEKNIK DURUM</b>",
+        f"\u251c\u2500 Strateji: {html.escape(signal_meta['display_name'])} ({html.escape(signal_meta['display_hint'])})",
+        f"\u251c\u2500 Yon: {html.escape(signal_meta['direction_label'])}",
+        f"\u251c\u2500 Skor: {html.escape(signal_meta['score_text'])} ({html.escape(signal_meta['strength_text'])})",
+        f"\u2514\u2500 Guc: {html.escape(signal_meta['power_bar'])} {html.escape(signal_meta['power_pct'])}%",
+        "",
+        "<b>\U0001f9e0 AI ANALIZI</b>",
+        "\u250c" + ("\u2500" * 29),
+        f"\u2502 {sentiment_icon} <b>{html.escape(str(sentiment_display))}</b> \u2022 Risk: {html.escape(str(risk_level))}",
+        "\u2502",
+        *[f"\u2502 {html.escape(line)}" for line in box_lines],
+        "\u2514" + ("\u2500" * 29),
+        "",
+        "<b>\U0001f4cc ONE CIKANLAR</b>",
+        summary_lines,
     ]
-    if level_lines:
-        sections.append("📍 <b>Seviyeler:</b>\n" + "\n".join(level_lines))
 
-    return "\n\n".join(sections)
+    if support_line or resistance_line:
+        sections.extend(["", "<b>\U0001f4cd KRITIK SEVIYELER</b>", "\u250c" + ("\u2500" * 29)])
+        if support_line:
+            sections.append(html.escape(support_line))
+        if resistance_line:
+            sections.append(html.escape(resistance_line))
+        sections.append("\u2514" + ("\u2500" * 29))
+
+    sections.extend(
+        [
+            "",
+            f"\u26a0\ufe0f <b>RISK SEVIYESI:</b> {html.escape(str(risk_level).upper())}",
+            f"\U0001f4a1 {html.escape(_build_risk_note(str(risk_level), str(sentiment_label)))}",
+            "",
+            "\u2501" * 28,
+            f"\U0001f916 Rapot AI \u2022 {html.escape(datetime.now().strftime('%d.%m.%Y %H:%M'))}",
+            "\u2501" * 28,
+        ]
+    )
+
+    return "\n".join(sections)
 
 
 def process_symbol(
@@ -434,7 +582,14 @@ def process_symbol(
             technical_data=technical_payload,
             news_context=news_data,
         )
-        final_message = format_ai_message_for_telegram(symbol, ai_msg)
+        final_message = format_ai_message_for_telegram(
+            symbol,
+            ai_msg,
+            strategy_name=strategy_name,
+            signal_dir=signal_dir,
+            special_tag=special_tag,
+            report=get_strategy_report(strategy_name),
+        )
         if not send_message(final_message):
             logger.error("Ozel sinyal AI mesaji gonderilemedi: %s %s", symbol, special_tag)
 

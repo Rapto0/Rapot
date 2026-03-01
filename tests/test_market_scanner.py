@@ -172,13 +172,14 @@ class TestFormatAIMessageForTelegram:
         result = format_ai_message_for_telegram("AYES", json.dumps(payload))
 
         assert "AI KARARI (AYES)" in result
-        assert "<b>SAT</b>" in result
-        assert "Ozet" in result
-        assert "Yorum" in result
+        assert "TEKNIK DURUM" in result
+        assert "AI ANALIZI" in result
+        assert "ONE CIKANLAR" in result
         assert "Risk: Orta" in result
-        assert "Destek: 21.50, 20.80" in result
-        assert "&lt;oynaklık&gt; &amp; baskı" in result
-        assert "&lt;satış&gt; baskısına işaret ediyor &amp; dikkat gerektiriyor." in result
+        assert "Destek  : 21.50 | 20.80" in result
+        assert "&lt;oynak" in result
+        assert "&lt;sat" in result
+        assert "dikkat" in result
         assert '"sentiment_score"' not in result
 
     @pytest.mark.unit
@@ -186,8 +187,7 @@ class TestFormatAIMessageForTelegram:
         result = format_ai_message_for_telegram(
             "AYES", json.dumps({"error": "Timeout", "error_code": "timeout", "sentiment_score": 50})
         )
-
-        assert "AI analizi üretilemedi: Timeout (timeout)" in result
+        assert "AI analizi uretilemedi: Timeout (timeout)" in result
 
     @pytest.mark.unit
     def test_fallback_for_non_json(self):
