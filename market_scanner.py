@@ -28,10 +28,10 @@ logger = get_logger(__name__)
 
 
 SPECIAL_TAG_DISPLAY: dict[str, tuple[str, str]] = {
-    "BELES": ("BELES", "Tarihi Firsat"),
-    "COK_UCUZ": ("COK UCUZ", "Dip Bolgesi"),
-    "PAHALI": ("PAHALI", "Tepe Bolgesi"),
-    "FAHIS_FIYAT": ("FAHIS FIYAT", "Asiri Tepe"),
+    "BELES": ("BELEŞ", "Tarihi Fırsat"),
+    "COK_UCUZ": ("ÇOK UCUZ", "Dip Bölgesi"),
+    "PAHALI": ("PAHALI", "Tepe Bölgesi"),
+    "FAHIS_FIYAT": ("FAHİŞ FİYAT", "Aşırı Tepe"),
 }
 
 SPECIAL_TAG_TARGET_TIMEFRAME = {
@@ -42,12 +42,15 @@ SPECIAL_TAG_TARGET_TIMEFRAME = {
 }
 
 NEUTRAL_TOKEN_DISPLAY = {
-    "VALUE_COMPRESSION_EXTREME_BUY": "BELES",
-    "VALUE_COMPRESSION_BUY": "COK UCUZ",
+    "VALUE_COMPRESSION_EXTREME_BUY": "BELEŞ",
+    "VALUE_COMPRESSION_BUY": "ÇOK UCUZ",
     "VALUE_EXTENSION_SELL": "PAHALI",
-    "VALUE_EXTENSION_EXTREME_SELL": "FAHIS FIYAT",
+    "VALUE_EXTENSION_EXTREME_SELL": "FAHİŞ FİYAT",
     "LONG_BIAS": "AL",
     "SHORT_BIAS": "SAT",
+    "RSI_Fast": "Hızlı RSI",
+    "TopScore": "Tepe Skoru",
+    "DipScore": "Dip Skoru",
 }
 
 
@@ -272,7 +275,7 @@ def _signal_meta(
     elif upper_signal == "SAT":
         direction_label = "\U0001f534 SAT"
     else:
-        direction_label = "\u26aa NOTR"
+        direction_label = "\u26aa NÖTR"
 
     timeframe_code = SPECIAL_TAG_TARGET_TIMEFRAME.get(str(special_tag or "").upper())
     selected_timeframe = None
@@ -292,11 +295,11 @@ def _signal_meta(
     parsed_score = _parse_fraction_score(score_value)
     if parsed_score:
         score_text, power_pct = parsed_score
-        strength_text = "Tam Sinyal" if power_pct >= 100 else "Guclu Sinyal"
+        strength_text = "Tam Sinyal" if power_pct >= 100 else "Güçlü Sinyal"
     else:
         power_pct = int(payload.confidence_score or payload.sentiment_score or 50)
         score_text = f"{int(payload.sentiment_score or 50)}/100"
-        strength_text = "AI Guveni"
+        strength_text = "AI Güveni"
 
     return {
         "display_name": display_name,
@@ -320,6 +323,70 @@ def _wrap_box_text(text: str, width: int = 29, max_lines: int = 4) -> list[str]:
     return lines
 
 
+def _shorten_summary_item(text: str, max_chars: int = 95) -> str:
+    normalized = _replace_internal_ai_tokens(text)
+    first_sentence = normalized.split(".")[0].strip() or normalized
+    compact = " ".join(first_sentence.split())
+    if len(compact) > max_chars:
+        compact = compact[: max_chars - 3].rstrip() + "..."
+    return compact
+
+
+def _target_timeframe_snapshot(
+    report: dict[str, Any] | None, special_tag: str | None
+) -> dict[str, Any] | None:
+    timeframe_code = SPECIAL_TAG_TARGET_TIMEFRAME.get(str(special_tag or "").upper())
+    if not report or not timeframe_code:
+        return None
+    for timeframe in report.get("timeframes", []):
+        if timeframe.get("code") == timeframe_code:
+            return timeframe
+    return None
+
+
+def _filter_numeric_levels(
+    levels: list[str], reference_price: float | None, kind: str
+) -> list[str]:
+    parsed: list[tuple[float, str]] = []
+    for raw_level in levels:
+        text = str(raw_level).strip()
+        if not text:
+            continue
+        try:
+            parsed.append((float(text.replace(",", ".")), text))
+        except ValueError:
+            continue
+
+    if not parsed:
+        return []
+
+    filtered = parsed
+    if reference_price and reference_price > 0:
+        if kind == "support":
+            filtered = [
+                item
+                for item in parsed
+                if (reference_price * 0.35) <= item[0] <= (reference_price * 1.02)
+            ]
+            filtered.sort(key=lambda item: item[0], reverse=True)
+        else:
+            filtered = [
+                item
+                for item in parsed
+                if (reference_price * 0.98) <= item[0] <= (reference_price * 1.80)
+            ]
+            filtered.sort(key=lambda item: item[0])
+
+    if not filtered:
+        filtered = parsed
+        if kind == "support":
+            filtered.sort(key=lambda item: item[0], reverse=True)
+        else:
+            filtered.sort(key=lambda item: item[0])
+
+    return [text for _, text in filtered[:2]]
+
+
 def _build_level_block(levels: list[str], prefix: str) -> str | None:
     cleaned = [str(level).strip() for level in levels if str(level).strip()]
     if not cleaned:
@@ -331,12 +398,44 @@ def _build_risk_note(risk_level: str, sentiment_label: str) -> str:
     upper_risk = str(risk_level).upper()
     upper_sentiment = str(sentiment_label).upper()
     if upper_risk == "YUKSEK":
-        return "Pozisyon almadan once hacim ve momentum teyidi bekleyin."
+        return "Pozisyon almadan önce hacim ve momentum teyidi bekleyin."
     if upper_sentiment in {"GUCLU AL", "AL"}:
-        return "Isleme girmeden once kirilim ve hacim teyidini izleyin."
+        return "İşleme girmeden önce kırılım ve hacim teyidini izleyin."
     if upper_sentiment in {"GUCLU SAT", "SAT"}:
-        return "Zayif hacimli geri donuslerde acele etmeyin."
-    return "Net yon teyidi gelmeden agresif pozisyon acmayin."
+        return "Zayıf hacimli geri dönüşlerde acele etmeyin."
+    return "Net yön teyidi gelmeden agresif pozisyon açmayın."
+
+
+def _display_sentiment_label(sentiment_label: str) -> str:
+    upper_label = str(sentiment_label).upper()
+    mapping = {
+        "GUCLU AL": "GÜÇLÜ AL",
+        "AL": "AL",
+        "NOTR": "NÖTR",
+        "SAT": "SAT",
+        "GUCLU SAT": "GÜÇLÜ SAT",
+    }
+    return mapping.get(upper_label, sentiment_label)
+
+
+def _display_risk_level(risk_level: str) -> str:
+    mapping = {
+        "Dusuk": "Düşük",
+        "Orta": "Orta",
+        "Yuksek": "Yüksek",
+        "DUSUK": "DÜŞÜK",
+        "ORTA": "ORTA",
+        "YUKSEK": "YÜKSEK",
+    }
+    return mapping.get(str(risk_level), str(risk_level))
+
+
+def _format_ai_error_message(header: str, payload: Any) -> str:
+    reason = str(payload.error or "AI analizi üretilemedi.").strip()
+    error_code = str(payload.error_code or "").strip().lower()
+    if error_code in {"invalid_json", "empty_response"}:
+        reason = "Model geçerli bir yanıt döndürmedi."
+    return f"{header}\n⚠️ AI analizi şu anda üretilemedi.\nNeden: {html.escape(reason)}"
 
 
 def format_ai_message_for_telegram(
@@ -362,8 +461,7 @@ def format_ai_message_for_telegram(
 
     error = payload.error
     if error:
-        error_suffix = f" ({payload.error_code})" if payload.error_code else ""
-        return f"{header}\n\u26a0\ufe0f AI analizi uretilemedi: {html.escape(str(error))}{html.escape(error_suffix)}"
+        return _format_ai_error_message(header, payload)
 
     sentiment_label = payload.sentiment_label or "NOTR"
     upper_label = sentiment_label.upper()
@@ -374,54 +472,58 @@ def format_ai_message_for_telegram(
     else:
         sentiment_icon = "\u26aa"
 
-    sentiment_display = (
-        "GUCLU AL"
-        if upper_label == "GUCLU AL"
-        else "GUCLU SAT"
-        if upper_label == "GUCLU SAT"
-        else sentiment_label
-    )
+    sentiment_display = _display_sentiment_label(sentiment_label)
 
     explanation = _replace_internal_ai_tokens(
-        payload.explanation or "Detayli aciklama uretilemedi."
+        payload.explanation or "Detaylı açıklama üretilemedi."
     )
     summary_items = [
-        _replace_internal_ai_tokens(item)
-        for item in (payload.summary or ["Ozet maddesi uretilemedi."])
+        _shorten_summary_item(item) for item in (payload.summary or ["Özet maddesi üretilemedi."])
     ]
-    risk_level = payload.risk_level or "Belirsiz"
+    risk_level = _display_risk_level(payload.risk_level or "Belirsiz")
 
     signal_meta = _signal_meta(strategy_name, signal_dir, special_tag, report, payload)
     box_lines = _wrap_box_text(explanation)
     summary_lines = "\n".join(f"\u2022 {html.escape(str(item))}" for item in summary_items[:3])
 
-    support_line = _build_level_block(payload.key_levels.support, "\u2502 \U0001f7e2 Destek  : ")
-    resistance_line = _build_level_block(
-        payload.key_levels.resistance, "\u2502 \U0001f534 Direnc  : "
+    target_snapshot = _target_timeframe_snapshot(report, special_tag)
+    current_price = None
+    if target_snapshot:
+        try:
+            current_price = float(target_snapshot.get("price"))
+        except (TypeError, ValueError):
+            current_price = None
+
+    filtered_support = _filter_numeric_levels(payload.key_levels.support, current_price, "support")
+    filtered_resistance = _filter_numeric_levels(
+        payload.key_levels.resistance, current_price, "resistance"
     )
+
+    support_line = _build_level_block(filtered_support, "\u2502 \U0001f7e2 Destek  : ")
+    resistance_line = _build_level_block(filtered_resistance, "\u2502 \U0001f534 Direnç  : ")
 
     sections = [
         header,
         "\u2501" * 28,
-        "<b>\U0001f4ca TEKNIK DURUM</b>",
+        "<b>\U0001f4ca TEKNİK DURUM</b>",
         f"\u251c\u2500 Strateji: {html.escape(signal_meta['display_name'])} ({html.escape(signal_meta['display_hint'])})",
-        f"\u251c\u2500 Yon: {html.escape(signal_meta['direction_label'])}",
+        f"\u251c\u2500 Yön: {html.escape(signal_meta['direction_label'])}",
         f"\u251c\u2500 Skor: {html.escape(signal_meta['score_text'])} ({html.escape(signal_meta['strength_text'])})",
-        f"\u2514\u2500 Guc: {html.escape(signal_meta['power_bar'])} {html.escape(signal_meta['power_pct'])}%",
+        f"\u2514\u2500 Güç: {html.escape(signal_meta['power_bar'])} {html.escape(signal_meta['power_pct'])}%",
         "",
-        "<b>\U0001f9e0 AI ANALIZI</b>",
+        "<b>\U0001f9e0 AI ANALİZİ</b>",
         "\u250c" + ("\u2500" * 29),
         f"\u2502 {sentiment_icon} <b>{html.escape(str(sentiment_display))}</b> \u2022 Risk: {html.escape(str(risk_level))}",
         "\u2502",
         *[f"\u2502 {html.escape(line)}" for line in box_lines],
         "\u2514" + ("\u2500" * 29),
         "",
-        "<b>\U0001f4cc ONE CIKANLAR</b>",
+        "<b>\U0001f4cc ÖNE ÇIKANLAR</b>",
         summary_lines,
     ]
 
     if support_line or resistance_line:
-        sections.extend(["", "<b>\U0001f4cd KRITIK SEVIYELER</b>", "\u250c" + ("\u2500" * 29)])
+        sections.extend(["", "<b>\U0001f4cd KRİTİK SEVİYELER</b>", "\u250c" + ("\u2500" * 29)])
         if support_line:
             sections.append(html.escape(support_line))
         if resistance_line:
@@ -431,7 +533,7 @@ def format_ai_message_for_telegram(
     sections.extend(
         [
             "",
-            f"\u26a0\ufe0f <b>RISK SEVIYESI:</b> {html.escape(str(risk_level).upper())}",
+            f"\u26a0\ufe0f <b>RİSK SEVİYESİ:</b> {html.escape(_display_risk_level(str(risk_level).upper()))}",
             f"\U0001f4a1 {html.escape(_build_risk_note(str(risk_level), str(sentiment_label)))}",
             "",
             "\u2501" * 28,
