@@ -205,6 +205,45 @@ class TestFormatAIMessageForTelegram:
         assert "Haber teyidi yok; analiz teknik veriye dayaniyor." in result
 
     @pytest.mark.unit
+    def test_normalizes_overflow_score_and_risk_note(self):
+        report = {
+            "timeframes": [
+                {
+                    "code": "W-FRI",
+                    "secondary_score": "13/10",
+                    "primary_score": "1/7",
+                    "price": 100.0,
+                }
+            ]
+        }
+        payload = {
+            "sentiment_score": 20,
+            "sentiment_label": "GUCLU SAT",
+            "summary": [
+                "ODINE hissesi, gunluk, haftalik ve aylik periyotlarda 'SAT' sinyali vermektedir.",
+                "Haber akışında herhangi bir gelişme bulunmaması, teknik sinyallerin ağırlığını artırmaktadır.",
+            ],
+            "explanation": "ODINE hissesi için teknik analiz, güçlü satış eğilimine işaret etmektedir. İkinci cümle görünmemeli.",
+            "key_levels": {"support": ["95.00", "88.00"], "resistance": ["108.00", "115.00"]},
+            "risk_level": "Yuksek",
+        }
+
+        result = format_ai_message_for_telegram(
+            "ODINE",
+            json.dumps(payload),
+            strategy_name="HUNTER",
+            signal_dir="SAT",
+            special_tag="PAHALI",
+            report=report,
+        )
+
+        assert "Skor: 10/10+" in result
+        assert "1G + 1H + 1A periyotlar" in result
+        assert "Haber teyidi yok; analiz teknik veriye dayaniyor." in result
+        assert "teyitsiz işleme girmeyin" in result
+        assert "..." not in result
+
+    @pytest.mark.unit
     def test_handles_error_payload(self):
         result = format_ai_message_for_telegram(
             "AYES", json.dumps({"error": "Timeout", "error_code": "timeout", "sentiment_score": 50})

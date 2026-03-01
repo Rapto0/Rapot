@@ -6,6 +6,7 @@ Piyasa tarama ve sinyal işleme fonksiyonları.
 import html
 import textwrap
 import time
+import unicodedata
 from datetime import datetime
 from typing import Any
 
@@ -232,6 +233,12 @@ def _replace_internal_ai_tokens(text: str) -> str:
     return " ".join(normalized.split())
 
 
+def _fold_text(text: str) -> str:
+    normalized = unicodedata.normalize("NFKD", str(text or ""))
+    ascii_like = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+    return ascii_like.lower()
+
+
 def _parse_fraction_score(score_value: Any) -> tuple[str, int] | None:
     if score_value is None:
         return None
@@ -247,6 +254,9 @@ def _parse_fraction_score(score_value: Any) -> tuple[str, int] | None:
     if denominator <= 0:
         return None
     percentage = max(0, min(100, int(round((numerator / denominator) * 100))))
+    if numerator.is_integer() and denominator.is_integer() and numerator > denominator:
+        base = int(denominator)
+        return f"{base}/{base}+", percentage
     if numerator.is_integer() and denominator.is_integer():
         return f"{int(numerator)}/{int(denominator)}", percentage
     return f"{numerator:g}/{denominator:g}", percentage
@@ -343,7 +353,9 @@ def _shorten_summary_item(text: str, max_chars: int = 95) -> str:
     first_sentence = normalized.split(".")[0].strip() or normalized
     compact = " ".join(first_sentence.split())
     if len(compact) > max_chars:
-        compact = compact[: max_chars - 3].rstrip() + "..."
+        compact = compact[:max_chars].rsplit(" ", 1)[0].rstrip(" ,;:")
+        if compact and compact[-1] not in ".!?":
+            compact += "."
     return compact
 
 
@@ -365,12 +377,43 @@ def _classify_summary_item(text: str) -> str:
 
 
 def _normalize_summary_item(text: str) -> str:
-    compact = _shorten_summary_item(text)
-    lowered = compact.lower()
-    if "haber" in lowered and (
-        "yok" in lowered or "mevcut degil" in lowered or "mevcut değil" in lowered
+    source = _replace_internal_ai_tokens(text)
+    lowered_source = _fold_text(source)
+    compact = _shorten_summary_item(source)
+    if "haber" in lowered_source and (
+        "yok" in lowered_source
+        or "mevcut degil" in lowered_source
+        or "mevcut değil" in lowered_source
+        or "bulunmam" in lowered_source
+        or "gelişme bulunm" in lowered_source
+        or "gelisme bulunm" in lowered_source
     ):
         return "Haber teyidi yok; analiz teknik veriye dayaniyor."
+    if any(
+        token in lowered_source
+        for token in ["günlük", "gunluk", "haftalık", "haftalik", "aylık", "aylik"]
+    ) and (
+        "'al'" in lowered_source
+        or "'sat'" in lowered_source
+        or " al sinyali" in lowered_source
+        or " sat sinyali" in lowered_source
+    ):
+        direction = "AL" if " al" in lowered_source or "'al'" in lowered_source else "SAT"
+        periods: list[str] = []
+        if "günlük" in lowered_source or "gunluk" in lowered_source:
+            periods.append("1G")
+        if "haftalık" in lowered_source or "haftalik" in lowered_source:
+            periods.append("1H")
+        if "iki haftalık" in lowered_source or "iki haftalik" in lowered_source:
+            periods.append("2H")
+        if "üç haftalık" in lowered_source or "üç haftalik" in lowered_source:
+            periods.append("3H")
+        if "aylık" in lowered_source or "aylik" in lowered_source:
+            periods.append("1A")
+        if periods:
+            joined = " + ".join(dict.fromkeys(periods))
+            return f"{joined} periyotlarında güçlü {direction} uyumu var."
+        return f"Çoklu periyotlarda güçlü {direction} uyumu var."
     return compact
 
 
@@ -470,10 +513,10 @@ def _resolve_levels_heading(has_support: bool, has_resistance: bool) -> str:
 
 
 def _build_risk_note(risk_level: str, sentiment_label: str) -> str:
-    upper_risk = str(risk_level).upper()
-    upper_sentiment = str(sentiment_label).upper()
+    upper_risk = _fold_text(risk_level).upper()
+    upper_sentiment = _fold_text(sentiment_label).upper()
     if upper_risk == "YUKSEK":
-        return "Pozisyon almadan önce hacim ve momentum teyidi bekleyin."
+        return "Yüksek risk nedeniyle teyitsiz işleme girmeyin."
     if upper_sentiment in {"GUCLU AL", "AL"}:
         return "İşleme girmeden önce kırılım ve hacim teyidini izleyin."
     if upper_sentiment in {"GUCLU SAT", "SAT"}:
@@ -562,7 +605,8 @@ def format_ai_message_for_telegram(
     risk_level = _display_risk_level(payload.risk_level or "Belirsiz")
 
     signal_meta = _signal_meta(strategy_name, signal_dir, special_tag, report, payload)
-    box_lines = _wrap_box_text(_extract_primary_comment(explanation), max_lines=6)
+    primary_comment = _shorten_summary_item(_extract_primary_comment(explanation), max_chars=125)
+    box_lines = _wrap_box_text(primary_comment, max_lines=5)
     summary_lines = _build_summary_lines(summary_items)
 
     target_snapshot = _target_timeframe_snapshot(report, special_tag)
