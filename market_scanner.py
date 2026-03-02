@@ -41,6 +41,14 @@ SPECIAL_TAG_TARGET_TIMEFRAME = {
     "FAHIS_FIYAT": "ME",
 }
 
+TIMEFRAME_DISPLAY_LABELS = {
+    "1D": "1 Günlük",
+    "W-FRI": "1 Haftalık",
+    "2W-FRI": "2 Haftalık",
+    "3W-FRI": "3 Haftalık",
+    "ME": "1 Aylık",
+}
+
 NEUTRAL_TOKEN_DISPLAY = {
     "VALUE_COMPRESSION_EXTREME_BUY": "BELEŞ",
     "VALUE_COMPRESSION_BUY": "ÇOK UCUZ",
@@ -258,6 +266,29 @@ def _parse_fraction_score(score_value: Any) -> tuple[str, str, int] | None:
     return f"{numerator:g}", f"{denominator:g}", percentage
 
 
+def _display_sentiment_label(label: str | None) -> str:
+    upper = str(label or "NOTR").upper()
+    mapping = {
+        "AL": "AL",
+        "GUCLU AL": "GÜÇLÜ AL",
+        "SAT": "SAT",
+        "GUCLU SAT": "GÜÇLÜ SAT",
+        "NOTR": "NÖTR",
+    }
+    return mapping.get(upper, upper.replace("_", " "))
+
+
+def _display_risk_level(level: str | None) -> str:
+    upper = str(level or "Belirsiz").upper()
+    mapping = {
+        "DUSUK": "Düşük",
+        "ORTA": "Orta",
+        "YUKSEK": "Yüksek",
+        "BELIRSIZ": "Belirsiz",
+    }
+    return mapping.get(upper, str(level or "Belirsiz"))
+
+
 def _signal_meta(
     strategy_name: str | None,
     signal_dir: str | None,
@@ -278,52 +309,60 @@ def _signal_meta(
     else:
         direction_label = "\u26aa NÖTR"
 
-    timeframe_code = SPECIAL_TAG_TARGET_TIMEFRAME.get(str(special_tag or "").upper())
-    selected_timeframe = None
-    if report and timeframe_code:
-        for timeframe in report.get("timeframes", []):
-            if timeframe.get("code") == timeframe_code:
-                selected_timeframe = timeframe
-                break
-
-    score_value = None
-    if selected_timeframe:
-        if upper_signal == "SAT":
-            score_value = selected_timeframe.get("secondary_score")
-        else:
-            score_value = selected_timeframe.get("primary_score")
-
-    parsed_score = _parse_fraction_score(score_value)
-    if parsed_score:
-        actual_score, threshold_score, _ = parsed_score
-        score_text = f"{actual_score} puan / {threshold_score} eşik"
-    else:
-        score_text = f"{int(payload.sentiment_score or 50)} güven / 100"
-
     return {
         "display_name": display_name,
         "display_hint": display_hint,
         "direction_label": direction_label,
-        "score_text": score_text,
     }
 
 
-def _wrap_box_text(text: str, width: int = 29, max_lines: int = 4) -> list[str]:
+def _format_explanatory_score(score_value: Any) -> str:
+    parsed_score = _parse_fraction_score(score_value)
+    if parsed_score:
+        actual_score, threshold_score, _ = parsed_score
+        return f"{actual_score} puan / {threshold_score} eşik"
+    return str(score_value)
+
+
+def _build_trigger_score_lines(
+    report: dict[str, Any] | None,
+    signal_dir: str | None,
+    trigger_rule: list[str] | None,
+    payload: Any,
+) -> list[str]:
+    if not report or not trigger_rule:
+        return [f"AI Güveni: {int(payload.sentiment_score or 50)} / 100"]
+
+    timeframes = {item.get("code"): item for item in report.get("timeframes", [])}
+    score_key = "secondary_score" if str(signal_dir or "").upper() == "SAT" else "primary_score"
+    lines: list[str] = []
+
+    for timeframe_code in trigger_rule:
+        timeframe = timeframes.get(timeframe_code)
+        if not timeframe:
+            continue
+        score_value = timeframe.get(score_key)
+        if score_value in (None, ""):
+            continue
+        label = TIMEFRAME_DISPLAY_LABELS.get(timeframe_code, timeframe_code)
+        lines.append(f"{label}: {_format_explanatory_score(score_value)}")
+
+    return lines or [f"AI Güveni: {int(payload.sentiment_score or 50)} / 100"]
+
+
+def _wrap_box_text(text: str, width: int = 46, max_lines: int = 10) -> list[str]:
     cleaned = _replace_internal_ai_tokens(text)
     wrapped = textwrap.wrap(cleaned, width=width, break_long_words=False, break_on_hyphens=False)
     if not wrapped:
-        return ["Detayli yorum uretilemedi."]
-    lines = wrapped[:max_lines]
-    if len(wrapped) > max_lines and len(lines[-1]) > 3:
-        lines[-1] = lines[-1][: max(0, width - 3)].rstrip() + "..."
-    return lines
+        return ["Detaylı yorum üretilemedi."]
+    return wrapped[:max_lines]
 
 
 def _extract_primary_comment(text: str) -> str:
     normalized = _replace_internal_ai_tokens(text)
     compact = " ".join(normalized.split()).strip()
     if not compact:
-        return "Detayli yorum uretilemedi."
+        return "Detaylı yorum üretilemedi."
 
     for separator in [". ", ".\n", "! ", "!\n", "? ", "?\n"]:
         if separator in compact:
@@ -334,14 +373,16 @@ def _extract_primary_comment(text: str) -> str:
     return compact
 
 
-def _shorten_summary_item(text: str, max_chars: int = 95) -> str:
+def _shorten_summary_item(text: str, max_chars: int = 220) -> str:
     normalized = _replace_internal_ai_tokens(text)
-    first_sentence = normalized.split(".")[0].strip() or normalized
-    compact = " ".join(first_sentence.split())
-    if len(compact) > max_chars:
-        compact = compact[:max_chars].rsplit(" ", 1)[0].rstrip(" ,;:")
+    compact = " ".join(normalized.split())
+    if len(compact) <= max_chars:
         if compact and compact[-1] not in ".!?":
             compact += "."
+        return compact
+    compact = compact[:max_chars].rsplit(" ", 1)[0].rstrip(" ,;:")
+    if compact and compact[-1] not in ".!?":
+        compact += "."
     return compact
 
 
@@ -366,47 +407,6 @@ def _classify_summary_item(text: str) -> str:
     return "general"
 
 
-def _normalize_summary_item(text: str) -> str:
-    source = _replace_internal_ai_tokens(text)
-    lowered_source = _fold_text(source)
-    compact = _shorten_summary_item(source)
-    if "haber" in lowered_source and (
-        "yok" in lowered_source
-        or "mevcut degil" in lowered_source
-        or "mevcut değil" in lowered_source
-        or "bulunmam" in lowered_source
-        or "gelişme bulunm" in lowered_source
-        or "gelisme bulunm" in lowered_source
-    ):
-        return "Haber teyidi yok; analiz teknik veriye dayaniyor."
-    if any(
-        token in lowered_source
-        for token in ["günlük", "gunluk", "haftalık", "haftalik", "aylık", "aylik"]
-    ) and (
-        "'al'" in lowered_source
-        or "'sat'" in lowered_source
-        or " al sinyali" in lowered_source
-        or " sat sinyali" in lowered_source
-    ):
-        direction = "AL" if " al" in lowered_source or "'al'" in lowered_source else "SAT"
-        periods: list[str] = []
-        if "günlük" in lowered_source or "gunluk" in lowered_source:
-            periods.append("1G")
-        if "haftalık" in lowered_source or "haftalik" in lowered_source:
-            periods.append("1H")
-        if "iki haftalık" in lowered_source or "iki haftalik" in lowered_source:
-            periods.append("2H")
-        if "üç haftalık" in lowered_source or "üç haftalik" in lowered_source:
-            periods.append("3H")
-        if "aylık" in lowered_source or "aylik" in lowered_source:
-            periods.append("1A")
-        if periods:
-            joined = " + ".join(dict.fromkeys(periods))
-            return f"{joined} periyotlarında güçlü {direction} uyumu var."
-        return f"Çoklu periyotlarda güçlü {direction} uyumu var."
-    return compact
-
-
 def _build_news_lines(summary_items: list[str]) -> str:
     picked: list[str] = []
     used_texts: set[str] = set()
@@ -414,7 +414,18 @@ def _build_news_lines(summary_items: list[str]) -> str:
     for item in summary_items:
         if _classify_summary_item(item) != "news":
             continue
-        normalized = _normalize_summary_item(item)
+        normalized = _replace_internal_ai_tokens(item)
+        normalized = " ".join(normalized.split()).strip()
+        lowered = _fold_text(normalized)
+        if "haber" in lowered and (
+            "yok" in lowered
+            or "mevcut degil" in lowered
+            or "bulunmam" in lowered
+            or "gelisme bulunm" in lowered
+        ):
+            normalized = "Haber teyidi yok; analiz teknik veriye dayanıyor."
+        else:
+            normalized = _shorten_summary_item(normalized, max_chars=220)
         text_key = normalized.lower()
         if text_key in used_texts:
             continue
@@ -437,6 +448,8 @@ def _build_level_block(levels: list[str], prefix: str) -> str | None:
 
 
 def _format_level_value(value: float) -> str:
+    if float(value).is_integer():
+        return str(int(value))
     if value >= 100:
         return f"{value:.2f}"
     if value >= 1:
@@ -462,28 +475,31 @@ def _select_recent_levels(values: list[float], *, reverse: bool) -> list[str]:
 def _derive_technical_levels(
     df_daily: pd.DataFrame | None, special_tag: str | None
 ) -> dict[str, list[str]]:
-    if df_daily is None or df_daily.empty:
+    if df_daily is None or df_daily.empty or "Close" not in df_daily.columns:
         return {"support": [], "resistance": []}
 
-    timeframe_code = SPECIAL_TAG_TARGET_TIMEFRAME.get(str(special_tag or "").upper(), "1D")
-    df_source = resample_data(df_daily.copy(), timeframe_code)
-    if (
-        df_source is None
-        or df_source.empty
-        or len(df_source) < 3
-        or not {"High", "Low", "Close"}.issubset(df_source.columns)
-    ):
-        return {"support": [], "resistance": []}
+    current_price = float(df_daily["Close"].iloc[-1])
+    support_candidates: list[float] = []
+    resistance_candidates: list[float] = []
 
-    recent = df_source.tail(24)
-    current_price = float(recent["Close"].iloc[-1])
-    historical = recent.iloc[:-1] if len(recent) > 1 else recent
-    support_candidates = [
-        float(value) for value in historical["Low"].tolist() if value < current_price
-    ]
-    resistance_candidates = [
-        float(value) for value in historical["High"].tolist() if value > current_price
-    ]
+    for timeframe_code in ("W-FRI", "ME"):
+        df_source = resample_data(df_daily.copy(), timeframe_code)
+        if (
+            df_source is None
+            or df_source.empty
+            or len(df_source) < 2
+            or not {"Open", "Close"}.issubset(df_source.columns)
+        ):
+            continue
+
+        recent = df_source.tail(16)
+        for column in ("Open", "Close"):
+            for value in recent[column].dropna().tolist():
+                numeric = float(value)
+                if numeric < current_price:
+                    support_candidates.append(numeric)
+                elif numeric > current_price:
+                    resistance_candidates.append(numeric)
 
     return {
         "support": _select_recent_levels(support_candidates, reverse=True),
@@ -493,58 +509,22 @@ def _derive_technical_levels(
 
 def _resolve_levels_heading(has_support: bool, has_resistance: bool) -> str:
     if has_support and has_resistance:
-        return "<b>\U0001f4cd KR\u0130T\u0130K SEV\u0130YELER</b>"
+        return "<b>\U0001f4cd KRİTİK SEVİYELER</b>"
     if has_support:
-        return "<b>\U0001f4cd DESTEK B\u00d6LGES\u0130</b>"
-    return "<b>\U0001f4cd D\u0130REN\u00c7 B\u00d6LGES\u0130</b>"
+        return "<b>\U0001f4cd DESTEK BÖLGESİ</b>"
+    return "<b>\U0001f4cd DİRENÇ BÖLGESİ</b>"
 
 
-def _build_risk_note(risk_level: str, sentiment_label: str) -> str:
-    upper_risk = _fold_text(risk_level).upper()
-    upper_sentiment = _fold_text(sentiment_label).upper()
-    if upper_risk == "YUKSEK":
-        return "Yüksek risk nedeniyle teyitsiz işleme girmeyin."
-    if upper_sentiment in {"GUCLU AL", "AL"}:
-        return "İşleme girmeden önce kırılım ve hacim teyidini izleyin."
-    if upper_sentiment in {"GUCLU SAT", "SAT"}:
-        return "Zayıf hacimli geri dönüşlerde acele etmeyin."
-    return "Net yön teyidi gelmeden agresif pozisyon açmayın."
-
-
-def _display_sentiment_label(sentiment_label: str) -> str:
-    upper_label = str(sentiment_label).upper()
-    mapping = {
-        "GUCLU AL": "GÜÇLÜ AL",
-        "AL": "AL",
-        "NOTR": "NÖTR",
-        "SAT": "SAT",
-        "GUCLU SAT": "GÜÇLÜ SAT",
-    }
-    return mapping.get(upper_label, sentiment_label)
-
-
-def _display_risk_level(risk_level: str) -> str:
-    mapping = {
-        "Dusuk": "Düşük",
-        "Orta": "Orta",
-        "Yuksek": "Yüksek",
-        "DUSUK": "DÜŞÜK",
-        "ORTA": "ORTA",
-        "YUKSEK": "YÜKSEK",
-    }
-    return mapping.get(str(risk_level), str(risk_level))
-
-
-def _format_ai_error_message(header: str, payload: Any) -> str:
-    reason = str(payload.error or "AI analizi uretilemedi.").strip()
+def _build_risk_note(header: str, payload: Any) -> str:
+    reason = str(payload.error or "AI analizi üretilemedi.").strip()
     error_code = str(payload.error_code or "").strip().lower()
     if reason.lower() in {"", "null", "none", "nan"}:
-        reason = "Model gecerli bir yanit dondurmedi."
+        reason = "Model geçerli bir yanıt döndürmedi."
     if error_code in {"invalid_json", "empty_response", "schema_validation"}:
-        reason = "Model gecerli bir yanit dondurmedi."
+        reason = "Model geçerli bir yanıt döndürmedi."
     return (
         f"{header}\n"
-        f"\u26a0\ufe0f AI analizi \u015fu anda \u00fcretilemedi.\n"
+        f"\u26a0\ufe0f AI analizi şu anda üretilemedi.\n"
         f"Neden: {html.escape(reason)}"
     )
 
@@ -558,6 +538,7 @@ def format_ai_message_for_telegram(
     special_tag: str | None = None,
     report: dict[str, Any] | None = None,
     technical_levels: dict[str, list[str]] | None = None,
+    trigger_rule: list[str] | None = None,
 ) -> str:
     """
     AI JSON ciktisini Telegram icin okunabilir ve hiyerarsik metne cevirir.
@@ -571,9 +552,8 @@ def format_ai_message_for_telegram(
     except AIResponseSchemaError:
         return f"{header}\n{html.escape(str(ai_response))}"
 
-    error = payload.error
-    if error or payload.error_code:
-        return _format_ai_error_message(header, payload)
+    if payload.error or payload.error_code:
+        return _build_risk_note(header, payload)
 
     sentiment_label = payload.sentiment_label or "NOTR"
     upper_label = sentiment_label.upper()
@@ -585,55 +565,74 @@ def format_ai_message_for_telegram(
         sentiment_icon = "\u26aa"
 
     sentiment_display = _display_sentiment_label(sentiment_label)
-
     explanation = _replace_internal_ai_tokens(
-        payload.explanation or "Detayli aciklama uretilemedi."
+        payload.explanation or "Detaylı açıklama üretilemedi."
     )
     summary_items = payload.summary or []
     risk_level = _display_risk_level(payload.risk_level or "Belirsiz")
 
     signal_meta = _signal_meta(strategy_name, signal_dir, special_tag, report, payload)
-    primary_comment = _shorten_summary_item(_extract_primary_comment(explanation), max_chars=125)
-    box_lines = _wrap_box_text(primary_comment, max_lines=5)
+    score_lines = _build_trigger_score_lines(report, signal_dir, trigger_rule, payload)
+    primary_comment = _extract_primary_comment(explanation)
+    box_lines = _wrap_box_text(primary_comment)
     summary_lines = _build_news_lines(summary_items)
 
     level_source = technical_levels or {}
-    filtered_support = list(level_source.get("support", []))
-    filtered_resistance = list(level_source.get("resistance", []))
-
-    support_line = _build_level_block(filtered_support, "\u2502 \U0001f7e2 Destek  : ")
-    resistance_line = _build_level_block(filtered_resistance, "\u2502 \U0001f534 Direnç  : ")
+    support_line = _build_level_block(
+        list(level_source.get("support", [])),
+        "│ 🟢 Destek  : ",
+    )
+    resistance_line = _build_level_block(
+        list(level_source.get("resistance", [])),
+        "│ 🔴 Direnç  : ",
+    )
     has_support = bool(support_line)
     has_resistance = bool(resistance_line)
 
     sections = [
         header,
-        "\u2501" * 28,
-        "<b>\U0001f4ca TEKNİK DURUM</b>",
-        f"\u251c\u2500 Strateji: {html.escape(signal_meta['display_name'])} ({html.escape(signal_meta['display_hint'])})",
-        f"\u251c\u2500 Yön: {html.escape(signal_meta['direction_label'])}",
-        f"\u2514\u2500 Skor: {html.escape(signal_meta['score_text'])}",
-        "",
-        "<b>\U0001f9e0 AI ANALİZİ</b>",
-        "\u250c" + ("\u2500" * 29),
-        f"\u2502 {sentiment_icon} <b>{html.escape(str(sentiment_display))}</b> \u2022 Risk: {html.escape(str(risk_level))}",
-        "\u2502",
-        *[f"\u2502 {html.escape(line)}" for line in box_lines],
-        "\u2514" + ("\u2500" * 29),
-        "",
-        "<b>\U0001f4cc ÖNE ÇIKANLAR</b>",
-        summary_lines,
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "<b>📊 TEKNİK DURUM</b>",
+        f"├─ Strateji: {html.escape(signal_meta['display_name'])} ({html.escape(signal_meta['display_hint'])})",
+        f"├─ Yön: {html.escape(signal_meta['direction_label'])}",
     ]
+
+    if len(score_lines) == 1:
+        sections.append(f"└─ Skor: {html.escape(score_lines[0])}")
+    else:
+        sections.append("├─ Koşul Skorları:")
+        for index, score_line in enumerate(score_lines):
+            branch = "└─" if index == len(score_lines) - 1 else "├─"
+            sections.append(f"{branch} {html.escape(score_line)}")
+
+    sections.extend(
+        [
+            "",
+            "<b>🧠 AI ANALİZİ</b>",
+            "┌─────────────────────────────",
+            f"│ {sentiment_icon} <b>{html.escape(str(sentiment_display))}</b> • Risk: {html.escape(str(risk_level))}",
+            "│",
+            *[f"│ {html.escape(line)}" for line in box_lines],
+            "└─────────────────────────────",
+            "",
+            "<b>📌 ÖNE ÇIKANLAR</b>",
+            summary_lines,
+        ]
+    )
 
     if has_support or has_resistance:
         sections.extend(
-            ["", _resolve_levels_heading(has_support, has_resistance), "\u250c" + ("\u2500" * 29)]
+            [
+                "",
+                _resolve_levels_heading(has_support, has_resistance),
+                "┌─────────────────────────────",
+            ]
         )
         if support_line:
             sections.append(html.escape(support_line))
         if resistance_line:
             sections.append(html.escape(resistance_line))
-        sections.append("\u2514" + ("\u2500" * 29))
+        sections.append("└─────────────────────────────")
 
     return "\n".join(sections)
 
@@ -785,6 +784,7 @@ def process_symbol(
             special_tag=special_tag,
             report=get_strategy_report(strategy_name),
             technical_levels=_derive_technical_levels(df_daily, special_tag),
+            trigger_rule=trigger_rule,
         )
         if not send_message(final_message):
             logger.error("Ozel sinyal AI mesaji gonderilemedi: %s %s", symbol, special_tag)

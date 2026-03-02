@@ -219,19 +219,31 @@ class TestFormatAIMessageForTelegram:
         report = {
             "timeframes": [
                 {
-                    "code": "W-FRI",
-                    "secondary_score": "13/10",
+                    "code": "1D",
+                    "label": "GÜNLÜK",
                     "primary_score": "1/7",
-                    "price": 100.0,
-                }
+                    "secondary_score": "13/10",
+                },
+                {
+                    "code": "W-FRI",
+                    "label": "1 HAFTALIK",
+                    "primary_score": "2/7",
+                    "secondary_score": "11/10",
+                },
+                {
+                    "code": "ME",
+                    "label": "1 AYLIK",
+                    "primary_score": "3/5",
+                    "secondary_score": "14/10",
+                },
             ]
         }
         payload = {
             "sentiment_score": 20,
             "sentiment_label": "GUCLU SAT",
             "summary": [
-                "ODINE hissesi, gunluk, haftalik ve aylik periyotlarda 'SAT' sinyali vermektedir.",
-                "Haber akışında herhangi bir gelişme bulunmaması, teknik sinyallerin ağırlığını artırmaktadır.",
+                "ODINE hissesi, günlük ve haftalık periyotlarda 'SAT' sinyali vermektedir.",
+                "Haber akışı yok.",
             ],
             "explanation": "ODINE hissesi için teknik analiz, güçlü satış eğilimine işaret etmektedir. İkinci cümle görünmemeli.",
             "key_levels": {"support": ["95.00", "88.00"], "resistance": ["108.00", "115.00"]},
@@ -246,10 +258,13 @@ class TestFormatAIMessageForTelegram:
             special_tag="PAHALI",
             report=report,
             technical_levels={"support": ["95.00", "88.00"], "resistance": ["108.00", "115.00"]},
+            trigger_rule=["1D", "W-FRI"],
         )
 
-        assert "Skor: 13 puan / 10 eşik" in result
-        assert "Haber teyidi yok; analiz teknik veriye dayaniyor." in result
+        assert "Koşul Skorları" in result
+        assert "1 Günlük: 13 puan / 10 eşik" in result
+        assert "1 Haftalık: 11 puan / 10 eşik" in result
+        assert "Haber teyidi yok; analiz teknik veriye dayanıyor." in result
         assert "Teknik Uyum" not in result
         assert "RİSK SEVİYESİ" not in result
         assert "Rapot AI" not in result
@@ -273,7 +288,7 @@ class TestFormatAIMessageForTelegram:
         )
         assert "Neden:" in result
         assert "null" not in result.lower()
-        assert "gecerli" in result.lower()
+        assert "geçerli" in result.lower()
 
     @pytest.mark.unit
     def test_uses_error_code_when_error_field_missing(self):
@@ -282,7 +297,7 @@ class TestFormatAIMessageForTelegram:
             json.dumps({"error": None, "error_code": "empty_response", "sentiment_score": 50}),
         )
         assert "AI analizi" in result
-        assert "gecerli" in result.lower()
+        assert "geçerli" in result.lower()
 
     @pytest.mark.unit
     def test_fallback_for_non_json(self):
