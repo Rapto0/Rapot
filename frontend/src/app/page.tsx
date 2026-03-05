@@ -1,63 +1,151 @@
-﻿"use client"
+"use client"
 
 import { useEffect, useMemo, useState, type ComponentType, type KeyboardEvent } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Search, ArrowRight, CalendarDays, LineChart, Activity, History } from "lucide-react"
+import { Search, ArrowRight, CalendarDays, LineChart, Activity, History, Bell, Brain } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { useBinanceTicker } from "@/lib/hooks/use-binance-ticker"
 import { fetchGlobalIndices, type GlobalIndexData } from "@/lib/api/client"
 import { cn } from "@/lib/utils"
 
+type MarketFeedSource = "binance" | "indices"
+
+interface MarketInstrument {
+  id: string
+  label: string
+  source: MarketFeedSource
+  feedSymbol: string
+}
+
+interface MarketCategory {
+  id: string
+  label: string
+  description: string
+  items: MarketInstrument[]
+}
+
+const LIVE_MARKET_CATEGORIES: MarketCategory[] = [
+  {
+    id: "crypto",
+    label: "Kripto",
+    description: "Canlı Binance akışı",
+    items: [
+      { id: "BTCUSDT", label: "BTCUSDT", source: "binance", feedSymbol: "BTCUSDT" },
+      { id: "ETHUSDT", label: "ETHUSDT", source: "binance", feedSymbol: "ETHUSDT" },
+      { id: "BNBUSDT", label: "BNBUSDT", source: "binance", feedSymbol: "BNBUSDT" },
+      { id: "SOLUSDT", label: "SOLUSDT", source: "binance", feedSymbol: "SOLUSDT" },
+    ],
+  },
+  {
+    id: "bist",
+    label: "BIST",
+    description: "Türkiye endeks ve hisseleri",
+    items: [
+      { id: "XU100", label: "XU100", source: "indices", feedSymbol: "XU100.IS" },
+      { id: "ASELS", label: "ASELS", source: "indices", feedSymbol: "ASELS.IS" },
+      { id: "TUPRS", label: "TUPRS", source: "indices", feedSymbol: "TUPRS.IS" },
+      { id: "THYAO", label: "THYAO", source: "indices", feedSymbol: "THYAO.IS" },
+    ],
+  },
+  {
+    id: "us-market",
+    label: "ABD Piyasaları",
+    description: "ABD endeks, hisse ve volatilite",
+    items: [
+      { id: "NASDAQ100", label: "NASDAQ 100", source: "indices", feedSymbol: "^NDX" },
+      { id: "SP500", label: "S&P 500", source: "indices", feedSymbol: "^GSPC" },
+      { id: "NVDA", label: "NVDA", source: "indices", feedSymbol: "NVDA" },
+      { id: "AAPL", label: "AAPLE (AAPL)", source: "indices", feedSymbol: "AAPL" },
+      { id: "TSLA", label: "TSLA", source: "indices", feedSymbol: "TSLA" },
+      { id: "GOOGL", label: "GOOGL", source: "indices", feedSymbol: "GOOGL" },
+      { id: "VIX", label: "VIX Korku Endeksi", source: "indices", feedSymbol: "^VIX" },
+    ],
+  },
+  {
+    id: "commodities-fx",
+    label: "Emtia ve Döviz",
+    description: "Spot emtia, DXY ve USD/TRY",
+    items: [
+      { id: "XAUUSD", label: "Spot Altın", source: "indices", feedSymbol: "XAUUSD=X" },
+      { id: "XAGUSD", label: "Spot Gümüş", source: "indices", feedSymbol: "XAGUSD=X" },
+      { id: "OIL", label: "Spot Petrol", source: "indices", feedSymbol: "CL=F" },
+      { id: "DXY", label: "DXY", source: "indices", feedSymbol: "DX-Y.NYB" },
+      { id: "USDTRY", label: "Dolar/TL", source: "indices", feedSymbol: "TRY=X" },
+    ],
+  },
+]
+
+const BINANCE_SYMBOLS = LIVE_MARKET_CATEGORIES.flatMap((category) =>
+  category.items.filter((item) => item.source === "binance").map((item) => item.feedSymbol)
+)
+
+const INDEX_SYMBOLS = LIVE_MARKET_CATEGORIES.flatMap((category) =>
+  category.items.filter((item) => item.source === "indices").map((item) => item.feedSymbol)
+)
+
+function chunkSymbols(symbols: string[], size: number): string[][] {
+  const chunks: string[][] = []
+  for (let index = 0; index < symbols.length; index += size) {
+    chunks.push(symbols.slice(index, index + size))
+  }
+  return chunks
+}
+
 export default function LandingPage() {
   const router = useRouter()
   const [searchQuery, setSearchQuery] = useState("")
   const [marketData, setMarketData] = useState<Record<string, GlobalIndexData>>({})
-  const btcTicker = useBinanceTicker(["BTCUSDT"])
+  const cryptoTicker = useBinanceTicker(BINANCE_SYMBOLS)
 
   useEffect(() => {
     const loadIndices = async () => {
-      const data = await fetchGlobalIndices(["^GSPC", "^NDX", "XU100.IS"])
-      const next: Record<string, GlobalIndexData> = {}
-      for (const item of data) {
-        next[item.symbol] = item
+      try {
+        const chunks = chunkSymbols(INDEX_SYMBOLS, 10)
+        const responses = await Promise.all(chunks.map((chunk) => fetchGlobalIndices(chunk)))
+        const next: Record<string, GlobalIndexData> = {}
+
+        for (const item of responses.flat()) {
+          next[item.symbol.toUpperCase()] = item
+        }
+
+        setMarketData(next)
+      } catch (error) {
+        console.error("Market indices load error:", error)
       }
-      setMarketData(next)
     }
 
     loadIndices()
-    const timer = setInterval(loadIndices, 60_000)
+    const timer = setInterval(loadIndices, 30_000)
     return () => clearInterval(timer)
   }, [])
 
-  const btcPrice = btcTicker.BTCUSDT?.price ?? null
-  const btcChange = btcTicker.BTCUSDT?.change ?? null
+  const categorizedMarketRows = useMemo(
+    () =>
+      LIVE_MARKET_CATEGORIES.map((category) => ({
+        ...category,
+        rows: category.items.map((item) => {
+          if (item.source === "binance") {
+            const live = cryptoTicker[item.feedSymbol]
+            return {
+              key: item.id,
+              label: item.label,
+              value: live?.price,
+              change: live?.change,
+            }
+          }
 
-  const marketRows = useMemo(
-    () => [
-      {
-        label: "S&P 500",
-        value: marketData["^GSPC"]?.regularMarketPrice,
-        change: marketData["^GSPC"]?.regularMarketChangePercent,
-      },
-      {
-        label: "NASDAQ 100",
-        value: marketData["^NDX"]?.regularMarketPrice,
-        change: marketData["^NDX"]?.regularMarketChangePercent,
-      },
-      {
-        label: "BTCUSDT",
-        value: btcPrice,
-        change: btcChange,
-      },
-      {
-        label: "BIST 100",
-        value: marketData["XU100.IS"]?.regularMarketPrice,
-        change: marketData["XU100.IS"]?.regularMarketChangePercent,
-      },
-    ],
-    [btcChange, btcPrice, marketData]
+          const live = marketData[item.feedSymbol.toUpperCase()]
+          return {
+            key: item.id,
+            label: item.label,
+            value: live?.regularMarketPrice,
+            change: live?.regularMarketChangePercent,
+          }
+        }),
+      })),
+    [cryptoTicker, marketData]
   )
 
   const handleSearch = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -77,10 +165,10 @@ export default function LandingPage() {
           <div className="space-y-3">
             <div className="label-uppercase">Rapot Terminal</div>
             <h1 className="max-w-3xl text-xl font-semibold tracking-[-0.02em] md:text-2xl">
-              Kripto ve BIST için veri odaklı izleme, analiz ve sinyal akışı
+              Kripto, BIST, ABD ve emtia tarafında veri odaklı izleme, analiz ve sinyal akışı
             </h1>
             <p className="max-w-2xl text-sm text-muted-foreground">
-              Piyasa hareketlerini tek ekrandan takip et, sembol ara ve doğrudan grafik görünümüne geç.
+              Canlı fiyatları kategori bazlı takip et, sembol ara ve doğrudan grafik görünümüne geç.
             </p>
           </div>
 
@@ -113,18 +201,44 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-2 border border-border bg-surface p-2 md:grid-cols-4">
-        {marketRows.map((item) => (
-          <MarketStrip key={item.label} label={item.label} value={item.value} change={item.change} />
+      <section className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+        {categorizedMarketRows.map((category) => (
+          <article key={category.id} className="border border-border bg-surface p-3">
+            <div className="flex items-center justify-between border-b border-[rgba(255,255,255,0.04)] pb-2">
+              <div>
+                <div className="label-uppercase">{category.label}</div>
+                <p className="mt-1 text-[10px] text-muted-foreground">{category.description}</p>
+              </div>
+              <span className="mono-numbers text-[10px] text-muted-foreground">{category.rows.length} enstrüman</span>
+            </div>
+
+            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {category.rows.map((item) => (
+                <MarketStrip key={item.key} label={item.label} value={item.value} change={item.change} />
+              ))}
+            </div>
+          </article>
         ))}
       </section>
 
-      <section className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-4">
+      <section className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <QuickLinkCard
           href="/trades"
           title="İşlemler"
           description="Açık ve kapalı pozisyon kayıtları"
           icon={History}
+        />
+        <QuickLinkCard
+          href="/signals"
+          title="Sinyaller"
+          description="Canlı sinyal akışı ve filtreler"
+          icon={Bell}
+        />
+        <QuickLinkCard
+          href="/ai"
+          title="AI"
+          description="AI terminali ve analiz arşivi"
+          icon={Brain}
         />
         <QuickLinkCard
           href="/chart"
@@ -167,13 +281,19 @@ function MarketStrip({
 }) {
   const hasChange = typeof change === "number"
   const isPositive = (change ?? 0) >= 0
+  const formattedValue =
+    typeof value === "number"
+      ? Math.abs(value) >= 1000
+        ? value.toLocaleString("tr-TR", { maximumFractionDigits: 2 })
+        : Math.abs(value) >= 1
+          ? value.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+          : value.toLocaleString("tr-TR", { minimumFractionDigits: 4, maximumFractionDigits: 4 })
+      : "--"
 
   return (
     <div className="border border-border bg-base px-3 py-2">
       <div className="label-uppercase mb-1">{label}</div>
-      <div className="mono-numbers text-lg font-semibold">
-        {typeof value === "number" ? value.toLocaleString("tr-TR", { maximumFractionDigits: 2 }) : "--"}
-      </div>
+      <div className="mono-numbers text-lg font-semibold">{formattedValue}</div>
       <div className={cn("mono-numbers text-xs", hasChange ? (isPositive ? "text-profit" : "text-loss") : "text-muted-foreground")}>
         {hasChange ? `${isPositive ? "+" : ""}${(change ?? 0).toFixed(2)}%` : "--"}
       </div>

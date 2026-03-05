@@ -14,6 +14,13 @@ export interface Signal {
     specialTag: 'BELES' | 'COK_UCUZ' | 'PAHALI' | 'FAHIS_FIYAT' | null;
 }
 
+const SPECIAL_NOTIFICATION_RULES = [
+    { strategy: 'HUNTER' as const, special_tag: 'BELES' as const },
+    { strategy: 'HUNTER' as const, special_tag: 'COK_UCUZ' as const },
+    { strategy: 'COMBO' as const, special_tag: 'BELES' as const },
+    { strategy: 'COMBO' as const, special_tag: 'COK_UCUZ' as const },
+];
+
 interface UseSignalsOptions {
     marketType?: 'all' | 'BIST' | 'Kripto';
     strategy?: 'all' | 'COMBO' | 'HUNTER';
@@ -41,9 +48,10 @@ async function fetchSignalsData(options: UseSignalsOptions = {}): Promise<Signal
     }
 
     // For 'all' markets, fetch both BIST and Kripto separately to ensure balanced results
+    const perMarketLimit = Math.max(1, Math.ceil(limit / 2));
     const [bistSignals, kriptoSignals] = await Promise.all([
-        fetchSignals({ ...params, market_type: 'BIST', limit: Math.floor(limit / 2) }),
-        fetchSignals({ ...params, market_type: 'Kripto', limit: Math.floor(limit / 2) }),
+        fetchSignals({ ...params, market_type: 'BIST', limit: perMarketLimit }),
+        fetchSignals({ ...params, market_type: 'Kripto', limit: perMarketLimit }),
     ]);
 
     // Combine and sort by date
@@ -51,7 +59,7 @@ async function fetchSignalsData(options: UseSignalsOptions = {}): Promise<Signal
         .map(transformSignal)
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 
-    return allSignals;
+    return allSignals.slice(0, limit);
 }
 
 export function useSignals(options: UseSignalsOptions = {}) {
@@ -84,8 +92,42 @@ export function useSignals(options: UseSignalsOptions = {}) {
 export function useRecentSignals(limit: number = 5) {
     return useQuery({
         queryKey: ['signals', 'recent', limit],
-        queryFn: () => fetchSignalsData({}),
-        select: (data) => data.slice(0, limit),
+        queryFn: () => fetchSignalsData({ limit }),
+        refetchInterval: 30000,
+        staleTime: 10000,
+    });
+}
+
+export function useSpecialNotificationSignals(limit: number = 100) {
+    return useQuery({
+        queryKey: ['signals', 'special-notifications', limit],
+        queryFn: async () => {
+            const perRuleLimit = Math.max(1, Math.ceil(limit / SPECIAL_NOTIFICATION_RULES.length));
+
+            const responses = await Promise.all(
+                SPECIAL_NOTIFICATION_RULES.map((rule) =>
+                    fetchSignals({
+                        strategy: rule.strategy,
+                        special_tag: rule.special_tag,
+                        limit: perRuleLimit,
+                    })
+                )
+            );
+
+            const deduped = new Map<number, Signal>();
+            responses
+                .flat()
+                .map(transformSignal)
+                .forEach((signal) => {
+                    deduped.set(signal.id, signal);
+                });
+
+            return Array.from(deduped.values())
+                .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                .slice(0, limit);
+        },
+        refetchInterval: 30000,
+        staleTime: 10000,
     });
 }
 

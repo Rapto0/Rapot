@@ -1,13 +1,21 @@
-﻿"use client"
+"use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { Bell, Check, X } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { useRecentSignals } from "@/lib/hooks/use-signals"
+import { useSpecialNotificationSignals } from "@/lib/hooks/use-signals"
 import { useBotHealth } from "@/lib/hooks/use-health"
 
 const READ_SIGNALS_KEY = "rapot_read_signal_ids"
+
+function formatSpecialTag(tag: "BELES" | "COK_UCUZ" | "PAHALI" | "FAHIS_FIYAT" | null) {
+  if (tag === "BELES") return "Beleş"
+  if (tag === "COK_UCUZ") return "Çok Ucuz"
+  if (tag === "PAHALI") return "Pahalı"
+  if (tag === "FAHIS_FIYAT") return "Fahiş Fiyat"
+  return "-"
+}
 
 export function Header() {
   const [currentTime, setCurrentTime] = useState<Date>(new Date())
@@ -31,7 +39,7 @@ export function Header() {
   })
   const panelRef = useRef<HTMLDivElement | null>(null)
 
-  const { data: signals } = useRecentSignals(30)
+  const { data: signals } = useSpecialNotificationSignals(100)
   const { isError } = useBotHealth()
 
   const unreadSignals = useMemo(
@@ -124,7 +132,7 @@ export function Header() {
             {showNotifications ? (
               <div className="absolute right-0 top-10 z-50 w-[360px] border border-border bg-overlay">
                 <div className="flex items-center justify-between border-b border-border px-3 py-2">
-                  <span className="label-uppercase">Bildirimler</span>
+                  <span className="label-uppercase">Özel Bildirimler</span>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
@@ -152,7 +160,7 @@ export function Header() {
                       return (
                         <Link
                           key={signal.id}
-                          href={`/chart?symbol=${signal.symbol}&market=${signal.marketType}`}
+                          href={`/chart?symbol=${encodeURIComponent(signal.symbol)}&market=${encodeURIComponent(signal.marketType)}`}
                           onClick={() => markRead([signal.id])}
                           className={cn(
                             "flex items-center justify-between border-b border-[rgba(255,255,255,0.04)] px-3 py-2 last:border-b-0 hover:bg-raised",
@@ -172,7 +180,7 @@ export function Header() {
                               </span>
                             </div>
                             <div className="mt-0.5 text-[10px] text-muted-foreground">
-                              {signal.strategy} • {signal.timeframe}
+                              {signal.strategy} • {formatSpecialTag(signal.specialTag)} • {signal.timeframe}
                             </div>
                           </div>
 

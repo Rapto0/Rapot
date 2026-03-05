@@ -103,7 +103,7 @@ export function AIAnalysisWidget({ symbol, data, isLoading }: AIAnalysisWidgetPr
                     {/* 2. Main Explanation */}
                     <div className="bg-[#2a2e39]/30 p-3 rounded-lg border border-[#2a2e39]">
                         <p className="text-sm text-[#d1d4dc] leading-relaxed italic">
-                            "{data.explanation}"
+                            &ldquo;{data.explanation}&rdquo;
                         </p>
                     </div>
 
