@@ -123,7 +123,7 @@ $serverCommands += @(
     "echo SERVER_HEAD: `$(git rev-parse --short HEAD)",
     "git status --short",
     "pm2 status",
-    "curl -I http://127.0.0.1:3000/dashboard"
+    "curl -I http://127.0.0.1:3000/"
 )
 
 Write-Host ""
