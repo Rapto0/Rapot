@@ -598,6 +598,10 @@ export function AdvancedChartPage({
     const isInitialLoadRef = useRef<boolean>(true)
     const lastSymbolRef = useRef<string>(initialSymbol)
     const lastTimeframeRef = useRef<string>("1d")
+    const lastRouteSelectionRef = useRef<{ symbol: string; market: MarketType }>({
+        symbol: initialSymbol.trim().toUpperCase(),
+        market: initialMarket,
+    })
     const indicatorChartsRef = useRef<Map<string, any>>(new Map())
     const isPointerDrawingRef = useRef(false)
     const rulerDraftStartRef = useRef<ChartAnchorPoint | null>(null)
@@ -663,6 +667,26 @@ export function AdvancedChartPage({
             setOverlayRenderNonce((value) => value + 1)
         })
     }, [])
+
+    // Keep chart state in sync when route query changes on the same /chart page.
+    useEffect(() => {
+        const nextSymbol = initialSymbol?.trim().toUpperCase()
+        if (!nextSymbol) return
+
+        const previousRouteSelection = lastRouteSelectionRef.current
+        if (
+            previousRouteSelection.symbol === nextSymbol &&
+            previousRouteSelection.market === initialMarket
+        ) {
+            return
+        }
+
+        lastRouteSelectionRef.current = { symbol: nextSymbol, market: initialMarket }
+        setSymbol(nextSymbol)
+        setMarketType(initialMarket)
+        setShowSymbolSearch(false)
+        setSearchQuery("")
+    }, [initialSymbol, initialMarket])
 
     useEffect(() => {
         activeToolRef.current = activeTool
