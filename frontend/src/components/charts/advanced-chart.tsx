@@ -1324,7 +1324,8 @@ export function AdvancedChartPage({
                 height: containerHeight,
                 rightPriceScale: {
                     borderColor: chartColors.grid,
-                    scaleMargins: { top: 0.05, bottom: showMainTimeScale ? 0.05 : 0.16 },
+                    // Keep main price labels away from the indicator pane border.
+                    scaleMargins: { top: 0.05, bottom: showMainTimeScale ? 0.05 : 0.2 },
                     minimumWidth: 64,
                 },
                 timeScale: {
@@ -2287,7 +2288,7 @@ export function AdvancedChartPage({
                 )}
 
                 {/* Chart Area */}
-                <div className={cn("relative flex-1 min-h-[320px]", visiblePanelIndicators.length > 0 && "mb-2")}>
+                <div className={cn("relative flex-1 min-h-[320px] overflow-hidden", visiblePanelIndicators.length > 0 && "mb-3")}>
                     {visibleOverlayIndicators.length > 0 && (
                         <div className="absolute left-3 top-3 z-20 flex flex-col gap-1 pointer-events-none">
                             {visibleOverlayIndicators.map((ind) => (
@@ -2873,24 +2874,31 @@ function IndicatorPane({
         paneHeightRef.current = paneHeight
     }, [paneHeight])
 
-    const startResize = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    const startResize = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
         event.preventDefault()
+        event.currentTarget.setPointerCapture?.(event.pointerId)
+
+        const pointerId = event.pointerId
         resizeStartYRef.current = event.clientY
         resizeStartHeightRef.current = paneHeight
 
-        const handleMouseMove = (moveEvent: MouseEvent) => {
+        const handlePointerMove = (moveEvent: PointerEvent) => {
+            if (moveEvent.pointerId !== pointerId) return
             const delta = moveEvent.clientY - resizeStartYRef.current
             const nextHeight = Math.max(84, Math.min(360, resizeStartHeightRef.current - delta))
             setPaneHeight(nextHeight)
         }
 
-        const handleMouseUp = () => {
-            window.removeEventListener("mousemove", handleMouseMove)
-            window.removeEventListener("mouseup", handleMouseUp)
+        const handlePointerUp = (upEvent: PointerEvent) => {
+            if (upEvent.pointerId !== pointerId) return
+            window.removeEventListener("pointermove", handlePointerMove)
+            window.removeEventListener("pointerup", handlePointerUp)
+            window.removeEventListener("pointercancel", handlePointerUp)
         }
 
-        window.addEventListener("mousemove", handleMouseMove)
-        window.addEventListener("mouseup", handleMouseUp)
+        window.addEventListener("pointermove", handlePointerMove)
+        window.addEventListener("pointerup", handlePointerUp)
+        window.addEventListener("pointercancel", handlePointerUp)
     }, [paneHeight])
 
     useEffect(() => {
@@ -2918,7 +2926,8 @@ function IndicatorPane({
                 rightPriceScale: {
                     borderColor: chartColors.grid,
                     minimumWidth: 64,
-                    scaleMargins: { top: 0.14, bottom: showTimeScale ? 0.2 : 0.12 },
+                    // Keep indicator labels away from pane edges so they don't collide with main chart labels.
+                    scaleMargins: { top: 0.22, bottom: showTimeScale ? 0.2 : 0.16 },
                 },
                 timeScale: {
                     visible: showTimeScale,
@@ -3148,7 +3157,7 @@ function IndicatorPane({
                 width: containerRef.current.clientWidth,
                 height: paneHeight,
                 rightPriceScale: {
-                    scaleMargins: { top: 0.14, bottom: showTimeScale ? 0.2 : 0.12 },
+                    scaleMargins: { top: 0.22, bottom: showTimeScale ? 0.2 : 0.16 },
                 },
                 timeScale: {
                     visible: showTimeScale,
@@ -3211,13 +3220,13 @@ function IndicatorPane({
     }, [])
 
     return (
-        <div className="border-t border-border/30">
+        <div className="relative border-t border-border/30">
             <div
-                onMouseDown={startResize}
-                className="group relative h-2 w-full cursor-row-resize bg-border/60 hover:bg-primary/60"
+                onPointerDown={startResize}
+                className="group relative z-20 h-3 w-full cursor-row-resize touch-none select-none border-y border-border/60 bg-border/50 hover:border-primary/70 hover:bg-primary/25"
                 title="Panel yüksekliğini ayarlamak için sürükleyin"
             >
-                <div className="pointer-events-none absolute left-1/2 top-1/2 h-0.5 w-10 -translate-x-1/2 -translate-y-1/2 rounded-full bg-muted-foreground/70 group-hover:bg-primary" />
+                <div className="pointer-events-none absolute left-1/2 top-1/2 h-1 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full bg-muted-foreground/70 group-hover:bg-primary/90" />
             </div>
             <div className="flex items-center justify-between px-4 py-1 bg-muted/10">
                 <div className="flex items-center gap-2">
@@ -3230,7 +3239,7 @@ function IndicatorPane({
                 </div>
                 <button onClick={onRemove} className="text-muted-foreground hover:text-loss"><X className="h-3 w-3" /></button>
             </div>
-            <div ref={containerRef} className="w-full" style={{ height: `${paneHeight}px` }} />
+            <div ref={containerRef} className="w-full overflow-hidden" style={{ height: `${paneHeight}px` }} />
         </div>
     )
 }
