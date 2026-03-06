@@ -1312,10 +1312,11 @@ export function AdvancedChartPage({
                 height: containerHeight,
                 rightPriceScale: {
                     borderColor: chartColors.grid,
-                    scaleMargins: { top: 0.05, bottom: 0.05 },
+                    scaleMargins: { top: 0.05, bottom: showMainTimeScale ? 0.05 : 0.16 },
                     minimumWidth: 64,
                 },
                 timeScale: {
+                    visible: showMainTimeScale,
                     borderColor: chartColors.grid,
                     timeVisible: true,
                     secondsVisible: false,
@@ -1445,7 +1446,7 @@ export function AdvancedChartPage({
                 }
             }
         })
-    }, [isFullscreen, requestOverlayProjectionRefresh, syncIndicatorPanesToMainRange])
+    }, [isFullscreen, requestOverlayProjectionRefresh, showMainTimeScale, syncIndicatorPanesToMainRange])
 
     // Update chart data
     useEffect(() => {
@@ -1723,6 +1724,13 @@ export function AdvancedChartPage({
         () => activeIndicators.filter(ind => ind.meta.isOverlay && ind.visible),
         [activeIndicators]
     )
+
+    const visiblePanelIndicators = useMemo(
+        () => activeIndicators.filter(ind => !ind.meta.isOverlay && ind.visible),
+        [activeIndicators]
+    )
+
+    const showMainTimeScale = visiblePanelIndicators.length === 0
 
     const projectedDrawings = useMemo(() => {
         const stepSeconds = getTimeframeStepSeconds(timeframe)
@@ -2279,7 +2287,7 @@ export function AdvancedChartPage({
                 )}
 
                 {/* Chart Area */}
-                <div className="relative flex-1 min-h-[320px]">
+                <div className={cn("relative flex-1 min-h-[320px]", visiblePanelIndicators.length > 0 && "mb-2")}>
                     {visibleOverlayIndicators.length > 0 && (
                         <div className="absolute left-3 top-3 z-20 flex flex-col gap-1 pointer-events-none">
                             {visibleOverlayIndicators.map((ind) => (
@@ -2424,7 +2432,7 @@ export function AdvancedChartPage({
                 </div>
 
                 {/* Indicator Panels */}
-                {activeIndicators.filter(i => !i.meta.isOverlay && i.visible).map((ind) => (
+                {visiblePanelIndicators.map((ind, index) => (
                     <IndicatorPane
                         key={ind.id}
                         indicator={ind}
@@ -2436,6 +2444,7 @@ export function AdvancedChartPage({
                         }}
                         mainChartRef={chartInstance}
                         hoveredUnixTime={hoveredUnixTime}
+                        showTimeScale={index === visiblePanelIndicators.length - 1}
                         onChartReady={registerIndicatorChart}
                     />
                 ))}
@@ -2824,10 +2833,20 @@ interface IndicatorPaneProps {
     onRemove: () => void
     mainChartRef: React.MutableRefObject<any>
     hoveredUnixTime: number | null
+    showTimeScale: boolean
     onChartReady?: (indicatorId: string, chart: any) => void
 }
 
-function IndicatorPane({ indicator, candles, precomputedSeries, onRemove, mainChartRef, hoveredUnixTime, onChartReady }: IndicatorPaneProps) {
+function IndicatorPane({
+    indicator,
+    candles,
+    precomputedSeries,
+    onRemove,
+    mainChartRef,
+    hoveredUnixTime,
+    showTimeScale,
+    onChartReady,
+}: IndicatorPaneProps) {
     const containerRef = useRef<HTMLDivElement>(null)
     const chartRef = useRef<any>(null)
     const primarySeriesRef = useRef<any>(null)
@@ -2896,9 +2915,13 @@ function IndicatorPane({ indicator, candles, precomputedSeries, onRemove, mainCh
                 grid: { vertLines: { color: chartColors.grid }, horzLines: { color: chartColors.grid } },
                 width: containerRef.current.clientWidth,
                 height: paneHeightRef.current,
-                rightPriceScale: { borderColor: chartColors.grid, minimumWidth: 64 },
+                rightPriceScale: {
+                    borderColor: chartColors.grid,
+                    minimumWidth: 64,
+                    scaleMargins: { top: 0.14, bottom: showTimeScale ? 0.2 : 0.12 },
+                },
                 timeScale: {
-                    visible: true,
+                    visible: showTimeScale,
                     borderColor: chartColors.grid,
                     timeVisible: true,
                     secondsVisible: false,
@@ -3116,7 +3139,7 @@ function IndicatorPane({ indicator, candles, precomputedSeries, onRemove, mainCh
                 primarySeriesPointsRef.current = []
             }
         })
-    }, [indicator, candleSignature, mainChartRef, onChartReady, candles, precomputedSeries])
+    }, [indicator, candleSignature, mainChartRef, onChartReady, candles, precomputedSeries, showTimeScale])
 
     useEffect(() => {
         if (!containerRef.current || !chartRef.current || isDisposedRef.current) return
@@ -3124,11 +3147,17 @@ function IndicatorPane({ indicator, candles, precomputedSeries, onRemove, mainCh
             chartRef.current.applyOptions({
                 width: containerRef.current.clientWidth,
                 height: paneHeight,
+                rightPriceScale: {
+                    scaleMargins: { top: 0.14, bottom: showTimeScale ? 0.2 : 0.12 },
+                },
+                timeScale: {
+                    visible: showTimeScale,
+                },
             })
         } catch (e) {
             // Chart disposed
         }
-    }, [paneHeight])
+    }, [paneHeight, showTimeScale])
 
     useEffect(() => {
         if (!chartRef.current || !primarySeriesRef.current) return
@@ -3164,7 +3193,7 @@ function IndicatorPane({ indicator, candles, precomputedSeries, onRemove, mainCh
 
             if (typeof chartRef.current.setCrosshairPosition === "function") {
                 try {
-                    chartRef.current.setCrosshairPosition(nearest.value, nearest.rawTime as any, primarySeriesRef.current)
+                    chartRef.current.setCrosshairPosition(nearest.value, hoveredUnixTime as any, primarySeriesRef.current)
                 } catch (e) {
                     // Ignore crosshair sync errors
                 }
@@ -3185,9 +3214,11 @@ function IndicatorPane({ indicator, candles, precomputedSeries, onRemove, mainCh
         <div className="border-t border-border/30">
             <div
                 onMouseDown={startResize}
-                className="h-1 w-full cursor-row-resize bg-border/60 hover:bg-primary/60"
+                className="group relative h-2 w-full cursor-row-resize bg-border/60 hover:bg-primary/60"
                 title="Panel yüksekliğini ayarlamak için sürükleyin"
-            />
+            >
+                <div className="pointer-events-none absolute left-1/2 top-1/2 h-0.5 w-10 -translate-x-1/2 -translate-y-1/2 rounded-full bg-muted-foreground/70 group-hover:bg-primary" />
+            </div>
             <div className="flex items-center justify-between px-4 py-1 bg-muted/10">
                 <div className="flex items-center gap-2">
                     <span className="text-xs font-medium text-muted-foreground">{indicator.meta.shortName}</span>
