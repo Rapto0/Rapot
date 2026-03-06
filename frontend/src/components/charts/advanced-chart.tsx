@@ -1259,6 +1259,18 @@ export function AdvancedChartPage({
     // OHLCV display data
     const displayOHLCV = crosshairData || (candles.length > 0 ? candles[candles.length - 1] : null)
 
+    const visibleOverlayIndicators = useMemo(
+        () => activeIndicators.filter(ind => ind.meta.isOverlay && ind.visible),
+        [activeIndicators]
+    )
+
+    const visiblePanelIndicators = useMemo(
+        () => activeIndicators.filter(ind => !ind.meta.isOverlay && ind.visible),
+        [activeIndicators]
+    )
+
+    const showMainTimeScale = visiblePanelIndicators.length === 0
+
     // Handle fullscreen toggle
     const toggleFullscreen = useCallback(() => {
         if (!document.fullscreenElement) {
@@ -1719,18 +1731,6 @@ export function AdvancedChartPage({
         () => activeIndicators.find(ind => ind.id === editingIndicatorId) || null,
         [activeIndicators, editingIndicatorId]
     )
-
-    const visibleOverlayIndicators = useMemo(
-        () => activeIndicators.filter(ind => ind.meta.isOverlay && ind.visible),
-        [activeIndicators]
-    )
-
-    const visiblePanelIndicators = useMemo(
-        () => activeIndicators.filter(ind => !ind.meta.isOverlay && ind.visible),
-        [activeIndicators]
-    )
-
-    const showMainTimeScale = visiblePanelIndicators.length === 0
 
     const projectedDrawings = useMemo(() => {
         const stepSeconds = getTimeframeStepSeconds(timeframe)
