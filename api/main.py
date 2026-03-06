@@ -289,6 +289,12 @@ class AIAnalysisResponse(BaseModel):
 _SPECIAL_TAG_CODES = {"BELES", "COK_UCUZ", "PAHALI", "FAHIS_FIYAT"}
 _SPECIAL_TAG_HEALTH_STATE_KEY = "special_tag_health_state"
 _SPECIAL_TAG_HEALTH_SUMMARY_KEY = "special_tag_health_summary"
+_MARKET_INDEX_FALLBACKS = {
+    "XAUUSD=X": "GC=F",
+    "XAGUSD=X": "SI=F",
+}
+_MARKET_INDEX_CACHE_TTL = timedelta(seconds=5)
+_market_index_cache: dict[str, tuple[datetime, dict[str, float | str]]] = {}
 
 
 def _normalize_special_tag(value: str | None) -> str | None:
@@ -898,7 +904,7 @@ async def get_market_overview(request: Request):
 
 
 @app.get("/market/indices", tags=["Market Data"])
-@limiter.limit("20/minute")
+@limiter.limit("240/minute")
 async def get_market_indices(
     request: Request,
     symbol: list[str] = Query(
@@ -914,6 +920,11 @@ async def get_market_indices(
             "^GSPC": "S&P 500",
             "^NDX": "Nasdaq 100",
             "XU100.IS": "BIST 100",
+            "^VIX": "VIX",
+            "DX-Y.NYB": "DXY",
+            "TRY=X": "USD/TRY",
+            "XAUUSD=X": "XAUUSD",
+            "XAGUSD=X": "XAGUSD",
         }
 
         unique_symbols = []
@@ -925,16 +936,31 @@ async def get_market_indices(
                 continue
             unique_symbols.append(normalized)
 
-        unique_symbols = unique_symbols[:10]
+        unique_symbols = unique_symbols[:30]
 
-        items = []
+        items: list[dict[str, float | str]] = []
+        now = datetime.now()
         for ticker_symbol in unique_symbols:
-            ticker = yf.Ticker(ticker_symbol)
-            hist = ticker.history(period="2d")
-            if hist.empty:
-                hist = ticker.history(period="5d")
+            cached = _market_index_cache.get(ticker_symbol)
+            if cached and now - cached[0] <= _MARKET_INDEX_CACHE_TTL:
+                items.append(dict(cached[1]))
+                continue
 
-            if hist.empty:
+            candidate_symbols = [ticker_symbol]
+            fallback_symbol = _MARKET_INDEX_FALLBACKS.get(ticker_symbol)
+            if fallback_symbol and fallback_symbol not in candidate_symbols:
+                candidate_symbols.append(fallback_symbol)
+
+            hist = None
+            for candidate in candidate_symbols:
+                ticker = yf.Ticker(candidate)
+                hist = ticker.history(period="2d")
+                if hist.empty:
+                    hist = ticker.history(period="5d")
+                if not hist.empty:
+                    break
+
+            if hist is None or hist.empty:
                 continue
 
             close_series = hist.get("Close")
@@ -964,14 +990,14 @@ async def get_market_indices(
                 ((current_price - previous_close) / previous_close) * 100 if previous_close else 0.0
             )
 
-            items.append(
-                {
-                    "symbol": ticker_symbol,
-                    "regularMarketPrice": current_price,
-                    "regularMarketChangePercent": change_percent,
-                    "shortName": display_names.get(ticker_symbol, ticker_symbol),
-                }
-            )
+            item: dict[str, float | str] = {
+                "symbol": ticker_symbol,
+                "regularMarketPrice": current_price,
+                "regularMarketChangePercent": change_percent,
+                "shortName": display_names.get(ticker_symbol, ticker_symbol),
+            }
+            _market_index_cache[ticker_symbol] = (now, item)
+            items.append(item)
 
         return items
 

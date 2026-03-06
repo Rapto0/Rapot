@@ -66,10 +66,10 @@ const LIVE_MARKET_CATEGORIES: MarketCategory[] = [
   {
     id: "commodities-fx",
     label: "Emtia ve Döviz",
-    description: "Spot emtia, DXY ve USD/TRY",
+    description: "Saniyelik işlenen emtia, DXY ve USD/TRY",
     items: [
-      { id: "XAUUSD", label: "Spot Altın", source: "indices", feedSymbol: "XAUUSD=X" },
-      { id: "XAGUSD", label: "Spot Gümüş", source: "indices", feedSymbol: "XAGUSD=X" },
+      { id: "XAUUSD", label: "XAUUSD", source: "indices", feedSymbol: "XAUUSD=X" },
+      { id: "XAGUSD", label: "XAGUSD", source: "indices", feedSymbol: "XAGUSD=X" },
       { id: "OIL", label: "Spot Petrol", source: "indices", feedSymbol: "CL=F" },
       { id: "DXY", label: "DXY", source: "indices", feedSymbol: "DX-Y.NYB" },
       { id: "USDTRY", label: "Dolar/TL", source: "indices", feedSymbol: "TRY=X" },
@@ -102,7 +102,7 @@ export default function LandingPage() {
   useEffect(() => {
     const loadIndices = async () => {
       try {
-        const chunks = chunkSymbols(INDEX_SYMBOLS, 10)
+        const chunks = chunkSymbols(INDEX_SYMBOLS, 30)
         const responses = await Promise.all(chunks.map((chunk) => fetchGlobalIndices(chunk)))
         const next: Record<string, GlobalIndexData> = {}
 
@@ -117,7 +117,7 @@ export default function LandingPage() {
     }
 
     loadIndices()
-    const timer = setInterval(loadIndices, 30_000)
+    const timer = setInterval(loadIndices, 1_000)
     return () => clearInterval(timer)
   }, [])
 
