@@ -87,6 +87,7 @@ if (-not [string]::IsNullOrWhiteSpace($status)) {
 }
 
 Run-Step -Title "Push to GitHub" -Executable "git" -Arguments @("push", $Remote, $Branch)
+$expectedHead = (git rev-parse --short HEAD).Trim()
 
 if ($NoServer) {
     Write-Host ""
@@ -125,7 +126,7 @@ $serverCommands += @(
     "pm2 startOrReload '$Pm2Config' --update-env",
     "pm2 reset frontend",
     "pm2 save",
-    "echo SERVER_HEAD: `$(git rev-parse --short HEAD)",
+    ('EXPECTED_HEAD=''{0}''; SERVER_HEAD=$(git rev-parse --short HEAD); echo EXPECTED_HEAD: $EXPECTED_HEAD; echo SERVER_HEAD: $SERVER_HEAD; [ "$SERVER_HEAD" = "$EXPECTED_HEAD" ] || (echo ''ERROR: SERVER_HEAD mismatch'' && exit 1)' -f $expectedHead),
     "git status --short",
     "pm2 status",
     "curl -I http://127.0.0.1:3000/"
