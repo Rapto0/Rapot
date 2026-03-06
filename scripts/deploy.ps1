@@ -113,12 +113,17 @@ if ($ForceServerReset) {
 
 $serverCommands += @(
     "python3 -m pip install -r requirements.txt",
+    'export NVM_DIR="$HOME/.nvm" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh" && nvm install && nvm use || true',
+    'node -e "const major = Number(process.versions.node.split(''.'')[0]); if (major !== 20) { console.error(''ERROR: Node 20.x required. Current: '' + process.versions.node); process.exit(1); }"',
+    "node -v",
+    "npm -v",
+    "pm2 stop frontend || true",
     "cd '$ServerPath/frontend'",
     "npm ci --include=dev",
     "npm run build",
     "cd '$ServerPath'",
-    "pm2 delete frontend || true",
     "pm2 startOrReload '$Pm2Config' --update-env",
+    "pm2 reset frontend",
     "pm2 save",
     "echo SERVER_HEAD: `$(git rev-parse --short HEAD)",
     "git status --short",

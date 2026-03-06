@@ -45,3 +45,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\deploy.ps1 -CommitMessage "de
 - Without `-ForceServerReset`, printed commands use `git pull --ff-only` (safer).
 - If pre-commit hooks fail during commit, deploy stops so you can fix issues.
 - Script no longer executes SSH deploy automatically; it prints commands for manual run.
+- Printed server flow now stops `frontend` before `npm run build` and starts it after build, to avoid `.next` race/restart loops.
+- Frontend runtime is pinned to Node `20.x`:
+  - `.nvmrc` exists in repo root and `frontend/`.
+  - deploy commands run `nvm install && nvm use` when `nvm` is available.
+  - deploy commands include a hard check that fails if active Node major is not `20`.
