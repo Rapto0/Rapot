@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils"
 import {
   Search,
   Bell,
+  AlarmClock,
   History,
   Activity,
   Settings,
@@ -27,6 +28,7 @@ const navigation: NavItem[] = [
   { name: "Grafik", href: "/chart", icon: BarChart3 },
   { name: "Tarayıcı", href: "/scanner", icon: Search },
   { name: "Sinyaller", href: "/signals", icon: Bell },
+  { name: "Alarmlar", href: "/alarms", icon: AlarmClock },
   { name: "İşlemler", href: "/trades", icon: History },
   { name: "Bot Sağlığı", href: "/health", icon: Activity },
   { name: "AI", href: "/ai", icon: Brain },

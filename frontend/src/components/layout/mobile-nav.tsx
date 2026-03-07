@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils"
 import {
   Search,
   Bell,
+  AlarmClock,
   BarChart3,
   Brain,
   History,
@@ -18,6 +19,7 @@ const mobileNavItems = [
   { name: "Grafik", href: "/chart", icon: BarChart3 },
   { name: "Tarayıcı", href: "/scanner", icon: Search },
   { name: "Sinyal", href: "/signals", icon: Bell },
+  { name: "Alarm", href: "/alarms", icon: AlarmClock },
   { name: "AI", href: "/ai", icon: Brain },
   { name: "Ayar", href: "/settings", icon: Settings },
 ]
@@ -27,7 +29,7 @@ export function MobileNav() {
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-surface md:hidden">
-      <div className="grid h-14 grid-cols-6">
+      <div className="grid h-14 grid-cols-7">
         {mobileNavItems.map((item) => {
           const active = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href))
           return (
@@ -57,6 +59,7 @@ export function MobileHeader() {
     "/chart": "Grafik",
     "/scanner": "Tarayici",
     "/signals": "Sinyaller",
+    "/alarms": "Alarmlar",
     "/ai": "AI",
     "/settings": "Ayarlar",
   }

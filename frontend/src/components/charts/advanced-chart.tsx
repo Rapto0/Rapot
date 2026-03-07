@@ -1,6 +1,7 @@
 ﻿"use client"
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react"
+import Link from "next/link"
 import { useQuery } from "@tanstack/react-query"
 import { fetchCandles, fetchBistSymbols, fetchTicker } from "@/lib/api/client"
 import { useBinanceTicker } from "@/lib/hooks/use-binance-ticker"
@@ -51,7 +52,20 @@ import {
     Copy,
     FolderOpen,
     Upload,
+    ArrowUpRight,
 } from "lucide-react"
+import {
+    ALARM_INDICATOR_OPTIONS,
+    ALARM_TIMEFRAME_OPTIONS,
+    DEFAULT_ALARM_THRESHOLDS,
+    createWatchlistAlarmRule,
+    loadWatchlistAlarmRules,
+    saveWatchlistAlarmRules,
+    type AlarmIndicator,
+    type AlarmThresholds,
+    type AlarmTimeframe,
+    type WatchlistAlarmRule,
+} from "@/lib/watchlist-alarms"
 
 // ==================== TYPES ====================
 
@@ -161,12 +175,6 @@ const symbolRow = (rawSymbol: string, marketType: MarketType): WatchlistSymbolRo
     kind: "symbol",
     rawSymbol,
     marketType,
-})
-
-const sectionRow = (title: string): WatchlistSectionRow => ({
-    kind: "section",
-    id: makeWatchlistId(title),
-    title,
 })
 
 const DEFAULT_WATCHLISTS: WatchlistModel[] = [
@@ -546,6 +554,13 @@ export function AdvancedChartPage({
     const [watchlistsHydrated, setWatchlistsHydrated] = useState(false)
     const [watchlistNotice, setWatchlistNotice] = useState<string | null>(null)
     const [serverClockLabel, setServerClockLabel] = useState("--")
+    const [watchlistAlarmRules, setWatchlistAlarmRules] = useState<WatchlistAlarmRule[]>([])
+    const [watchlistAlarmRulesHydrated, setWatchlistAlarmRulesHydrated] = useState(false)
+    const [alarmIndicatorDraft, setAlarmIndicatorDraft] = useState<AlarmIndicator>("rsi")
+    const [alarmTimeframeDraft, setAlarmTimeframeDraft] = useState<AlarmTimeframe>("4h")
+    const [alarmThresholdDraft, setAlarmThresholdDraft] = useState<AlarmThresholds>(() => ({
+        ...DEFAULT_ALARM_THRESHOLDS,
+    }))
 
     // Indicator state
     const [showIndicatorSearch, setShowIndicatorSearch] = useState(false)
@@ -866,6 +881,7 @@ export function AdvancedChartPage({
     useEffect(() => {
         if (typeof window === "undefined") {
             setWatchlistsHydrated(true)
+            setWatchlistAlarmRulesHydrated(true)
             return
         }
 
@@ -898,7 +914,7 @@ export function AdvancedChartPage({
                                           ) {
                                               return {
                                                   kind: "symbol",
-                                                  rawSymbol: (maybeRow as any).rawSymbol,
+                                                  rawSymbol: (maybeRow as any).rawSymbol.toUpperCase(),
                                                   marketType: (maybeRow as any).marketType,
                                               }
                                           }
@@ -938,10 +954,16 @@ export function AdvancedChartPage({
             ) {
                 setActiveUtilityPanel(storedPanel)
             }
+
+            const restoredAlarmRules = loadWatchlistAlarmRules()
+            if (restoredAlarmRules.length > 0) {
+                setWatchlistAlarmRules(restoredAlarmRules)
+            }
         } catch (error) {
             console.error("Watchlist state could not be restored:", error)
         } finally {
             setWatchlistsHydrated(true)
+            setWatchlistAlarmRulesHydrated(true)
         }
     }, [])
 
@@ -955,6 +977,11 @@ export function AdvancedChartPage({
             window.localStorage.removeItem(WATCHLIST_PANEL_STORAGE_KEY)
         }
     }, [watchlists, activeWatchlistId, activeUtilityPanel, watchlistsHydrated])
+
+    useEffect(() => {
+        if (!watchlistAlarmRulesHydrated || typeof window === "undefined") return
+        saveWatchlistAlarmRules(watchlistAlarmRules)
+    }, [watchlistAlarmRules, watchlistAlarmRulesHydrated])
 
     useEffect(() => {
         if (watchlists.length === 0) return
@@ -1076,8 +1103,23 @@ export function AdvancedChartPage({
         refetchInterval: 30000,
     })
 
+    const watchlistCryptoSymbols = useMemo(() => {
+        const symbols = new Set<string>(CRYPTO_WATCHLIST)
+        for (const list of watchlists) {
+            for (const row of list.rows) {
+                if (row.kind === "symbol" && row.marketType === "Kripto") {
+                    symbols.add(row.rawSymbol.toUpperCase())
+                }
+            }
+        }
+        if (marketType === "Kripto") {
+            symbols.add(symbol.toUpperCase())
+        }
+        return Array.from(symbols)
+    }, [watchlists, marketType, symbol])
+
     // Live crypto prices for watchlist
-    const cryptoPrices = useBinanceTicker(CRYPTO_WATCHLIST, {
+    const cryptoPrices = useBinanceTicker(watchlistCryptoSymbols, {
         paused: activeTool !== "none",
         flushIntervalMs: 320,
     })
@@ -1861,6 +1903,49 @@ export function AdvancedChartPage({
         [activeWatchlist]
     )
 
+    const activeWatchlistAlarmRules = useMemo(
+        () =>
+            watchlistAlarmRules.filter(
+                (rule) => (activeWatchlist ? rule.watchlistId === activeWatchlist.id : false)
+            ),
+        [watchlistAlarmRules, activeWatchlist]
+    )
+
+    const activeWatchlistQuotes = useMemo(() => {
+        return activeWatchlistSymbolRows
+            .map((row) => {
+                const quote =
+                    row.marketType === "Kripto"
+                        ? cryptoQuoteMap.get(row.rawSymbol)
+                        : bistQuoteMap.get(row.rawSymbol)
+                return {
+                    ...row,
+                    priceText: quote?.priceText ?? "---",
+                    change: quote?.change ?? 0,
+                    hasQuote: !!quote,
+                }
+            })
+            .filter((row) => row.hasQuote)
+    }, [activeWatchlistSymbolRows, cryptoQuoteMap, bistQuoteMap])
+
+    const watchlistChangeSnapshot = useMemo(() => {
+        if (activeWatchlistQuotes.length === 0) return null
+        let strongest = activeWatchlistQuotes[0]
+        let weakest = activeWatchlistQuotes[0]
+        let sum = 0
+        for (const row of activeWatchlistQuotes) {
+            sum += row.change
+            if (row.change > strongest.change) strongest = row
+            if (row.change < weakest.change) weakest = row
+        }
+        return {
+            average: sum / activeWatchlistQuotes.length,
+            strongest,
+            weakest,
+            quotedCount: activeWatchlistQuotes.length,
+        }
+    }, [activeWatchlistQuotes])
+
     const updateActiveWatchlist = useCallback(
         (updater: (watchlist: WatchlistModel) => WatchlistModel) => {
             setWatchlists((prev) =>
@@ -1972,21 +2057,37 @@ export function AdvancedChartPage({
         if (!activeWatchlist) return
         const nextName = window.prompt("Yeni liste adı", activeWatchlist.name)
         if (!nextName || !nextName.trim()) return
-        updateActiveWatchlist((watchlist) => ({ ...watchlist, name: nextName.trim() }))
+        const normalizedName = nextName.trim()
+        updateActiveWatchlist((watchlist) => ({ ...watchlist, name: normalizedName }))
+        setWatchlistAlarmRules((prev) =>
+            prev.map((rule) =>
+                rule.watchlistId === activeWatchlist.id
+                    ? { ...rule, watchlistName: normalizedName, updatedAt: new Date().toISOString() }
+                    : rule
+            )
+        )
         setShowWatchlistMenu(false)
         showWatchlistToast("Liste adı güncellendi.")
     }, [activeWatchlist, showWatchlistToast, updateActiveWatchlist])
 
-    const handleAddSectionToWatchlist = useCallback(() => {
-        const sectionName = window.prompt("Bölüm adı")
-        if (!sectionName || !sectionName.trim()) return
-        updateActiveWatchlist((watchlist) => ({
-            ...watchlist,
-            rows: [...watchlist.rows, sectionRow(sectionName.trim())],
-        }))
+    const handleDeleteWatchlist = useCallback(() => {
+        if (!activeWatchlist) return
+        if (watchlists.length <= 1) {
+            showWatchlistToast("En az bir liste kalmalı.")
+            return
+        }
+        const approved = window.confirm(`${activeWatchlist.name} listesini silmek istiyor musunuz?`)
+        if (!approved) return
+
+        const fallback = watchlists.find((watchlist) => watchlist.id !== activeWatchlist.id)
+        setWatchlists((prev) => prev.filter((watchlist) => watchlist.id !== activeWatchlist.id))
+        setWatchlistAlarmRules((prev) => prev.filter((rule) => rule.watchlistId !== activeWatchlist.id))
+        if (fallback) {
+            setActiveWatchlistId(fallback.id)
+        }
         setShowWatchlistMenu(false)
-        showWatchlistToast("Listeye yeni bölüm eklendi.")
-    }, [showWatchlistToast, updateActiveWatchlist])
+        showWatchlistToast("Liste silindi.")
+    }, [activeWatchlist, watchlists, showWatchlistToast])
 
     const handleClearWatchlist = useCallback(() => {
         if (!activeWatchlist) return
@@ -2044,6 +2145,48 @@ export function AdvancedChartPage({
         },
         [updateActiveWatchlist]
     )
+
+    const handleAlarmThresholdDraftChange = useCallback(
+        (key: keyof AlarmThresholds, rawValue: string) => {
+            const parsed = Number(rawValue)
+            if (!Number.isFinite(parsed)) return
+            setAlarmThresholdDraft((prev) => ({ ...prev, [key]: parsed }))
+        },
+        []
+    )
+
+    const handleCreateWatchlistAlarmRule = useCallback(() => {
+        if (!activeWatchlist) return
+        const nextRule = createWatchlistAlarmRule(
+            activeWatchlist.id,
+            activeWatchlist.name,
+            alarmIndicatorDraft,
+            alarmTimeframeDraft,
+            alarmThresholdDraft
+        )
+        setWatchlistAlarmRules((prev) => [nextRule, ...prev])
+        showWatchlistToast(`${activeWatchlist.name} için yeni alarm eklendi.`)
+    }, [
+        activeWatchlist,
+        alarmIndicatorDraft,
+        alarmTimeframeDraft,
+        alarmThresholdDraft,
+        showWatchlistToast,
+    ])
+
+    const handleToggleAlarmRule = useCallback((ruleId: string) => {
+        setWatchlistAlarmRules((prev) =>
+            prev.map((rule) =>
+                rule.id === ruleId
+                    ? { ...rule, enabled: !rule.enabled, updatedAt: new Date().toISOString() }
+                    : rule
+            )
+        )
+    }, [])
+
+    const handleRemoveAlarmRule = useCallback((ruleId: string) => {
+        setWatchlistAlarmRules((prev) => prev.filter((rule) => rule.id !== ruleId))
+    }, [])
 
     return (
         <div
@@ -2556,12 +2699,13 @@ export function AdvancedChartPage({
                                         <button onClick={handleShareWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-raised"><Share2 className="h-4 w-4" /> Listeyi paylas</button>
                                         <button onClick={handleCopyWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-raised"><Copy className="h-4 w-4" /> Kopya olustur</button>
                                         <button onClick={handleRenameWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-raised"><Pencil className="h-4 w-4" /> Yeni ad ver</button>
-                                        <button onClick={handleAddSectionToWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-raised"><BarChart3 className="h-4 w-4" /> Bolum ekle</button>
-                                        <button onClick={handleClearWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-raised"><Trash2 className="h-4 w-4" /> Listeyi temizle</button>
+                                        <button onClick={handleClearWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-raised"><Trash2 className="h-4 w-4" /> Sembolleri temizle</button>
+                                        <button onClick={handleDeleteWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm text-loss hover:bg-loss/10"><Trash2 className="h-4 w-4" /> Listeyi sil</button>
                                         <div className="my-1 border-t border-border" />
                                         <button onClick={handleCreateWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-raised"><Plus className="h-4 w-4" /> Yeni liste olustur</button>
                                         <button onClick={handleLoadWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-raised"><FolderOpen className="h-4 w-4" /> Listeyi yukle</button>
                                         <button onClick={handleAddSymbolToWatchlist} className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-raised"><Upload className="h-4 w-4" /> Sembol ekle</button>
+                                        <Link href="/alarms" className="w-full flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-raised"><ArrowUpRight className="h-4 w-4" /> Alarmlar sayfasi</Link>
                                     </div>
                                     <div className="border-t border-border px-3 py-2">
                                         <div className="mb-1 text-[11px] text-muted-foreground uppercase">Son kullanilanlar</div>
@@ -2657,15 +2801,174 @@ export function AdvancedChartPage({
                         {activeUtilityPanel && (
                             <div className="border-t border-border px-3 py-3 text-xs">
                                 {activeUtilityPanel === "alerts" && (
-                                    <div className="space-y-2">
+                                    <div className="space-y-3">
                                         <div className="flex items-center justify-between">
                                             <span className="text-muted-foreground">Liste alarmlari</span>
                                             <button onClick={handleToggleWatchlistAlerts} className={cn("rounded px-2 py-1 text-[11px]", activeWatchlist?.alarmsEnabled ? "bg-primary text-primary-foreground" : "bg-raised text-foreground")}>
                                                 {activeWatchlist?.alarmsEnabled ? "Acik" : "Kapali"}
                                             </button>
                                         </div>
-                                        <div className="text-muted-foreground">Aktif sembol: {symbol} - {marketType}</div>
-                                        <div className="text-muted-foreground">Listedeki semboller: {activeWatchlistSymbolRows.length}</div>
+                                        <div className="rounded border border-border/50 bg-base p-2.5">
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <label className="flex flex-col gap-1">
+                                                    <span className="text-[10px] uppercase text-muted-foreground">Indikator</span>
+                                                    <select
+                                                        value={alarmIndicatorDraft}
+                                                        onChange={(e) => setAlarmIndicatorDraft(e.target.value as AlarmIndicator)}
+                                                        className="rounded border border-border bg-background px-2 py-1 text-xs"
+                                                    >
+                                                        {ALARM_INDICATOR_OPTIONS.map((option) => (
+                                                            <option key={option.value} value={option.value}>
+                                                                {option.label}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </label>
+                                                <label className="flex flex-col gap-1">
+                                                    <span className="text-[10px] uppercase text-muted-foreground">Periyot</span>
+                                                    <select
+                                                        value={alarmTimeframeDraft}
+                                                        onChange={(e) => setAlarmTimeframeDraft(e.target.value as AlarmTimeframe)}
+                                                        className="rounded border border-border bg-background px-2 py-1 text-xs"
+                                                    >
+                                                        {ALARM_TIMEFRAME_OPTIONS.map((option) => (
+                                                            <option key={option.value} value={option.value}>
+                                                                {option.label}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </label>
+                                            </div>
+
+                                            {(alarmIndicatorDraft === "rsi" || alarmIndicatorDraft === "wr") && (
+                                                <div className="mt-2 grid grid-cols-2 gap-2">
+                                                    <label className="flex flex-col gap-1">
+                                                        <span className="text-[10px] uppercase text-muted-foreground">DIP esik</span>
+                                                        <input
+                                                            type="number"
+                                                            value={alarmIndicatorDraft === "rsi" ? alarmThresholdDraft.rsiDipThreshold : alarmThresholdDraft.wrDipThreshold}
+                                                            onChange={(e) =>
+                                                                handleAlarmThresholdDraftChange(
+                                                                    alarmIndicatorDraft === "rsi" ? "rsiDipThreshold" : "wrDipThreshold",
+                                                                    e.target.value
+                                                                )
+                                                            }
+                                                            className="rounded border border-border bg-background px-2 py-1 text-xs"
+                                                        />
+                                                    </label>
+                                                    <label className="flex flex-col gap-1">
+                                                        <span className="text-[10px] uppercase text-muted-foreground">TEPE esik</span>
+                                                        <input
+                                                            type="number"
+                                                            value={alarmIndicatorDraft === "rsi" ? alarmThresholdDraft.rsiTopThreshold : alarmThresholdDraft.wrTopThreshold}
+                                                            onChange={(e) =>
+                                                                handleAlarmThresholdDraftChange(
+                                                                    alarmIndicatorDraft === "rsi" ? "rsiTopThreshold" : "wrTopThreshold",
+                                                                    e.target.value
+                                                                )
+                                                            }
+                                                            className="rounded border border-border bg-background px-2 py-1 text-xs"
+                                                        />
+                                                    </label>
+                                                </div>
+                                            )}
+
+                                            {(alarmIndicatorDraft === "combo" || alarmIndicatorDraft === "hunter") && (
+                                                <div className="mt-2 grid grid-cols-2 gap-2">
+                                                    <label className="flex flex-col gap-1">
+                                                        <span className="text-[10px] uppercase text-muted-foreground">DIP skor</span>
+                                                        <input
+                                                            type="number"
+                                                            value={alarmIndicatorDraft === "combo" ? alarmThresholdDraft.comboDipThreshold : alarmThresholdDraft.hunterDipThreshold}
+                                                            onChange={(e) =>
+                                                                handleAlarmThresholdDraftChange(
+                                                                    alarmIndicatorDraft === "combo" ? "comboDipThreshold" : "hunterDipThreshold",
+                                                                    e.target.value
+                                                                )
+                                                            }
+                                                            className="rounded border border-border bg-background px-2 py-1 text-xs"
+                                                        />
+                                                    </label>
+                                                    <label className="flex flex-col gap-1">
+                                                        <span className="text-[10px] uppercase text-muted-foreground">TEPE skor</span>
+                                                        <input
+                                                            type="number"
+                                                            value={alarmIndicatorDraft === "combo" ? alarmThresholdDraft.comboTopThreshold : alarmThresholdDraft.hunterTopThreshold}
+                                                            onChange={(e) =>
+                                                                handleAlarmThresholdDraftChange(
+                                                                    alarmIndicatorDraft === "combo" ? "comboTopThreshold" : "hunterTopThreshold",
+                                                                    e.target.value
+                                                                )
+                                                            }
+                                                            className="rounded border border-border bg-background px-2 py-1 text-xs"
+                                                        />
+                                                    </label>
+                                                </div>
+                                            )}
+
+                                            <button
+                                                onClick={handleCreateWatchlistAlarmRule}
+                                                className="mt-2 w-full rounded bg-primary px-2 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90"
+                                            >
+                                                Alarm ekle
+                                            </button>
+                                        </div>
+
+                                        <div className="text-muted-foreground">
+                                            Listedeki semboller: {activeWatchlistSymbolRows.length} • Kurallar: {activeWatchlistAlarmRules.length}
+                                        </div>
+
+                                        <div className="max-h-40 space-y-1 overflow-y-auto rounded border border-border/40 bg-base p-2">
+                                            {activeWatchlistAlarmRules.length === 0 && (
+                                                <div className="text-muted-foreground">Bu liste icin alarm kurali yok.</div>
+                                            )}
+                                            {activeWatchlistAlarmRules.map((rule) => {
+                                                const timeframeLabel =
+                                                    ALARM_TIMEFRAME_OPTIONS.find((item) => item.value === rule.timeframe)?.label || rule.timeframe
+                                                const indicatorLabel =
+                                                    ALARM_INDICATOR_OPTIONS.find((item) => item.value === rule.indicator)?.label || rule.indicator
+                                                const thresholdText =
+                                                    rule.indicator === "rsi"
+                                                        ? `DIP<=${rule.thresholds.rsiDipThreshold} / TEPE>=${rule.thresholds.rsiTopThreshold}`
+                                                        : rule.indicator === "wr"
+                                                            ? `DIP<=${rule.thresholds.wrDipThreshold} / TEPE>=${rule.thresholds.wrTopThreshold}`
+                                                            : rule.indicator === "combo"
+                                                                ? `DIP>=${rule.thresholds.comboDipThreshold} / TEPE>=${rule.thresholds.comboTopThreshold}`
+                                                                : `DIP>=${rule.thresholds.hunterDipThreshold} / TEPE>=${rule.thresholds.hunterTopThreshold}`
+
+                                                return (
+                                                    <div key={rule.id} className="rounded border border-border/50 px-2 py-1.5">
+                                                        <div className="flex items-center justify-between gap-2">
+                                                            <div className="truncate font-medium">{indicatorLabel} • {timeframeLabel}</div>
+                                                            <div className="flex items-center gap-1">
+                                                                <button
+                                                                    onClick={() => handleToggleAlarmRule(rule.id)}
+                                                                    className={cn(
+                                                                        "rounded px-1.5 py-0.5 text-[10px]",
+                                                                        rule.enabled ? "bg-primary text-primary-foreground" : "bg-raised text-muted-foreground"
+                                                                    )}
+                                                                >
+                                                                    {rule.enabled ? "Acik" : "Kapali"}
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleRemoveAlarmRule(rule.id)}
+                                                                    className="text-muted-foreground hover:text-loss"
+                                                                    title="Kurali sil"
+                                                                >
+                                                                    <X className="h-3.5 w-3.5" />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                        <div className="mt-1 text-[10px] text-muted-foreground">{thresholdText}</div>
+                                                    </div>
+                                                )
+                                            })}
+                                        </div>
+
+                                        <Link href="/alarms" className="flex items-center justify-between rounded border border-border/50 px-2 py-1.5 text-muted-foreground hover:bg-raised">
+                                            <span>/alarms sayfasinda aktif tetikleri izle</span>
+                                            <ArrowUpRight className="h-3.5 w-3.5" />
+                                        </Link>
                                     </div>
                                 )}
                                 {activeUtilityPanel === "notes" && (
@@ -2684,17 +2987,27 @@ export function AdvancedChartPage({
                                         <div>Sunucu saati: {serverClockLabel}</div>
                                         <div>Grafik periyodu: {currentTimeframeLabel}</div>
                                         <div>Veri kaynagi: {dataSource}</div>
+                                        <div className="pt-1 text-[10px] uppercase tracking-wide text-muted-foreground/80">Alarm periyotlari</div>
+                                        <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11px]">
+                                            {ALARM_TIMEFRAME_OPTIONS.slice(0, 8).map((option) => (
+                                                <span key={`tf-${option.value}`}>{option.label}</span>
+                                            ))}
+                                        </div>
                                     </div>
                                 )}
                                 {activeUtilityPanel === "news" && (
                                     <div className="space-y-1 text-muted-foreground">
-                                        <div>Liste ozeti:</div>
-                                        {activeWatchlistSymbolRows.slice(0, 4).map((row) => (
-                                            <div key={`news-${row.marketType}-${row.rawSymbol}`} className="truncate">
-                                                {row.rawSymbol} ({row.marketType})
-                                            </div>
-                                        ))}
-                                        {activeWatchlistSymbolRows.length === 0 && <div>Gosterilecek sembol yok.</div>}
+                                        <div>Liste performans ozeti:</div>
+                                        {watchlistChangeSnapshot ? (
+                                            <>
+                                                <div>Ortalama degisim: {watchlistChangeSnapshot.average >= 0 ? "+" : ""}{watchlistChangeSnapshot.average.toFixed(2)}%</div>
+                                                <div>Pozitif lider: {watchlistChangeSnapshot.strongest.rawSymbol} ({watchlistChangeSnapshot.strongest.change >= 0 ? "+" : ""}{watchlistChangeSnapshot.strongest.change.toFixed(2)}%)</div>
+                                                <div>Negatif lider: {watchlistChangeSnapshot.weakest.rawSymbol} ({watchlistChangeSnapshot.weakest.change >= 0 ? "+" : ""}{watchlistChangeSnapshot.weakest.change.toFixed(2)}%)</div>
+                                                <div>Kotasyon gelen sembol: {watchlistChangeSnapshot.quotedCount}</div>
+                                            </>
+                                        ) : (
+                                            <div>Canli quote bekleniyor.</div>
+                                        )}
                                     </div>
                                 )}
                                 {activeUtilityPanel === "layout" && (
@@ -2702,13 +3015,20 @@ export function AdvancedChartPage({
                                         <div>Panel: {showRightPanel ? "Acik" : "Kapali"}</div>
                                         <div>Indikator sayisi: {activeIndicators.length}</div>
                                         <div>Overlay: {visibleOverlayIndicators.length}</div>
+                                        <div>Alarm kurali: {activeWatchlistAlarmRules.length}</div>
+                                        <Link href="/alarms" className="inline-flex items-center gap-1 pt-1 text-primary hover:underline">
+                                            Alarm merkezi
+                                            <ArrowUpRight className="h-3.5 w-3.5" />
+                                        </Link>
                                     </div>
                                 )}
                                 {activeUtilityPanel === "help" && (
                                     <div className="space-y-1 text-muted-foreground">
                                         <div>- `+` ile listeye sembol ekleyin.</div>
                                         <div>- `...` menusuyle listeyi kopyalayin/yeniden adlandirin.</div>
+                                        <div>- Artik listeleri tamamen silebilirsiniz.</div>
                                         <div>- Satirdaki `x` ile sembolu kaldirin.</div>
+                                        <div>- Alarm kurali ekleyip /alarms sayfasinda tetikleri izleyin.</div>
                                         <div>- Ikonlarla sag panel modlarini degistirin.</div>
                                     </div>
                                 )}
