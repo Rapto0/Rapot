@@ -221,6 +221,9 @@ def resample_data(df: pd.DataFrame | None, timeframe: str) -> pd.DataFrame | Non
 
 _BIST_WEEK_EPOCH = pd.Timestamp("1970-01-05")  # Monday
 _BIST_MONTH_EPOCH_INDEX = 1970 * 12
+_CRYPTO_DAY_EPOCH = pd.Timestamp("1970-01-01")
+_CRYPTO_WEEK_EPOCH = pd.Timestamp("1970-01-05")  # Monday
+_CRYPTO_MONTH_EPOCH_INDEX = 1970 * 12
 
 
 def _normalize_ohlcv_frame(df: pd.DataFrame | None) -> pd.DataFrame | None:
@@ -247,6 +250,33 @@ def _normalize_ohlcv_frame(df: pd.DataFrame | None) -> pd.DataFrame | None:
         return work
     except Exception as e:
         logger.debug(f"OHLCV normalize error: {e}")
+        return None
+
+
+def _normalize_ohlcv_frame_utc(df: pd.DataFrame | None) -> pd.DataFrame | None:
+    """Normalize OHLCV dataframe in UTC semantics for crypto grouping."""
+    if df is None or df.empty:
+        return None
+
+    try:
+        work = df.copy()
+        idx = pd.to_datetime(work.index)
+        if getattr(idx, "tz", None) is not None:
+            idx = idx.tz_convert("UTC").tz_localize(None)
+        else:
+            idx = idx.tz_localize(None)
+        work.index = idx
+        work = work.sort_index()
+        work = work[~work.index.duplicated(keep="last")]
+
+        keep_columns = [col for col in ["Open", "High", "Low", "Close", "Volume"] if col in work.columns]
+        if not keep_columns:
+            return None
+        work = work[keep_columns]
+        work = work.dropna(subset=[col for col in ["Open", "High", "Low", "Close"] if col in work.columns])
+        return work
+    except Exception as e:
+        logger.debug(f"UTC OHLCV normalize error: {e}")
         return None
 
 
@@ -346,6 +376,65 @@ def resample_bist_data(df: pd.DataFrame | None, timeframe: str) -> pd.DataFrame 
         return _aggregate_grouped_ohlcv(work, group_keys)
 
     logger.debug(f"Unsupported BIST resample timeframe: {timeframe}")
+    return None
+
+
+def resample_crypto_data(df: pd.DataFrame | None, timeframe: str) -> pd.DataFrame | None:
+    """
+    Kripto ozel zaman dilimi resample kurallari (UTC).
+
+    - 2D-6D: Takvim gunu sayar (hafta sonu/tatil atlamaz).
+    - 1W/2W/3W: Pazartesi bazli takvim haftasi ve sabit epoch ile gruplar.
+    - 1M/2M/3M: Takvim ayi bloklari; ayin ilk gununden itibaren gruplar.
+    """
+    work = _normalize_ohlcv_frame_utc(df)
+    if work is None or work.empty:
+        return None
+
+    tf_raw = timeframe.strip()
+    tf_upper = tf_raw.upper()
+    aliases = {
+        "GUNLUK": "1d",
+        "GÜNLÜK": "1d",
+        "D": "1d",
+        "HAFTALIK": "1wk",
+        "W": "1wk",
+        "2 HAFTALIK": "2wk",
+        "3 HAFTALIK": "3wk",
+        "AYLIK": "1mo",
+        "M": "1mo",
+    }
+    tf = aliases.get(tf_upper, tf_raw.lower())
+
+    if tf == "1d":
+        return work
+
+    multi_day_steps = {"2d": 2, "3d": 3, "4d": 4, "5d": 5, "6d": 6}
+    multi_week_steps = {"1wk": 1, "2wk": 2, "3wk": 3}
+    multi_month_steps = {"1mo": 1, "2mo": 2, "3mo": 3}
+    idx = pd.DatetimeIndex(work.index)
+
+    if tf in multi_day_steps:
+        step = multi_day_steps[tf]
+        day_start = idx.normalize()
+        day_counter = ((day_start - _CRYPTO_DAY_EPOCH) // pd.Timedelta(days=1)).astype("int64")
+        group_keys = pd.Series(day_counter // step, index=work.index)
+        return _aggregate_grouped_ohlcv(work, group_keys)
+
+    if tf in multi_week_steps:
+        step = multi_week_steps[tf]
+        week_start = idx.normalize() - pd.to_timedelta(idx.weekday, unit="D")
+        week_counter = ((week_start - _CRYPTO_WEEK_EPOCH) // pd.Timedelta(days=7)).astype("int64")
+        group_keys = pd.Series(week_counter // step, index=work.index)
+        return _aggregate_grouped_ohlcv(work, group_keys)
+
+    if tf in multi_month_steps:
+        step = multi_month_steps[tf]
+        month_counter = (idx.year * 12 + idx.month - 1) - _CRYPTO_MONTH_EPOCH_INDEX
+        group_keys = pd.Series(month_counter // step, index=work.index)
+        return _aggregate_grouped_ohlcv(work, group_keys)
+
+    logger.debug(f"Unsupported crypto resample timeframe: {timeframe}")
     return None
 
 

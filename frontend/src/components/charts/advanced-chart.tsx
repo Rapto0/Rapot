@@ -456,9 +456,11 @@ const buildMarkerHash = (markers: Array<{ time: string | number, text?: string, 
 }
 
 // Helper to parse backend time string into chart timestamp.
-// IMPORTANT: Intraday timestamps from API are exchange wall-time (TR) without timezone.
-// Lightweight Charts expects UTC timestamps; we therefore encode wall-time as UTC
-// to avoid browser local-time drift and chart-side timezone shifts.
+// IMPORTANT:
+// - BIST intraday timestamps come as TR exchange wall-time.
+// - Crypto intraday timestamps come as UTC wall-time.
+// Lightweight Charts expects UTC timestamps; we therefore encode the provided wall-time
+// as UTC to keep backend grouping boundaries stable on every client timezone.
 const parseChartTimeToUnix = (timeStr: string): number => {
     const value = timeStr.trim()
     const intradayMatch = value.match(INTRADAY_RE)

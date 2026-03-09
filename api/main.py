@@ -1537,6 +1537,14 @@ async def get_candles(
                         df = resampled
                         if timeframe != "1d":
                             source = f"{source}_bist_custom"
+                elif market_type in ["Kripto", "CRYPTO"]:
+                    from data_loader import resample_crypto_data
+
+                    resampled = resample_crypto_data(df, timeframe)
+                    if resampled is not None and not resampled.empty:
+                        df = resampled
+                        if timeframe != "1d":
+                            source = f"{source}_crypto_custom"
                 elif resample_tf != "1D":
                     from data_loader import resample_data
 
@@ -1546,25 +1554,39 @@ async def get_candles(
             except Exception as resample_err:
                 print(f"Resample error: {resample_err}")
 
-        # 5. Format output with Turkey timezone conversion
+        # 5. Format output timestamps
         import pytz
 
         turkey_tz = pytz.timezone("Europe/Istanbul")
+        utc_tz = pytz.UTC
         candles = []
         if df is not None and not df.empty:
             # Take last N candles
             df_tail = df.tail(limit)
 
             for index, row in df_tail.iterrows():
-                # Convert index to Turkey timezone if it's timezone-aware
                 ts = index
                 if is_intraday:
-                    # Convert UTC to Turkey timezone for intraday data
-                    if hasattr(ts, "tzinfo") and ts.tzinfo is not None:
-                        ts = ts.astimezone(turkey_tz)
-                    elif hasattr(ts, "tz_localize"):
-                        with suppress(Exception):
-                            ts = ts.tz_localize("UTC").tz_convert(turkey_tz)
+                    if market_type == "BIST":
+                        # BIST intraday bars are represented in TR exchange session wall-time.
+                        if hasattr(ts, "tzinfo") and ts.tzinfo is not None:
+                            ts = ts.astimezone(turkey_tz)
+                        elif hasattr(ts, "tz_localize"):
+                            with suppress(Exception):
+                                ts = ts.tz_localize("UTC").tz_convert(turkey_tz)
+                    else:
+                        # Crypto intraday bars stay in UTC reference (00:00 boundary).
+                        if hasattr(ts, "tzinfo") and ts.tzinfo is not None:
+                            if hasattr(ts, "tz_convert"):
+                                ts = ts.tz_convert(utc_tz)
+                            else:
+                                ts = ts.astimezone(utc_tz)
+                            if hasattr(ts, "tz_localize"):
+                                with suppress(Exception):
+                                    ts = ts.tz_localize(None)
+                        elif hasattr(ts, "tz_localize"):
+                            with suppress(Exception):
+                                ts = ts.tz_localize("UTC").tz_localize(None)
                     time_val = ts.strftime("%Y-%m-%d %H:%M")
                 else:
                     time_val = ts.strftime("%Y-%m-%d")
