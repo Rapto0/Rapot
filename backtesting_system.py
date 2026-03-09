@@ -14,7 +14,7 @@ from tqdm import tqdm
 from data_loader import (
     get_bist_data,
     get_crypto_data,
-    resample_data,
+    resample_market_data,
 )
 from signals import calculate_combo_signal, calculate_hunter_signal
 
@@ -288,7 +288,7 @@ class BacktestEngine:
         self.start_date = start_date
         self.end_date = end_date or datetime.now().strftime("%Y-%m-%d")
 
-    def check_signals(self, df_daily, strategy="combo"):
+    def check_signals(self, df_daily, market_type, strategy="combo"):
         """Sinyal kontrolü"""
 
         signals = {"buy": {"cok_ucuz": False, "beles": False}, "sell": {"pahali": False}}
@@ -297,7 +297,7 @@ class BacktestEngine:
 
         for tf_code, _ in self.TIMEFRAMES:
             try:
-                df_resampled = resample_data(df_daily.copy(), tf_code)
+                df_resampled = resample_market_data(df_daily.copy(), tf_code, market_type)
 
                 # ============================================================
                 # DÜZELTME: Timeframe'e özel minimum periyot kontrolü
@@ -405,14 +405,14 @@ class BacktestEngine:
 
             # Geçmiş veri
             historical_data = df.iloc[: i + 1].copy()
-            df_daily = resample_data(historical_data, "1D")
+            df_daily = resample_market_data(historical_data, "1D", market_type)
 
             if df_daily is None or len(df_daily) < 14:
                 continue
 
             # Her iki stratejiyi test et
             for strategy in ["combo", "hunter"]:
-                signals = self.check_signals(df_daily, strategy)
+                signals = self.check_signals(df_daily, market_type, strategy)
                 strategy_name = strategy.upper()
 
                 # ALIM SİGNALLERİ

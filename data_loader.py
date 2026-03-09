@@ -438,6 +438,63 @@ def resample_crypto_data(df: pd.DataFrame | None, timeframe: str) -> pd.DataFram
     return None
 
 
+def _normalize_strategy_timeframe_code(timeframe: str) -> str:
+    """Map legacy strategy timeframe codes to custom candle engine codes."""
+    normalized = str(timeframe or "").strip().upper()
+    alias_map = {
+        "1D": "1d",
+        "D": "1d",
+        "DAILY": "1d",
+        "W-FRI": "1wk",
+        "1W": "1wk",
+        "2W-FRI": "2wk",
+        "2W": "2wk",
+        "3W-FRI": "3wk",
+        "3W": "3wk",
+        "ME": "1mo",
+        "1M": "1mo",
+        "2ME": "2mo",
+        "2M": "2mo",
+        "3ME": "3mo",
+        "3M": "3mo",
+    }
+    if normalized in alias_map:
+        return alias_map[normalized]
+    return str(timeframe or "").strip().lower()
+
+
+def resample_market_data(
+    df: pd.DataFrame | None,
+    timeframe: str,
+    market_type: str | None,
+) -> pd.DataFrame | None:
+    """
+    Market-aware resample entrypoint for scanner/inspector.
+
+    - BIST uses the custom BIST candle engine.
+    - Kripto uses the custom crypto candle engine (UTC calendar).
+    - Unknown market falls back to legacy pandas resample behavior.
+    """
+    if df is None or df.empty:
+        return None
+
+    normalized_market = str(market_type or "").strip().upper()
+    normalized_timeframe = _normalize_strategy_timeframe_code(timeframe)
+
+    if normalized_market == "BIST":
+        result = resample_bist_data(df, normalized_timeframe)
+        if result is not None and not result.empty:
+            return result
+
+    if normalized_market in {"KRIPTO", "CRYPTO"}:
+        result = resample_crypto_data(df, normalized_timeframe)
+        if result is not None and not result.empty:
+            return result
+
+    # Legacy fallback for compatibility with older or unknown timeframe codes.
+    return resample_data(df, timeframe)
+
+
 def get_bist_data(symbol: str, start_date: str = "01-01-2015") -> pd.DataFrame | None:
     """
     BIST Verisi Çeker (Retry Mekanizmalı)

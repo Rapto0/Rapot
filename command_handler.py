@@ -8,7 +8,7 @@ import re
 import time
 from datetime import datetime
 
-from data_loader import get_bist_data, get_crypto_data, resample_data
+from data_loader import get_bist_data, get_crypto_data, resample_market_data
 from logger import get_logger
 from signals import calculate_combo_signal, calculate_hunter_signal
 from strategy_inspector import (
@@ -61,7 +61,7 @@ def analyze_manual(symbol: str) -> None:
         send_message(f"ERROR: '{symbol}' bulunamadi.")
         return
 
-    df_daily = resample_data(df.copy(), "1D")
+    df_daily = resample_market_data(df.copy(), "1D", market_type)
     if df_daily is None or len(df_daily) < 30:
         send_message("Uyari: Yetersiz veri.")
         return

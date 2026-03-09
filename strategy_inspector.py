@@ -13,7 +13,7 @@ from typing import Any
 import pandas as pd
 
 from config import TIMEFRAMES
-from data_loader import get_bist_data, get_crypto_data, resample_data
+from data_loader import get_bist_data, get_crypto_data, resample_market_data
 from signals import calculate_combo_signal, calculate_hunter_signal
 
 COMBO_INDICATORS: tuple[tuple[str, str], ...] = (
@@ -200,7 +200,7 @@ def inspect_strategy_dataframe(
 
     timeframe_results: list[dict[str, Any]] = []
     for timeframe_code, timeframe_label in TIMEFRAMES:
-        df_resampled = resample_data(df_daily.copy(), timeframe_code)
+        df_resampled = resample_market_data(df_daily.copy(), timeframe_code, market_type)
         if df_resampled is None or df_resampled.empty:
             timeframe_results.append(
                 {

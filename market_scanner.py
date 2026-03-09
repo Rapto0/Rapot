@@ -14,7 +14,7 @@ import pandas as pd
 from ai_analyst import analyze_with_gemini
 from ai_schema import AIResponseSchemaError, parse_ai_response
 from config import TIMEFRAMES, rate_limits
-from data_loader import get_all_binance_symbols, get_all_bist_symbols, resample_data
+from data_loader import get_all_binance_symbols, get_all_bist_symbols, resample_market_data
 from database import save_signal as db_save_signal
 from database import set_signal_special_tag as db_set_signal_special_tag
 from logger import get_logger
@@ -473,7 +473,7 @@ def _select_recent_levels(values: list[float], *, reverse: bool) -> list[str]:
 
 
 def _derive_technical_levels(
-    df_daily: pd.DataFrame | None, special_tag: str | None
+    df_daily: pd.DataFrame | None, special_tag: str | None, market_type: str
 ) -> dict[str, list[str]]:
     if df_daily is None or df_daily.empty or "Close" not in df_daily.columns:
         return {"support": [], "resistance": []}
@@ -483,7 +483,7 @@ def _derive_technical_levels(
     resistance_candidates: list[float] = []
 
     for timeframe_code in ("W-FRI", "ME"):
-        df_source = resample_data(df_daily.copy(), timeframe_code)
+        df_source = resample_market_data(df_daily.copy(), timeframe_code, market_type)
         if (
             df_source is None
             or df_source.empty
@@ -661,7 +661,7 @@ def process_symbol(
 
     for tf_code, tf_label in TIMEFRAMES:
         try:
-            df_resampled = resample_data(df_daily.copy(), tf_code)
+            df_resampled = resample_market_data(df_daily.copy(), tf_code, market_type)
             if df_resampled is None or len(df_resampled) < 20:
                 continue
 
@@ -783,7 +783,7 @@ def process_symbol(
             signal_dir=signal_dir,
             special_tag=special_tag,
             report=get_strategy_report(strategy_name),
-            technical_levels=_derive_technical_levels(df_daily, special_tag),
+            technical_levels=_derive_technical_levels(df_daily, special_tag, market_type),
             trigger_rule=trigger_rule,
         )
         if not send_message(final_message):

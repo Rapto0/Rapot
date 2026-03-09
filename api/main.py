@@ -1284,31 +1284,6 @@ async def get_candles(
     }
     timeframe = timeframe_aliases.get(raw_timeframe.upper(), raw_timeframe.lower())
 
-    # Extended timeframe mapping
-    # For resample (daily data -> larger timeframes)
-    resample_map = {
-        "GÜNLÜK": "1D",
-        "1d": "1D",
-        "D": "1D",
-        "2d": "2D",
-        "3d": "3D",
-        "4d": "4D",
-        "5d": "5D",
-        "6d": "6D",
-        "HAFTALIK": "W-FRI",
-        "1wk": "W-FRI",
-        "W": "W-FRI",
-        "2wk": "2W-FRI",
-        "2 HAFTALIK": "2W-FRI",
-        "3wk": "3W-FRI",
-        "3 HAFTALIK": "3W-FRI",
-        "AYLIK": "ME",
-        "1mo": "ME",
-        "2mo": "2ME",
-        "3mo": "3ME",
-        "M": "ME",
-    }
-
     # Binance interval mapping for intraday crypto data
     binance_interval_map = {
         "15m": "15m",
@@ -1332,7 +1307,6 @@ async def get_candles(
 
     # Check if this is an intraday timeframe
     is_intraday = timeframe in ["15m", "30m", "1h", "2h", "4h", "8h", "12h"]
-    resample_tf = resample_map.get(timeframe, "1D")
     binance_interval = binance_interval_map.get(timeframe, "1d")
 
     df = None
@@ -1526,31 +1500,16 @@ async def get_candles(
             if df.empty:
                 raise HTTPException(status_code=404, detail=f"{symbol} için veri bulunamadı")
 
-        # 4. Resample daily+ data
+        # 4. Resample daily+ data via market-aware candle engine
         if not is_intraday and df is not None and not df.empty:
             try:
-                if market_type == "BIST":
-                    from data_loader import resample_bist_data
+                from data_loader import resample_market_data
 
-                    resampled = resample_bist_data(df, timeframe)
-                    if resampled is not None and not resampled.empty:
-                        df = resampled
-                        if timeframe != "1d":
-                            source = f"{source}_bist_custom"
-                elif market_type in ["Kripto", "CRYPTO"]:
-                    from data_loader import resample_crypto_data
-
-                    resampled = resample_crypto_data(df, timeframe)
-                    if resampled is not None and not resampled.empty:
-                        df = resampled
-                        if timeframe != "1d":
-                            source = f"{source}_crypto_custom"
-                elif resample_tf != "1D":
-                    from data_loader import resample_data
-
-                    resampled = resample_data(df, resample_tf)
-                    if resampled is not None and not resampled.empty:
-                        df = resampled
+                resampled = resample_market_data(df, timeframe, market_type)
+                if resampled is not None and not resampled.empty:
+                    df = resampled
+                    if timeframe != "1d":
+                        source = f"{source}_market_custom"
             except Exception as resample_err:
                 print(f"Resample error: {resample_err}")
 

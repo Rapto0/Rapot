@@ -15,7 +15,7 @@ from async_data_loader import (
     get_all_binance_symbols_async,
 )
 from config import TIMEFRAMES
-from data_loader import get_all_bist_symbols, resample_data
+from data_loader import get_all_bist_symbols, resample_market_data
 from database import save_signal as db_save_signal
 from logger import get_logger
 from signals import calculate_combo_signal, calculate_hunter_signal
@@ -84,7 +84,7 @@ async def process_symbol_async(symbol: str, df_daily, market_type: str) -> dict[
 
     for tf_code, tf_label in TIMEFRAMES:
         try:
-            df_resampled = resample_data(df_daily.copy(), tf_code)
+            df_resampled = resample_market_data(df_daily.copy(), tf_code, market_type)
             if df_resampled is None or len(df_resampled) < 20:
                 continue
 

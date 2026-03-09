@@ -313,7 +313,10 @@ class TestTelegramSignalFiltering:
         saved_signals = []
 
         monkeypatch.setattr("market_scanner.TIMEFRAMES", [("1D", "GÜNLÜK")])
-        monkeypatch.setattr("market_scanner.resample_data", lambda current_df, tf: current_df)
+        monkeypatch.setattr(
+            "market_scanner.resample_market_data",
+            lambda current_df, tf, market_type: current_df,
+        )
         monkeypatch.setattr(
             "market_scanner.calculate_combo_signal",
             lambda current_df, tf: {
@@ -352,7 +355,10 @@ class TestTelegramSignalFiltering:
             "market_scanner.TIMEFRAMES",
             [("1D", "GÜNLÜK"), ("W-FRI", "1 HAFTALIK"), ("3W-FRI", "3 HAFTALIK")],
         )
-        monkeypatch.setattr("market_scanner.resample_data", lambda current_df, tf: current_df)
+        monkeypatch.setattr(
+            "market_scanner.resample_market_data",
+            lambda current_df, tf, market_type: current_df,
+        )
         monkeypatch.setattr(
             "market_scanner.calculate_combo_signal",
             lambda current_df, tf: {
@@ -426,7 +432,10 @@ class TestTelegramSignalFiltering:
             "market_scanner.TIMEFRAMES",
             [("1D", "GUNLUK"), ("2W-FRI", "2 HAFTALIK"), ("ME", "1 AYLIK")],
         )
-        monkeypatch.setattr("market_scanner.resample_data", lambda current_df, tf: current_df)
+        monkeypatch.setattr(
+            "market_scanner.resample_market_data",
+            lambda current_df, tf, market_type: current_df,
+        )
         monkeypatch.setattr(
             "market_scanner.calculate_combo_signal",
             lambda current_df, tf: {
