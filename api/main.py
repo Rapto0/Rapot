@@ -1256,7 +1256,7 @@ async def get_candles(
     market_type: str = Query("BIST", description="Piyasa türü (BIST/Kripto)"),
     timeframe: str = Query(
         "1d",
-        description="Timeframe (15m, 30m, 1h, 2h, 4h, 8h, 12h, 1d, 2d, 3d, 4d, 5d, 6d, 1wk, 1mo)",
+        description="Timeframe (15m, 30m, 1h, 2h, 4h, 8h, 12h, 1d, 2d, 3d, 4d, 5d, 6d, 1wk, 2wk, 3wk, 1mo, 2mo, 3mo)",
     ),
     limit: int = Query(500, description="Number of candles (max 2000)"),
 ):
@@ -1269,6 +1269,20 @@ async def get_candles(
 
     symbol = symbol.upper()
     limit = min(limit, 2000)  # Max limit
+
+    raw_timeframe = timeframe.strip()
+    timeframe_aliases = {
+        "GUNLUK": "1d",
+        "GÜNLÜK": "1d",
+        "D": "1d",
+        "HAFTALIK": "1wk",
+        "W": "1wk",
+        "2 HAFTALIK": "2wk",
+        "3 HAFTALIK": "3wk",
+        "AYLIK": "1mo",
+        "M": "1mo",
+    }
+    timeframe = timeframe_aliases.get(raw_timeframe.upper(), raw_timeframe.lower())
 
     # Extended timeframe mapping
     # For resample (daily data -> larger timeframes)
@@ -1317,7 +1331,7 @@ async def get_candles(
     }
 
     # Check if this is an intraday timeframe
-    is_intraday = timeframe in ["15m", "30m", "1h", "2h", "4h", "8h", "12h", "18h"]
+    is_intraday = timeframe in ["15m", "30m", "1h", "2h", "4h", "8h", "12h"]
     resample_tf = resample_map.get(timeframe, "1D")
     binance_interval = binance_interval_map.get(timeframe, "1d")
 
@@ -1332,13 +1346,9 @@ async def get_candles(
                 import pytz
 
                 yf_symbol = symbol + ".IS" if not symbol.endswith(".IS") else symbol
-                # NOTE:
-                # yfinance 1h bars for BIST are often misaligned and sometimes sparse compared with TradingView.
-                # For 1h, pull denser 15m bars and resample locally for better bar continuity/alignment.
-                if timeframe in ["15m", "30m"]:
-                    yf_interval = timeframe
-                    period = "60d"
-                elif timeframe == "1h":
+                # Intraday bars are anchored to BIST session open (10:00 TR).
+                # Fetch denser data where needed, then resample with 10:00 offset.
+                if timeframe in ["15m", "30m", "1h"]:
                     yf_interval = "15m"
                     period = "60d"
                 else:
@@ -1361,6 +1371,14 @@ async def get_candles(
                         with suppress(Exception):
                             df.index = df.index.tz_localize("UTC").tz_convert(turkey_tz)
 
+                    # Keep only exchange session rows (Mon-Fri, 10:00-18:00 TR).
+                    df = df[df.index.dayofweek < 5]
+                    session_mask = (
+                        ((df.index.hour > 10) | ((df.index.hour == 10) & (df.index.minute >= 0)))
+                        & (df.index.hour < 18)
+                    )
+                    df = df[session_mask]
+
                     agg_map = {
                         "Open": "first",
                         "High": "max",
@@ -1369,32 +1387,39 @@ async def get_candles(
                         "Volume": "sum",
                     }
 
-                    if timeframe == "30m" and yf_interval == "15m":
-                        df = (
-                            df.resample("30min", label="left", closed="left", origin="start_day")
-                            .agg(agg_map)
-                            .dropna()
-                        )
-                    elif timeframe == "1h" and yf_interval == "15m":
-                        df = (
-                            df.resample("1h", label="left", closed="left", origin="start_day")
-                            .agg(agg_map)
-                            .dropna()
-                        )
-                    # Resample if needed (2h, 4h, 8h, 12h)
-                    elif timeframe in ["2h", "4h", "8h", "12h"]:
-                        hours = int(timeframe.replace("h", ""))
+                    intraday_rule_map = {
+                        "30m": "30min",
+                        "1h": "1h",
+                        "2h": "2h",
+                        "4h": "4h",
+                        "8h": "8h",
+                        "12h": "12h",
+                    }
+                    rule = intraday_rule_map.get(timeframe)
+                    if rule:
                         df = (
                             df.resample(
-                                f"{hours}h", label="left", closed="left", origin="start_day"
+                                rule,
+                                label="left",
+                                closed="left",
+                                origin="start_day",
+                                offset="10h",
                             )
                             .agg(agg_map)
                             .dropna()
                         )
+
+                    # Remove any bucket starting outside the trading session.
+                    session_start_mask = (
+                        ((df.index.hour > 10) | ((df.index.hour == 10) & (df.index.minute >= 0)))
+                        & (df.index.hour < 18)
+                    )
+                    df = df[session_start_mask]
+
                     source = (
-                        "yfinance_intraday_resampled"
+                        "yfinance_intraday_session_resampled"
                         if timeframe != yf_interval
-                        else "yfinance_intraday"
+                        else "yfinance_intraday_session"
                     )
             except Exception as yf_err:
                 print(f"yfinance intraday error for {symbol}: {yf_err}")
@@ -1501,14 +1526,23 @@ async def get_candles(
             if df.empty:
                 raise HTTPException(status_code=404, detail=f"{symbol} için veri bulunamadı")
 
-        # 4. Resample if needed (only for daily+ data, not for intraday)
-        if not is_intraday and resample_tf != "1D" and df is not None and not df.empty:
+        # 4. Resample daily+ data
+        if not is_intraday and df is not None and not df.empty:
             try:
-                from data_loader import resample_data
+                if market_type == "BIST":
+                    from data_loader import resample_bist_data
 
-                resampled = resample_data(df, resample_tf)
-                if resampled is not None and not resampled.empty:
-                    df = resampled
+                    resampled = resample_bist_data(df, timeframe)
+                    if resampled is not None and not resampled.empty:
+                        df = resampled
+                        if timeframe != "1d":
+                            source = f"{source}_bist_custom"
+                elif resample_tf != "1D":
+                    from data_loader import resample_data
+
+                    resampled = resample_data(df, resample_tf)
+                    if resampled is not None and not resampled.empty:
+                        df = resampled
             except Exception as resample_err:
                 print(f"Resample error: {resample_err}")
 

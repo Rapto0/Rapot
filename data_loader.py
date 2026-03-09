@@ -219,6 +219,136 @@ def resample_data(df: pd.DataFrame | None, timeframe: str) -> pd.DataFrame | Non
         return None
 
 
+_BIST_WEEK_EPOCH = pd.Timestamp("1970-01-05")  # Monday
+_BIST_MONTH_EPOCH_INDEX = 1970 * 12
+
+
+def _normalize_ohlcv_frame(df: pd.DataFrame | None) -> pd.DataFrame | None:
+    """Normalize OHLCV dataframe index/columns for deterministic grouping."""
+    if df is None or df.empty:
+        return None
+
+    try:
+        work = df.copy()
+        idx = pd.to_datetime(work.index)
+        if getattr(idx, "tz", None) is not None:
+            idx = idx.tz_convert("Europe/Istanbul").tz_localize(None)
+        else:
+            idx = idx.tz_localize(None)
+        work.index = idx
+        work = work.sort_index()
+        work = work[~work.index.duplicated(keep="last")]
+
+        keep_columns = [col for col in ["Open", "High", "Low", "Close", "Volume"] if col in work.columns]
+        if not keep_columns:
+            return None
+        work = work[keep_columns]
+        work = work.dropna(subset=[col for col in ["Open", "High", "Low", "Close"] if col in work.columns])
+        return work
+    except Exception as e:
+        logger.debug(f"OHLCV normalize error: {e}")
+        return None
+
+
+def _aggregate_ohlcv_slice(slice_df: pd.DataFrame) -> dict:
+    """Aggregate one grouped OHLCV slice into a single candle row."""
+    candle = {}
+    if "Open" in slice_df.columns:
+        candle["Open"] = float(slice_df["Open"].iloc[0])
+    if "High" in slice_df.columns:
+        candle["High"] = float(slice_df["High"].max())
+    if "Low" in slice_df.columns:
+        candle["Low"] = float(slice_df["Low"].min())
+    if "Close" in slice_df.columns:
+        candle["Close"] = float(slice_df["Close"].iloc[-1])
+    if "Volume" in slice_df.columns:
+        candle["Volume"] = float(slice_df["Volume"].sum())
+    return candle
+
+
+def _aggregate_grouped_ohlcv(df: pd.DataFrame, group_keys: pd.Series) -> pd.DataFrame | None:
+    """Build grouped OHLCV candles preserving first trading day as candle timestamp."""
+    if df.empty:
+        return None
+
+    work = df.copy()
+    work["_group_key"] = group_keys.to_numpy()
+
+    rows = []
+    for _, block in work.groupby("_group_key", sort=True):
+        block = block.drop(columns="_group_key")
+        if block.empty:
+            continue
+        rows.append((block.index[0], _aggregate_ohlcv_slice(block)))
+
+    if not rows:
+        return None
+
+    result_index = [idx for idx, _ in rows]
+    result_rows = [row for _, row in rows]
+    result = pd.DataFrame(result_rows, index=pd.DatetimeIndex(result_index))
+    return result.sort_index()
+
+
+def resample_bist_data(df: pd.DataFrame | None, timeframe: str) -> pd.DataFrame | None:
+    """
+    BIST ozel zaman dilimi resample kurallari.
+
+    - 2D-6D: Islem gunu sayar (tatiller/hafta sonu sayilmaz).
+    - 1W/2W/3W: Takvim haftasi (Pazartesi baslangicli) ve sabit epoch ile gruplar.
+    - 1M/2M/3M: Takvim ayi bloklari; mum acilisi ilk islem gunu, kapanis son islem gunu.
+    """
+    work = _normalize_ohlcv_frame(df)
+    if work is None or work.empty:
+        return None
+
+    tf_raw = timeframe.strip()
+    tf_upper = tf_raw.upper()
+    aliases = {
+        "GUNLUK": "1d",
+        "GÜNLÜK": "1d",
+        "D": "1d",
+        "HAFTALIK": "1wk",
+        "W": "1wk",
+        "2 HAFTALIK": "2wk",
+        "3 HAFTALIK": "3wk",
+        "AYLIK": "1mo",
+        "M": "1mo",
+    }
+    tf = aliases.get(tf_upper, tf_raw.lower())
+
+    if tf == "1d":
+        return work
+
+    multi_day_steps = {"2d": 2, "3d": 3, "4d": 4, "5d": 5, "6d": 6}
+    multi_week_steps = {"1wk": 1, "2wk": 2, "3wk": 3}
+    multi_month_steps = {"1mo": 1, "2mo": 2, "3mo": 3}
+
+    if tf in multi_day_steps:
+        step = multi_day_steps[tf]
+        trading_counter = pd.Series(range(len(work)), index=work.index, dtype="int64")
+        group_keys = trading_counter // step
+        return _aggregate_grouped_ohlcv(work, group_keys)
+
+    if tf in multi_week_steps:
+        step = multi_week_steps[tf]
+        idx = pd.DatetimeIndex(work.index)
+        week_start = idx.normalize() - pd.to_timedelta(idx.weekday, unit="D")
+        week_counter = ((week_start - _BIST_WEEK_EPOCH) // pd.Timedelta(days=7)).astype("int64")
+        group_keys = pd.Series(week_counter // step, index=work.index)
+        return _aggregate_grouped_ohlcv(work, group_keys)
+
+    if tf in multi_month_steps:
+        step = multi_month_steps[tf]
+        idx = pd.DatetimeIndex(work.index)
+        month_counter = (idx.year * 12 + idx.month - 1) - _BIST_MONTH_EPOCH_INDEX
+        group_keys = pd.Series(month_counter // step, index=work.index)
+        return _aggregate_grouped_ohlcv(work, group_keys)
+
+    logger.debug(f"Unsupported BIST resample timeframe: {timeframe}")
+    return None
+
+
 def get_bist_data(symbol: str, start_date: str = "01-01-2015") -> pd.DataFrame | None:
     """
     BIST Verisi Çeker (Retry Mekanizmalı)

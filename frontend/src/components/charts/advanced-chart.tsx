@@ -320,6 +320,26 @@ const QUICK_TIMEFRAMES = [
     { label: "1A", value: "1mo" },
 ]
 
+const BIST_ALLOWED_TIMEFRAMES = new Set([
+    "15m",
+    "30m",
+    "1h",
+    "2h",
+    "4h",
+    "1d",
+    "2d",
+    "3d",
+    "4d",
+    "5d",
+    "6d",
+    "1wk",
+    "2wk",
+    "3wk",
+    "1mo",
+    "2mo",
+    "3mo",
+])
+
 // Popular crypto symbols for watchlist
 const CRYPTO_WATCHLIST = [
     "BTCUSDT", "ETHUSDT", "BNBUSDT", "XRPUSDT", "ADAUSDT",
@@ -702,6 +722,27 @@ export function AdvancedChartPage({
         setShowSymbolSearch(false)
         setSearchQuery("")
     }, [initialSymbol, initialMarket])
+
+    const availableTimeframeCategories = useMemo(() => {
+        if (marketType !== "BIST") return TIMEFRAME_CATEGORIES
+        return TIMEFRAME_CATEGORIES
+            .map((category) => ({
+                ...category,
+                items: category.items.filter((item) => BIST_ALLOWED_TIMEFRAMES.has(item.value)),
+            }))
+            .filter((category) => category.items.length > 0)
+    }, [marketType])
+
+    const availableQuickTimeframes = useMemo(() => {
+        if (marketType !== "BIST") return QUICK_TIMEFRAMES
+        return QUICK_TIMEFRAMES.filter((item) => BIST_ALLOWED_TIMEFRAMES.has(item.value))
+    }, [marketType])
+
+    useEffect(() => {
+        if (marketType !== "BIST") return
+        if (BIST_ALLOWED_TIMEFRAMES.has(timeframe)) return
+        setTimeframe("1d")
+    }, [marketType, timeframe])
 
     useEffect(() => {
         activeToolRef.current = activeTool
@@ -2268,7 +2309,7 @@ export function AdvancedChartPage({
                     <div className="flex items-center gap-3">
                         {/* Quick Timeframes */}
                         <div className="flex items-center bg-muted/30 rounded-sm p-1">
-                            {QUICK_TIMEFRAMES.map((tf) => (
+                            {availableQuickTimeframes.map((tf) => (
                                 <button
                                     key={tf.value}
                                     onClick={() => setTimeframe(tf.value)}
@@ -2284,7 +2325,7 @@ export function AdvancedChartPage({
                                 </button>
                                 {showTimeframeMenu && (
                                     <div className="absolute top-full right-0 mt-2 w-64 glass-panel z-50 overflow-hidden">
-                                        {TIMEFRAME_CATEGORIES.map((cat) => (
+                                        {availableTimeframeCategories.map((cat) => (
                                             <div key={cat.category}>
                                                 <div className="px-3 py-2 text-xs font-semibold text-muted-foreground bg-muted/30">{cat.category}</div>
                                                 <div className="grid grid-cols-3 gap-1 p-2">
