@@ -51,3 +51,4 @@ powershell -ExecutionPolicy Bypass -File .\scripts\deploy.ps1 -CommitMessage "de
   - deploy commands run `nvm install && nvm use` when `nvm` is available.
   - deploy commands include a hard check that fails if active Node major is not `20`.
 - Deploy commands now include a hard check for `SERVER_HEAD` vs expected local head and fail if they do not match.
+- Deploy commands now wait for API health (`/health`) after PM2 reload before proceeding.

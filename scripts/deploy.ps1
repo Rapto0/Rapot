@@ -124,6 +124,8 @@ $serverCommands += @(
     "npm run build",
     "cd '$ServerPath'",
     "pm2 startOrReload '$Pm2Config' --update-env",
+    "for i in {1..20}; do curl -sf http://127.0.0.1:8000/health && break; sleep 2; done",
+    "curl -sf http://127.0.0.1:8000/health",
     "pm2 reset frontend",
     "pm2 save",
     ('EXPECTED_HEAD=''{0}''; SERVER_HEAD=$(git rev-parse --short HEAD); echo EXPECTED_HEAD: $EXPECTED_HEAD; echo SERVER_HEAD: $SERVER_HEAD; [ "$SERVER_HEAD" = "$EXPECTED_HEAD" ] || (echo ''ERROR: SERVER_HEAD mismatch'' && exit 1)' -f $expectedHead),

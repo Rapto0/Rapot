@@ -289,6 +289,12 @@ class AIAnalysisResponse(BaseModel):
 _SPECIAL_TAG_CODES = {"BELES", "COK_UCUZ", "PAHALI", "FAHIS_FIYAT"}
 _SPECIAL_TAG_HEALTH_STATE_KEY = "special_tag_health_state"
 _SPECIAL_TAG_HEALTH_SUMMARY_KEY = "special_tag_health_summary"
+_MARKET_INDEX_CANONICAL = {
+    # Yahoo tarafinda spot altin/gumus bazi hesaplarda 404 donebildigi icin
+    # emtia futures sembollerine canonical map uyguluyoruz.
+    "XAUUSD=X": "GC=F",
+    "XAGUSD=X": "SI=F",
+}
 _MARKET_INDEX_FALLBACKS = {
     "XAUUSD=X": "GC=F",
     "XAGUSD=X": "SI=F",
@@ -925,11 +931,13 @@ async def get_market_indices(
             "TRY=X": "USD/TRY",
             "XAUUSD=X": "XAUUSD",
             "XAGUSD=X": "XAGUSD",
+            "GC=F": "XAUUSD",
+            "SI=F": "XAGUSD",
         }
 
         unique_symbols = []
         for raw_symbol in symbol:
-            normalized = raw_symbol.strip().upper()
+            normalized = raw_symbol.strip().upper().lstrip("$")
             if not normalized:
                 continue
             if normalized in unique_symbols:
@@ -946,8 +954,9 @@ async def get_market_indices(
                 items.append(dict(cached[1]))
                 continue
 
-            candidate_symbols = [ticker_symbol]
-            fallback_symbol = _MARKET_INDEX_FALLBACKS.get(ticker_symbol)
+            canonical_symbol = _MARKET_INDEX_CANONICAL.get(ticker_symbol, ticker_symbol)
+            candidate_symbols = [canonical_symbol]
+            fallback_symbol = _MARKET_INDEX_FALLBACKS.get(canonical_symbol)
             if fallback_symbol and fallback_symbol not in candidate_symbols:
                 candidate_symbols.append(fallback_symbol)
 
