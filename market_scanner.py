@@ -13,13 +13,21 @@ import pandas as pd
 
 from ai_analyst import analyze_with_gemini
 from ai_schema import AIResponseSchemaError, parse_ai_response
-from config import TIMEFRAMES, rate_limits
-from data_loader import get_all_binance_symbols, get_all_bist_symbols, resample_market_data
+from config import TIMEFRAMES, rate_limits, signal_guard_settings
+from data_loader import (
+    get_all_binance_symbols,
+    get_all_bist_symbols,
+    get_bist_data,
+    get_bist_data_secondary,
+    get_dataframe_age_seconds,
+    is_dataframe_fresh,
+    resample_market_data,
+)
 from database import save_signal as db_save_signal
 from database import set_signal_special_tag as db_set_signal_special_tag
 from logger import get_logger
 from news_manager import fetch_market_news
-from price_cache import cached_get_bist_data, cached_get_crypto_data, price_cache
+from price_cache import cached_get_crypto_data, price_cache
 from signals import calculate_combo_signal, calculate_hunter_signal
 from strategy_inspector import build_strategy_ai_payload, inspect_strategy_dataframe
 from telegram_notify import send_message
@@ -507,6 +515,57 @@ def _derive_technical_levels(
     }
 
 
+def _strategy_matches_direction(
+    strategy_name: str,
+    df_resampled: pd.DataFrame,
+    timeframe_code: str,
+    signal_dir: str,
+) -> bool:
+    normalized_strategy = str(strategy_name or "").upper()
+    normalized_dir = str(signal_dir or "").upper()
+
+    if normalized_strategy == "COMBO":
+        result = calculate_combo_signal(df_resampled, timeframe_code)
+    elif normalized_strategy == "HUNTER":
+        result = calculate_hunter_signal(df_resampled, timeframe_code)
+    else:
+        return False
+
+    if not result:
+        return False
+    if normalized_dir == "AL":
+        return bool(result.get("buy"))
+    if normalized_dir == "SAT":
+        return bool(result.get("sell"))
+    return False
+
+
+def _verify_bist_second_source(
+    symbol: str,
+    strategy_name: str,
+    signal_dir: str,
+    trigger_rule: list[str],
+    secondary_df: pd.DataFrame | None,
+) -> tuple[bool, str]:
+    if secondary_df is None or secondary_df.empty:
+        return False, "ikincil_kaynak_bos"
+
+    if not is_dataframe_fresh(secondary_df, signal_guard_settings.BIST_MAX_DATA_AGE_SECONDS):
+        age = get_dataframe_age_seconds(secondary_df)
+        if age is None:
+            return False, "ikincil_kaynak_tarihsiz"
+        return False, f"ikincil_kaynak_bayat ({age:.1f}s)"
+
+    for timeframe_code in trigger_rule:
+        df_resampled = resample_market_data(secondary_df.copy(), timeframe_code, "BIST")
+        if df_resampled is None or len(df_resampled) < 20:
+            return False, f"ikincil_{timeframe_code}_veri_yetersiz"
+        if not _strategy_matches_direction(strategy_name, df_resampled, timeframe_code, signal_dir):
+            return False, f"ikincil_{timeframe_code}_uyumsuz"
+
+    return True, "ok"
+
+
 def _resolve_levels_heading(has_support: bool, has_resistance: bool) -> str:
     if has_support and has_resistance:
         return "<b>\U0001f4cd KRİTİK SEVİYELER</b>"
@@ -733,6 +792,17 @@ def process_symbol(
             logger.error(f"HATA: {symbol} - {tf_label}: {str(e)}")
 
     # --- ÖZEL SİNYALLER & YAPAY ZEKA ANALİZİ ---
+    secondary_df_cache: pd.DataFrame | None = None
+    secondary_df_loaded = False
+
+    def get_secondary_df() -> pd.DataFrame | None:
+        nonlocal secondary_df_cache, secondary_df_loaded
+        if secondary_df_loaded:
+            return secondary_df_cache
+        secondary_df_loaded = True
+        secondary_df_cache = get_bist_data_secondary(symbol, start_date="01-01-2015")
+        return secondary_df_cache
+
     def get_strategy_report(strategy_name: str) -> dict[str, Any]:
         if strategy_name not in strategy_reports:
             strategy_reports[strategy_name] = inspect_strategy_dataframe(
@@ -750,6 +820,27 @@ def process_symbol(
         special_tag: str,
         trigger_rule: list[str],
     ) -> None:
+        if (
+            market_type == "BIST"
+            and signal_guard_settings.BIST_REQUIRE_SECOND_SOURCE_CONFIRMATION
+        ):
+            ok, reason = _verify_bist_second_source(
+                symbol=symbol,
+                strategy_name=strategy_name,
+                signal_dir=signal_dir,
+                trigger_rule=trigger_rule,
+                secondary_df=get_secondary_df(),
+            )
+            if not ok:
+                logger.warning(
+                    "Ikinci kaynak dogrulamasi basarisiz (%s %s %s): %s",
+                    symbol,
+                    strategy_name,
+                    special_tag,
+                    reason,
+                )
+                return
+
         logger.info(
             "Ozel sinyal tetiklendi: %s %s %s %s",
             symbol,
@@ -928,7 +1019,17 @@ def scan_market(check_commands_callback=None) -> None:
     for i, sym in enumerate(symbols):
         print(f"\rBIST: {i + 1}/{len(symbols)} {sym}", end="")
         try:
-            df = cached_get_bist_data(sym, start_date="01-01-2015")
+            # Trade-time BIST akisinda cache bypass: her turde kaynaktan taze veri cek.
+            df = get_bist_data(sym, start_date="01-01-2015")
+            if not is_dataframe_fresh(df, signal_guard_settings.BIST_MAX_DATA_AGE_SECONDS):
+                age = get_dataframe_age_seconds(df)
+                if age is None:
+                    logger.warning(f"BIST veri tazelik bilgisi yok, atlandi: {sym}")
+                else:
+                    logger.warning(
+                        f"BIST veri bayat ({age:.1f}s > {signal_guard_settings.BIST_MAX_DATA_AGE_SECONDS}s), atlandi: {sym}"
+                    )
+                continue
             process_symbol(df, sym, "BIST")
         except Exception as e:
             logger.error(f"VERİ ÇEKME HATASI (BIST): {sym} - {str(e)}")

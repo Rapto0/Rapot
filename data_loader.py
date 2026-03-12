@@ -89,6 +89,23 @@ def is_suspicious_bist_ohlcv(df: pd.DataFrame | None) -> bool:
     return equal_ratio >= 0.9 and has_spread_ratio >= 0.6
 
 
+def get_dataframe_age_seconds(df: pd.DataFrame | None) -> float | None:
+    if df is None:
+        return None
+    ts = getattr(df, "attrs", {}).get("fetched_at_ts")
+    if ts is None:
+        return None
+    try:
+        return max(0.0, time.time() - float(ts))
+    except (TypeError, ValueError):
+        return None
+
+
+def is_dataframe_fresh(df: pd.DataFrame | None, max_age_seconds: int) -> bool:
+    age = get_dataframe_age_seconds(df)
+    return age is not None and age <= float(max_age_seconds)
+
+
 def _fetch_bist_data_yfinance(symbol: str, start_date: str = "01-01-2015") -> pd.DataFrame | None:
     """
     isyatirim başarısız olduğunda BIST verisini yfinance ile çekmeye çalışır.
@@ -168,8 +185,11 @@ def _fetch_bist_data_yfinance(symbol: str, start_date: str = "01-01-2015") -> pd
 
         _bist_yf_failure_cooldown_until.pop(symbol_root, None)
         _bist_yf_failure_logged_reason.pop(symbol_root, None)
+        fetched_at_ts = time.time()
         df.attrs["source_hint"] = "yfinance_bist"
         df.attrs["open_quality"] = "provider"
+        df.attrs["fetched_at_ts"] = fetched_at_ts
+        df.attrs["fetched_at_iso"] = datetime.utcnow().isoformat()
         return df
     except Exception as e:
         _bist_yf_failure_cooldown_until[symbol_root] = now_ts + _YF_SHORT_COOLDOWN_SECONDS
@@ -648,8 +668,11 @@ def get_bist_data(symbol: str, start_date: str = "01-01-2015") -> pd.DataFrame |
                     )
                     return fallback
 
+            fetched_at_ts = time.time()
             df.attrs["source_hint"] = "isyatirim"
             df.attrs["open_quality"] = "mapped" if discovered_open else "synthetic_fallback"
+            df.attrs["fetched_at_ts"] = fetched_at_ts
+            df.attrs["fetched_at_iso"] = datetime.utcnow().isoformat()
 
             # Başarılı olursa döngüden çık ve veriyi döndür
             return df
@@ -695,6 +718,14 @@ def get_bist_data(symbol: str, start_date: str = "01-01-2015") -> pd.DataFrame |
     return None
 
 
+def get_bist_data_secondary(symbol: str, start_date: str = "01-01-2015") -> pd.DataFrame | None:
+    """
+    BIST icin ikinci kaynak (yfinance) verisini acikca dondurur.
+    Cift-kaynak dogrulama akisi icin kullanilir.
+    """
+    return _fetch_bist_data_yfinance(symbol, start_date)
+
+
 def get_crypto_data(symbol: str, start_str: str = "6 years ago") -> pd.DataFrame | None:
     """
     Binance'ten kripto verisi ceker.
@@ -736,6 +767,10 @@ def get_crypto_data(symbol: str, start_str: str = "6 years ago") -> pd.DataFrame
 
         cols = ["Open", "High", "Low", "Close", "Volume"]
         df[cols] = df[cols].astype(float)
+        fetched_at_ts = time.time()
+        df.attrs["source_hint"] = "binance"
+        df.attrs["fetched_at_ts"] = fetched_at_ts
+        df.attrs["fetched_at_iso"] = datetime.utcnow().isoformat()
         return df
     except Exception as e:
         logger.debug(f"Crypto data fetch error for {symbol}: {e}")

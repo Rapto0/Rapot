@@ -90,6 +90,14 @@ class BacktestSettings:
     START_DATE: str = "2006-01-01"
 
 
+@dataclass(frozen=True)
+class SignalGuardSettings:
+    """Canli sinyal veri guvenlik ayarlari."""
+
+    BIST_MAX_DATA_AGE_SECONDS: int = 90
+    BIST_REQUIRE_SECOND_SOURCE_CONFIRMATION: bool = True
+
+
 # Minimum periyot gereksinimleri (timeframe bazlı)
 MIN_PERIODS: dict[str, int] = {
     "1D": 30,
@@ -117,3 +125,4 @@ scan_settings = ScanSettings()
 combo_thresholds = ComboThresholds()
 hunter_thresholds = HunterThresholds()
 backtest_settings = BacktestSettings()
+signal_guard_settings = SignalGuardSettings()
