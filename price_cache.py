@@ -371,19 +371,25 @@ def cached_get_bist_data(symbol: str, start_date: str = "01-01-2015") -> pd.Data
     Cache destekli BIST veri çekme.
     Önce cache'e bakar, yoksa API'den çeker.
     """
-    from data_loader import get_bist_data
+    from data_loader import get_bist_data, is_suspicious_bist_ohlcv
 
     # Cache'e bak
     cached = price_cache.get(symbol, "BIST")
     if cached is not None:
-        return cached
+        if is_suspicious_bist_ohlcv(cached):
+            price_cache.invalidate(symbol, "BIST")
+            logger.warning(f"BIST cache invalidated (suspicious open profile): {symbol}")
+        else:
+            return cached
 
     # API'den çek
     df = get_bist_data(symbol, start_date)
 
     # Cache'e yaz
-    if df is not None and not df.empty:
+    if df is not None and not df.empty and not is_suspicious_bist_ohlcv(df):
         price_cache.set(symbol, "BIST", df)
+    elif df is not None and not df.empty:
+        logger.warning(f"BIST cache write skipped (suspicious open profile): {symbol}")
 
     return df
 

@@ -1442,7 +1442,17 @@ async def get_candles(
 
                 df = price_cache.get(symbol, market_type)
                 if df is not None and not df.empty:
-                    source = "cache"
+                    if market_type == "BIST":
+                        from data_loader import is_suspicious_bist_ohlcv
+
+                        if is_suspicious_bist_ohlcv(df):
+                            price_cache.invalidate(symbol, "BIST")
+                            print(f"Invalidated suspicious BIST cache: {symbol}")
+                            df = None
+                        else:
+                            source = "cache"
+                    else:
+                        source = "cache"
             except Exception as cache_err:
                 print(f"Cache error for {symbol}: {cache_err}")
                 df = None
@@ -1455,14 +1465,19 @@ async def get_candles(
                         from data_loader import get_bist_data
 
                         df = get_bist_data(symbol, start_date="01-01-2010")
-                        source = "isyatirim"
+                        source = str(getattr(df, "attrs", {}).get("source_hint", "isyatirim"))
 
                         # Save to cache for next time
                         if df is not None and not df.empty:
                             with suppress(Exception):
                                 from price_cache import price_cache as pc
+                                from data_loader import is_suspicious_bist_ohlcv
 
-                                pc.set(symbol, market_type, df)
+                                if is_suspicious_bist_ohlcv(df):
+                                    pc.invalidate(symbol, market_type)
+                                    print(f"Skipped suspicious BIST cache write: {symbol}")
+                                else:
+                                    pc.set(symbol, market_type, df)
                     except Exception as bist_err:
                         print(f"BIST data error for {symbol}: {bist_err}")
                         df = None

@@ -1,5 +1,6 @@
 import json
 import time
+import unicodedata
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime
 from io import StringIO
@@ -22,6 +23,70 @@ _bist_yf_failure_cooldown_until: dict[str, float] = {}
 _bist_yf_failure_logged_reason: dict[str, str] = {}
 _YF_SHORT_COOLDOWN_SECONDS = 60 * 60
 _YF_LONG_COOLDOWN_SECONDS = 24 * 60 * 60
+
+
+def _normalize_text_token(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", str(value or ""))
+    ascii_only = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+    upper = ascii_only.upper()
+    return "".join(ch for ch in upper if ch.isalnum() or ch == "_")
+
+
+def _discover_isyatirim_open_column(columns: list[str]) -> str | None:
+    """
+    Is Yatirim raw kolonlari icinden olasi acilis kolonunu bulur.
+
+    API kolon isimleri zamanla degisebildigi icin exact + heuristic yaklasim kullanir.
+    """
+    normalized_map: dict[str, str] = {}
+    for column in columns:
+        normalized_map[_normalize_text_token(column)] = column
+
+    exact_priority = (
+        "HGDG_ACILIS",
+        "HGDG_ACIK",
+        "HGDG_OPEN",
+        "ACILIS",
+        "ACIK",
+        "OPEN",
+    )
+    for key in exact_priority:
+        if key in normalized_map:
+            return normalized_map[key]
+
+    for normalized_name, original_name in normalized_map.items():
+        has_open_hint = "ACILIS" in normalized_name or normalized_name.endswith("OPEN")
+        if has_open_hint and "KAPANIS" not in normalized_name and "CLOSE" not in normalized_name:
+            return original_name
+
+    return None
+
+
+def is_suspicious_bist_ohlcv(df: pd.DataFrame | None) -> bool:
+    """
+    BIST gunluk OHLCV verisinde acilis kalitesinin bozuk olma olasiligini tespit eder.
+
+    Tipik bozuk profil: Open neredeyse her satirda Close ile birebir ayni, ancak High/Low spread var.
+    """
+    if df is None or df.empty:
+        return False
+
+    required = {"Open", "High", "Low", "Close"}
+    if not required.issubset(df.columns):
+        return False
+
+    work = df[list(required)].dropna()
+    if len(work) < 20:
+        return False
+
+    rounded_open = work["Open"].astype(float).round(6)
+    rounded_close = work["Close"].astype(float).round(6)
+    equal_ratio = float((rounded_open == rounded_close).mean())
+
+    spread = (work["High"].astype(float) - work["Low"].astype(float)).abs().round(6)
+    has_spread_ratio = float((spread > 0).mean())
+
+    return equal_ratio >= 0.9 and has_spread_ratio >= 0.6
 
 
 def _fetch_bist_data_yfinance(symbol: str, start_date: str = "01-01-2015") -> pd.DataFrame | None:
@@ -103,6 +168,8 @@ def _fetch_bist_data_yfinance(symbol: str, start_date: str = "01-01-2015") -> pd
 
         _bist_yf_failure_cooldown_until.pop(symbol_root, None)
         _bist_yf_failure_logged_reason.pop(symbol_root, None)
+        df.attrs["source_hint"] = "yfinance_bist"
+        df.attrs["open_quality"] = "provider"
         return df
     except Exception as e:
         _bist_yf_failure_cooldown_until[symbol_root] = now_ts + _YF_SHORT_COOLDOWN_SECONDS
@@ -512,9 +579,9 @@ def get_bist_data(symbol: str, start_date: str = "01-01-2015") -> pd.DataFrame |
     for attempt in range(max_retries):
         try:
             # Veri çekme denemesi
-            df = fetch_stock_data(symbols=[symbol], start_date=start_date)
+            raw_df = fetch_stock_data(symbols=[symbol], start_date=start_date)
 
-            if df is None or df.empty:
+            if raw_df is None or raw_df.empty:
                 if attempt == max_retries - 1:
                     logger.warning(f"BIST veri boş döndü ({symbol}), yfinance fallback deneniyor.")
                     fallback = _fetch_bist_data_yfinance(symbol, start_date)
@@ -525,18 +592,40 @@ def get_bist_data(symbol: str, start_date: str = "01-01-2015") -> pd.DataFrame |
                 time.sleep(rate_limits.RETRY_WAIT)
                 continue
 
-            # Sütun düzeltme işlemleri
-            df = df.rename(
-                columns={
-                    "HGDG_KAPANIS": "Close",
-                    "HGDG_MIN": "Low",
-                    "HGDG_MAX": "High",
-                    "HGDG_HACIM": "Volume",
-                    "HGDG_TARIH": "Date",
-                }
-            )
+            # Sütun düzeltme: raw kolon keşfi + dinamik açılış eşlemesi
+            raw_columns = [str(col) for col in raw_df.columns]
+            discovered_open = _discover_isyatirim_open_column(raw_columns)
+            if discovered_open:
+                logger.debug(f"BIST open kolonu keşfedildi ({symbol}): {discovered_open}")
+            else:
+                logger.warning(
+                    f"BIST open kolonu bulunamadı ({symbol}). "
+                    "Chart/sinyal kalitesi için yfinance fallback denenecek."
+                )
+
+            rename_map = {
+                "HGDG_KAPANIS": "Close",
+                "HGDG_MIN": "Low",
+                "HGDG_MAX": "High",
+                "HGDG_HACIM": "Volume",
+                "HGDG_TARIH": "Date",
+            }
+            if discovered_open and discovered_open != "Open":
+                rename_map[discovered_open] = "Open"
+
+            df = raw_df.rename(columns=rename_map)
 
             if "Open" not in df.columns and "Close" in df.columns:
+                # Son çare: İş Yatırım açılış kolonu yoksa yfinance fallback
+                fallback = _fetch_bist_data_yfinance(symbol, start_date)
+                if fallback is not None:
+                    logger.warning(
+                        f"BIST open fallback (yfinance) kullanıldı: {symbol}"
+                    )
+                    return fallback
+                logger.warning(
+                    f"BIST open fallback başarısız ({symbol}); geçici olarak Open=Close kullanılacak."
+                )
                 df["Open"] = df["Close"]
 
             if "Date" in df.columns:
@@ -545,6 +634,22 @@ def get_bist_data(symbol: str, start_date: str = "01-01-2015") -> pd.DataFrame |
 
             cols_to_fix = [c for c in ["Open", "High", "Low", "Close", "Volume"] if c in df.columns]
             df[cols_to_fix] = df[cols_to_fix].astype(float)
+            df = df.sort_index()
+
+            # Open profili bozuk görünüyorsa otomatik fallback
+            if is_suspicious_bist_ohlcv(df):
+                logger.warning(
+                    f"BIST verisinde şüpheli Open profili ({symbol}); yfinance fallback denenecek."
+                )
+                fallback = _fetch_bist_data_yfinance(symbol, start_date)
+                if fallback is not None:
+                    logger.warning(
+                        f"BIST şüpheli-open fallback (yfinance) kullanıldı: {symbol}"
+                    )
+                    return fallback
+
+            df.attrs["source_hint"] = "isyatirim"
+            df.attrs["open_quality"] = "mapped" if discovered_open else "synthetic_fallback"
 
             # Başarılı olursa döngüden çık ve veriyi döndür
             return df
