@@ -995,7 +995,32 @@ def process_symbol(
         )
 
 
-def scan_market(check_commands_callback=None) -> None:
+def _normalize_scan_markets(
+    markets: str | list[str] | tuple[str, ...] | set[str] | None,
+) -> set[str]:
+    if markets is None:
+        return {"BIST", "Kripto"}
+
+    if isinstance(markets, str):
+        raw_markets = [markets]
+    else:
+        raw_markets = list(markets)
+
+    normalized: set[str] = set()
+    for market in raw_markets:
+        token = str(market or "").strip().upper()
+        if token == "BIST":
+            normalized.add("BIST")
+        elif token in {"KRIPTO", "CRYPTO"}:
+            normalized.add("Kripto")
+
+    return normalized or {"BIST", "Kripto"}
+
+
+def scan_market(
+    check_commands_callback=None,
+    markets: str | list[str] | tuple[str, ...] | set[str] | None = None,
+) -> None:
     """
     Tum BIST ve Kripto piyasalarini tarar.
 
@@ -1006,13 +1031,16 @@ def scan_market(check_commands_callback=None) -> None:
     Args:
         check_commands_callback: Komut kontrol fonksiyonu (opsiyonel)
     """
+    selected_markets = _normalize_scan_markets(markets)
+    market_label = " + ".join(m for m in ("BIST", "Kripto") if m in selected_markets)
+
     increment_scan_count()
     scan_num = get_scan_count()
     logger.info(f"Tarama #{scan_num} başladı")
     print(f"\n--- Tarama Başladı: {time.strftime('%H:%M:%S')} ---")
 
     # BIST Tarama
-    symbols = get_all_bist_symbols()
+    symbols = get_all_bist_symbols() if "BIST" in selected_markets else []
     logger.info(f"BIST taranıyor: {len(symbols)} hisse")
     print(f"🏢 BIST Taranıyor ({len(symbols)} hisse)...")
 
@@ -1039,7 +1067,7 @@ def scan_market(check_commands_callback=None) -> None:
         time.sleep(rate_limits.BIST_DELAY)
 
     # Kripto Tarama
-    crypto_syms = get_all_binance_symbols()
+    crypto_syms = get_all_binance_symbols() if "Kripto" in selected_markets else []
     print(f"\n\n₿ Kripto Taranıyor ({len(crypto_syms)} çift)...")
 
     for i, sym in enumerate(crypto_syms):
@@ -1060,7 +1088,7 @@ def scan_market(check_commands_callback=None) -> None:
     # Cache istatistikleri logla
     cache_stats = price_cache.get_stats()
     logger.info(f"Cache: {cache_stats['session_hits']} hit, {cache_stats['session_misses']} miss")
-
-    logger.info(f"Tarama #{scan_num} tamamlandı")
-    print("\n✅ Tarama Bitti.")
-    send_message("✅ Tüm periyotlar tarandı. Yeni tarama 4 saat sonra.")
+    logger.info(f"Tarama #{scan_num} tamamlandi | Piyasalar: {market_label}")
+    print("\nTarama bitti.")
+    send_message(f"Tarama tamamlandi ({market_label}).")
+    return

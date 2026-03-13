@@ -181,8 +181,31 @@ async def process_signals_batch(results: list[dict[str, Any]], notify: bool = Tr
     return total_signals
 
 
+def _normalize_scan_markets(
+    markets: str | list[str] | tuple[str, ...] | set[str] | None,
+) -> set[str]:
+    if markets is None:
+        return {"BIST", "Kripto"}
+
+    if isinstance(markets, str):
+        raw_markets = [markets]
+    else:
+        raw_markets = list(markets)
+
+    normalized: set[str] = set()
+    for market in raw_markets:
+        token = str(market or "").strip().upper()
+        if token == "BIST":
+            normalized.add("BIST")
+        elif token in {"KRIPTO", "CRYPTO"}:
+            normalized.add("Kripto")
+    return normalized or {"BIST", "Kripto"}
+
+
 async def scan_market_async(
-    notify: bool = True, progress_callback: Callable | None = None
+    notify: bool = True,
+    progress_callback: Callable | None = None,
+    markets: str | list[str] | tuple[str, ...] | set[str] | None = None,
 ) -> dict[str, Any]:
     """
     Asenkron piyasa tarama.
@@ -200,6 +223,9 @@ async def scan_market_async(
         logger.warning("Tarama zaten devam ediyor")
         return {"error": "Tarama devam ediyor"}
 
+    selected_markets = _normalize_scan_markets(markets)
+    market_label = " + ".join(m for m in ("BIST", "Kripto") if m in selected_markets)
+
     scan_num = _async_state.start_scan()
     start_time = time.time()
 
@@ -212,7 +238,7 @@ async def scan_market_async(
 
     try:
         # BIST Tarama
-        bist_symbols = get_all_bist_symbols()
+        bist_symbols = get_all_bist_symbols() if "BIST" in selected_markets else []
         logger.info(f"BIST taranıyor: {len(bist_symbols)} hisse")
 
         bist_data = await fetch_multiple_bist_async(bist_symbols, batch_size=30)
@@ -227,7 +253,9 @@ async def scan_market_async(
         logger.info(f"BIST sinyalleri: {bist_signals}")
 
         # Kripto Tarama
-        crypto_symbols = get_all_binance_symbols_async()
+        crypto_symbols = (
+            get_all_binance_symbols_async() if "Kripto" in selected_markets else []
+        )
         logger.info(f"Kripto taranıyor: {len(crypto_symbols)} çift")
 
         crypto_data = await fetch_multiple_crypto_async(crypto_symbols, batch_size=50)
@@ -250,11 +278,12 @@ async def scan_market_async(
 
     # Sonuç mesajı
     summary = (
-        f"✅ Tarama #{scan_num} tamamlandı\n"
-        f"• Süre: {duration:.1f}s\n"
-        f"• BIST: {len(bist_data)} sembol\n"
-        f"• Kripto: {len(crypto_data)} sembol\n"
-        f"• Toplam Sinyal: {total_signals}"
+        f"Tarama #{scan_num} tamamlandi\n"
+        f"Sure: {duration:.1f}s\n"
+        f"BIST: {len(bist_data)} sembol\n"
+        f"Kripto: {len(crypto_data)} sembol\n"
+        f"Toplam Sinyal: {total_signals}\n"
+        f"Piyasalar: {market_label}"
     )
     send_message(summary)
     logger.info(summary.replace("\n", " | "))
@@ -268,9 +297,9 @@ async def scan_market_async(
     }
 
 
-def run_async_scan():
+def run_async_scan(markets: str | list[str] | tuple[str, ...] | set[str] | None = None):
     """Sync wrapper for async scan."""
-    return asyncio.run(scan_market_async())
+    return asyncio.run(scan_market_async(markets=markets))
 
 
 def get_async_scanner_stats() -> dict[str, Any]:
