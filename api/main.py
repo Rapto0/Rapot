@@ -1121,6 +1121,148 @@ async def get_market_ticker(request: Request):
         return []
 
 
+def _extract_close_series_from_download(download_df, ticker: str):
+    """yfinance multi/single download sonucundan close serisini cikarir."""
+    try:
+        import pandas as pd
+    except Exception:
+        return None
+
+    if download_df is None or getattr(download_df, "empty", True):
+        return None
+
+    close_series = None
+
+    columns = getattr(download_df, "columns", None)
+    if isinstance(columns, pd.MultiIndex):
+        level0 = set(columns.get_level_values(0))
+        level1 = set(columns.get_level_values(1))
+
+        if ticker in level0:
+            with suppress(Exception):
+                ticker_df = download_df[ticker]
+                if "Close" in ticker_df.columns:
+                    close_series = ticker_df["Close"]
+        elif ticker in level1:
+            with suppress(Exception):
+                close_series = download_df["Close"][ticker]
+    else:
+        if "Close" in download_df.columns:
+            close_series = download_df["Close"]
+
+    if close_series is None:
+        return None
+    close_series = close_series.dropna()
+    if close_series.empty:
+        return None
+    return close_series
+
+
+def _calculate_market_metric_payload(close_series):
+    """Close serisinden latest/change/perf7/perf30 metriclerini hesaplar."""
+    if close_series is None or len(close_series) == 0:
+        return None
+
+    latest = float(close_series.iloc[-1])
+    previous = float(close_series.iloc[-2]) if len(close_series) > 1 else None
+    latest_ts = close_series.index[-1]
+
+    target_7 = latest_ts - timedelta(days=7)
+    target_30 = latest_ts - timedelta(days=30)
+    lookback_7 = close_series[close_series.index <= target_7]
+    lookback_30 = close_series[close_series.index <= target_30]
+
+    past_7 = float(lookback_7.iloc[-1]) if len(lookback_7) > 0 else None
+    past_30 = float(lookback_30.iloc[-1]) if len(lookback_30) > 0 else None
+
+    def pct(current: float | None, past: float | None) -> float | None:
+        if current is None or past is None or past == 0:
+            return None
+        return ((current - past) / past) * 100.0
+
+    return {
+        "latest_price": latest,
+        "change_pct": pct(latest, previous),
+        "perf_7d": pct(latest, past_7),
+        "perf_30d": pct(latest, past_30),
+    }
+
+
+@app.get("/market/metrics", tags=["Market Data"])
+@limiter.limit("30/minute")
+async def get_market_metrics(
+    request: Request,
+    key: list[str] | None = Query(
+        None,
+        description="Market key listesi (ornek: BIST:THYAO, Kripto:BTCUSDT)",
+    ),
+):
+    """
+    Scanner icin toplu piyasa metrikleri dondurur.
+    Tek cagriyla birden fazla sembolun latest/change/perf7/perf30 degerini verir.
+    """
+    normalized_keys = []
+    for item in key or []:
+        if not item or ":" not in item:
+            continue
+        market_raw, symbol_raw = item.split(":", 1)
+        market = "BIST" if market_raw.strip().upper() == "BIST" else "Kripto"
+        symbol = symbol_raw.strip().upper()
+        if not symbol:
+            continue
+        normalized_keys.append(f"{market}:{symbol}")
+
+    # Stable unique order
+    normalized_keys = list(dict.fromkeys(normalized_keys))[:600]
+    if not normalized_keys:
+        return {}
+
+    groups: dict[str, list[tuple[str, str]]] = {"BIST": [], "Kripto": []}
+    for item in normalized_keys:
+        market, symbol = item.split(":", 1)
+        if market == "BIST":
+            ticker = symbol if symbol.endswith(".IS") else f"{symbol}.IS"
+            groups["BIST"].append((item, ticker))
+        else:
+            if symbol.endswith("USDT"):
+                ticker = symbol.replace("USDT", "-USD")
+            elif "-" in symbol:
+                ticker = symbol
+            else:
+                ticker = f"{symbol}-USD"
+            groups["Kripto"].append((item, ticker))
+
+    metrics: dict[str, dict[str, float | None | str]] = {}
+
+    for market, items in groups.items():
+        if not items:
+            continue
+        tickers = [ticker for _, ticker in items]
+        try:
+            # Single batch request per market
+            download_df = yf.download(
+                tickers=tickers if len(tickers) > 1 else tickers[0],
+                period="3mo",
+                interval="1d",
+                auto_adjust=False,
+                progress=False,
+                group_by="ticker",
+                threads=True,
+            )
+        except Exception as exc:
+            print(f"Market metrics download error ({market}): {exc}")
+            continue
+
+        for key_name, ticker in items:
+            close_series = _extract_close_series_from_download(download_df, ticker)
+            payload = _calculate_market_metric_payload(close_series)
+            if payload:
+                payload["source"] = "yfinance_batch"
+                metrics[key_name] = payload
+
+    return metrics
+
+
 def _select_manual_analysis_timeframes(
     report: dict, timeframe_code: str | None
 ) -> tuple[str, list[dict]]:

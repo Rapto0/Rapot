@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Check, ListPlus, RefreshCw, Search, Settings2, Star, StarOff } from "lucide-react"
 import {
-  fetchCandles,
+  fetchMarketMetrics,
   fetchSpecialTagHealth,
   fetchLogs,
   fetchScanHistory,
@@ -398,7 +398,7 @@ export default function ScannerPage() {
     () =>
       [...screenerRows]
         .sort((left, right) => right.lastSeenTs - left.lastSeenTs)
-        .slice(0, 90)
+        .slice(0, 320)
         .map((row) => ({ key: row.key, symbol: row.symbol, marketType: row.marketType })),
     [screenerRows]
   )
@@ -628,6 +628,27 @@ export default function ScannerPage() {
       delete next[column]
       return next
     })
+  }
+
+  const applyColumnFilterPrompt = (column: NumericFilterColumnId) => {
+    const currentInput = columnFilterInputs[column]
+    const currentText = currentInput ? summarizeColumnFilterInput(currentInput) : ""
+    const raw = window.prompt(
+      `${COLUMN_META[column].label} filtresi\nOrnek: >= 7, <= 10, = 30, 20..40\nBos birakirsan filtre temizlenir.`,
+      currentText
+    )
+    if (raw === null) return
+    const trimmed = raw.trim()
+    if (!trimmed) {
+      clearColumnFilterInput(column)
+      return
+    }
+    const parsed = parseColumnFilterExpression(trimmed)
+    if (!parsed) {
+      window.alert("Filtre formati gecersiz. Ornekler: >= 7, <= 10, = 30, 20..40")
+      return
+    }
+    updateColumnFilterInput(column, parsed)
   }
 
   const upsertActiveWatchlist = (updater: (watchlist: WatchlistModel) => WatchlistModel) => {
@@ -862,68 +883,49 @@ export default function ScannerPage() {
                 <tr className="border-b border-border">
                   {visibleColumnsSafe.map((column) => {
                     const meta = COLUMN_META[column]
+                    const numericColumn = toNumericFilterColumn(column)
+                    const columnFilter = numericColumn ? columnFilterInputs[numericColumn] : null
+                    const hasFilter = columnFilter && hasColumnFilterInput(columnFilter)
                     return (
                       <th key={column} className={cn("px-2 py-2", meta.align === "right" ? "text-right" : "text-left")}>
-                        <button type="button" onClick={() => handleSort(column)} title={COLUMN_HELP[column]} className={cn("inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.06em]", sortBy === column ? "text-foreground" : "text-muted-foreground")}>
-                          <span>{meta.label}</span>
-                          <span className="mono-numbers text-[10px]">{sortIconForColumn(column)}</span>
-                          <span className="cursor-help text-[9px] text-muted-foreground" title={COLUMN_HELP[column]}>?</span>
-                        </button>
-                      </th>
-                    )
-                  })}
-                </tr>
-                <tr className="border-b border-border bg-base/80">
-                  {visibleColumnsSafe.map((column) => {
-                    const numericColumn = toNumericFilterColumn(column)
-                    if (!numericColumn) {
-                      return <th key={`filter-${column}`} className="px-2 py-1" />
-                    }
-                    const input = columnFilterInputs[numericColumn] ?? { operator: "gte", value: "", valueTo: "" }
-                    return (
-                      <th key={`filter-${column}`} className="px-2 py-1 align-top">
-                        <div className="flex items-center gap-1">
-                          <select
-                            value={input.operator}
-                            onChange={(event) =>
-                              updateColumnFilterInput(numericColumn, {
-                                operator: event.target.value as NumericFilterOperator,
-                              })
-                            }
-                            className="h-6 min-w-[52px] bg-base px-1 text-[10px]"
-                            title={`${COLUMN_META[numericColumn].label} operator`}
-                          >
-                            {NUMERIC_FILTER_OPERATORS.map((operator) => (
-                              <option key={operator.value} value={operator.value}>
-                                {operator.label}
-                              </option>
-                            ))}
-                          </select>
-                          <Input
-                            value={input.value}
-                            onChange={(event) => updateColumnFilterInput(numericColumn, { value: event.target.value })}
-                            className="h-6 min-w-[62px] px-1 text-[10px]"
-                            placeholder="deger"
-                          />
-                          {input.operator === "between" ? (
-                            <Input
-                              value={input.valueTo}
-                              onChange={(event) =>
-                                updateColumnFilterInput(numericColumn, { valueTo: event.target.value })
-                              }
-                              className="h-6 min-w-[62px] px-1 text-[10px]"
-                              placeholder="ust"
-                            />
-                          ) : null}
-                          {(input.value || input.valueTo) ? (
-                            <button
-                              type="button"
-                              onClick={() => clearColumnFilterInput(numericColumn)}
-                              className="h-6 rounded-sm border border-border px-1 text-[10px] text-muted-foreground hover:text-foreground"
-                              title="Filtreyi temizle"
-                            >
-                              x
-                            </button>
+                        <div className={cn("flex flex-col gap-1", meta.align === "right" ? "items-end" : "items-start")}>
+                          <button type="button" onClick={() => handleSort(column)} title={COLUMN_HELP[column]} className={cn("inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.04em]", sortBy === column ? "text-foreground" : "text-muted-foreground")}>
+                            <span>{meta.label}</span>
+                            <span className="mono-numbers text-[10px]">{sortIconForColumn(column)}</span>
+                            <span className="cursor-help text-[9px] text-muted-foreground/70 hover:text-muted-foreground" title={COLUMN_HELP[column]}>?</span>
+                          </button>
+                          {numericColumn ? (
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  applyColumnFilterPrompt(numericColumn)
+                                }}
+                                className={cn(
+                                  "h-5 rounded-sm border px-1.5 text-[10px]",
+                                  hasFilter
+                                    ? "border-foreground/70 bg-raised text-foreground"
+                                    : "border-border bg-base text-muted-foreground hover:text-foreground"
+                                )}
+                                title={`${COLUMN_META[numericColumn].label} filtresi`}
+                              >
+                                {hasFilter ? summarizeColumnFilterInput(columnFilter) : "filtre"}
+                              </button>
+                              {hasFilter ? (
+                                <button
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    clearColumnFilterInput(numericColumn)
+                                  }}
+                                  className="h-5 rounded-sm border border-border bg-base px-1 text-[10px] text-muted-foreground hover:text-foreground"
+                                  title="Filtreyi kaldir"
+                                >
+                                  x
+                                </button>
+                              ) : null}
+                            </div>
                           ) : null}
                         </div>
                       </th>
@@ -935,7 +937,7 @@ export default function ScannerPage() {
                 {sortedRows.map((row) => {
                   const isSelected = row.key === selectedRow?.key
                   return (
-                    <tr key={row.key} onClick={() => setSelectedRowKey(row.key)} className={cn("cursor-pointer border-b border-[rgba(255,255,255,0.04)] last:border-b-0 hover:bg-raised/40", isSelected && "border-l-2 border-foreground bg-raised/60")}>
+                    <tr key={row.key} onClick={() => setSelectedRowKey(row.key)} className={cn("cursor-pointer border-b border-[rgba(255,255,255,0.04)] last:border-b-0 odd:bg-surface even:bg-[rgba(255,255,255,0.01)] hover:bg-raised/40", isSelected && "border-l-2 border-foreground bg-raised/60")}>
                       {visibleColumnsSafe.map((column) => (
                         <td key={`${row.key}:${column}`} className={cn("px-2 py-2", COLUMN_META[column].align === "right" ? "text-right" : "text-left")}>
                           {renderCellContent(column, row, activeWatchSet, toggleWatchSymbol)}
@@ -1585,6 +1587,61 @@ function sanitizeColumnFilterInputs(
   return sanitized
 }
 
+function parseColumnFilterExpression(expression: string): NumericColumnFilterInput | null {
+  const compact = expression.replace(/\s+/g, "")
+  if (!compact) return null
+
+  const betweenMatch = compact.match(/^(-?\d+(?:[.,]\d+)?)\.\.(-?\d+(?:[.,]\d+)?)$/)
+  if (betweenMatch) {
+    return {
+      operator: "between",
+      value: betweenMatch[1].replace(",", "."),
+      valueTo: betweenMatch[2].replace(",", "."),
+    }
+  }
+
+  const withOperator = compact.match(/^(>=|<=|>|<|=)(-?\d+(?:[.,]\d+)?)$/)
+  if (withOperator) {
+    const operatorMap: Record<string, NumericFilterOperator> = {
+      ">": "gt",
+      ">=": "gte",
+      "<": "lt",
+      "<=": "lte",
+      "=": "eq",
+    }
+    return {
+      operator: operatorMap[withOperator[1]],
+      value: withOperator[2].replace(",", "."),
+      valueTo: "",
+    }
+  }
+
+  const bareNumber = compact.match(/^-?\d+(?:[.,]\d+)?$/)
+  if (bareNumber) {
+    return {
+      operator: "eq",
+      value: bareNumber[0].replace(",", "."),
+      valueTo: "",
+    }
+  }
+
+  return null
+}
+
+function summarizeColumnFilterInput(input: NumericColumnFilterInput | null | undefined) {
+  if (!input || !input.value.trim()) return ""
+  if (input.operator === "between") {
+    if (!input.valueTo.trim()) return ""
+    return `${input.value}..${input.valueTo}`
+  }
+  const symbol = NUMERIC_FILTER_OPERATORS.find((operator) => operator.value === input.operator)?.label ?? "="
+  return `${symbol}${input.value}`
+}
+
+function hasColumnFilterInput(input: NumericColumnFilterInput | null | undefined) {
+  return summarizeColumnFilterInput(input).length > 0
+}
+
 function applyMarketMetrics(
   rows: ScreenerRow[],
   metrics: Record<string, MarketMetricSnapshot>
@@ -1607,60 +1664,32 @@ async function fetchMarketMetricsForTargets(targets: ScannerMetricTarget[]) {
   const metrics: Record<string, MarketMetricSnapshot> = {}
   if (targets.length === 0) return metrics
 
-  const chunkSize = 8
+  const chunkSize = 120
   for (let index = 0; index < targets.length; index += chunkSize) {
     const chunk = targets.slice(index, index + chunkSize)
-    const results = await Promise.all(
-      chunk.map(async (target) => {
-        try {
-          const response = await fetchCandles(target.symbol, target.marketType, "1d", 45)
-          const metric = calculateMarketMetricsFromCandles(response.candles)
-          return { key: target.key, metric }
-        } catch {
-          return { key: target.key, metric: null }
+    try {
+      const keys = chunk.map((target) => target.key)
+      const response = await fetchMarketMetrics(keys)
+      for (const key of keys) {
+        const item = response[key]
+        if (!item) continue
+        metrics[key] = {
+          latestPrice: Number.isFinite(item.latest_price) ? (item.latest_price as number) : Number.NaN,
+          changePct: toFiniteOrNull(item.change_pct),
+          perf7d: toFiniteOrNull(item.perf_7d),
+          perf30d: toFiniteOrNull(item.perf_30d),
         }
-      })
-    )
-
-    for (const result of results) {
-      if (result.metric) metrics[result.key] = result.metric
+      }
+    } catch {
+      continue
     }
   }
 
   return metrics
 }
 
-function calculateMarketMetricsFromCandles(
-  candles: Array<{ time: string; open: number; high: number; low: number; close: number; volume: number }>
-) {
-  if (!Array.isArray(candles) || candles.length === 0) return null
-  const sorted = [...candles].sort((left, right) => left.time.localeCompare(right.time))
-  const latest = sorted[sorted.length - 1]
-  if (!latest || !Number.isFinite(latest.close)) return null
-
-  const previous = sorted.length > 1 ? sorted[sorted.length - 2] : null
-  const latestTime = parseDate(latest.time)?.getTime() ?? Date.now()
-  const lookback7 = findLookbackClose(sorted, latestTime - 7 * 86_400_000)
-  const lookback30 = findLookbackClose(sorted, latestTime - 30 * 86_400_000)
-
-  return {
-    latestPrice: latest.close,
-    changePct: previous ? percentageChange(latest.close, previous.close) : null,
-    perf7d: percentageChange(latest.close, lookback7),
-    perf30d: percentageChange(latest.close, lookback30),
-  }
-}
-
-function findLookbackClose(
-  candles: Array<{ time: string; open: number; high: number; low: number; close: number; volume: number }>,
-  targetTs: number
-) {
-  for (let i = candles.length - 1; i >= 0; i -= 1) {
-    const ts = parseDate(candles[i].time)?.getTime()
-    if (ts === undefined || ts === null) continue
-    if (ts <= targetTs) return candles[i].close
-  }
-  return null
+function toFiniteOrNull(value: number | null | undefined) {
+  return Number.isFinite(value) ? (value as number) : null
 }
 
 function sortColumns(columns: ColumnId[]) {

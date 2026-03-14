@@ -376,6 +376,23 @@ export async function fetchGlobalIndices(symbols: string[]): Promise<GlobalIndex
     );
 }
 
+export interface MarketMetricsItem {
+    latest_price: number | null;
+    change_pct: number | null;
+    perf_7d: number | null;
+    perf_30d: number | null;
+    source?: string | null;
+}
+
+export async function fetchMarketMetrics(keys: string[]): Promise<Record<string, MarketMetricsItem>> {
+    const searchParams = new URLSearchParams();
+    keys.forEach((value) => searchParams.append("key", value));
+    const query = searchParams.toString();
+    return fetchApi<Record<string, MarketMetricsItem>>(
+        `${API_BASE_URL}/market/metrics${query ? `?${query}` : ""}`
+    );
+}
+
 export interface EconomicCalendarEvent {
     country: string | null;
     event: string | null;
