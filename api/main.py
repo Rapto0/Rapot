@@ -1103,8 +1103,8 @@ async def get_market_ticker(request: Request):
 
                 tickers.append(
                     {
-                        "symbol": item["name"],  # Display name
-                        "name": s_symbol.replace(".IS", "").replace("-USD", ""),  # Subtitle
+                        "symbol": s_symbol.replace(".IS", "").replace("-USD", "USDT"),
+                        "name": item["name"],
                         "price": current_price,
                         "change": change,
                         "changePercent": change_percent,

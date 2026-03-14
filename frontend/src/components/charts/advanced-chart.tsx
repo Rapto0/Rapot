@@ -7,6 +7,7 @@ import {
     fetchCandles,
     fetchBistSymbols,
     fetchEconomicCalendar,
+    fetchGlobalIndices,
     fetchSignals,
     fetchTicker,
     type ApiSignal,
@@ -1285,6 +1286,28 @@ export function AdvancedChartPage({
         refetchInterval: 30000,
     })
 
+    const activeWatchlistBistSymbolsForQuery = useMemo(() => {
+        const activeWatchlistForQuery =
+            watchlists.find((watchlist) => watchlist.id === activeWatchlistId) || watchlists[0] || null
+        if (!activeWatchlistForQuery) return [] as string[]
+
+        const set = new Set<string>()
+        for (const row of activeWatchlistForQuery.rows) {
+            if (row.kind === "symbol" && row.marketType === "BIST") {
+                set.add(`${row.rawSymbol.toUpperCase()}.IS`)
+            }
+        }
+        return Array.from(set).sort()
+    }, [watchlists, activeWatchlistId])
+
+    const { data: activeWatchlistBistQuotes, refetch: refetchActiveWatchlistBistQuotes } = useQuery({
+        queryKey: ['watchlist-active-bist-quotes', ...activeWatchlistBistSymbolsForQuery],
+        queryFn: () => fetchGlobalIndices(activeWatchlistBistSymbolsForQuery),
+        enabled: activeWatchlistBistSymbolsForQuery.length > 0,
+        refetchInterval: 30000,
+        staleTime: 10_000,
+    })
+
     const utilityCalendarRange = useMemo(() => {
         const now = new Date()
         const from = now.toISOString().slice(0, 10)
@@ -2095,13 +2118,27 @@ export function AdvancedChartPage({
     const bistQuoteMap = useMemo(() => {
         const map = new Map<string, { priceText: string; change: number }>()
         for (const ticker of bistTickers || []) {
-            map.set(ticker.symbol.toUpperCase(), {
+            const quote = {
                 priceText: ticker.price?.toFixed(2) || "---",
                 change: ticker.changePercent || 0,
-            })
+            }
+            map.set(ticker.symbol.toUpperCase(), quote)
+            map.set(ticker.name.toUpperCase(), quote)
+        }
+        for (const quote of activeWatchlistBistQuotes || []) {
+            const raw = (quote.symbol || "").toUpperCase()
+            const normalized = raw.endsWith(".IS") ? raw.slice(0, -3) : raw
+            const payload = {
+                priceText: typeof quote.regularMarketPrice === "number"
+                    ? quote.regularMarketPrice.toFixed(2)
+                    : "---",
+                change: quote.regularMarketChangePercent || 0,
+            }
+            if (raw) map.set(raw, payload)
+            if (normalized) map.set(normalized, payload)
         }
         return map
-    }, [bistTickers])
+    }, [bistTickers, activeWatchlistBistQuotes])
 
     const bistSymbolSet = useMemo(
         () => new Set((bistSymbols?.symbols || []).map((s) => s.toUpperCase())),
@@ -2962,7 +2999,10 @@ export function AdvancedChartPage({
                                 <Plus className="h-4 w-4" />
                             </button>
                             <button
-                                onClick={() => refetchTickers()}
+                                onClick={() => {
+                                    refetchTickers()
+                                    refetchActiveWatchlistBistQuotes()
+                                }}
                                 className="flex h-7 w-7 items-center justify-center rounded-sm hover:bg-raised text-muted-foreground"
                                 title="Veriyi yenile"
                             >
