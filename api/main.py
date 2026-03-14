@@ -143,6 +143,7 @@ class SignalResponse(BaseModel):
     price: float
     created_at: str | None = None
     special_tag: str | None = None
+    details: dict[str, float | int | str | bool | None] | str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -644,6 +645,7 @@ async def get_signals(
                 price=s.price,
                 created_at=s.created_at.isoformat() + "Z" if s.created_at else None,
                 special_tag=s.special_tag,
+                details=s.details,
             )
             for s in signals
         ]
@@ -672,6 +674,7 @@ async def get_signal(signal_id: int):
             price=signal.price,
             created_at=signal.created_at.isoformat() if signal.created_at else None,
             special_tag=signal.special_tag,
+            details=signal.details,
         )
 
 
@@ -1258,7 +1261,7 @@ def get_market_analysis(
 
 
 @app.get("/candles/{symbol}", tags=["Market Data"])
-@limiter.limit("20/minute")
+@limiter.limit("180/minute")
 async def get_candles(
     request: Request,
     symbol: str,

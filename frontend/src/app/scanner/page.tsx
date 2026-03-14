@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Check, ListPlus, RefreshCw, Search, Settings2, Star, StarOff } from "lucide-react"
 import {
+  fetchCandles,
   fetchSpecialTagHealth,
   fetchLogs,
   fetchScanHistory,
@@ -73,11 +74,29 @@ type NumericFilterColumnId =
 type NumericFilterOperator = "gt" | "gte" | "lt" | "lte" | "eq" | "between"
 
 interface NumericFilterRule {
-  id: string
   column: NumericFilterColumnId
   operator: NumericFilterOperator
   value: number
   valueTo: number | null
+}
+
+interface NumericColumnFilterInput {
+  operator: NumericFilterOperator
+  value: string
+  valueTo: string
+}
+
+interface ScannerMetricTarget {
+  key: string
+  symbol: string
+  marketType: MarketKind
+}
+
+interface MarketMetricSnapshot {
+  latestPrice: number
+  changePct: number | null
+  perf7d: number | null
+  perf30d: number | null
 }
 
 interface ScannerSignal {
@@ -309,12 +328,7 @@ export default function ScannerPage() {
   const [strategyFilter, setStrategyFilter] = useState<StrategyFilter>("ALL")
   const [signalFilter, setSignalFilter] = useState<SignalFilter>("ALL")
   const [timeframeFilter, setTimeframeFilter] = useState<string[]>([])
-  const [numericFilters, setNumericFilters] = useState<NumericFilterRule[]>([])
-  const [numericColumnDraft, setNumericColumnDraft] = useState<NumericFilterColumnId>("rsi14")
-  const [numericOperatorDraft, setNumericOperatorDraft] = useState<NumericFilterOperator>("gte")
-  const [numericValueDraft, setNumericValueDraft] = useState("")
-  const [numericValueToDraft, setNumericValueToDraft] = useState("")
-  const [numericFilterNotice, setNumericFilterNotice] = useState<string | null>(null)
+  const [columnFilterInputs, setColumnFilterInputs] = useState<Partial<Record<NumericFilterColumnId, NumericColumnFilterInput>>>({})
 
   const [activeView, setActiveView] = useState<ViewKey>("ozel")
   const [visibleColumns, setVisibleColumns] = useState<ColumnId[]>(VIEW_PRESETS.ozel.columns)
@@ -378,12 +392,38 @@ export default function ScannerPage() {
   const kriptoSignals = useMemo(() => kriptoSignalsQuery.data ?? EMPTY_SIGNALS, [kriptoSignalsQuery.data])
   const allSignals = useMemo(() => [...bistSignals, ...kriptoSignals].sort(sortSignalsByDateDesc), [bistSignals, kriptoSignals])
   const screenerRows = useMemo(() => buildScreenerRows(allSignals), [allSignals])
+  const numericFilters = useMemo(() => buildNumericFiltersFromInputs(columnFilterInputs), [columnFilterInputs])
+
+  const metricTargets = useMemo<ScannerMetricTarget[]>(
+    () =>
+      [...screenerRows]
+        .sort((left, right) => right.lastSeenTs - left.lastSeenTs)
+        .slice(0, 90)
+        .map((row) => ({ key: row.key, symbol: row.symbol, marketType: row.marketType })),
+    [screenerRows]
+  )
+
+  const metricTargetKey = useMemo(() => metricTargets.map((target) => target.key).join("|"), [metricTargets])
+
+  const marketMetricQuery = useQuery<Record<string, MarketMetricSnapshot>>({
+    queryKey: ["scanner-v2", "market-metrics", metricTargetKey],
+    queryFn: () => fetchMarketMetricsForTargets(metricTargets),
+    enabled: metricTargets.length > 0,
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+    refetchIntervalInBackground: false,
+  })
+
+  const rowsWithMarketMetrics = useMemo(
+    () => applyMarketMetrics(screenerRows, marketMetricQuery.data ?? {}),
+    [screenerRows, marketMetricQuery.data]
+  )
 
   const timeframeOptions = useMemo(() => {
     const values = new Set<string>()
-    for (const row of screenerRows) values.add(row.lastTimeframe)
+    for (const row of rowsWithMarketMetrics) values.add(row.lastTimeframe)
     return Array.from(values).sort((left, right) => timeframeRank(left) - timeframeRank(right))
-  }, [screenerRows])
+  }, [rowsWithMarketMetrics])
 
   const activeWatchlist = useMemo(
     () => watchlists.find((watchlist) => watchlist.id === activeWatchlistId) ?? watchlists[0] ?? null,
@@ -394,7 +434,7 @@ export default function ScannerPage() {
   const filteredRows = useMemo(() => {
     const keyword = searchQuery.trim().toUpperCase()
     const timeframeSet = new Set(timeframeFilter)
-    return screenerRows.filter((row) => {
+    return rowsWithMarketMetrics.filter((row) => {
       if (marketFilter !== "ALL" && row.marketType !== marketFilter) return false
       if (strategyFilter !== "ALL" && row.lastStrategy !== strategyFilter) return false
       if (signalFilter !== "ALL" && row.lastSignalType !== signalFilter) return false
@@ -404,7 +444,7 @@ export default function ScannerPage() {
       if (!matchesNumericFilters(row, numericFilters)) return false
       return true
     })
-  }, [screenerRows, searchQuery, marketFilter, strategyFilter, signalFilter, timeframeFilter, watchOnly, activeWatchSet, numericFilters])
+  }, [rowsWithMarketMetrics, searchQuery, marketFilter, strategyFilter, signalFilter, timeframeFilter, watchOnly, activeWatchSet, numericFilters])
 
   const sortedRows = useMemo(() => {
     const meta = COLUMN_META[sortBy]
@@ -454,7 +494,8 @@ export default function ScannerPage() {
     logsQuery.isFetching ||
     specialTagHealthQuery.isFetching ||
     bistSignalsQuery.isFetching ||
-    kriptoSignalsQuery.isFetching
+    kriptoSignalsQuery.isFetching ||
+    marketMetricQuery.isFetching
 
   useEffect(() => {
     if (typeof window === "undefined") return
@@ -490,7 +531,7 @@ export default function ScannerPage() {
           signalFilter: SignalFilter
           timeframeFilter: string[]
           watchOnly: boolean
-          numericFilters: NumericFilterRule[]
+          columnFilterInputs: Partial<Record<NumericFilterColumnId, NumericColumnFilterInput>>
         }>
         if (prefs.activeView && VIEW_PRESETS[prefs.activeView]) setActiveView(prefs.activeView)
         if (Array.isArray(prefs.visibleColumns)) {
@@ -504,7 +545,9 @@ export default function ScannerPage() {
         if (prefs.signalFilter === "ALL" || prefs.signalFilter === "AL" || prefs.signalFilter === "SAT") setSignalFilter(prefs.signalFilter)
         if (Array.isArray(prefs.timeframeFilter)) setTimeframeFilter(prefs.timeframeFilter.filter((item): item is string => typeof item === "string"))
         if (typeof prefs.watchOnly === "boolean") setWatchOnly(prefs.watchOnly)
-        if (Array.isArray(prefs.numericFilters)) setNumericFilters(sanitizeNumericFilters(prefs.numericFilters))
+        if (prefs.columnFilterInputs && typeof prefs.columnFilterInputs === "object") {
+          setColumnFilterInputs(sanitizeColumnFilterInputs(prefs.columnFilterInputs))
+        }
       }
     } catch (error) {
       console.error("Scanner preferences could not be restored:", error)
@@ -517,20 +560,14 @@ export default function ScannerPage() {
     if (!hydrated || typeof window === "undefined") return
     window.localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(watchlists))
     window.localStorage.setItem(WATCHLIST_ACTIVE_KEY, activeWatchlistId)
-    window.localStorage.setItem(PREF_STORAGE_KEY, JSON.stringify({ activeView, visibleColumns, sortBy, sortDirection, marketFilter, strategyFilter, signalFilter, timeframeFilter, watchOnly, numericFilters }))
-  }, [hydrated, watchlists, activeWatchlistId, activeView, visibleColumns, sortBy, sortDirection, marketFilter, strategyFilter, signalFilter, timeframeFilter, watchOnly, numericFilters])
+    window.localStorage.setItem(PREF_STORAGE_KEY, JSON.stringify({ activeView, visibleColumns, sortBy, sortDirection, marketFilter, strategyFilter, signalFilter, timeframeFilter, watchOnly, columnFilterInputs }))
+  }, [hydrated, watchlists, activeWatchlistId, activeView, visibleColumns, sortBy, sortDirection, marketFilter, strategyFilter, signalFilter, timeframeFilter, watchOnly, columnFilterInputs])
 
   useEffect(() => {
     if (!watchlistNotice) return
     const timer = window.setTimeout(() => setWatchlistNotice(null), 2400)
     return () => window.clearTimeout(timer)
   }, [watchlistNotice])
-
-  useEffect(() => {
-    if (!numericFilterNotice) return
-    const timer = window.setTimeout(() => setNumericFilterNotice(null), 2400)
-    return () => window.clearTimeout(timer)
-  }, [numericFilterNotice])
 
   const refreshAll = async () => {
     await Promise.all([
@@ -539,39 +576,8 @@ export default function ScannerPage() {
       specialTagHealthQuery.refetch(),
       bistSignalsQuery.refetch(),
       kriptoSignalsQuery.refetch(),
+      marketMetricQuery.refetch(),
     ])
-  }
-
-  const addNumericFilter = () => {
-    const value = parseNumber(numericValueDraft)
-    if (value === null) {
-      setNumericFilterNotice("Gecerli bir sayi giriniz.")
-      return
-    }
-    let valueTo: number | null = null
-    if (numericOperatorDraft === "between") {
-      valueTo = parseNumber(numericValueToDraft)
-      if (valueTo === null) {
-        setNumericFilterNotice("Aralik filtresi icin ikinci degeri giriniz.")
-        return
-      }
-    }
-
-    setNumericFilters((prev) => [
-      ...prev,
-      {
-        id: `${numericColumnDraft}-${numericOperatorDraft}-${Date.now()}`,
-        column: numericColumnDraft,
-        operator: numericOperatorDraft,
-        value,
-        valueTo,
-      },
-    ])
-    setNumericFilterNotice("Sayisal filtre eklendi.")
-  }
-
-  const removeNumericFilter = (id: string) => {
-    setNumericFilters((prev) => prev.filter((rule) => rule.id !== id))
   }
 
   const applyViewPreset = (view: ViewKey) => {
@@ -602,6 +608,25 @@ export default function ScannerPage() {
         return prev.filter((item) => item !== column)
       }
       return sortColumns([...prev, column])
+    })
+  }
+
+  const updateColumnFilterInput = (
+    column: NumericFilterColumnId,
+    patch: Partial<NumericColumnFilterInput>
+  ) => {
+    setColumnFilterInputs((prev) => {
+      const current = prev[column] ?? { operator: "gte", value: "", valueTo: "" }
+      const next = { ...current, ...patch }
+      return { ...prev, [column]: next }
+    })
+  }
+
+  const clearColumnFilterInput = (column: NumericFilterColumnId) => {
+    setColumnFilterInputs((prev) => {
+      const next = { ...prev }
+      delete next[column]
+      return next
     })
   }
 
@@ -761,7 +786,7 @@ export default function ScannerPage() {
               <Settings2 className="h-3.5 w-3.5" />
               Kolonlar
             </button>
-            <button type="button" onClick={() => { setSearchQuery(""); setMarketFilter("ALL"); setStrategyFilter("ALL"); setSignalFilter("ALL"); setTimeframeFilter([]); setNumericFilters([]); setWatchOnly(false) }} className="h-8 rounded-sm border border-border bg-base px-2 text-xs text-muted-foreground hover:text-foreground">
+            <button type="button" onClick={() => { setSearchQuery(""); setMarketFilter("ALL"); setStrategyFilter("ALL"); setSignalFilter("ALL"); setTimeframeFilter([]); setColumnFilterInputs({}); setWatchOnly(false) }} className="h-8 rounded-sm border border-border bg-base px-2 text-xs text-muted-foreground hover:text-foreground">
               Filtre sifirla
             </button>
           </div>
@@ -775,61 +800,6 @@ export default function ScannerPage() {
                 </button>
               )
             })}
-          </div>
-
-          <div className="mt-2 border border-border bg-base/40 p-2">
-            <div className="label-uppercase">Sayisal Filtreler</div>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <select value={numericColumnDraft} onChange={(event) => setNumericColumnDraft(event.target.value as NumericFilterColumnId)} className="h-8 min-w-[130px] bg-base px-2 text-xs">
-                {NUMERIC_FILTER_COLUMNS.map((column) => (
-                  <option key={column} value={column}>
-                    {COLUMN_META[column].label}
-                  </option>
-                ))}
-              </select>
-              <select value={numericOperatorDraft} onChange={(event) => setNumericOperatorDraft(event.target.value as NumericFilterOperator)} className="h-8 min-w-[88px] bg-base px-2 text-xs">
-                {NUMERIC_FILTER_OPERATORS.map((operator) => (
-                  <option key={operator.value} value={operator.value}>
-                    {operator.label}
-                  </option>
-                ))}
-              </select>
-              <Input
-                value={numericValueDraft}
-                onChange={(event) => setNumericValueDraft(event.target.value)}
-                className="h-8 w-[110px] text-xs"
-                placeholder="Deger"
-              />
-              {numericOperatorDraft === "between" ? (
-                <Input
-                  value={numericValueToDraft}
-                  onChange={(event) => setNumericValueToDraft(event.target.value)}
-                  className="h-8 w-[110px] text-xs"
-                  placeholder="Ust deger"
-                />
-              ) : null}
-              <Button type="button" variant="outline" size="sm" className="h-8 px-2 text-xs" onClick={addNumericFilter}>
-                Filtre Ekle
-              </Button>
-            </div>
-            {numericFilters.length > 0 ? (
-              <div className="mt-2 flex flex-wrap gap-2">
-                {numericFilters.map((rule) => (
-                  <button
-                    key={rule.id}
-                    type="button"
-                    onClick={() => removeNumericFilter(rule.id)}
-                    className="inline-flex h-7 items-center rounded-sm border border-border bg-base px-2 text-[11px] text-muted-foreground hover:text-foreground"
-                    title="Filtreyi kaldir"
-                  >
-                    {formatNumericRuleLabel(rule)} x
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div className="mt-2 text-[11px] text-muted-foreground">Ornek: RSI(14) &gt;= 7 veya RSI(14) &lt;= 10.</div>
-            )}
-            {numericFilterNotice ? <div className="mt-2 text-[11px] text-muted-foreground">{numericFilterNotice}</div> : null}
           </div>
 
           <div className="mt-2 flex flex-wrap gap-2">
@@ -899,6 +869,63 @@ export default function ScannerPage() {
                           <span className="mono-numbers text-[10px]">{sortIconForColumn(column)}</span>
                           <span className="cursor-help text-[9px] text-muted-foreground" title={COLUMN_HELP[column]}>?</span>
                         </button>
+                      </th>
+                    )
+                  })}
+                </tr>
+                <tr className="border-b border-border bg-base/80">
+                  {visibleColumnsSafe.map((column) => {
+                    const numericColumn = toNumericFilterColumn(column)
+                    if (!numericColumn) {
+                      return <th key={`filter-${column}`} className="px-2 py-1" />
+                    }
+                    const input = columnFilterInputs[numericColumn] ?? { operator: "gte", value: "", valueTo: "" }
+                    return (
+                      <th key={`filter-${column}`} className="px-2 py-1 align-top">
+                        <div className="flex items-center gap-1">
+                          <select
+                            value={input.operator}
+                            onChange={(event) =>
+                              updateColumnFilterInput(numericColumn, {
+                                operator: event.target.value as NumericFilterOperator,
+                              })
+                            }
+                            className="h-6 min-w-[52px] bg-base px-1 text-[10px]"
+                            title={`${COLUMN_META[numericColumn].label} operator`}
+                          >
+                            {NUMERIC_FILTER_OPERATORS.map((operator) => (
+                              <option key={operator.value} value={operator.value}>
+                                {operator.label}
+                              </option>
+                            ))}
+                          </select>
+                          <Input
+                            value={input.value}
+                            onChange={(event) => updateColumnFilterInput(numericColumn, { value: event.target.value })}
+                            className="h-6 min-w-[62px] px-1 text-[10px]"
+                            placeholder="deger"
+                          />
+                          {input.operator === "between" ? (
+                            <Input
+                              value={input.valueTo}
+                              onChange={(event) =>
+                                updateColumnFilterInput(numericColumn, { valueTo: event.target.value })
+                              }
+                              className="h-6 min-w-[62px] px-1 text-[10px]"
+                              placeholder="ust"
+                            />
+                          ) : null}
+                          {(input.value || input.valueTo) ? (
+                            <button
+                              type="button"
+                              onClick={() => clearColumnFilterInput(numericColumn)}
+                              className="h-6 rounded-sm border border-border px-1 text-[10px] text-muted-foreground hover:text-foreground"
+                              title="Filtreyi temizle"
+                            >
+                              x
+                            </button>
+                          ) : null}
+                        </div>
                       </th>
                     )
                   })}
@@ -1512,32 +1539,128 @@ function matchesNumericRule(value: number, filter: NumericFilterRule) {
   }
 }
 
-function formatNumericRuleLabel(rule: NumericFilterRule) {
-  const column = COLUMN_META[rule.column].label
-  if (rule.operator === "between" && rule.valueTo !== null) {
-    return `${column} ${rule.value}..${rule.valueTo}`
-  }
-  const operator = NUMERIC_FILTER_OPERATORS.find((item) => item.value === rule.operator)?.label ?? rule.operator
-  return `${column} ${operator} ${rule.value}`
+function toNumericFilterColumn(column: ColumnId): NumericFilterColumnId | null {
+  return NUMERIC_FILTER_COLUMNS.includes(column as NumericFilterColumnId)
+    ? (column as NumericFilterColumnId)
+    : null
 }
 
-function sanitizeNumericFilters(rawRules: NumericFilterRule[]) {
-  return rawRules
-    .filter((rawRule): rawRule is NumericFilterRule => {
-      if (!rawRule || typeof rawRule !== "object") return false
-      if (!NUMERIC_FILTER_COLUMNS.includes(rawRule.column)) return false
-      if (!NUMERIC_FILTER_OPERATORS.some((item) => item.value === rawRule.operator)) return false
-      if (!Number.isFinite(rawRule.value)) return false
-      if (rawRule.operator === "between" && rawRule.valueTo !== null && !Number.isFinite(rawRule.valueTo)) return false
-      return true
+function buildNumericFiltersFromInputs(
+  inputs: Partial<Record<NumericFilterColumnId, NumericColumnFilterInput>>
+) {
+  const filters: NumericFilterRule[] = []
+  for (const column of NUMERIC_FILTER_COLUMNS) {
+    const input = inputs[column]
+    if (!input) continue
+    const value = parseNumber(input.value)
+    if (value === null) continue
+    const valueTo = input.operator === "between" ? parseNumber(input.valueTo) : null
+    if (input.operator === "between" && valueTo === null) continue
+    filters.push({
+      column,
+      operator: input.operator,
+      value,
+      valueTo,
     })
-    .map((rule) => ({
-      id: typeof rule.id === "string" ? rule.id : `${rule.column}-${rule.operator}-${Math.random()}`,
-      column: rule.column,
-      operator: rule.operator,
-      value: rule.value,
-      valueTo: rule.operator === "between" ? rule.valueTo : null,
-    }))
+  }
+  return filters
+}
+
+function sanitizeColumnFilterInputs(
+  rawInputs: Partial<Record<NumericFilterColumnId, NumericColumnFilterInput>>
+) {
+  const sanitized: Partial<Record<NumericFilterColumnId, NumericColumnFilterInput>> = {}
+  for (const column of NUMERIC_FILTER_COLUMNS) {
+    const candidate = rawInputs[column]
+    if (!candidate || typeof candidate !== "object") continue
+    const operator = NUMERIC_FILTER_OPERATORS.some((item) => item.value === candidate.operator)
+      ? candidate.operator
+      : "gte"
+    sanitized[column] = {
+      operator,
+      value: typeof candidate.value === "string" ? candidate.value : "",
+      valueTo: typeof candidate.valueTo === "string" ? candidate.valueTo : "",
+    }
+  }
+  return sanitized
+}
+
+function applyMarketMetrics(
+  rows: ScreenerRow[],
+  metrics: Record<string, MarketMetricSnapshot>
+) {
+  if (Object.keys(metrics).length === 0) return rows
+  return rows.map((row) => {
+    const metric = metrics[row.key]
+    if (!metric) return row
+    return {
+      ...row,
+      latestPrice: Number.isFinite(metric.latestPrice) ? metric.latestPrice : row.latestPrice,
+      changePct: metric.changePct ?? row.changePct,
+      perf7d: metric.perf7d ?? row.perf7d,
+      perf30d: metric.perf30d ?? row.perf30d,
+    }
+  })
+}
+
+async function fetchMarketMetricsForTargets(targets: ScannerMetricTarget[]) {
+  const metrics: Record<string, MarketMetricSnapshot> = {}
+  if (targets.length === 0) return metrics
+
+  const chunkSize = 8
+  for (let index = 0; index < targets.length; index += chunkSize) {
+    const chunk = targets.slice(index, index + chunkSize)
+    const results = await Promise.all(
+      chunk.map(async (target) => {
+        try {
+          const response = await fetchCandles(target.symbol, target.marketType, "1d", 45)
+          const metric = calculateMarketMetricsFromCandles(response.candles)
+          return { key: target.key, metric }
+        } catch {
+          return { key: target.key, metric: null }
+        }
+      })
+    )
+
+    for (const result of results) {
+      if (result.metric) metrics[result.key] = result.metric
+    }
+  }
+
+  return metrics
+}
+
+function calculateMarketMetricsFromCandles(
+  candles: Array<{ time: string; open: number; high: number; low: number; close: number; volume: number }>
+) {
+  if (!Array.isArray(candles) || candles.length === 0) return null
+  const sorted = [...candles].sort((left, right) => left.time.localeCompare(right.time))
+  const latest = sorted[sorted.length - 1]
+  if (!latest || !Number.isFinite(latest.close)) return null
+
+  const previous = sorted.length > 1 ? sorted[sorted.length - 2] : null
+  const latestTime = parseDate(latest.time)?.getTime() ?? Date.now()
+  const lookback7 = findLookbackClose(sorted, latestTime - 7 * 86_400_000)
+  const lookback30 = findLookbackClose(sorted, latestTime - 30 * 86_400_000)
+
+  return {
+    latestPrice: latest.close,
+    changePct: previous ? percentageChange(latest.close, previous.close) : null,
+    perf7d: percentageChange(latest.close, lookback7),
+    perf30d: percentageChange(latest.close, lookback30),
+  }
+}
+
+function findLookbackClose(
+  candles: Array<{ time: string; open: number; high: number; low: number; close: number; volume: number }>,
+  targetTs: number
+) {
+  for (let i = candles.length - 1; i >= 0; i -= 1) {
+    const ts = parseDate(candles[i].time)?.getTime()
+    if (ts === undefined || ts === null) continue
+    if (ts <= targetTs) return candles[i].close
+  }
+  return null
 }
 
 function sortColumns(columns: ColumnId[]) {

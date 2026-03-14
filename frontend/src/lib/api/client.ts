@@ -23,6 +23,7 @@ export interface ApiSignal {
     price: number;
     created_at: string | null;
     special_tag?: string | null;
+    details?: unknown;
 }
 
 export interface ApiTrade {
