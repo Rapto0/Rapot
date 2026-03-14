@@ -1,104 +1,161 @@
-﻿"use client"
+"use client"
 
 import { useMemo, useState } from "react"
+import { useQuery } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { fetchEconomicCalendar, type EconomicCalendarEvent } from "@/lib/api/client"
 
-type EventImpact = "Düşük" | "Orta" | "Yüksek"
-type EventRegion = "TR" | "EU" | "UK" | "USA" | "JP"
+type UiImpact = "Dusuk" | "Orta" | "Yuksek"
 
-type CalendarEvent = {
-  id: number
+type UiEvent = {
+  id: string
   date: string
   time: string
-  region: EventRegion
-  impact: EventImpact
+  country: string
+  impact: UiImpact
   title: string
   actual: string
   forecast: string
   previous: string
+  orderKey: string
 }
 
-const CALENDAR_EVENTS: CalendarEvent[] = [
-  { id: 1, date: "2026-02-24", time: "10:00", region: "TR", impact: "Orta", title: "Yabancı turist sayısı", actual: "4.5%", forecast: "3.2%", previous: "2.1%" },
-  { id: 2, date: "2026-02-24", time: "10:30", region: "EU", impact: "Yüksek", title: "Almanya imalat PMI", actual: "45.4", forecast: "43.7", previous: "43.3" },
-  { id: 3, date: "2026-02-24", time: "12:00", region: "UK", impact: "Orta", title: "İngiltere hizmet PMI", actual: "53.8", forecast: "53.2", previous: "53.4" },
-  { id: 4, date: "2026-02-24", time: "16:45", region: "USA", impact: "Yüksek", title: "S&P Global hizmet PMI", actual: "52.9", forecast: "51.0", previous: "51.4" },
-  { id: 5, date: "2026-02-24", time: "18:00", region: "USA", impact: "Düşük", title: "Richmond imalat endeksi", actual: "-15", forecast: "-7", previous: "-11" },
-  { id: 6, date: "2026-02-25", time: "08:00", region: "JP", impact: "Orta", title: "BoJ faiz kararı", actual: "", forecast: "-0.10%", previous: "-0.10%" },
-  { id: 7, date: "2026-02-25", time: "10:00", region: "TR", impact: "Yüksek", title: "TCMB faiz kararı", actual: "", forecast: "45.00%", previous: "42.50%" },
-  { id: 8, date: "2026-02-25", time: "16:30", region: "USA", impact: "Yüksek", title: "GSYİH (çeyreklik)", actual: "", forecast: "2.0%", previous: "4.9%" },
-]
-
-const impactOrder: EventImpact[] = ["Düşük", "Orta", "Yüksek"]
+const IMPACT_ORDER: UiImpact[] = ["Dusuk", "Orta", "Yuksek"]
+const AUTO_REFRESH_MS = 60_000
 
 export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState<string>("all")
-  const [selectedImpact, setSelectedImpact] = useState<EventImpact | "all">("all")
+  const [selectedImpact, setSelectedImpact] = useState<UiImpact | "all">("all")
+  const [selectedCountry, setSelectedCountry] = useState<string>("all")
 
-  const dates = useMemo(() => Array.from(new Set(CALENDAR_EVENTS.map((event) => event.date))), [])
+  const fromDate = useMemo(() => formatYmd(new Date()), [])
+  const toDate = useMemo(() => {
+    const end = new Date()
+    end.setDate(end.getDate() + 14)
+    return formatYmd(end)
+  }, [])
+
+  const {
+    data: rawEvents,
+    isLoading,
+    isFetching,
+    isError,
+    refetch,
+    dataUpdatedAt,
+  } = useQuery({
+    queryKey: ["calendar-page", fromDate, toDate],
+    queryFn: () => fetchEconomicCalendar({ from_date: fromDate, to_date: toDate }),
+    refetchInterval: AUTO_REFRESH_MS,
+    staleTime: 30_000,
+  })
+
+  const events = useMemo(() => mapCalendarEvents(rawEvents || []), [rawEvents])
+
+  const dates = useMemo(
+    () => Array.from(new Set(events.map((event) => event.date))).sort(),
+    [events]
+  )
+
+  const countries = useMemo(
+    () => Array.from(new Set(events.map((event) => event.country))).sort(),
+    [events]
+  )
 
   const filteredEvents = useMemo(() => {
-    return CALENDAR_EVENTS.filter((event) => {
+    return events.filter((event) => {
       if (selectedDate !== "all" && event.date !== selectedDate) return false
       if (selectedImpact !== "all" && event.impact !== selectedImpact) return false
+      if (selectedCountry !== "all" && event.country !== selectedCountry) return false
       return true
     })
-  }, [selectedDate, selectedImpact])
+  }, [events, selectedDate, selectedImpact, selectedCountry])
+
+  const lastUpdateLabel =
+    dataUpdatedAt > 0
+      ? new Date(dataUpdatedAt).toLocaleString("tr-TR")
+      : "--"
 
   return (
     <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-3 p-3">
       <section className="border border-border bg-surface p-4">
         <div className="label-uppercase">Takvim</div>
         <h1 className="mt-1 text-lg font-semibold tracking-[-0.02em]">Ekonomik takvim</h1>
-        <p className="mt-1 text-xs text-muted-foreground">Piyasa etkisi yüksek veri ve karar akışı.</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Finnhub tabanli canli veri. Her 60 saniyede otomatik yenilenir.
+        </p>
+        <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
+          <span>Son guncelleme: {lastUpdateLabel}</span>
+          {isFetching && <span className="text-primary">Yenileniyor...</span>}
+          <Button type="button" size="sm" variant="outline" onClick={() => refetch()}>
+            Yenile
+          </Button>
+        </div>
       </section>
 
       <section className="border border-border bg-surface p-3">
         <div className="flex flex-wrap items-center gap-3">
           <FilterBlock
             title="Tarih"
-            options={[["all", "Tümü"], ...dates.map((date) => [date, formatDateLabel(date)] as [string, string])]}
+            options={[["all", "Tumu"], ...dates.map((date) => [date, formatDateLabel(date)] as [string, string])]}
             value={selectedDate}
             onChange={setSelectedDate}
           />
           <FilterBlock
             title="Etki"
-            options={[["all", "Tümü"], ...impactOrder.map((value) => [value, value] as [string, string])]}
+            options={[["all", "Tumu"], ...IMPACT_ORDER.map((value) => [value, value] as [string, string])]}
             value={selectedImpact}
-            onChange={(value) => setSelectedImpact(value as EventImpact | "all")}
+            onChange={(value) => setSelectedImpact(value as UiImpact | "all")}
+          />
+          <FilterBlock
+            title="Bolge"
+            options={[["all", "Tumu"], ...countries.map((country) => [country, country] as [string, string])]}
+            value={selectedCountry}
+            onChange={setSelectedCountry}
           />
         </div>
       </section>
 
       <section className="border border-border bg-surface">
-        <div className="grid grid-cols-[80px_80px_110px_1fr_100px_100px_100px] border-b border-border px-3 py-2 text-[10px] uppercase tracking-[0.06em] text-muted-foreground">
+        <div className="grid grid-cols-[80px_90px_90px_1fr_110px_110px_110px] border-b border-border px-3 py-2 text-[10px] uppercase tracking-[0.06em] text-muted-foreground">
           <span>Saat</span>
-          <span>Bölge</span>
+          <span>Bolge</span>
           <span>Etki</span>
           <span>Olay</span>
-          <span className="text-right">Güncel</span>
+          <span className="text-right">Guncel</span>
           <span className="text-right">Tahmin</span>
-          <span className="text-right">Önceki</span>
+          <span className="text-right">Onceki</span>
         </div>
 
-        {filteredEvents.length === 0 ? (
-          <div className="px-3 py-8 text-center text-xs text-muted-foreground">Kayıt bulunamadı.</div>
+        {isLoading ? (
+          <div className="px-3 py-8 text-center text-xs text-muted-foreground">Veriler yukleniyor...</div>
+        ) : isError ? (
+          <div className="px-3 py-8 text-center text-xs text-loss">
+            Takvim verisi alinamadi. `FINNHUB_API_KEY` ayarini kontrol edin.
+          </div>
+        ) : filteredEvents.length === 0 ? (
+          <div className="px-3 py-8 text-center text-xs text-muted-foreground">Kayit bulunamadi.</div>
         ) : (
           <div className="divide-y divide-border">
             {filteredEvents.map((event) => (
-              <div key={event.id} className="grid grid-cols-[80px_80px_110px_1fr_100px_100px_100px] items-center gap-2 px-3 py-2">
+              <div key={event.id} className="grid grid-cols-[80px_90px_90px_1fr_110px_110px_110px] items-center gap-2 px-3 py-2">
                 <span className="mono-numbers text-xs text-foreground">{event.time}</span>
-                <span className="text-xs text-muted-foreground">{event.region}</span>
+                <span className="text-xs text-muted-foreground">{event.country}</span>
                 <span
                   className={cn(
                     "signal-badge w-fit",
-                    event.impact === "Yüksek" ? "signal-sell" : event.impact === "Orta" ? "signal-neutral" : "border border-border bg-base text-muted-foreground"
+                    event.impact === "Yuksek"
+                      ? "signal-sell"
+                      : event.impact === "Orta"
+                        ? "signal-neutral"
+                        : "border border-border bg-base text-muted-foreground"
                   )}
                 >
                   {event.impact}
                 </span>
-                <span className="truncate text-xs text-foreground">{event.title}</span>
+                <span className="truncate text-xs text-foreground" title={event.title}>
+                  {event.title}
+                </span>
                 <span className="mono-numbers text-right text-xs text-foreground">{event.actual || "--"}</span>
                 <span className="mono-numbers text-right text-xs text-muted-foreground">{event.forecast || "--"}</span>
                 <span className="mono-numbers text-right text-xs text-muted-foreground">{event.previous || "--"}</span>
@@ -142,10 +199,74 @@ function FilterBlock({
   )
 }
 
+function mapCalendarEvents(rawEvents: EconomicCalendarEvent[]): UiEvent[] {
+  return rawEvents
+    .map((item, index) => {
+      const parsed = parseApiDateTime(item.time)
+      if (!parsed) return null
+
+      return {
+        id: `${parsed.orderKey}-${item.country || "ROW"}-${index}`,
+        date: parsed.date,
+        time: parsed.time,
+        country: (item.country || item.currency || "ROW").toUpperCase(),
+        impact: mapImpact(item.impact),
+        title: item.event || "Ekonomik veri",
+        actual: formatMetric(item.actual, item.unit),
+        forecast: formatMetric(item.estimate, item.unit),
+        previous: formatMetric(item.previous, item.unit),
+        orderKey: parsed.orderKey,
+      }
+    })
+    .filter((event): event is UiEvent => event !== null)
+    .sort((a, b) => a.orderKey.localeCompare(b.orderKey))
+}
+
+function parseApiDateTime(value: string | null): { date: string; time: string; orderKey: string } | null {
+  if (!value) return null
+
+  const directMatch = value.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/)
+  if (directMatch) {
+    const date = directMatch[1]
+    const time = directMatch[2]
+    return { date, time, orderKey: `${date}T${time}` }
+  }
+
+  const normalized = value.includes("T") ? value : value.replace(" ", "T")
+  const dateObj = new Date(normalized)
+  if (Number.isNaN(dateObj.getTime())) return null
+
+  return {
+    date: formatYmd(dateObj),
+    time: dateObj.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }),
+    orderKey: dateObj.toISOString(),
+  }
+}
+
+function mapImpact(rawImpact: string | null): UiImpact {
+  const value = (rawImpact || "").toLowerCase()
+  if (value.includes("high") || value === "3" || value.includes("critical")) return "Yuksek"
+  if (value.includes("medium") || value === "2" || value.includes("med")) return "Orta"
+  return "Dusuk"
+}
+
+function formatMetric(value: number | null, unit: string | null): string {
+  if (value === null || value === undefined) return ""
+  const numberText = Number.isInteger(value) ? value.toString() : value.toFixed(2)
+  return `${numberText}${unit || ""}`
+}
+
 function formatDateLabel(dateValue: string) {
   const date = new Date(`${dateValue}T00:00:00`)
   return date.toLocaleDateString("tr-TR", {
     day: "2-digit",
     month: "short",
   })
+}
+
+function formatYmd(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
 }

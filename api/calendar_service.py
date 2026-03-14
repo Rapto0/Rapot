@@ -1,73 +1,77 @@
 import datetime
+import logging
 import os
 from typing import Any
 
 import requests
 
 
+logger = logging.getLogger(__name__)
+
+
 class CalendarService:
-    def __init__(self):
+    def __init__(self) -> None:
         self.api_key = os.getenv("FINNHUB_API_KEY")
         self.base_url = "https://finnhub.io/api/v1/calendar/economic"
-        self._cache = {}
-        self._cache_expiry = {}
+        self.cache_ttl_seconds = int(os.getenv("CALENDAR_CACHE_SECONDS", "60"))
+        self._cache: dict[str, list[dict[str, Any]]] = {}
+        self._cache_expiry: dict[str, datetime.datetime] = {}
 
     def get_economic_calendar(
-        self, from_date: str = None, to_date: str = None
+        self, from_date: str | None = None, to_date: str | None = None
     ) -> list[dict[str, Any]]:
         """
-        Finnhub API'den ekonomik takvim verilerini çeker.
-        Tarih formatı: YYYY-MM-DD
+        Finnhub ekonomik takvim verilerini doner.
+        Tarih formatlari: YYYY-MM-DD
         """
         if not self.api_key:
-            print("WARNING: FINNHUB_API_KEY bulunamadı. Mock veri veya boş liste dönebilir.")
+            logger.warning("FINNHUB_API_KEY bulunamadi, ekonomik takvim bos donuyor.")
             return []
 
-        # Varsayılan tarihler (bugün ve gelecek 7 gün)
+        today = datetime.date.today()
         if not from_date:
-            from_date = datetime.date.today().strftime("%Y-%m-%d")
+            from_date = today.strftime("%Y-%m-%d")
         if not to_date:
-            to_date = (datetime.date.today() + datetime.timedelta(days=7)).strftime("%Y-%m-%d")
+            to_date = (today + datetime.timedelta(days=7)).strftime("%Y-%m-%d")
 
-        # Cache key oluştur
         cache_key = f"{from_date}_{to_date}"
-
-        # Cache kontrolü (1 saatlik cache)
-        if cache_key in self._cache and datetime.datetime.now() < self._cache_expiry[cache_key]:
+        now = datetime.datetime.utcnow()
+        expires_at = self._cache_expiry.get(cache_key)
+        if expires_at and cache_key in self._cache and now < expires_at:
             return self._cache[cache_key]
 
         try:
-            params = {"from": from_date, "to": to_date, "token": self.api_key}
-
-            response = requests.get(self.base_url, params=params)
+            response = requests.get(
+                self.base_url,
+                params={
+                    "from": from_date,
+                    "to": to_date,
+                    "token": self.api_key,
+                },
+                timeout=20,
+            )
             response.raise_for_status()
+            payload = response.json()
 
-            data = response.json()
-
-            # Veriyi işle ve cache'le
-            if "economicCalendar" in data:
-                # Bazen data direkt liste olabilir veya 'economicCalendar' key'i içinde olabilir
-                # Finnhub dokümanına göre response: { "economicCalendar": [...] }
-                events = data["economicCalendar"]
-            elif isinstance(data, list):
-                events = data
+            if isinstance(payload, dict) and isinstance(payload.get("economicCalendar"), list):
+                events = payload["economicCalendar"]
+            elif isinstance(payload, list):
+                events = payload
             else:
                 events = []
 
-            # Önemli eventleri filtreleyebiliriz veya hepsini dönebiliriz.
-            # Şimdilik hepsini dönüyoruz.
-
             self._cache[cache_key] = events
-            self._cache_expiry[cache_key] = datetime.datetime.now() + datetime.timedelta(hours=1)
-
+            self._cache_expiry[cache_key] = now + datetime.timedelta(seconds=self.cache_ttl_seconds)
             return events
+        except requests.RequestException as exc:
+            logger.warning("Finnhub calendar request failed: %s", exc)
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Unexpected calendar service error: %s", exc)
 
-        except requests.RequestException as e:
-            print(f"Finnhub API hatası: {e}")
-            return []
-        except Exception as e:
-            print(f"Beklenmedik hata (CalendarService): {e}")
-            return []
+        # Hata durumunda son basarili cache varsa onu don.
+        if cache_key in self._cache:
+            return self._cache[cache_key]
+        return []
 
 
 calendar_service = CalendarService()

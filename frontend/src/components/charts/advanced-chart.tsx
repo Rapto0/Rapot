@@ -3,7 +3,15 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react"
 import Link from "next/link"
 import { useQuery } from "@tanstack/react-query"
-import { fetchCandles, fetchBistSymbols, fetchTicker } from "@/lib/api/client"
+import {
+    fetchCandles,
+    fetchBistSymbols,
+    fetchEconomicCalendar,
+    fetchSignals,
+    fetchTicker,
+    type ApiSignal,
+    type EconomicCalendarEvent,
+} from "@/lib/api/client"
 import { useBinanceTicker } from "@/lib/hooks/use-binance-ticker"
 import { cn } from "@/lib/utils"
 import {
@@ -153,11 +161,39 @@ interface WorkerComputationState {
     }
 }
 
+type UtilityCalendarImpact = "Dusuk" | "Orta" | "Yuksek"
+
+interface UtilityCalendarItem {
+    id: string
+    date: string
+    time: string
+    country: string
+    title: string
+    impact: UtilityCalendarImpact
+    actual: string
+    forecast: string
+    previous: string
+    orderKey: string
+}
+
+interface WatchlistSignalFeedItem {
+    id: number
+    symbol: string
+    marketType: string
+    strategy: string
+    signalType: string
+    timeframe: string
+    specialTag: string
+    createdAt: string
+}
+
 const INDICATOR_SETTINGS_STORAGE_KEY = "rapot.dashboard.indicators.v1"
 const DEFAULT_OVERLAY_INDICATOR_IDS = ["combo", "hunter"] as const
 const WATCHLIST_STORAGE_KEY = "rapot.dashboard.watchlists.v1"
 const ACTIVE_WATCHLIST_STORAGE_KEY = "rapot.dashboard.watchlists.active.v1"
 const WATCHLIST_PANEL_STORAGE_KEY = "rapot.dashboard.watchlists.panel.v1"
+const WATCHLIST_UTILITY_CALENDAR_REFRESH_MS = 60_000
+const WATCHLIST_UTILITY_SIGNAL_REFRESH_MS = 60_000
 
 const WATCHLIST_UTILITY_ITEMS: UtilityPanelItem[] = [
     { id: "alerts", label: "Alarmlar", icon: Bell },
@@ -541,6 +577,109 @@ const deduplicateByTime = <T extends { time: string | number }>(data: T[]): T[] 
         const timeA = typeof a.time === 'number' ? a.time : parseChartTimeToUnix(a.time)
         const timeB = typeof b.time === 'number' ? b.time : parseChartTimeToUnix(b.time)
         return timeA - timeB
+    })
+}
+
+const mapUtilityCalendarImpact = (value: string | null): UtilityCalendarImpact => {
+    const normalized = (value || "").toLowerCase()
+    if (normalized.includes("high") || normalized === "3" || normalized.includes("critical")) return "Yuksek"
+    if (normalized.includes("medium") || normalized === "2" || normalized.includes("med")) return "Orta"
+    return "Dusuk"
+}
+
+const formatUtilityCalendarMetric = (value: number | null, unit: string | null): string => {
+    if (value === null || value === undefined) return ""
+    const numeric = Number(value)
+    const formatted = Number.isInteger(numeric) ? numeric.toString() : numeric.toFixed(2)
+    return `${formatted}${unit || ""}`
+}
+
+const parseUtilityCalendarDateTime = (
+    value: string | null
+): { date: string, time: string, orderKey: string } | null => {
+    if (!value) return null
+    const direct = value.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/)
+    if (direct) {
+        const date = direct[1]
+        const time = direct[2]
+        return { date, time, orderKey: `${date}T${time}` }
+    }
+
+    const normalized = value.includes("T") ? value : value.replace(" ", "T")
+    const dateObj = new Date(normalized)
+    if (Number.isNaN(dateObj.getTime())) return null
+
+    return {
+        date: dateObj.toISOString().slice(0, 10),
+        time: dateObj.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }),
+        orderKey: dateObj.toISOString(),
+    }
+}
+
+const buildUtilityCalendarItems = (rawEvents: EconomicCalendarEvent[]): UtilityCalendarItem[] => {
+    return rawEvents
+        .map((event, index) => {
+            const parsed = parseUtilityCalendarDateTime(event.time)
+            if (!parsed) return null
+            return {
+                id: `${parsed.orderKey}-${event.country || "ROW"}-${index}`,
+                date: parsed.date,
+                time: parsed.time,
+                country: (event.country || event.currency || "ROW").toUpperCase(),
+                title: event.event || "Ekonomik veri",
+                impact: mapUtilityCalendarImpact(event.impact),
+                actual: formatUtilityCalendarMetric(event.actual, event.unit),
+                forecast: formatUtilityCalendarMetric(event.estimate, event.unit),
+                previous: formatUtilityCalendarMetric(event.previous, event.unit),
+                orderKey: parsed.orderKey,
+            }
+        })
+        .filter((item): item is UtilityCalendarItem => item !== null)
+        .sort((a, b) => a.orderKey.localeCompare(b.orderKey))
+}
+
+const buildWatchlistSignalFeed = (
+    rawSignals: ApiSignal[],
+    activeSymbolRows: WatchlistSymbolRow[]
+): WatchlistSignalFeedItem[] => {
+    if (rawSignals.length === 0 || activeSymbolRows.length === 0) return []
+    const symbolSet = new Set(
+        activeSymbolRows.map((row) => `${row.marketType}:${row.rawSymbol.toUpperCase()}`)
+    )
+
+    return rawSignals
+        .filter((signal) => {
+            const marketType = signal.market_type === "BIST" ? "BIST" : "Kripto"
+            const symbol = signal.symbol?.toUpperCase?.() || ""
+            return symbolSet.has(`${marketType}:${symbol}`)
+        })
+        .sort((a, b) => {
+            const left = a.created_at ? Date.parse(a.created_at) : 0
+            const right = b.created_at ? Date.parse(b.created_at) : 0
+            return right - left
+        })
+        .slice(0, 12)
+        .map((signal) => ({
+            id: signal.id,
+            symbol: signal.symbol,
+            marketType: signal.market_type,
+            strategy: signal.strategy,
+            signalType: signal.signal_type,
+            timeframe: signal.timeframe,
+            specialTag: signal.special_tag || "-",
+            createdAt: signal.created_at || "",
+        }))
+}
+
+const formatSignalTimestamp = (isoValue: string): string => {
+    if (!isoValue) return "-"
+    const date = new Date(isoValue)
+    if (Number.isNaN(date.getTime())) return "-"
+    return date.toLocaleString("tr-TR", {
+        day: "2-digit",
+        month: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
     })
 }
 
@@ -1144,6 +1283,42 @@ export function AdvancedChartPage({
         queryKey: ['watchlist-ticker'],
         queryFn: fetchTicker,
         refetchInterval: 30000,
+    })
+
+    const utilityCalendarRange = useMemo(() => {
+        const now = new Date()
+        const from = now.toISOString().slice(0, 10)
+        const toDate = new Date(now)
+        toDate.setDate(toDate.getDate() + 7)
+        const to = toDate.toISOString().slice(0, 10)
+        return { from, to }
+    }, [])
+
+    const {
+        data: utilityCalendarRaw = [],
+        isFetching: isUtilityCalendarFetching,
+        dataUpdatedAt: utilityCalendarUpdatedAt,
+        refetch: refetchUtilityCalendar,
+    } = useQuery({
+        queryKey: ['chart-watchlist-calendar', utilityCalendarRange.from, utilityCalendarRange.to],
+        queryFn: () =>
+            fetchEconomicCalendar({
+                from_date: utilityCalendarRange.from,
+                to_date: utilityCalendarRange.to,
+            }),
+        refetchInterval: WATCHLIST_UTILITY_CALENDAR_REFRESH_MS,
+        staleTime: 30_000,
+    })
+
+    const {
+        data: utilityWatchlistSignalsRaw = [],
+        isFetching: isUtilitySignalsFetching,
+        refetch: refetchUtilitySignals,
+    } = useQuery({
+        queryKey: ['chart-watchlist-signals-feed'],
+        queryFn: () => fetchSignals({ limit: 300 }),
+        refetchInterval: WATCHLIST_UTILITY_SIGNAL_REFRESH_MS,
+        staleTime: 30_000,
     })
 
     const watchlistCryptoSymbols = useMemo(() => {
@@ -1989,6 +2164,27 @@ export function AdvancedChartPage({
         }
     }, [activeWatchlistQuotes])
 
+    const utilityCalendarItems = useMemo(
+        () => buildUtilityCalendarItems(utilityCalendarRaw),
+        [utilityCalendarRaw]
+    )
+
+    const utilityCalendarUpcoming = useMemo(() => {
+        const nowKey = new Date().toISOString()
+        const upcoming = utilityCalendarItems.filter((item) => item.orderKey >= nowKey)
+        return (upcoming.length > 0 ? upcoming : utilityCalendarItems).slice(0, 8)
+    }, [utilityCalendarItems])
+
+    const utilityCalendarUpdatedLabel = useMemo(() => {
+        if (!utilityCalendarUpdatedAt) return "--"
+        return new Date(utilityCalendarUpdatedAt).toLocaleString("tr-TR")
+    }, [utilityCalendarUpdatedAt])
+
+    const watchlistSignalFeed = useMemo(
+        () => buildWatchlistSignalFeed(utilityWatchlistSignalsRaw, activeWatchlistSymbolRows),
+        [utilityWatchlistSignalsRaw, activeWatchlistSymbolRows]
+    )
+
     const updateActiveWatchlist = useCallback(
         (updater: (watchlist: WatchlistModel) => WatchlistModel) => {
             setWatchlists((prev) =>
@@ -2189,6 +2385,38 @@ export function AdvancedChartPage({
         [updateActiveWatchlist]
     )
 
+    const handleAppendWatchlistNoteTimestamp = useCallback(() => {
+        const stamp = new Date().toLocaleString("tr-TR")
+        updateActiveWatchlist((watchlist) => {
+            const current = watchlist.notes ? `${watchlist.notes}\n` : ""
+            return { ...watchlist, notes: `${current}[${stamp}] ` }
+        })
+        showWatchlistToast("Notlara zaman damgasi eklendi.")
+    }, [showWatchlistToast, updateActiveWatchlist])
+
+    const handleCopyWatchlistNotes = useCallback(async () => {
+        if (!activeWatchlist) return
+        const text = activeWatchlist.notes?.trim()
+        if (!text) {
+            showWatchlistToast("Kopyalanacak not bulunamadi.")
+            return
+        }
+        try {
+            await navigator.clipboard.writeText(text)
+            showWatchlistToast("Notlar panoya kopyalandi.")
+        } catch {
+            window.prompt("Notlari kopyalayin", text)
+        }
+    }, [activeWatchlist, showWatchlistToast])
+
+    const handleClearWatchlistNotes = useCallback(() => {
+        if (!activeWatchlist) return
+        const approved = window.confirm(`${activeWatchlist.name} notlari temizlensin mi?`)
+        if (!approved) return
+        updateActiveWatchlist((watchlist) => ({ ...watchlist, notes: "" }))
+        showWatchlistToast("Notlar temizlendi.")
+    }, [activeWatchlist, showWatchlistToast, updateActiveWatchlist])
+
     const handleAlarmThresholdDraftChange = useCallback(
         (key: keyof AlarmThresholds, rawValue: string) => {
             const parsed = Number(rawValue)
@@ -2230,6 +2458,39 @@ export function AdvancedChartPage({
     const handleRemoveAlarmRule = useCallback((ruleId: string) => {
         setWatchlistAlarmRules((prev) => prev.filter((rule) => rule.id !== ruleId))
     }, [])
+
+    const handleClearChartDrawings = useCallback(() => {
+        setRulerDrawings([])
+        setPencilDrawings([])
+        setTextDrawings([])
+        setRulerDraftStart(null)
+        setRulerDraftEnd(null)
+        setActivePencilPoints(null)
+        rulerDraftStartRef.current = null
+        isPointerDrawingRef.current = false
+        setActiveTool("none")
+        requestOverlayProjectionRefresh()
+        showWatchlistToast("Cizimler temizlendi.")
+    }, [requestOverlayProjectionRefresh, showWatchlistToast])
+
+    const handleHidePaneIndicators = useCallback(() => {
+        setActiveIndicators((prev) =>
+            prev.map((indicator) =>
+                indicator.meta.isOverlay ? indicator : { ...indicator, visible: false }
+            )
+        )
+        showWatchlistToast("Panel indikatorleri gizlendi.")
+    }, [showWatchlistToast])
+
+    const handleShowAllIndicators = useCallback(() => {
+        setActiveIndicators((prev) => prev.map((indicator) => ({ ...indicator, visible: true })))
+        showWatchlistToast("Tum indikatorler gosteriliyor.")
+    }, [showWatchlistToast])
+
+    const handleResetIndicatorLayout = useCallback(() => {
+        setActiveIndicators(getDefaultActiveIndicators())
+        showWatchlistToast("Indikator yerlesimi varsayilana donduruldu.")
+    }, [showWatchlistToast])
 
     return (
         <div
@@ -3015,64 +3276,217 @@ export function AdvancedChartPage({
                                     </div>
                                 )}
                                 {activeUtilityPanel === "notes" && (
-                                    <div className="space-y-2">
-                                        <div className="text-muted-foreground">Liste notlari</div>
+                                    <div className="space-y-2.5">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-muted-foreground">Liste notlari</span>
+                                            <span className="text-[10px] text-muted-foreground/80">
+                                                {(activeWatchlist?.notes || "").length} karakter
+                                            </span>
+                                        </div>
                                         <textarea
                                             value={activeWatchlist?.notes || ""}
                                             onChange={(e) => handleWatchlistNotesChange(e.target.value)}
                                             placeholder="Bu liste icin not girin..."
-                                            className="h-20 w-full resize-none rounded border border-border bg-base px-2 py-1.5 text-xs outline-none focus:border-primary/60"
+                                            className="h-24 w-full resize-none rounded border border-border bg-base px-2 py-1.5 text-xs outline-none focus:border-primary/60"
                                         />
-                                    </div>
-                                )}
-                                {activeUtilityPanel === "calendar" && (
-                                    <div className="space-y-1 text-muted-foreground">
-                                        <div>Sunucu saati: {serverClockLabel}</div>
-                                        <div>Grafik periyodu: {currentTimeframeLabel}</div>
-                                        <div>Veri kaynagi: {dataSource}</div>
-                                        <div className="pt-1 text-[10px] uppercase tracking-wide text-muted-foreground/80">Alarm periyotlari</div>
-                                        <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[11px]">
-                                            {ALARM_TIMEFRAME_OPTIONS.slice(0, 8).map((option) => (
-                                                <span key={`tf-${option.value}`}>{option.label}</span>
-                                            ))}
+                                        <div className="grid grid-cols-3 gap-1.5">
+                                            <button
+                                                onClick={handleAppendWatchlistNoteTimestamp}
+                                                className="rounded border border-border px-2 py-1 text-[11px] text-muted-foreground hover:bg-raised"
+                                            >
+                                                Zaman damgasi
+                                            </button>
+                                            <button
+                                                onClick={handleCopyWatchlistNotes}
+                                                className="rounded border border-border px-2 py-1 text-[11px] text-muted-foreground hover:bg-raised"
+                                            >
+                                                Kopyala
+                                            </button>
+                                            <button
+                                                onClick={handleClearWatchlistNotes}
+                                                className="rounded border border-loss/40 px-2 py-1 text-[11px] text-loss hover:bg-loss/10"
+                                            >
+                                                Temizle
+                                            </button>
                                         </div>
                                     </div>
                                 )}
-                                {activeUtilityPanel === "news" && (
-                                    <div className="space-y-1 text-muted-foreground">
-                                        <div>Liste performans ozeti:</div>
-                                        {watchlistChangeSnapshot ? (
-                                            <>
-                                                <div>Ortalama degisim: {watchlistChangeSnapshot.average >= 0 ? "+" : ""}{watchlistChangeSnapshot.average.toFixed(2)}%</div>
-                                                <div>Pozitif lider: {watchlistChangeSnapshot.strongest.rawSymbol} ({watchlistChangeSnapshot.strongest.change >= 0 ? "+" : ""}{watchlistChangeSnapshot.strongest.change.toFixed(2)}%)</div>
-                                                <div>Negatif lider: {watchlistChangeSnapshot.weakest.rawSymbol} ({watchlistChangeSnapshot.weakest.change >= 0 ? "+" : ""}{watchlistChangeSnapshot.weakest.change.toFixed(2)}%)</div>
-                                                <div>Kotasyon gelen sembol: {watchlistChangeSnapshot.quotedCount}</div>
-                                            </>
-                                        ) : (
-                                            <div>Canli quote bekleniyor.</div>
-                                        )}
-                                    </div>
-                                )}
-                                {activeUtilityPanel === "layout" && (
-                                    <div className="space-y-1 text-muted-foreground">
-                                        <div>Panel: {showRightPanel ? "Acik" : "Kapali"}</div>
-                                        <div>Indikator sayisi: {activeIndicators.length}</div>
-                                        <div>Overlay: {visibleOverlayIndicators.length}</div>
-                                        <div>Alarm kurali: {activeWatchlistAlarmRules.length}</div>
-                                        <Link href="/alarms" className="inline-flex items-center gap-1 pt-1 text-primary hover:underline">
-                                            Alarm merkezi
+                                {activeUtilityPanel === "calendar" && (
+                                    <div className="space-y-2 text-muted-foreground">
+                                        <div className="flex items-center justify-between">
+                                            <span>Canli takvim</span>
+                                            <button
+                                                onClick={() => refetchUtilityCalendar()}
+                                                className={cn(
+                                                    "rounded border border-border px-2 py-0.5 text-[10px] hover:bg-raised",
+                                                    isUtilityCalendarFetching && "opacity-70"
+                                                )}
+                                            >
+                                                {isUtilityCalendarFetching ? "Yenileniyor" : "Yenile"}
+                                            </button>
+                                        </div>
+                                        <div className="text-[11px]">
+                                            Son guncelleme: {utilityCalendarUpdatedLabel}
+                                        </div>
+                                        <div className="text-[11px]">Sunucu saati: {serverClockLabel}</div>
+                                        <div className="text-[11px]">Grafik periyodu: {currentTimeframeLabel}</div>
+                                        <div className="max-h-52 space-y-1 overflow-y-auto rounded border border-border/40 bg-base p-2">
+                                            {utilityCalendarUpcoming.length === 0 && (
+                                                <div className="text-[11px] text-muted-foreground">
+                                                    Yakin donem ekonomik olay bulunamadi.
+                                                </div>
+                                            )}
+                                            {utilityCalendarUpcoming.map((event) => (
+                                                <div key={event.id} className="rounded border border-border/40 px-2 py-1">
+                                                    <div className="flex items-center justify-between gap-2">
+                                                        <span className="text-[11px] text-foreground">
+                                                            {event.date} {event.time}
+                                                        </span>
+                                                        <span
+                                                            className={cn(
+                                                                "rounded px-1.5 py-0.5 text-[10px]",
+                                                                event.impact === "Yuksek"
+                                                                    ? "bg-loss/20 text-loss"
+                                                                    : event.impact === "Orta"
+                                                                        ? "bg-primary/20 text-primary"
+                                                                        : "bg-raised text-muted-foreground"
+                                                            )}
+                                                        >
+                                                            {event.impact}
+                                                        </span>
+                                                    </div>
+                                                    <div className="mt-0.5 text-[11px] text-muted-foreground">
+                                                        {event.country} • {event.title}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <Link href="/calendar" className="flex items-center justify-between rounded border border-border/50 px-2 py-1.5 hover:bg-raised">
+                                            <span>Takvimi tam sayfada ac</span>
                                             <ArrowUpRight className="h-3.5 w-3.5" />
                                         </Link>
                                     </div>
                                 )}
+                                {activeUtilityPanel === "news" && (
+                                    <div className="space-y-2 text-muted-foreground">
+                                        <div className="flex items-center justify-between">
+                                            <span>Canli akis</span>
+                                            <button
+                                                onClick={() => refetchUtilitySignals()}
+                                                className={cn(
+                                                    "rounded border border-border px-2 py-0.5 text-[10px] hover:bg-raised",
+                                                    isUtilitySignalsFetching && "opacity-70"
+                                                )}
+                                            >
+                                                {isUtilitySignalsFetching ? "Yenileniyor" : "Yenile"}
+                                            </button>
+                                        </div>
+                                        {watchlistChangeSnapshot ? (
+                                            <div className="rounded border border-border/40 bg-base p-2 text-[11px]">
+                                                <div>Ortalama degisim: {watchlistChangeSnapshot.average >= 0 ? "+" : ""}{watchlistChangeSnapshot.average.toFixed(2)}%</div>
+                                                <div>Pozitif lider: {watchlistChangeSnapshot.strongest.rawSymbol} ({watchlistChangeSnapshot.strongest.change >= 0 ? "+" : ""}{watchlistChangeSnapshot.strongest.change.toFixed(2)}%)</div>
+                                                <div>Negatif lider: {watchlistChangeSnapshot.weakest.rawSymbol} ({watchlistChangeSnapshot.weakest.change >= 0 ? "+" : ""}{watchlistChangeSnapshot.weakest.change.toFixed(2)}%)</div>
+                                                <div>Kotasyon gelen sembol: {watchlistChangeSnapshot.quotedCount}</div>
+                                            </div>
+                                        ) : (
+                                            <div className="text-[11px]">Canli quote bekleniyor.</div>
+                                        )}
+
+                                        <div className="max-h-52 space-y-1 overflow-y-auto rounded border border-border/40 bg-base p-2">
+                                            {watchlistSignalFeed.length === 0 && (
+                                                <div className="text-[11px] text-muted-foreground">
+                                                    Bu liste sembolleri icin yeni sinyal akisi yok.
+                                                </div>
+                                            )}
+                                            {watchlistSignalFeed.map((item) => (
+                                                <Link
+                                                    key={item.id}
+                                                    href={`/chart?symbol=${encodeURIComponent(item.symbol)}&market=${encodeURIComponent(item.marketType)}`}
+                                                    className="block rounded border border-border/50 px-2 py-1 hover:bg-raised"
+                                                >
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="font-medium text-foreground">{item.symbol}</span>
+                                                        <span className={cn("rounded px-1.5 py-0.5 text-[10px]", item.signalType === "AL" ? "bg-profit/20 text-profit" : "bg-loss/20 text-loss")}>
+                                                            {item.signalType}
+                                                        </span>
+                                                    </div>
+                                                    <div className="mt-0.5 text-[10px] text-muted-foreground">
+                                                        {item.strategy} • {item.timeframe} • {item.specialTag} • {formatSignalTimestamp(item.createdAt)}
+                                                    </div>
+                                                </Link>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                                {activeUtilityPanel === "layout" && (
+                                    <div className="space-y-2 text-muted-foreground">
+                                        <div className="text-[11px]">Panel: {showRightPanel ? "Acik" : "Kapali"}</div>
+                                        <div className="text-[11px]">Indikator sayisi: {activeIndicators.length}</div>
+                                        <div className="text-[11px]">Overlay: {visibleOverlayIndicators.length}</div>
+                                        <div className="text-[11px]">Alarm kurali: {activeWatchlistAlarmRules.length}</div>
+
+                                        <div className="grid grid-cols-2 gap-1.5">
+                                            <button
+                                                onClick={() => setShowRightPanel((prev) => !prev)}
+                                                className="rounded border border-border px-2 py-1 text-[11px] hover:bg-raised"
+                                            >
+                                                {showRightPanel ? "Paneli gizle" : "Paneli ac"}
+                                            </button>
+                                            <button
+                                                onClick={toggleFullscreen}
+                                                className="rounded border border-border px-2 py-1 text-[11px] hover:bg-raised"
+                                            >
+                                                {isFullscreen ? "Kucult" : "Tam ekran"}
+                                            </button>
+                                            <button
+                                                onClick={handleClearChartDrawings}
+                                                className="rounded border border-border px-2 py-1 text-[11px] hover:bg-raised"
+                                            >
+                                                Cizimleri temizle
+                                            </button>
+                                            <button
+                                                onClick={handleHidePaneIndicators}
+                                                className="rounded border border-border px-2 py-1 text-[11px] hover:bg-raised"
+                                            >
+                                                Alt panelleri gizle
+                                            </button>
+                                            <button
+                                                onClick={handleShowAllIndicators}
+                                                className="rounded border border-border px-2 py-1 text-[11px] hover:bg-raised"
+                                            >
+                                                Tum indikatorler
+                                            </button>
+                                            <button
+                                                onClick={handleResetIndicatorLayout}
+                                                className="rounded border border-border px-2 py-1 text-[11px] hover:bg-raised"
+                                            >
+                                                Varsayilan layout
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
                                 {activeUtilityPanel === "help" && (
-                                    <div className="space-y-1 text-muted-foreground">
-                                        <div>- `+` ile listeye sembol ekleyin.</div>
-                                        <div>- `...` menusuyle listeyi kopyalayin/yeniden adlandirin.</div>
-                                        <div>- Artik listeleri tamamen silebilirsiniz.</div>
-                                        <div>- Satirdaki `x` ile sembolu kaldirin.</div>
-                                        <div>- Alarm kurali ekleyip /alarms sayfasinda tetikleri izleyin.</div>
-                                        <div>- Ikonlarla sag panel modlarini degistirin.</div>
+                                    <div className="space-y-2 text-muted-foreground">
+                                        <div className="rounded border border-border/40 bg-base p-2 text-[11px]">
+                                            <div>Notlar: Izleme listesine ozel not tutar, panoya kopyalar.</div>
+                                            <div>Takvim: Gercek ekonomik olay akisini 60 sn aralikla yeniler.</div>
+                                            <div>Haberler: Liste sembollerine ait son sinyal akislarini gosterir.</div>
+                                            <div>Yerlesim: Panel ve grafik duzenini hizli sekilde degistirir.</div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-1.5">
+                                            <Link href="/alarms" className="rounded border border-border px-2 py-1 text-center text-[11px] hover:bg-raised">
+                                                Alarm merkezi
+                                            </Link>
+                                            <Link href="/calendar" className="rounded border border-border px-2 py-1 text-center text-[11px] hover:bg-raised">
+                                                Takvim sayfasi
+                                            </Link>
+                                            <Link href="/signals" className="rounded border border-border px-2 py-1 text-center text-[11px] hover:bg-raised">
+                                                Sinyal akisi
+                                            </Link>
+                                            <Link href="/trades" className="rounded border border-border px-2 py-1 text-center text-[11px] hover:bg-raised">
+                                                Islemler
+                                            </Link>
+                                        </div>
                                     </div>
                                 )}
                             </div>

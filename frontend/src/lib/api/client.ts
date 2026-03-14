@@ -375,6 +375,35 @@ export async function fetchGlobalIndices(symbols: string[]): Promise<GlobalIndex
     );
 }
 
+export interface EconomicCalendarEvent {
+    country: string | null;
+    event: string | null;
+    impact: string | null;
+    time: string | null;
+    actual: number | null;
+    estimate: number | null;
+    previous: number | null;
+    unit: string | null;
+    currency: string | null;
+}
+
+export interface EconomicCalendarParams {
+    from_date?: string;
+    to_date?: string;
+}
+
+export async function fetchEconomicCalendar(
+    params: EconomicCalendarParams = {}
+): Promise<EconomicCalendarEvent[]> {
+    const searchParams = new URLSearchParams();
+    if (params.from_date) searchParams.set("from_date", params.from_date);
+    if (params.to_date) searchParams.set("to_date", params.to_date);
+    const query = searchParams.toString();
+    return fetchApi<EconomicCalendarEvent[]>(
+        `${API_BASE_URL}/calendar${query ? `?${query}` : ""}`
+    );
+}
+
 // ==================== SYSTEM API ====================
 
 export interface ScanHistory {
