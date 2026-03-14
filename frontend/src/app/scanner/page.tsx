@@ -38,11 +38,47 @@ type ColumnId =
   | "rsi14"
   | "rsiFast"
   | "cci"
+  | "macd"
+  | "wr"
+  | "roc"
+  | "ult"
+  | "bbp"
+  | "psy"
+  | "zScore"
   | "signals24h"
   | "signalsTotal"
   | "bias"
   | "score"
   | "lastSeen"
+
+type NumericFilterColumnId =
+  | "price"
+  | "changePct"
+  | "perf7d"
+  | "perf30d"
+  | "rsi14"
+  | "rsiFast"
+  | "cci"
+  | "macd"
+  | "wr"
+  | "roc"
+  | "ult"
+  | "bbp"
+  | "psy"
+  | "zScore"
+  | "signals24h"
+  | "signalsTotal"
+  | "bias"
+
+type NumericFilterOperator = "gt" | "gte" | "lt" | "lte" | "eq" | "between"
+
+interface NumericFilterRule {
+  id: string
+  column: NumericFilterColumnId
+  operator: NumericFilterOperator
+  value: number
+  valueTo: number | null
+}
 
 interface ScannerSignal {
   id: number
@@ -80,6 +116,13 @@ interface ScreenerRow {
   rsi14: number | null
   rsiFast: number | null
   cci: number | null
+  macd: number | null
+  wr: number | null
+  roc: number | null
+  ult: number | null
+  bbp: number | null
+  psy: number | null
+  zScore: number | null
 }
 
 interface MutableScreenerRow {
@@ -120,6 +163,13 @@ const COLUMN_ORDER: ColumnId[] = [
   "rsi14",
   "rsiFast",
   "cci",
+  "macd",
+  "wr",
+  "roc",
+  "ult",
+  "bbp",
+  "psy",
+  "zScore",
   "signals24h",
   "signalsTotal",
   "bias",
@@ -142,12 +192,75 @@ const COLUMN_META: Record<ColumnId, ColumnMeta> = {
   rsi14: { label: "RSI(14)", align: "right", sortValue: (row) => row.rsi14 ?? Number.NEGATIVE_INFINITY },
   rsiFast: { label: "RSI Fast", align: "right", sortValue: (row) => row.rsiFast ?? Number.NEGATIVE_INFINITY },
   cci: { label: "CCI", align: "right", sortValue: (row) => row.cci ?? Number.NEGATIVE_INFINITY },
+  macd: { label: "MACD", align: "right", sortValue: (row) => row.macd ?? Number.NEGATIVE_INFINITY },
+  wr: { label: "W%R", align: "right", sortValue: (row) => row.wr ?? Number.NEGATIVE_INFINITY },
+  roc: { label: "ROC", align: "right", sortValue: (row) => row.roc ?? Number.NEGATIVE_INFINITY },
+  ult: { label: "ULT", align: "right", sortValue: (row) => row.ult ?? Number.NEGATIVE_INFINITY },
+  bbp: { label: "BB%", align: "right", sortValue: (row) => row.bbp ?? Number.NEGATIVE_INFINITY },
+  psy: { label: "PSY", align: "right", sortValue: (row) => row.psy ?? Number.NEGATIVE_INFINITY },
+  zScore: { label: "Z-Score", align: "right", sortValue: (row) => row.zScore ?? Number.NEGATIVE_INFINITY },
   signals24h: { label: "Sinyal 24s", align: "right", sortValue: (row) => row.signals24h },
   signalsTotal: { label: "Sinyal Toplam", align: "right", sortValue: (row) => row.totalSignals },
   bias: { label: "Bias", align: "right", sortValue: (row) => row.buySignals - row.sellSignals },
   score: { label: "Skor", align: "left", sortValue: (row) => row.lastScore },
   lastSeen: { label: "Son Guncelleme", align: "right", sortValue: (row) => row.lastSeenTs },
 }
+
+const COLUMN_HELP: Record<ColumnId, string> = {
+  symbol: "Takip edilen enstruman kodu.",
+  market: "Enstrumanin geldigi pazar (BIST veya Kripto).",
+  price: "Secilen sembol icin son gorulen fiyat.",
+  changePct: "Bir onceki kayda gore yuzdesel degisim.",
+  perf7d: "Yaklasik 7 gunluk performans.",
+  perf30d: "Yaklasik 30 gunluk performans.",
+  lastSignal: "Botun son verdigi sinyal yonu.",
+  strategy: "Son sinyali ureten strateji.",
+  timeframe: "Son sinyalin ait oldugu periyot.",
+  rsi14: "RSI(14) degeri.",
+  rsiFast: "Kisa periyot RSI degeri (RSI Fast).",
+  cci: "CCI osilator degeri.",
+  macd: "MACD degeri.",
+  wr: "Williams %R degeri.",
+  roc: "Rate of Change (ROC) degeri.",
+  ult: "Ultimate Oscillator degeri.",
+  bbp: "Bollinger Band %B degeri.",
+  psy: "PSY osilator degeri.",
+  zScore: "Fiyatin normalize edilmis Z-Score degeri.",
+  signals24h: "Son 24 saatte bu sembolde uretilen toplam AL+SAT sinyal adedi.",
+  signalsTotal: "Bu sembol icin kaydedilen toplam sinyal sayisi.",
+  bias: "AL sinyalleri eksi SAT sinyalleri.",
+  score: "Stratejinin son hesaplanan skor metni.",
+  lastSeen: "Bu sembole ait son kaydin sisteme dusme zamani.",
+}
+
+const NUMERIC_FILTER_COLUMNS: NumericFilterColumnId[] = [
+  "price",
+  "changePct",
+  "perf7d",
+  "perf30d",
+  "rsi14",
+  "rsiFast",
+  "cci",
+  "macd",
+  "wr",
+  "roc",
+  "ult",
+  "bbp",
+  "psy",
+  "zScore",
+  "signals24h",
+  "signalsTotal",
+  "bias",
+]
+
+const NUMERIC_FILTER_OPERATORS: Array<{ value: NumericFilterOperator; label: string }> = [
+  { value: "gt", label: ">" },
+  { value: "gte", label: ">=" },
+  { value: "lt", label: "<" },
+  { value: "lte", label: "<=" },
+  { value: "eq", label: "=" },
+  { value: "between", label: "Aralik" },
+]
 
 const VIEW_PRESETS: Record<ViewKey, { label: string; subtitle: string; columns: ColumnId[]; sortBy: ColumnId; sortDirection: SortDirection }> = {
   ozel: {
@@ -160,7 +273,7 @@ const VIEW_PRESETS: Record<ViewKey, { label: string; subtitle: string; columns: 
   momentum: {
     label: "Momentum",
     subtitle: "Kisa ve orta vade ivme takibi icin performans ve osilator odakli gorunum.",
-    columns: ["symbol", "price", "changePct", "perf7d", "perf30d", "rsi14", "rsiFast", "cci", "bias", "lastSeen"],
+    columns: ["symbol", "price", "changePct", "perf7d", "perf30d", "rsi14", "rsiFast", "roc", "macd", "wr", "cci", "bias", "lastSeen"],
     sortBy: "changePct",
     sortDirection: "desc",
   },
@@ -174,7 +287,7 @@ const VIEW_PRESETS: Record<ViewKey, { label: string; subtitle: string; columns: 
   risk: {
     label: "Risk",
     subtitle: "Asiri alis/satis bolgeleri ve sinyal bias dengesini takip eder.",
-    columns: ["symbol", "price", "changePct", "rsi14", "cci", "bias", "signals24h", "lastSignal", "lastSeen"],
+    columns: ["symbol", "price", "changePct", "rsi14", "wr", "ult", "bbp", "cci", "zScore", "bias", "signals24h", "lastSignal", "lastSeen"],
     sortBy: "rsi14",
     sortDirection: "desc",
   },
@@ -196,6 +309,12 @@ export default function ScannerPage() {
   const [strategyFilter, setStrategyFilter] = useState<StrategyFilter>("ALL")
   const [signalFilter, setSignalFilter] = useState<SignalFilter>("ALL")
   const [timeframeFilter, setTimeframeFilter] = useState<string[]>([])
+  const [numericFilters, setNumericFilters] = useState<NumericFilterRule[]>([])
+  const [numericColumnDraft, setNumericColumnDraft] = useState<NumericFilterColumnId>("rsi14")
+  const [numericOperatorDraft, setNumericOperatorDraft] = useState<NumericFilterOperator>("gte")
+  const [numericValueDraft, setNumericValueDraft] = useState("")
+  const [numericValueToDraft, setNumericValueToDraft] = useState("")
+  const [numericFilterNotice, setNumericFilterNotice] = useState<string | null>(null)
 
   const [activeView, setActiveView] = useState<ViewKey>("ozel")
   const [visibleColumns, setVisibleColumns] = useState<ColumnId[]>(VIEW_PRESETS.ozel.columns)
@@ -282,9 +401,10 @@ export default function ScannerPage() {
       if (timeframeSet.size > 0 && !timeframeSet.has(row.lastTimeframe)) return false
       if (keyword && !`${row.symbol} ${row.marketType}`.toUpperCase().includes(keyword)) return false
       if (watchOnly && !activeWatchSet.has(row.key)) return false
+      if (!matchesNumericFilters(row, numericFilters)) return false
       return true
     })
-  }, [screenerRows, searchQuery, marketFilter, strategyFilter, signalFilter, timeframeFilter, watchOnly, activeWatchSet])
+  }, [screenerRows, searchQuery, marketFilter, strategyFilter, signalFilter, timeframeFilter, watchOnly, activeWatchSet, numericFilters])
 
   const sortedRows = useMemo(() => {
     const meta = COLUMN_META[sortBy]
@@ -360,7 +480,18 @@ export default function ScannerPage() {
 
       const rawPrefs = window.localStorage.getItem(PREF_STORAGE_KEY)
       if (rawPrefs) {
-        const prefs = JSON.parse(rawPrefs) as Partial<{ activeView: ViewKey; visibleColumns: ColumnId[]; sortBy: ColumnId; sortDirection: SortDirection; marketFilter: MarketFilter; strategyFilter: StrategyFilter; signalFilter: SignalFilter; timeframeFilter: string[]; watchOnly: boolean }>
+        const prefs = JSON.parse(rawPrefs) as Partial<{
+          activeView: ViewKey
+          visibleColumns: ColumnId[]
+          sortBy: ColumnId
+          sortDirection: SortDirection
+          marketFilter: MarketFilter
+          strategyFilter: StrategyFilter
+          signalFilter: SignalFilter
+          timeframeFilter: string[]
+          watchOnly: boolean
+          numericFilters: NumericFilterRule[]
+        }>
         if (prefs.activeView && VIEW_PRESETS[prefs.activeView]) setActiveView(prefs.activeView)
         if (Array.isArray(prefs.visibleColumns)) {
           const validColumns = prefs.visibleColumns.filter((column): column is ColumnId => COLUMN_ORDER.includes(column))
@@ -373,6 +504,7 @@ export default function ScannerPage() {
         if (prefs.signalFilter === "ALL" || prefs.signalFilter === "AL" || prefs.signalFilter === "SAT") setSignalFilter(prefs.signalFilter)
         if (Array.isArray(prefs.timeframeFilter)) setTimeframeFilter(prefs.timeframeFilter.filter((item): item is string => typeof item === "string"))
         if (typeof prefs.watchOnly === "boolean") setWatchOnly(prefs.watchOnly)
+        if (Array.isArray(prefs.numericFilters)) setNumericFilters(sanitizeNumericFilters(prefs.numericFilters))
       }
     } catch (error) {
       console.error("Scanner preferences could not be restored:", error)
@@ -385,14 +517,20 @@ export default function ScannerPage() {
     if (!hydrated || typeof window === "undefined") return
     window.localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(watchlists))
     window.localStorage.setItem(WATCHLIST_ACTIVE_KEY, activeWatchlistId)
-    window.localStorage.setItem(PREF_STORAGE_KEY, JSON.stringify({ activeView, visibleColumns, sortBy, sortDirection, marketFilter, strategyFilter, signalFilter, timeframeFilter, watchOnly }))
-  }, [hydrated, watchlists, activeWatchlistId, activeView, visibleColumns, sortBy, sortDirection, marketFilter, strategyFilter, signalFilter, timeframeFilter, watchOnly])
+    window.localStorage.setItem(PREF_STORAGE_KEY, JSON.stringify({ activeView, visibleColumns, sortBy, sortDirection, marketFilter, strategyFilter, signalFilter, timeframeFilter, watchOnly, numericFilters }))
+  }, [hydrated, watchlists, activeWatchlistId, activeView, visibleColumns, sortBy, sortDirection, marketFilter, strategyFilter, signalFilter, timeframeFilter, watchOnly, numericFilters])
 
   useEffect(() => {
     if (!watchlistNotice) return
     const timer = window.setTimeout(() => setWatchlistNotice(null), 2400)
     return () => window.clearTimeout(timer)
   }, [watchlistNotice])
+
+  useEffect(() => {
+    if (!numericFilterNotice) return
+    const timer = window.setTimeout(() => setNumericFilterNotice(null), 2400)
+    return () => window.clearTimeout(timer)
+  }, [numericFilterNotice])
 
   const refreshAll = async () => {
     await Promise.all([
@@ -402,6 +540,38 @@ export default function ScannerPage() {
       bistSignalsQuery.refetch(),
       kriptoSignalsQuery.refetch(),
     ])
+  }
+
+  const addNumericFilter = () => {
+    const value = parseNumber(numericValueDraft)
+    if (value === null) {
+      setNumericFilterNotice("Gecerli bir sayi giriniz.")
+      return
+    }
+    let valueTo: number | null = null
+    if (numericOperatorDraft === "between") {
+      valueTo = parseNumber(numericValueToDraft)
+      if (valueTo === null) {
+        setNumericFilterNotice("Aralik filtresi icin ikinci degeri giriniz.")
+        return
+      }
+    }
+
+    setNumericFilters((prev) => [
+      ...prev,
+      {
+        id: `${numericColumnDraft}-${numericOperatorDraft}-${Date.now()}`,
+        column: numericColumnDraft,
+        operator: numericOperatorDraft,
+        value,
+        valueTo,
+      },
+    ])
+    setNumericFilterNotice("Sayisal filtre eklendi.")
+  }
+
+  const removeNumericFilter = (id: string) => {
+    setNumericFilters((prev) => prev.filter((rule) => rule.id !== id))
   }
 
   const applyViewPreset = (view: ViewKey) => {
@@ -591,7 +761,7 @@ export default function ScannerPage() {
               <Settings2 className="h-3.5 w-3.5" />
               Kolonlar
             </button>
-            <button type="button" onClick={() => { setSearchQuery(""); setMarketFilter("ALL"); setStrategyFilter("ALL"); setSignalFilter("ALL"); setTimeframeFilter([]); setWatchOnly(false) }} className="h-8 rounded-sm border border-border bg-base px-2 text-xs text-muted-foreground hover:text-foreground">
+            <button type="button" onClick={() => { setSearchQuery(""); setMarketFilter("ALL"); setStrategyFilter("ALL"); setSignalFilter("ALL"); setTimeframeFilter([]); setNumericFilters([]); setWatchOnly(false) }} className="h-8 rounded-sm border border-border bg-base px-2 text-xs text-muted-foreground hover:text-foreground">
               Filtre sifirla
             </button>
           </div>
@@ -605,6 +775,61 @@ export default function ScannerPage() {
                 </button>
               )
             })}
+          </div>
+
+          <div className="mt-2 border border-border bg-base/40 p-2">
+            <div className="label-uppercase">Sayisal Filtreler</div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <select value={numericColumnDraft} onChange={(event) => setNumericColumnDraft(event.target.value as NumericFilterColumnId)} className="h-8 min-w-[130px] bg-base px-2 text-xs">
+                {NUMERIC_FILTER_COLUMNS.map((column) => (
+                  <option key={column} value={column}>
+                    {COLUMN_META[column].label}
+                  </option>
+                ))}
+              </select>
+              <select value={numericOperatorDraft} onChange={(event) => setNumericOperatorDraft(event.target.value as NumericFilterOperator)} className="h-8 min-w-[88px] bg-base px-2 text-xs">
+                {NUMERIC_FILTER_OPERATORS.map((operator) => (
+                  <option key={operator.value} value={operator.value}>
+                    {operator.label}
+                  </option>
+                ))}
+              </select>
+              <Input
+                value={numericValueDraft}
+                onChange={(event) => setNumericValueDraft(event.target.value)}
+                className="h-8 w-[110px] text-xs"
+                placeholder="Deger"
+              />
+              {numericOperatorDraft === "between" ? (
+                <Input
+                  value={numericValueToDraft}
+                  onChange={(event) => setNumericValueToDraft(event.target.value)}
+                  className="h-8 w-[110px] text-xs"
+                  placeholder="Ust deger"
+                />
+              ) : null}
+              <Button type="button" variant="outline" size="sm" className="h-8 px-2 text-xs" onClick={addNumericFilter}>
+                Filtre Ekle
+              </Button>
+            </div>
+            {numericFilters.length > 0 ? (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {numericFilters.map((rule) => (
+                  <button
+                    key={rule.id}
+                    type="button"
+                    onClick={() => removeNumericFilter(rule.id)}
+                    className="inline-flex h-7 items-center rounded-sm border border-border bg-base px-2 text-[11px] text-muted-foreground hover:text-foreground"
+                    title="Filtreyi kaldir"
+                  >
+                    {formatNumericRuleLabel(rule)} x
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-2 text-[11px] text-muted-foreground">Ornek: RSI(14) &gt;= 7 veya RSI(14) &lt;= 10.</div>
+            )}
+            {numericFilterNotice ? <div className="mt-2 text-[11px] text-muted-foreground">{numericFilterNotice}</div> : null}
           </div>
 
           <div className="mt-2 flex flex-wrap gap-2">
@@ -626,7 +851,7 @@ export default function ScannerPage() {
               {COLUMN_ORDER.map((column) => {
                 const enabled = visibleColumnsSafe.includes(column)
                 return (
-                  <button key={column} type="button" onClick={() => toggleColumn(column)} className={cn("flex h-8 items-center justify-between rounded-sm border px-2 text-xs", enabled ? "border-foreground bg-raised text-foreground" : "border-border bg-base text-muted-foreground", LOCKED_COLUMNS.has(column) && "cursor-default")}>
+                  <button key={column} type="button" onClick={() => toggleColumn(column)} title={COLUMN_HELP[column]} className={cn("flex h-8 items-center justify-between rounded-sm border px-2 text-xs", enabled ? "border-foreground bg-raised text-foreground" : "border-border bg-base text-muted-foreground", LOCKED_COLUMNS.has(column) && "cursor-default")}>
                     <span>{COLUMN_META[column].label}</span>
                     {enabled ? <Check className="h-3.5 w-3.5" /> : null}
                   </button>
@@ -662,16 +887,17 @@ export default function ScannerPage() {
           <div className="px-3 py-12 text-center text-xs text-muted-foreground">Filtreye uygun kayit bulunamadi.</div>
         ) : (
           <div className="max-h-[640px] overflow-auto">
-            <table className="w-full min-w-[1320px] text-[11px]">
+            <table className="w-full min-w-[1680px] text-[11px]">
               <thead className="sticky top-0 z-20 bg-surface">
                 <tr className="border-b border-border">
                   {visibleColumnsSafe.map((column) => {
                     const meta = COLUMN_META[column]
                     return (
                       <th key={column} className={cn("px-2 py-2", meta.align === "right" ? "text-right" : "text-left")}>
-                        <button type="button" onClick={() => handleSort(column)} className={cn("inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.06em]", sortBy === column ? "text-foreground" : "text-muted-foreground")}>
+                        <button type="button" onClick={() => handleSort(column)} title={COLUMN_HELP[column]} className={cn("inline-flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.06em]", sortBy === column ? "text-foreground" : "text-muted-foreground")}>
                           <span>{meta.label}</span>
                           <span className="mono-numbers text-[10px]">{sortIconForColumn(column)}</span>
+                          <span className="cursor-help text-[9px] text-muted-foreground" title={COLUMN_HELP[column]}>?</span>
                         </button>
                       </th>
                     )
@@ -911,6 +1137,20 @@ function renderCellContent(column: ColumnId, row: ScreenerRow, watchSet: Set<str
       return <span className={cn("mono-numbers", oscillatorToneClass(row.rsiFast))}>{formatDecimal(row.rsiFast)}</span>
     case "cci":
       return <span className={cn("mono-numbers", oscillatorToneClass(row.cci))}>{formatDecimal(row.cci)}</span>
+    case "macd":
+      return <span className={cn("mono-numbers", toneClassFromPercent(row.macd))}>{formatDecimal(row.macd)}</span>
+    case "wr":
+      return <span className={cn("mono-numbers", williamsToneClass(row.wr))}>{formatDecimal(row.wr)}</span>
+    case "roc":
+      return <span className={cn("mono-numbers", toneClassFromPercent(row.roc))}>{formatDecimal(row.roc)}</span>
+    case "ult":
+      return <span className={cn("mono-numbers", oscillatorToneClass(row.ult))}>{formatDecimal(row.ult)}</span>
+    case "bbp":
+      return <span className={cn("mono-numbers", bollingerPercentToneClass(row.bbp))}>{formatDecimal(row.bbp)}</span>
+    case "psy":
+      return <span className={cn("mono-numbers", oscillatorToneClass(row.psy))}>{formatDecimal(row.psy)}</span>
+    case "zScore":
+      return <span className={cn("mono-numbers", zScoreToneClass(row.zScore))}>{formatDecimal(row.zScore)}</span>
     case "signals24h":
       return <span className="mono-numbers text-foreground">{formatCount(row.signals24h)}</span>
     case "signalsTotal":
@@ -1000,8 +1240,15 @@ function buildScreenerRows(signals: ScannerSignal[]): ScreenerRow[] {
           totalSignals: 1,
           signals24h: ts >= dayAgo ? 1 : 0,
           rsi14: readNumeric(signal.details, ["RSI", "rsi", "RSI14", "rsi14"]),
-          rsiFast: readNumeric(signal.details, ["RSI_FAST", "rsi_fast", "RSI2", "rsi2"]),
+          rsiFast: readNumeric(signal.details, ["RSI_Fast", "RSI_FAST", "rsi_fast", "RSI2", "rsi2"]),
           cci: readNumeric(signal.details, ["CCI", "cci"]),
+          macd: readNumeric(signal.details, ["MACD", "macd"]),
+          wr: readNumeric(signal.details, ["W%R", "WR", "wr", "w%r"]),
+          roc: readNumeric(signal.details, ["ROC", "roc"]),
+          ult: readNumeric(signal.details, ["ULT", "ult", "ULTOSC", "ultimate"]),
+          bbp: readNumeric(signal.details, ["BBP", "bbp", "BB%", "bollinger_percent_b"]),
+          psy: readNumeric(signal.details, ["PSY", "psy"]),
+          zScore: readNumeric(signal.details, ["ZScore", "zscore", "ZSCORE"]),
         },
         timeline: signal.price > 0 ? [{ ts, price: signal.price }] : [],
       })
@@ -1024,8 +1271,15 @@ function buildScreenerRows(signals: ScannerSignal[]): ScreenerRow[] {
       current.row.lastSeenIso = signal.createdAt
       current.row.lastSeenTs = ts
       current.row.rsi14 = readNumeric(signal.details, ["RSI", "rsi", "RSI14", "rsi14"])
-      current.row.rsiFast = readNumeric(signal.details, ["RSI_FAST", "rsi_fast", "RSI2", "rsi2"])
+      current.row.rsiFast = readNumeric(signal.details, ["RSI_Fast", "RSI_FAST", "rsi_fast", "RSI2", "rsi2"])
       current.row.cci = readNumeric(signal.details, ["CCI", "cci"])
+      current.row.macd = readNumeric(signal.details, ["MACD", "macd"])
+      current.row.wr = readNumeric(signal.details, ["W%R", "WR", "wr", "w%r"])
+      current.row.roc = readNumeric(signal.details, ["ROC", "roc"])
+      current.row.ult = readNumeric(signal.details, ["ULT", "ult", "ULTOSC", "ultimate"])
+      current.row.bbp = readNumeric(signal.details, ["BBP", "bbp", "BB%", "bollinger_percent_b"])
+      current.row.psy = readNumeric(signal.details, ["PSY", "psy"])
+      current.row.zScore = readNumeric(signal.details, ["ZScore", "zscore", "ZSCORE"])
     }
   }
 
@@ -1166,6 +1420,124 @@ function oscillatorToneClass(value: number | null) {
   if (value >= 70) return "text-loss"
   if (value <= 30) return "text-profit"
   return "text-foreground"
+}
+
+function williamsToneClass(value: number | null) {
+  if (value === null) return "text-muted-foreground"
+  if (value >= -20) return "text-loss"
+  if (value <= -80) return "text-profit"
+  return "text-foreground"
+}
+
+function bollingerPercentToneClass(value: number | null) {
+  if (value === null) return "text-muted-foreground"
+  if (value >= 1) return "text-loss"
+  if (value <= 0) return "text-profit"
+  return "text-foreground"
+}
+
+function zScoreToneClass(value: number | null) {
+  if (value === null) return "text-muted-foreground"
+  if (value >= 2) return "text-loss"
+  if (value <= -2) return "text-profit"
+  return "text-foreground"
+}
+
+function getNumericValue(row: ScreenerRow, column: NumericFilterColumnId): number | null {
+  switch (column) {
+    case "price":
+      return row.latestPrice
+    case "changePct":
+      return row.changePct
+    case "perf7d":
+      return row.perf7d
+    case "perf30d":
+      return row.perf30d
+    case "rsi14":
+      return row.rsi14
+    case "rsiFast":
+      return row.rsiFast
+    case "cci":
+      return row.cci
+    case "macd":
+      return row.macd
+    case "wr":
+      return row.wr
+    case "roc":
+      return row.roc
+    case "ult":
+      return row.ult
+    case "bbp":
+      return row.bbp
+    case "psy":
+      return row.psy
+    case "zScore":
+      return row.zScore
+    case "signals24h":
+      return row.signals24h
+    case "signalsTotal":
+      return row.totalSignals
+    case "bias":
+      return row.buySignals - row.sellSignals
+  }
+}
+
+function matchesNumericFilters(row: ScreenerRow, filters: NumericFilterRule[]) {
+  for (const filter of filters) {
+    const value = getNumericValue(row, filter.column)
+    if (value === null || !Number.isFinite(value)) return false
+    if (!matchesNumericRule(value, filter)) return false
+  }
+  return true
+}
+
+function matchesNumericRule(value: number, filter: NumericFilterRule) {
+  switch (filter.operator) {
+    case "gt":
+      return value > filter.value
+    case "gte":
+      return value >= filter.value
+    case "lt":
+      return value < filter.value
+    case "lte":
+      return value <= filter.value
+    case "eq":
+      return value === filter.value
+    case "between": {
+      if (filter.valueTo === null) return false
+      const low = Math.min(filter.value, filter.valueTo)
+      const high = Math.max(filter.value, filter.valueTo)
+      return value >= low && value <= high
+    }
+  }
+}
+
+function formatNumericRuleLabel(rule: NumericFilterRule) {
+  const column = COLUMN_META[rule.column].label
+  if (rule.operator === "between" && rule.valueTo !== null) {
+    return `${column} ${rule.value}..${rule.valueTo}`
+  }
+  const operator = NUMERIC_FILTER_OPERATORS.find((item) => item.value === rule.operator)?.label ?? rule.operator
+  return `${column} ${operator} ${rule.value}`
+}
+
+function sanitizeNumericFilters(rawRules: NumericFilterRule[]) {
+  return rawRules
+    .filter((rawRule): rawRule is NumericFilterRule => {
+      if (!rawRule || typeof rawRule !== "object") return false
+      if (!NUMERIC_FILTER_COLUMNS.includes(rawRule.column)) return false
+      if (!NUMERIC_FILTER_OPERATORS.some((item) => item.value === rawRule.operator)) return false
+      if (!Number.isFinite(rawRule.value)) return false
+      if (rawRule.operator === "between" && rawRule.valueTo !== null && !Number.isFinite(rawRule.valueTo)) return false
+      return true
+    })
+    .map((rule) => ({
+      id: typeof rule.id === "string" ? rule.id : `${rule.column}-${rule.operator}-${Math.random()}`,
+      column: rule.column,
+      operator: rule.operator,
+      value: rule.value,
+      valueTo: rule.operator === "between" ? rule.valueTo : null,
+    }))
 }
 
 function sortColumns(columns: ColumnId[]) {
