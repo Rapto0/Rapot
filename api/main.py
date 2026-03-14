@@ -1624,8 +1624,8 @@ async def get_candles(
                         # Save to cache for next time
                         if df is not None and not df.empty:
                             with suppress(Exception):
-                                from price_cache import price_cache as pc
                                 from data_loader import is_suspicious_bist_ohlcv
+                                from price_cache import price_cache as pc
 
                                 if is_suspicious_bist_ohlcv(df):
                                     pc.invalidate(symbol, market_type)

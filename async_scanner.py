@@ -187,10 +187,7 @@ def _normalize_scan_markets(
     if markets is None:
         return {"BIST", "Kripto"}
 
-    if isinstance(markets, str):
-        raw_markets = [markets]
-    else:
-        raw_markets = list(markets)
+    raw_markets = [markets] if isinstance(markets, str) else list(markets)
 
     normalized: set[str] = set()
     for market in raw_markets:

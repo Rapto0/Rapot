@@ -55,8 +55,8 @@
   --sidebar-accent: var(--bg-raised);
   --sidebar-border: var(--border-default);
 
-  --font-sans: var(--font-dm-sans), system-ui, sans-serif;
-  --font-mono: var(--font-dm-mono), "JetBrains Mono", monospace;
+  --font-sans: "DM Sans", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "DM Mono", "JetBrains Mono", "Cascadia Mono", monospace;
 
   --radius: 2px;
 }
