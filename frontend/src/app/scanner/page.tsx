@@ -1247,38 +1247,40 @@ function buildScreenerRows(signals: ScannerSignal[]): ScreenerRow[] {
     const ts = parseDate(signal.createdAt)?.getTime() ?? 0
     const current = grouped.get(key)
     if (!current) {
+      const baseRow: ScreenerRow = {
+        key,
+        symbol: signal.symbol,
+        marketType: signal.marketType,
+        latestPrice: signal.price,
+        changePct: null,
+        perf7d: null,
+        perf30d: null,
+        lastSignalType: signal.signalType,
+        lastStrategy: signal.strategy,
+        lastTimeframe: signal.timeframe,
+        lastScore: signal.score,
+        lastSeenIso: signal.createdAt,
+        lastSeenTs: ts,
+        buySignals: signal.signalType === "AL" ? 1 : 0,
+        sellSignals: signal.signalType === "SAT" ? 1 : 0,
+        comboSignals: signal.strategy === "COMBO" ? 1 : 0,
+        hunterSignals: signal.strategy === "HUNTER" ? 1 : 0,
+        totalSignals: 1,
+        signals24h: ts >= dayAgo ? 1 : 0,
+        rsi14: null,
+        rsiFast: null,
+        cci: null,
+        macd: null,
+        wr: null,
+        roc: null,
+        ult: null,
+        bbp: null,
+        psy: null,
+        zScore: null,
+      }
+      mergeIndicatorSnapshot(baseRow, signal.details)
       grouped.set(key, {
-        row: {
-          key,
-          symbol: signal.symbol,
-          marketType: signal.marketType,
-          latestPrice: signal.price,
-          changePct: null,
-          perf7d: null,
-          perf30d: null,
-          lastSignalType: signal.signalType,
-          lastStrategy: signal.strategy,
-          lastTimeframe: signal.timeframe,
-          lastScore: signal.score,
-          lastSeenIso: signal.createdAt,
-          lastSeenTs: ts,
-          buySignals: signal.signalType === "AL" ? 1 : 0,
-          sellSignals: signal.signalType === "SAT" ? 1 : 0,
-          comboSignals: signal.strategy === "COMBO" ? 1 : 0,
-          hunterSignals: signal.strategy === "HUNTER" ? 1 : 0,
-          totalSignals: 1,
-          signals24h: ts >= dayAgo ? 1 : 0,
-          rsi14: readNumeric(signal.details, ["RSI", "rsi", "RSI14", "rsi14"]),
-          rsiFast: readNumeric(signal.details, ["RSI_Fast", "RSI_FAST", "rsi_fast", "RSI2", "rsi2"]),
-          cci: readNumeric(signal.details, ["CCI", "cci"]),
-          macd: readNumeric(signal.details, ["MACD", "macd"]),
-          wr: readNumeric(signal.details, ["W%R", "WR", "wr", "w%r"]),
-          roc: readNumeric(signal.details, ["ROC", "roc"]),
-          ult: readNumeric(signal.details, ["ULT", "ult", "ULTOSC", "ultimate"]),
-          bbp: readNumeric(signal.details, ["BBP", "bbp", "BB%", "bollinger_percent_b"]),
-          psy: readNumeric(signal.details, ["PSY", "psy"]),
-          zScore: readNumeric(signal.details, ["ZScore", "zscore", "ZSCORE"]),
-        },
+        row: baseRow,
         timeline: signal.price > 0 ? [{ ts, price: signal.price }] : [],
       })
       continue
@@ -1290,6 +1292,7 @@ function buildScreenerRows(signals: ScannerSignal[]): ScreenerRow[] {
     if (signal.strategy === "HUNTER") current.row.hunterSignals += 1
     if (ts >= dayAgo) current.row.signals24h += 1
     if (signal.price > 0) current.timeline.push({ ts, price: signal.price })
+    mergeIndicatorSnapshot(current.row, signal.details)
 
     if (ts >= current.row.lastSeenTs) {
       current.row.latestPrice = signal.price
@@ -1299,16 +1302,6 @@ function buildScreenerRows(signals: ScannerSignal[]): ScreenerRow[] {
       current.row.lastScore = signal.score
       current.row.lastSeenIso = signal.createdAt
       current.row.lastSeenTs = ts
-      current.row.rsi14 = readNumeric(signal.details, ["RSI", "rsi", "RSI14", "rsi14"])
-      current.row.rsiFast = readNumeric(signal.details, ["RSI_Fast", "RSI_FAST", "rsi_fast", "RSI2", "rsi2"])
-      current.row.cci = readNumeric(signal.details, ["CCI", "cci"])
-      current.row.macd = readNumeric(signal.details, ["MACD", "macd"])
-      current.row.wr = readNumeric(signal.details, ["W%R", "WR", "wr", "w%r"])
-      current.row.roc = readNumeric(signal.details, ["ROC", "roc"])
-      current.row.ult = readNumeric(signal.details, ["ULT", "ult", "ULTOSC", "ultimate"])
-      current.row.bbp = readNumeric(signal.details, ["BBP", "bbp", "BB%", "bollinger_percent_b"])
-      current.row.psy = readNumeric(signal.details, ["PSY", "psy"])
-      current.row.zScore = readNumeric(signal.details, ["ZScore", "zscore", "ZSCORE"])
     }
   }
 
@@ -1321,6 +1314,20 @@ function buildScreenerRows(signals: ScannerSignal[]): ScreenerRow[] {
     row.perf30d = percentageChange(latest?.price ?? null, findLookbackPrice(sorted, 30))
     return row
   })
+}
+
+function mergeIndicatorSnapshot(row: ScreenerRow, details: Record<string, unknown> | null) {
+  const pick = (current: number | null, keys: string[]) => current ?? readNumeric(details, keys)
+  row.rsi14 = pick(row.rsi14, ["RSI", "rsi", "RSI14", "rsi14"])
+  row.rsiFast = pick(row.rsiFast, ["RSI_Fast", "RSI_FAST", "rsi_fast", "RSI2", "rsi2"])
+  row.cci = pick(row.cci, ["CCI", "cci"])
+  row.macd = pick(row.macd, ["MACD", "macd"])
+  row.wr = pick(row.wr, ["W%R", "WR", "wr", "w%r"])
+  row.roc = pick(row.roc, ["ROC", "roc"])
+  row.ult = pick(row.ult, ["ULT", "ult", "ULTOSC", "ultimate"])
+  row.bbp = pick(row.bbp, ["BBP", "bbp", "BB%", "bollinger_percent_b"])
+  row.psy = pick(row.psy, ["PSY", "psy"])
+  row.zScore = pick(row.zScore, ["ZScore", "zscore", "ZSCORE"])
 }
 
 function findLookbackPrice(timeline: Array<{ ts: number; price: number }>, lookbackDays: number) {
