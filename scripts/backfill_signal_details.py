@@ -52,6 +52,12 @@ def _load_daily_data(symbol: str, market_type: str):
 def main() -> None:
     parser = argparse.ArgumentParser(description="Backfill empty signals.details values.")
     parser.add_argument("--limit", type=int, default=5000, help="Max empty rows to process.")
+    parser.add_argument(
+        "--mode",
+        choices=("scanner-latest", "all"),
+        default="scanner-latest",
+        help="scanner-latest: her sembol/piyasa icin en guncel bos details kaydini doldurur; all: tum bos kayitlari (limit dahilinde) tarar.",
+    )
     args = parser.parse_args()
 
     if not DB_PATH.exists():
@@ -60,16 +66,36 @@ def main() -> None:
     con = sqlite3.connect(str(DB_PATH))
     cur = con.cursor()
 
-    cur.execute(
-        """
-        SELECT id, symbol, market_type, strategy, timeframe
-        FROM signals
-        WHERE details IS NULL OR TRIM(details) = ''
-        ORDER BY id DESC
-        LIMIT ?
-        """,
-        (args.limit,),
-    )
+    if args.mode == "scanner-latest":
+        cur.execute(
+            """
+            SELECT s.id, s.symbol, s.market_type, s.strategy, s.timeframe
+            FROM signals s
+            INNER JOIN (
+                SELECT symbol, market_type, MAX(created_at) AS max_created_at
+                FROM signals
+                GROUP BY symbol, market_type
+            ) latest
+              ON latest.symbol = s.symbol
+             AND latest.market_type = s.market_type
+             AND latest.max_created_at = s.created_at
+            WHERE s.details IS NULL OR TRIM(s.details) = ''
+            ORDER BY s.id DESC
+            LIMIT ?
+            """,
+            (args.limit,),
+        )
+    else:
+        cur.execute(
+            """
+            SELECT id, symbol, market_type, strategy, timeframe
+            FROM signals
+            WHERE details IS NULL OR TRIM(details) = ''
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (args.limit,),
+        )
     rows = cur.fetchall()
 
     if not rows:
@@ -123,7 +149,7 @@ def main() -> None:
 
     con.commit()
     con.close()
-    print(f"Processed: {len(rows)} | Updated: {updated} | Skipped: {skipped}")
+    print(f"Mode: {args.mode} | Processed: {len(rows)} | Updated: {updated} | Skipped: {skipped}")
 
 
 if __name__ == "__main__":
