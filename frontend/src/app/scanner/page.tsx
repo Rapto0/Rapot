@@ -398,7 +398,7 @@ export default function ScannerPage() {
     () =>
       [...screenerRows]
         .sort((left, right) => right.lastSeenTs - left.lastSeenTs)
-        .slice(0, 320)
+        .slice(0, 600)
         .map((row) => ({ key: row.key, symbol: row.symbol, marketType: row.marketType })),
     [screenerRows]
   )

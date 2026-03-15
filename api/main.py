@@ -1188,6 +1188,56 @@ def _calculate_market_metric_payload(close_series):
     }
 
 
+def _to_float_or_none(value) -> float | None:
+    try:
+        numeric = float(value)
+    except (TypeError, ValueError):
+        return None
+    return numeric if math.isfinite(numeric) else None
+
+
+def _normalize_binance_symbol(symbol: str) -> str:
+    normalized = symbol.strip().upper()
+    if normalized.endswith("-USD"):
+        return normalized.replace("-USD", "USDT")
+    return normalized
+
+
+def _fetch_binance_24h_metrics(symbols: list[str]) -> dict[str, dict[str, float | None | str]]:
+    """
+    Binance 24h ticker endpoint'inden toplu fiyat/degisim alir.
+    perf_7d ve perf_30d bu kaynakta olmadigi icin None birakilir.
+    """
+    if not symbols:
+        return {}
+    try:
+        from binance.client import Client
+
+        client = Client()
+        rows = client.get_ticker()
+    except Exception as exc:
+        print(f"Binance 24h ticker error: {exc}")
+        return {}
+
+    wanted = {_normalize_binance_symbol(symbol) for symbol in symbols}
+    out: dict[str, dict[str, float | None | str]] = {}
+    for row in rows or []:
+        symbol = str(row.get("symbol", "")).upper()
+        if symbol not in wanted:
+            continue
+        latest_price = _to_float_or_none(row.get("lastPrice"))
+        if latest_price is None:
+            continue
+        out[symbol] = {
+            "latest_price": latest_price,
+            "change_pct": _to_float_or_none(row.get("priceChangePercent")),
+            "perf_7d": None,
+            "perf_30d": None,
+            "source": "binance_24h",
+        }
+    return out
+
+
 @app.get("/market/metrics", tags=["Market Data"])
 @limiter.limit("30/minute")
 async def get_market_metrics(
@@ -1258,6 +1308,30 @@ async def get_market_metrics(
             payload = _calculate_market_metric_payload(close_series)
             if payload:
                 payload["source"] = "yfinance_batch"
+                metrics[key_name] = payload
+
+        # Batch sonucunda bos kalanlar icin tekil yfinance fallback (ozellikle BIST tarafi).
+        missing_items = [(key_name, ticker) for key_name, ticker in items if key_name not in metrics]
+        for key_name, ticker in missing_items:
+            try:
+                single_hist = yf.Ticker(ticker).history(period="3mo", interval="1d")
+                close_series = _extract_close_series_from_download(single_hist, ticker)
+                payload = _calculate_market_metric_payload(close_series)
+                if payload:
+                    payload["source"] = "yfinance_single"
+                    metrics[key_name] = payload
+            except Exception:
+                continue
+
+    # Crypto tarafinda yfinance'de olmayan pariteler icin Binance 24h fallback.
+    missing_crypto = [item for item, _ in groups["Kripto"] if item not in metrics]
+    if missing_crypto:
+        symbols = [item.split(":", 1)[1] for item in missing_crypto]
+        binance_metrics = _fetch_binance_24h_metrics(symbols)
+        for key_name in missing_crypto:
+            symbol = _normalize_binance_symbol(key_name.split(":", 1)[1])
+            payload = binance_metrics.get(symbol)
+            if payload:
                 metrics[key_name] = payload
 
     return metrics
