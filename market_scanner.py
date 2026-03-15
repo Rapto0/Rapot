@@ -4,6 +4,7 @@ Piyasa tarama ve sinyal işleme fonksiyonları.
 """
 
 import html
+import json
 import textwrap
 import time
 import unicodedata
@@ -33,6 +34,24 @@ from strategy_inspector import build_strategy_ai_payload, inspect_strategy_dataf
 from telegram_notify import send_message
 
 logger = get_logger(__name__)
+
+
+def _json_default(value: Any):
+    if hasattr(value, "item"):
+        try:
+            return value.item()
+        except Exception:
+            pass
+    return str(value)
+
+
+def _serialize_signal_details(details: dict[str, Any] | None) -> str:
+    if not details:
+        return ""
+    try:
+        return json.dumps(details, ensure_ascii=False, default=_json_default)
+    except Exception:
+        return ""
 
 
 SPECIAL_TAG_DISPLAY: dict[str, tuple[str, str]] = {
@@ -739,6 +758,7 @@ def process_symbol(
                         timeframe=tf_code,
                         score=str(res_combo["details"]["Score"]),
                         price=res_combo["details"].get("PRICE", 0),
+                        details=_serialize_signal_details(res_combo.get("details")),
                     )
                     increment_signal_count()
 
@@ -753,6 +773,7 @@ def process_symbol(
                         timeframe=tf_code,
                         score=str(res_combo["details"]["Score"]),
                         price=res_combo["details"].get("PRICE", 0),
+                        details=_serialize_signal_details(res_combo.get("details")),
                     )
                     increment_signal_count()
 
@@ -771,6 +792,7 @@ def process_symbol(
                         timeframe=tf_code,
                         score=str(res_hunter["details"]["DipScore"]),
                         price=res_hunter["details"].get("PRICE", 0),
+                        details=_serialize_signal_details(res_hunter.get("details")),
                     )
                     increment_signal_count()
 
@@ -785,6 +807,7 @@ def process_symbol(
                         timeframe=tf_code,
                         score=str(res_hunter["details"]["TopScore"]),
                         price=res_hunter["details"].get("PRICE", 0),
+                        details=_serialize_signal_details(res_hunter.get("details")),
                     )
                     increment_signal_count()
 

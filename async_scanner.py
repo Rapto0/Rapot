@@ -4,6 +4,7 @@ Paralel piyasa tarama ve sinyal işleme.
 """
 
 import asyncio
+import json
 import time
 from collections.abc import Callable
 from datetime import datetime
@@ -22,6 +23,24 @@ from signals import calculate_combo_signal, calculate_hunter_signal
 from telegram_notify import send_message
 
 logger = get_logger(__name__)
+
+
+def _json_default(value: Any):
+    if hasattr(value, "item"):
+        try:
+            return value.item()
+        except Exception:
+            pass
+    return str(value)
+
+
+def _serialize_signal_details(details: dict[str, Any] | None) -> str:
+    if not details:
+        return ""
+    try:
+        return json.dumps(details, ensure_ascii=False, default=_json_default)
+    except Exception:
+        return ""
 
 
 class AsyncScannerState:
@@ -100,6 +119,7 @@ async def process_symbol_async(symbol: str, df_daily, market_type: str) -> dict[
                             "tf_label": tf_label,
                             "score": res_combo["details"]["Score"],
                             "price": res_combo["details"].get("PRICE", 0),
+                            "details": res_combo.get("details"),
                         }
                     )
                 if res_combo["sell"]:
@@ -111,6 +131,7 @@ async def process_symbol_async(symbol: str, df_daily, market_type: str) -> dict[
                             "tf_label": tf_label,
                             "score": res_combo["details"]["Score"],
                             "price": res_combo["details"].get("PRICE", 0),
+                            "details": res_combo.get("details"),
                         }
                     )
 
@@ -126,6 +147,7 @@ async def process_symbol_async(symbol: str, df_daily, market_type: str) -> dict[
                             "tf_label": tf_label,
                             "score": res_hunter["details"]["DipScore"],
                             "price": res_hunter["details"].get("PRICE", 0),
+                            "details": res_hunter.get("details"),
                         }
                     )
                 if res_hunter["sell"]:
@@ -137,6 +159,7 @@ async def process_symbol_async(symbol: str, df_daily, market_type: str) -> dict[
                             "tf_label": tf_label,
                             "score": res_hunter["details"]["TopScore"],
                             "price": res_hunter["details"].get("PRICE", 0),
+                            "details": res_hunter.get("details"),
                         }
                     )
 
@@ -176,6 +199,7 @@ async def process_signals_batch(results: list[dict[str, Any]], notify: bool = Tr
                 timeframe=signal["timeframe"],
                 score=str(signal["score"]),
                 price=signal["price"],
+                details=_serialize_signal_details(signal.get("details")),
             )
 
     return total_signals
