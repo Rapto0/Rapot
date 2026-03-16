@@ -1,3 +1,8 @@
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute(
+    "PSAvoidUsingWriteHost",
+    "",
+    Justification = "Interactive deploy script intentionally uses colored host output."
+)]
 param(
     [Parameter(Mandatory = $false)]
     [string]$CommitMessage = "",
@@ -30,7 +35,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-function Run-Step {
+function Invoke-Step {
     param(
         [Parameter(Mandatory = $true)]
         [string]$Title,
@@ -73,20 +78,20 @@ if ($currentBranch -ne $Branch) {
 
 $status = (git status --porcelain)
 if (-not [string]::IsNullOrWhiteSpace($status)) {
-    Run-Step -Title "Stage all changes" -Executable "git" -Arguments @("add", "-A")
+    Invoke-Step -Title "Stage all changes" -Executable "git" -Arguments @("add", "-A")
 
     $staged = (git diff --cached --name-only)
     if (-not [string]::IsNullOrWhiteSpace($staged)) {
         if ([string]::IsNullOrWhiteSpace($CommitMessage)) {
             $CommitMessage = "bakim: otomatik deploy $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
         }
-        Run-Step -Title "Create commit" -Executable "git" -Arguments @("commit", "-m", $CommitMessage)
+        Invoke-Step -Title "Create commit" -Executable "git" -Arguments @("commit", "-m", $CommitMessage)
     }
 } else {
     Write-Host "No local changes to commit." -ForegroundColor Yellow
 }
 
-Run-Step -Title "Push to GitHub" -Executable "git" -Arguments @("push", $Remote, $Branch)
+Invoke-Step -Title "Push to GitHub" -Executable "git" -Arguments @("push", $Remote, $Branch)
 $expectedHead = (git rev-parse --short HEAD).Trim()
 
 if ($NoServer) {
