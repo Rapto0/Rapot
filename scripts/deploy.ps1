@@ -101,7 +101,6 @@ if ($AllowPasswordPrompt) {
 }
 
 $serverCommands = @()
-$serverCommands += "ssh $Server"
 $serverCommands += "cd '$ServerPath'"
 $serverCommands += "git fetch '$Remote' '$Branch'"
 $serverCommands += "git checkout '$Branch'"
@@ -136,7 +135,8 @@ $serverCommands += @(
 
 Write-Host ""
 Write-Host "==> Manual Server Deploy Commands" -ForegroundColor Cyan
-Write-Host "Run the following commands on your server, in order:" -ForegroundColor Yellow
+Write-Host "Server: $Server" -ForegroundColor Yellow
+Write-Host "Run the following commands in an already-open server shell, in order:" -ForegroundColor Yellow
 Write-Host ""
 for ($i = 0; $i -lt $serverCommands.Count; $i++) {
     Write-Host ("{0}. {1}" -f ($i + 1), $serverCommands[$i]) -ForegroundColor DarkGray

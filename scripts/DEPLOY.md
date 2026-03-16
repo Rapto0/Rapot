@@ -17,7 +17,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\deploy.ps1 -CommitMessage "fi
 ```
 
 After this command, script prints numbered server commands.
-Run them on your server in the same order.
+These commands now start directly from `cd ...` (no `ssh ...` line).
+Run them in an already-open server shell, in the same order.
 
 ## 2) Useful options
 
@@ -45,6 +46,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\deploy.ps1 -CommitMessage "de
 - Without `-ForceServerReset`, printed commands use `git pull --ff-only` (safer).
 - If pre-commit hooks fail during commit, deploy stops so you can fix issues.
 - Script no longer executes SSH deploy automatically; it prints commands for manual run.
+- Printed command list intentionally excludes `ssh ...`; open the server shell first, then run the list.
 - Printed server flow now stops `frontend` before `npm run build` and starts it after build, to avoid `.next` race/restart loops.
 - Frontend runtime is pinned to Node `20.x`:
   - `.nvmrc` exists in repo root and `frontend/`.
