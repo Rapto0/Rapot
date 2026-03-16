@@ -78,7 +78,7 @@ if (-not [string]::IsNullOrWhiteSpace($status)) {
     $staged = (git diff --cached --name-only)
     if (-not [string]::IsNullOrWhiteSpace($staged)) {
         if ([string]::IsNullOrWhiteSpace($CommitMessage)) {
-            $CommitMessage = "chore: auto deploy $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+            $CommitMessage = "bakim: otomatik deploy $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
         }
         Run-Step -Title "Create commit" -Executable "git" -Arguments @("commit", "-m", $CommitMessage)
     }

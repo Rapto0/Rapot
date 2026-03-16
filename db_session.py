@@ -18,6 +18,12 @@ logger = get_logger(__name__)
 # Default database path
 DEFAULT_DB_PATH = Path(__file__).parent / "trading_bot.db"
 
+# Official migration policy for this project:
+# - Alembic is intentionally not used.
+# - Schema changes are applied via init_db() and ensure_sqlite_columns().
+# - Data/backfill migrations are handled in migrate_db.py.
+MIGRATION_POLICY = "init_db + ensure_sqlite_columns (No Alembic)"
+
 
 def get_database_url(db_path: Path | str | None = None) -> str:
     """
@@ -120,9 +126,10 @@ def init_db() -> None:
     Mevcut tablolar varsa dokunmaz, yoksa oluşturur.
     """
     engine = get_engine()
+    # Policy step 1: create any missing tables from SQLAlchemy models.
     Base.metadata.create_all(bind=engine)
 
-    # Backward-compatible migration for existing databases.
+    # Policy step 2: apply backward-compatible schema updates.
     ensure_sqlite_columns(
         engine,
         "signals",

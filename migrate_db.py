@@ -22,6 +22,11 @@ logger = get_logger(__name__)
 OLD_DB_PATH = Path(__file__).parent / "trading_bot.db"
 BACKUP_DIR = Path(__file__).parent / "backups"
 
+# Schema policy note:
+# - Alembic is intentionally not used.
+# - Schema lifecycle is managed in db_session.py (init_db + ensure_sqlite_columns).
+# - This script handles data migration/backfill flow.
+
 
 def create_backup() -> Path | None:
     """
@@ -330,8 +335,11 @@ def run_migration(dry_run: bool = False, backup: bool = True) -> dict:
     Returns:
         Migration sonuçları
     """
+    from db_session import MIGRATION_POLICY
+
     print("=" * 50)
     print("🔄 Veritabanı Migration")
+    print(f"Policy: {MIGRATION_POLICY}")
     print("=" * 50)
 
     results = {

@@ -164,6 +164,12 @@ Persistence ikiye bolunmus durumda:
 
 Bu, ayni domaini iki farkli erisim modeli ile yonetme etkisi yaratiyor.
 
+Migration policy (official):
+- Alembic kullanilmiyor.
+- Schema degisiklikleri: `db_session.py` (`init_db` + `ensure_sqlite_columns`)
+- Data/backfill migrationlari: `migrate_db.py`
+- Ayrintili kurallar: `docs/DB_MIGRATION_POLICY.md`
+
 ---
 
 ## 6) ETKI TABLOSU - BACKEND (DOSYAYA DOKUNMANIN ETKISI)
@@ -328,6 +334,10 @@ Onemli:
 - `scripts/deploy.ps1`:
   - local commit/push
   - server komutlarini manuel bastirir
+
+### Git commit dili
+- GitHub commit mesajlari bundan sonra Turkce yazilir.
+- Onerilen format: `tip: kisa Turkce ozet` (ornek: `duzeltme: RSI hesaplama tutarliligi`).
 
 ---
 
