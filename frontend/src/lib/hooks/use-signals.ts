@@ -32,7 +32,7 @@ interface UseSignalsOptions {
 
 // Fetch signals from API
 async function fetchSignalsData(options: UseSignalsOptions = {}): Promise<Signal[]> {
-    const { marketType, strategy, direction, specialTag, limit = 1000 } = options;
+    const { marketType, strategy, direction, specialTag, limit = 300 } = options;
 
     // Build API params - fetch more for pagination
     const params: SignalsParams = { limit };
@@ -69,14 +69,14 @@ export function useSignals(options: UseSignalsOptions = {}) {
         direction = 'all',
         specialTag = 'all',
         searchQuery = '',
-        limit = 1000,
+        limit = 300,
     } = options;
 
     return useQuery({
         queryKey: ['signals', marketType, strategy, direction, specialTag, searchQuery, limit],
         queryFn: () => fetchSignalsData({ marketType, strategy, direction, specialTag, limit }),
-        refetchInterval: 30000, // Refresh every 30 seconds for live signals
-        staleTime: 10000, // Consider data stale after 10 seconds
+        refetchInterval: 45000, // Reduce API pressure while keeping UI fresh
+        staleTime: 15000,
         select: (data) => {
             // Client-side search filter
             if (searchQuery) {
@@ -93,8 +93,8 @@ export function useRecentSignals(limit: number = 5) {
     return useQuery({
         queryKey: ['signals', 'recent', limit],
         queryFn: () => fetchSignalsData({ limit }),
-        refetchInterval: 30000,
-        staleTime: 10000,
+        refetchInterval: 45000,
+        staleTime: 15000,
     });
 }
 
@@ -126,8 +126,8 @@ export function useSpecialNotificationSignals(limit: number = 100) {
                 .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
                 .slice(0, limit);
         },
-        refetchInterval: 30000,
-        staleTime: 10000,
+        refetchInterval: 45000,
+        staleTime: 15000,
     });
 }
 

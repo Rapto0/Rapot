@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { fetchTrades, transformTrade, type TradesParams } from '@/lib/api/client';
+import { fetchStats, fetchTrades, transformTrade, type TradesParams } from '@/lib/api/client';
 
 export interface Trade {
     id: number;
@@ -51,22 +51,16 @@ export function useClosedTrades() {
 export function useTradeStats() {
     return useQuery({
         queryKey: ['trades', 'stats'],
-        queryFn: () => fetchTradesData({}),
-        select: (data) => {
-            const openTrades = data.filter(t => t.status === 'OPEN');
-            const closedTrades = data.filter(t => t.status === 'CLOSED');
-            const totalPnL = data.reduce((sum, t) => sum + t.pnl, 0);
-            const winningTrades = closedTrades.filter(t => t.pnl > 0).length;
-            const winRate = closedTrades.length > 0 ? (winningTrades / closedTrades.length) * 100 : 0;
-
+        queryFn: fetchStats,
+        select: (stats) => {
             return {
-                total: data.length,
-                open: openTrades.length,
-                closed: closedTrades.length,
-                totalPnL,
-                winRate,
-                openPnL: openTrades.reduce((sum, t) => sum + t.pnl, 0),
-                closedPnL: closedTrades.reduce((sum, t) => sum + t.pnl, 0),
+                total: stats.total_trades,
+                open: stats.open_trades,
+                closed: Math.max(0, stats.total_trades - stats.open_trades),
+                totalPnL: stats.total_pnl,
+                winRate: stats.win_rate,
+                openPnL: 0,
+                closedPnL: stats.total_pnl,
             };
         },
     });

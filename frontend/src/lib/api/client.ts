@@ -217,7 +217,55 @@ async function fetchApi<T>(
         );
     }
 
-    return response.json();
+    try {
+        const payload: unknown = await response.json();
+        return payload as T;
+    } catch {
+        throw new ApiError('Invalid JSON response', response.status);
+    }
+}
+
+const VALID_MARKET_TYPES = new Set(['BIST', 'Kripto'] as const);
+const VALID_STRATEGIES = new Set(['COMBO', 'HUNTER'] as const);
+const VALID_SIGNAL_TYPES = new Set(['AL', 'SAT'] as const);
+const VALID_SPECIAL_TAGS = new Set(['BELES', 'COK_UCUZ', 'PAHALI', 'FAHIS_FIYAT'] as const);
+const VALID_DIRECTIONS = new Set(['BUY', 'SELL'] as const);
+const VALID_TRADE_STATUSES = new Set(['OPEN', 'CLOSED', 'CANCELLED'] as const);
+
+function toMarketType(value: string | null | undefined): 'BIST' | 'Kripto' {
+    return VALID_MARKET_TYPES.has(value as 'BIST' | 'Kripto') ? (value as 'BIST' | 'Kripto') : 'BIST';
+}
+
+function toStrategy(value: string | null | undefined): 'COMBO' | 'HUNTER' {
+    return VALID_STRATEGIES.has(value as 'COMBO' | 'HUNTER') ? (value as 'COMBO' | 'HUNTER') : 'COMBO';
+}
+
+function toSignalType(value: string | null | undefined): 'AL' | 'SAT' {
+    return VALID_SIGNAL_TYPES.has(value as 'AL' | 'SAT') ? (value as 'AL' | 'SAT') : 'AL';
+}
+
+function toNullableSignalType(value: string | null | undefined): 'AL' | 'SAT' | null {
+    if (!value) return null;
+    return VALID_SIGNAL_TYPES.has(value as 'AL' | 'SAT') ? (value as 'AL' | 'SAT') : null;
+}
+
+function toSpecialTag(
+    value: string | null | undefined
+): 'BELES' | 'COK_UCUZ' | 'PAHALI' | 'FAHIS_FIYAT' | null {
+    if (!value) return null;
+    return VALID_SPECIAL_TAGS.has(value as 'BELES' | 'COK_UCUZ' | 'PAHALI' | 'FAHIS_FIYAT')
+        ? (value as 'BELES' | 'COK_UCUZ' | 'PAHALI' | 'FAHIS_FIYAT')
+        : null;
+}
+
+function toTradeDirection(value: string | null | undefined): 'BUY' | 'SELL' {
+    return VALID_DIRECTIONS.has(value as 'BUY' | 'SELL') ? (value as 'BUY' | 'SELL') : 'BUY';
+}
+
+function toTradeStatus(value: string | null | undefined): 'OPEN' | 'CLOSED' | 'CANCELLED' {
+    return VALID_TRADE_STATUSES.has(value as 'OPEN' | 'CLOSED' | 'CANCELLED')
+        ? (value as 'OPEN' | 'CLOSED' | 'CANCELLED')
+        : 'OPEN';
 }
 
 // ==================== SIGNALS API ====================
@@ -552,11 +600,13 @@ export interface StructuredAIAnalysisResponse {
     updated_at: string;
 }
 
-function safeParseTechnicalData(value: string | null): Record<string, any> | null {
+function safeParseTechnicalData(value: string | null): Record<string, unknown> | null {
     if (!value) return null;
     try {
         const parsed = JSON.parse(value);
-        return parsed && typeof parsed === 'object' ? parsed : null;
+        return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+            ? (parsed as Record<string, unknown>)
+            : null;
     } catch {
         return null;
     }
@@ -593,9 +643,9 @@ export function transformAnalysis(apiAnalysis: ApiAIAnalysis) {
         id: apiAnalysis.id,
         signalId: apiAnalysis.signal_id,
         symbol: apiAnalysis.symbol,
-        marketType: apiAnalysis.market_type as 'BIST' | 'Kripto',
+        marketType: toMarketType(apiAnalysis.market_type),
         scenarioName: apiAnalysis.scenario_name || '',
-        signalType: apiAnalysis.signal_type as 'AL' | 'SAT' | null,
+        signalType: toNullableSignalType(apiAnalysis.signal_type),
         analysisText: apiAnalysis.analysis_text,
         technicalData: safeParseTechnicalData(apiAnalysis.technical_data),
         provider: apiAnalysis.provider ?? null,
@@ -624,30 +674,32 @@ export function transformSignal(apiSignal: ApiSignal) {
     return {
         id: apiSignal.id,
         symbol: apiSignal.symbol,
-        marketType: apiSignal.market_type as 'BIST' | 'Kripto',
-        strategy: apiSignal.strategy as 'COMBO' | 'HUNTER',
-        signalType: apiSignal.signal_type as 'AL' | 'SAT',
+        marketType: toMarketType(apiSignal.market_type),
+        strategy: toStrategy(apiSignal.strategy),
+        signalType: toSignalType(apiSignal.signal_type),
         timeframe: apiSignal.timeframe,
         score: apiSignal.score || '',
         price: apiSignal.price,
         createdAt: apiSignal.created_at || new Date().toISOString(),
-        specialTag: (apiSignal.special_tag as 'BELES' | 'COK_UCUZ' | 'PAHALI' | 'FAHIS_FIYAT' | null | undefined) ?? null,
+        specialTag: toSpecialTag(apiSignal.special_tag),
     };
 }
 
 // Transform API trade to frontend format
 export function transformTrade(apiTrade: ApiTrade) {
+    const entryPrice = Number.isFinite(apiTrade.price) ? apiTrade.price : 0;
+    const pnl = Number.isFinite(apiTrade.pnl) ? apiTrade.pnl : 0;
     return {
         id: apiTrade.id,
         symbol: apiTrade.symbol,
-        marketType: apiTrade.market_type as 'BIST' | 'Kripto',
-        direction: apiTrade.direction as 'BUY' | 'SELL',
-        entryPrice: apiTrade.price,
-        currentPrice: apiTrade.price, // Would need real-time data
+        marketType: toMarketType(apiTrade.market_type),
+        direction: toTradeDirection(apiTrade.direction),
+        entryPrice,
+        currentPrice: entryPrice, // Would need real-time data
         quantity: apiTrade.quantity,
-        pnl: apiTrade.pnl,
-        pnlPercent: apiTrade.price > 0 ? (apiTrade.pnl / apiTrade.price) * 100 : 0,
-        status: apiTrade.status as 'OPEN' | 'CLOSED',
+        pnl,
+        pnlPercent: entryPrice > 0 ? (pnl / entryPrice) * 100 : 0,
+        status: toTradeStatus(apiTrade.status),
         createdAt: apiTrade.created_at || new Date().toISOString(),
     };
 }

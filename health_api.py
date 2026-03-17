@@ -121,12 +121,12 @@ def stats():
     Bot istatistikleri.
     """
     try:
-        from database import db
         from market_scanner import get_scan_count, get_signal_count
+        from ops_repository import get_trade_stats
         from price_cache import price_cache
 
         cache_stats = price_cache.get_stats()
-        trade_stats = db.get_trade_stats()
+        trade_stats = get_trade_stats()
 
         return jsonify(
             {
@@ -148,7 +148,7 @@ def stats():
 def signals():
     """Son sinyaller."""
     try:
-        from database import get_recent_signals
+        from ops_repository import get_recent_signals
 
         signals_list = get_recent_signals(limit=20)
 

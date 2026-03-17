@@ -309,6 +309,95 @@ class AIAnalysisResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class MarketHistoryPointResponse(BaseModel):
+    """Single market history datapoint."""
+
+    time: str
+    value: float
+
+
+class MarketSeriesResponse(BaseModel):
+    """Market overview row."""
+
+    currentValue: float
+    change: float
+    history: list[MarketHistoryPointResponse]
+
+
+class MarketOverviewResponse(BaseModel):
+    """Market overview payload."""
+
+    bist: MarketSeriesResponse
+    crypto: MarketSeriesResponse
+
+
+class MarketIndexResponse(BaseModel):
+    """Global index/ticker row for landing feed."""
+
+    symbol: str
+    regularMarketPrice: float
+    regularMarketChangePercent: float
+    shortName: str
+
+
+class MarketTickerResponse(BaseModel):
+    """Ticker strip row."""
+
+    symbol: str
+    name: str
+    price: float
+    change: float
+    changePercent: float
+
+
+class MarketMetricsItemResponse(BaseModel):
+    """Scanner metrics row."""
+
+    latest_price: float
+    change_pct: float | None = None
+    perf_7d: float | None = None
+    perf_30d: float | None = None
+    source: str | None = None
+
+
+class CandlePointResponse(BaseModel):
+    """Single candle row."""
+
+    time: str
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: int
+
+
+class CandlesResponse(BaseModel):
+    """Candles endpoint response."""
+
+    symbol: str
+    market_type: str
+    timeframe: str
+    source: str
+    count: int
+    candles: list[CandlePointResponse]
+
+
+class CalendarEventResponse(BaseModel):
+    """Economic calendar event row."""
+
+    country: str | None = None
+    event: str | None = None
+    impact: str | None = None
+    time: str | None = None
+    actual: float | int | str | None = None
+    estimate: float | int | str | None = None
+    previous: float | int | str | None = None
+    unit: str | None = None
+    currency: str | None = None
+
+    model_config = ConfigDict(extra="ignore")
+
+
 # ==================== ENDPOINTS ====================
 
 _SPECIAL_TAG_CODES = {"BELES", "COK_UCUZ", "PAHALI", "FAHIS_FIYAT"}
@@ -326,6 +415,10 @@ _MARKET_INDEX_FALLBACKS = {
 }
 _MARKET_INDEX_CACHE_TTL = timedelta(seconds=5)
 _market_index_cache: dict[str, tuple[datetime, dict[str, float | str]]] = {}
+_MARKET_OVERVIEW_CACHE_TTL = timedelta(seconds=15)
+_market_overview_cache: tuple[datetime, dict[str, dict]] | None = None
+_MARKET_TICKER_CACHE_TTL = timedelta(seconds=10)
+_market_ticker_cache: tuple[datetime, list[dict[str, float | str]]] | None = None
 
 
 def _normalize_special_tag(value: str | None) -> str | None:
@@ -397,6 +490,48 @@ def _build_ai_analysis_response(analysis) -> AIAnalysisResponse:
     )
 
 
+def _fetch_history_with_fallback(
+    symbol: str,
+    *,
+    period: str = "2d",
+    fallback_period: str | None = "5d",
+    interval: str | None = None,
+    auto_adjust: bool = False,
+    actions: bool = False,
+):
+    """Fetch yfinance history with an optional fallback period."""
+    ticker = yf.Ticker(symbol)
+    kwargs = {"period": period, "auto_adjust": auto_adjust, "actions": actions}
+    if interval:
+        kwargs["interval"] = interval
+    df = ticker.history(**kwargs)
+    if fallback_period and df.empty:
+        kwargs["period"] = fallback_period
+        df = ticker.history(**kwargs)
+    return df
+
+
+def _fetch_yfinance_download(tickers: str | list[str]):
+    """Batch download helper for yfinance."""
+    return yf.download(
+        tickers=tickers,
+        period="3mo",
+        interval="1d",
+        auto_adjust=False,
+        progress=False,
+        group_by="ticker",
+        threads=True,
+    )
+
+
+def _fetch_binance_klines(symbol: str, interval: str, limit: int):
+    """Blocking Binance client call extracted for thread offload."""
+    from binance.client import Client
+
+    client = Client()
+    return client.get_klines(symbol=symbol, interval=interval, limit=limit)
+
+
 # ==================== PUBLIC ENDPOINTS ====================
 
 
@@ -454,7 +589,11 @@ async def get_special_tag_health(
 
     Ops kullanimi icindir. Scheduler tarafindaki health check ile ayni veri kaynagini kullanir.
     """
-    from database import db, get_special_tag_coverage
+    from ops_repository import (
+        get_bot_stat,
+        get_bot_stats_last_updated,
+        get_special_tag_coverage,
+    )
 
     normalized_market = market_type.strip().upper()
     if normalized_market == "ALL":
@@ -485,17 +624,9 @@ async def get_special_tag_health(
     )
     missing_total = sum(int(row.get("missing", 0)) for row in coverage_rows)
 
-    with db.get_cursor() as cursor:
-        cursor.execute(
-            """
-            SELECT MAX(updated_at)
-            FROM bot_stats
-            WHERE stat_name IN (?, ?)
-            """,
-            (_SPECIAL_TAG_HEALTH_STATE_KEY, _SPECIAL_TAG_HEALTH_SUMMARY_KEY),
-        )
-        last_checked_raw = cursor.fetchone()[0]
-
+    last_checked_raw = get_bot_stats_last_updated(
+        (_SPECIAL_TAG_HEALTH_STATE_KEY, _SPECIAL_TAG_HEALTH_SUMMARY_KEY)
+    )
     if isinstance(last_checked_raw, datetime):
         last_checked_at = last_checked_raw.isoformat()
     elif last_checked_raw:
@@ -503,8 +634,8 @@ async def get_special_tag_health(
     else:
         last_checked_at = None
 
-    stored_state = db.get_stat(_SPECIAL_TAG_HEALTH_STATE_KEY)
-    summary = db.get_stat(_SPECIAL_TAG_HEALTH_SUMMARY_KEY)
+    stored_state = get_bot_stat(_SPECIAL_TAG_HEALTH_STATE_KEY)
+    summary = get_bot_stat(_SPECIAL_TAG_HEALTH_SUMMARY_KEY)
 
     return SpecialTagHealthResponse(
         status="alert" if missing_total > 0 else "ok",
@@ -836,25 +967,39 @@ async def get_signal_analysis(signal_id: int):
         return _build_ai_analysis_response(analysis)
 
 
-@app.get("/market/overview", tags=["Market Data"])
+@app.get("/market/overview", response_model=MarketOverviewResponse, tags=["Market Data"])
 @limiter.limit("5/minute")
 async def get_market_overview(request: Request):
     """
     Piyasa genel bakış verilerini döndürür (BIST 100 ve Bitcoin).
     Son 24 saatlik mini grafik verisi içerir.
     """
+    global _market_overview_cache
+    now = datetime.now()
+    if _market_overview_cache and now - _market_overview_cache[0] <= _MARKET_OVERVIEW_CACHE_TTL:
+        return _market_overview_cache[1]
+
     try:
         symbols = {"bist": "XU100.IS", "crypto": "BTC-USD"}
         data = {}
 
         for key, symbol in symbols.items():
-            ticker = yf.Ticker(symbol)
             # yfinance period values do not support "24h"; use "1d" for the last day
-            df = ticker.history(period="1d", interval="15m")
-
+            df = await asyncio.to_thread(
+                _fetch_history_with_fallback,
+                symbol,
+                period="1d",
+                fallback_period="5d",
+                interval="15m",
+            )
             if df.empty:
-                # Fallback if 24h is empty (e.g. weekend for BIST)
-                df = ticker.history(period="5d", interval="60m")
+                df = await asyncio.to_thread(
+                    _fetch_history_with_fallback,
+                    symbol,
+                    period="5d",
+                    fallback_period=None,
+                    interval="60m",
+                )
 
             history = []
             if not df.empty:
@@ -862,9 +1007,6 @@ async def get_market_overview(request: Request):
                 first_value = float(df["Open"].iloc[0])
                 change_percent = ((current_value - first_value) / first_value) * 100
 
-                # Resample or just take last N points to keep payload small
-                # Taking last 24 points (approx 6 hours if 15m, or 24h if 1h)
-                # Let's just take all points but formatted
                 for index, row in df.iterrows():
                     history.append({"time": index.strftime("%H:%M"), "value": float(row["Close"])})
 
@@ -876,18 +1018,20 @@ async def get_market_overview(request: Request):
             else:
                 data[key] = {"currentValue": 0, "change": 0, "history": []}
 
+        _market_overview_cache = (now, data)
         return data
 
     except Exception as e:
         print(f"Market overview error: {e}")
-        # Return empty data instead of crash to keep dashboard alive
-        return {
+        fallback = {
             "bist": {"currentValue": 0, "change": 0, "history": []},
             "crypto": {"currentValue": 0, "change": 0, "history": []},
         }
+        _market_overview_cache = (now, fallback)
+        return fallback
 
 
-@app.get("/market/indices", tags=["Market Data"])
+@app.get("/market/indices", response_model=list[MarketIndexResponse], tags=["Market Data"])
 @limiter.limit("240/minute")
 async def get_market_indices(
     request: Request,
@@ -940,10 +1084,13 @@ async def get_market_indices(
 
             hist = None
             for candidate in candidate_symbols:
-                ticker = yf.Ticker(candidate)
-                hist = ticker.history(period="2d")
-                if hist.empty:
-                    hist = ticker.history(period="5d")
+                hist = await asyncio.to_thread(
+                    _fetch_history_with_fallback,
+                    candidate,
+                    period="2d",
+                    fallback_period="5d",
+                    interval=None,
+                )
                 if not hist.empty:
                     break
 
@@ -993,12 +1140,17 @@ async def get_market_indices(
         return []
 
 
-@app.get("/market/ticker", tags=["Market Data"])
+@app.get("/market/ticker", response_model=list[MarketTickerResponse], tags=["Market Data"])
 @limiter.limit("20/minute")
 async def get_market_ticker(request: Request):
     """
     Header ticker için popüler sembol verilerini döndürür.
     """
+    global _market_ticker_cache
+    now = datetime.now()
+    if _market_ticker_cache and now - _market_ticker_cache[0] <= _MARKET_TICKER_CACHE_TTL:
+        return _market_ticker_cache[1]
+
     try:
         symbols = [
             {"symbol": "XU100.IS", "name": "BIST 100"},
@@ -1012,9 +1164,13 @@ async def get_market_ticker(request: Request):
         tickers = []
         for item in symbols:
             s_symbol = item["symbol"]
-            ticker = yf.Ticker(s_symbol)
-            # Get latest data (1 day)
-            hist = ticker.history(period="2d")
+            hist = await asyncio.to_thread(
+                _fetch_history_with_fallback,
+                s_symbol,
+                period="2d",
+                fallback_period=None,
+                interval=None,
+            )
 
             if not hist.empty and len(hist) >= 1:
                 current_price = float(hist["Close"].iloc[-1])
@@ -1036,10 +1192,12 @@ async def get_market_ticker(request: Request):
                     }
                 )
 
+        _market_ticker_cache = (now, tickers)
         return tickers
 
     except Exception as e:
         print(f"Ticker error: {e}")
+        _market_ticker_cache = (now, [])
         return []
 
 
@@ -1160,7 +1318,11 @@ def _fetch_binance_24h_metrics(symbols: list[str]) -> dict[str, dict[str, float 
     return out
 
 
-@app.get("/market/metrics", tags=["Market Data"])
+@app.get(
+    "/market/metrics",
+    response_model=dict[str, MarketMetricsItemResponse],
+    tags=["Market Data"],
+)
 @limiter.limit("30/minute")
 async def get_market_metrics(
     request: Request,
@@ -1212,14 +1374,9 @@ async def get_market_metrics(
         tickers = [ticker for _, ticker in items]
         try:
             # Single batch request per market
-            download_df = yf.download(
-                tickers=tickers if len(tickers) > 1 else tickers[0],
-                period="3mo",
-                interval="1d",
-                auto_adjust=False,
-                progress=False,
-                group_by="ticker",
-                threads=True,
+            download_df = await asyncio.to_thread(
+                _fetch_yfinance_download,
+                tickers if len(tickers) > 1 else tickers[0],
             )
         except Exception as exc:
             print(f"Market metrics download error ({market}): {exc}")
@@ -1233,10 +1390,18 @@ async def get_market_metrics(
                 metrics[key_name] = payload
 
         # Batch sonucunda bos kalanlar icin tekil yfinance fallback (ozellikle BIST tarafi).
-        missing_items = [(key_name, ticker) for key_name, ticker in items if key_name not in metrics]
+        missing_items = [
+            (key_name, ticker) for key_name, ticker in items if key_name not in metrics
+        ]
         for key_name, ticker in missing_items:
             try:
-                single_hist = yf.Ticker(ticker).history(period="3mo", interval="1d")
+                single_hist = await asyncio.to_thread(
+                    _fetch_history_with_fallback,
+                    ticker,
+                    period="3mo",
+                    fallback_period=None,
+                    interval="1d",
+                )
                 close_series = _extract_close_series_from_download(single_hist, ticker)
                 payload = _calculate_market_metric_payload(close_series)
                 if payload:
@@ -1249,7 +1414,7 @@ async def get_market_metrics(
     missing_crypto = [item for item, _ in groups["Kripto"] if item not in metrics]
     if missing_crypto:
         symbols = [item.split(":", 1)[1] for item in missing_crypto]
-        binance_metrics = _fetch_binance_24h_metrics(symbols)
+        binance_metrics = await asyncio.to_thread(_fetch_binance_24h_metrics, symbols)
         for key_name in missing_crypto:
             symbol = _normalize_binance_symbol(key_name.split(":", 1)[1])
             payload = binance_metrics.get(symbol)
@@ -1399,7 +1564,7 @@ def get_market_analysis(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@app.get("/candles/{symbol}", tags=["Market Data"])
+@app.get("/candles/{symbol}", response_model=CandlesResponse, tags=["Market Data"])
 @limiter.limit("180/minute")
 async def get_candles(
     request: Request,
@@ -1480,9 +1645,11 @@ async def get_candles(
                     yf_interval = "1h"
                     period = "730d"
 
-                ticker = yf.Ticker(yf_symbol)
-                df = ticker.history(
+                df = await asyncio.to_thread(
+                    _fetch_history_with_fallback,
+                    yf_symbol,
                     period=period,
+                    fallback_period=None,
                     interval=yf_interval,
                     auto_adjust=False,
                     actions=False,
@@ -1499,9 +1666,8 @@ async def get_candles(
                     # Keep only exchange session rows (Mon-Fri, 10:00-18:00 TR).
                     df = df[df.index.dayofweek < 5]
                     session_mask = (
-                        ((df.index.hour > 10) | ((df.index.hour == 10) & (df.index.minute >= 0)))
-                        & (df.index.hour < 18)
-                    )
+                        (df.index.hour > 10) | ((df.index.hour == 10) & (df.index.minute >= 0))
+                    ) & (df.index.hour < 18)
                     df = df[session_mask]
 
                     agg_map = {
@@ -1536,9 +1702,8 @@ async def get_candles(
 
                     # Remove any bucket starting outside the trading session.
                     session_start_mask = (
-                        ((df.index.hour > 10) | ((df.index.hour == 10) & (df.index.minute >= 0)))
-                        & (df.index.hour < 18)
-                    )
+                        (df.index.hour > 10) | ((df.index.hour == 10) & (df.index.minute >= 0))
+                    ) & (df.index.hour < 18)
                     df = df[session_start_mask]
 
                     source = (
@@ -1554,10 +1719,13 @@ async def get_candles(
         elif market_type in ["Kripto", "CRYPTO"] and is_intraday:
             try:
                 import pandas as pd
-                from binance.client import Client
 
-                client = Client()
-                klines = client.get_klines(symbol=symbol, interval=binance_interval, limit=limit)
+                klines = await asyncio.to_thread(
+                    _fetch_binance_klines,
+                    symbol,
+                    binance_interval,
+                    limit,
+                )
 
                 if klines:
                     df = pd.DataFrame(
@@ -1659,8 +1827,13 @@ async def get_candles(
             elif symbol.endswith("USDT"):
                 yf_symbol = symbol.replace("USDT", "-USD")
 
-            ticker = yf.Ticker(yf_symbol)
-            df = ticker.history(period="max", interval="1d")
+            df = await asyncio.to_thread(
+                _fetch_history_with_fallback,
+                yf_symbol,
+                period="max",
+                fallback_period=None,
+                interval="1d",
+            )
             source = "yfinance"
 
             if df.empty:
@@ -1743,8 +1916,8 @@ async def get_candles(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@app.get("/calendar", tags=["Calendar"])
-@app.get("/api/calendar", tags=["Calendar"])
+@app.get("/calendar", response_model=list[CalendarEventResponse], tags=["Calendar"])
+@app.get("/api/calendar", response_model=list[CalendarEventResponse], tags=["Calendar"])
 def get_calendar(from_date: str = Query(None), to_date: str = Query(None)):
     """Ekonomik takvim verilerini getirir (Finnhub)."""
     return calendar_service.get_economic_calendar(from_date, to_date)
@@ -1789,5 +1962,3 @@ async def _stop_realtime_services() -> None:
         print("Real-time services stopped")
     except Exception as e:
         print(f"Error stopping real-time services: {e}")
-
-

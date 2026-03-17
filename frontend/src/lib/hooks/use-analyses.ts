@@ -11,7 +11,7 @@ export interface AIAnalysis {
     scenarioName: string;
     signalType: 'AL' | 'SAT' | null;
     analysisText: string;
-    technicalData: Record<string, any> | null;
+    technicalData: Record<string, unknown> | null;
     provider: string | null;
     model: string | null;
     backend: string | null;

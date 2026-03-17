@@ -45,7 +45,11 @@ def run_special_tag_health_check() -> None:
     Sends Telegram only on state transitions.
     """
     try:
-        from database import db, get_special_tag_coverage
+        from ops_repository import (
+            get_bot_stat,
+            get_special_tag_coverage,
+            set_bot_stat,
+        )
 
         coverage_rows = get_special_tag_coverage(
             since_hours=24,
@@ -54,12 +58,12 @@ def run_special_tag_health_check() -> None:
             window_seconds=900,
         )
         issues = [row for row in coverage_rows if row.get("missing", 0) > 0]
-        previous_state = (db.get_stat(SPECIAL_TAG_HEALTH_STATE_KEY) or "").strip().lower()
+        previous_state = (get_bot_stat(SPECIAL_TAG_HEALTH_STATE_KEY) or "").strip().lower()
 
         if issues:
             summary = _format_special_tag_issue_summary(issues)
-            db.set_stat(SPECIAL_TAG_HEALTH_SUMMARY_KEY, summary)
-            db.set_stat(SPECIAL_TAG_HEALTH_STATE_KEY, "alert")
+            set_bot_stat(SPECIAL_TAG_HEALTH_SUMMARY_KEY, summary)
+            set_bot_stat(SPECIAL_TAG_HEALTH_STATE_KEY, "alert")
             logger.warning(f"Ozel etiket kapsama alarmi (24h): {summary}")
 
             if previous_state != "alert":
@@ -71,8 +75,8 @@ def run_special_tag_health_check() -> None:
                 )
         else:
             logger.info("Ozel etiket kapsama kontrolu OK (24h, BIST).")
-            db.set_stat(SPECIAL_TAG_HEALTH_STATE_KEY, "ok")
-            db.set_stat(SPECIAL_TAG_HEALTH_SUMMARY_KEY, "")
+            set_bot_stat(SPECIAL_TAG_HEALTH_STATE_KEY, "ok")
+            set_bot_stat(SPECIAL_TAG_HEALTH_SUMMARY_KEY, "")
 
             if previous_state == "alert":
                 send_message(
@@ -110,9 +114,7 @@ def _schedule_daily_tr_clock(tr_clock: str, job_func, job_label: str) -> None:
     except TypeError:
         local_clock = _tr_clock_to_local_clock(tr_clock)
         schedule.every().day.at(local_clock).do(job_func)
-        logger.info(
-            f"Scheduler: {job_label} her gun TR {tr_clock} (local {local_clock} fallback)"
-        )
+        logger.info(f"Scheduler: {job_label} her gun TR {tr_clock} (local {local_clock} fallback)")
 
 
 def _run_scheduled_scan(scan_func, label: str) -> None:
@@ -274,7 +276,9 @@ def start_bot(use_async: bool = True) -> None:
     # Startup: run only health check. Scans will start at fixed times.
     run_special_tag_health_check()
 
-    setup_scheduler(scan_bist_func=run_scheduled_bist_scan, scan_crypto_func=run_scheduled_crypto_scan)
+    setup_scheduler(
+        scan_bist_func=run_scheduled_bist_scan, scan_crypto_func=run_scheduled_crypto_scan
+    )
     run_bot_loop(run_manual_sync_full_scan, check_commands_wrapper)
 
 
