@@ -17,8 +17,8 @@ from async_data_loader import (
 )
 from config import TIMEFRAMES
 from data_loader import get_all_bist_symbols, resample_market_data
-from database import save_signal as db_save_signal
 from logger import get_logger
+from signal_repository import save_signal as db_save_signal
 from signals import calculate_combo_signal, calculate_hunter_signal
 from telegram_notify import send_message
 

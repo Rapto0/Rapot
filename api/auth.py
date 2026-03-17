@@ -1,15 +1,12 @@
 """
-JWT Authentication Module
-Token oluşturma, doğrulama ve kullanıcı yetkilendirme.
+JWT authentication helpers.
 
-Kullanım:
-    1. /auth/token endpoint'inden token alın
-    2. Token'ı Authorization: Bearer <token> header'ında gönderin
+Usage:
+    1. Obtain token from `/auth/token`
+    2. Send `Authorization: Bearer <token>` on protected endpoints
 """
 
 import hashlib
-
-# ==================== CONFIGURATION ====================
 import os
 from datetime import datetime, timedelta
 
@@ -17,10 +14,17 @@ from dotenv import load_dotenv
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-# Güvenlik ayarları - .env'den okunmalı
+try:
+    import bcrypt
+except Exception:  # pragma: no cover - optional import safety
+    bcrypt = None
+
 load_dotenv()
+
+
+# ==================== CONFIGURATION ====================
 
 
 def _is_truthy(raw_value: str | None) -> bool:
@@ -47,34 +51,98 @@ def _resolve_secret_key() -> str:
 
 SECRET_KEY = _resolve_secret_key()
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "1440"))  # 24 saat
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "1440"))
 
-# Varsayılan kullanıcı şifreleri - .env'den okunmalı
 DEFAULT_ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
 DEFAULT_USER_PASSWORD = os.getenv("USER_PASSWORD", "")
+DEFAULT_ADMIN_PASSWORD_HASH = os.getenv("ADMIN_PASSWORD_HASH", "")
+DEFAULT_USER_PASSWORD_HASH = os.getenv("USER_PASSWORD_HASH", "")
 
-# Bearer token security
 security = HTTPBearer(auto_error=False)
 
 
-# ==================== PASSWORD HASHING ====================
+# ==================== PASSWORD HELPERS ====================
+
+
+def _is_legacy_sha256_hash(value: str) -> bool:
+    token = value.strip()
+    if len(token) != 64:
+        return False
+    return all(ch in "0123456789abcdefABCDEF" for ch in token)
+
+
+def _is_bcrypt_hash(value: str) -> bool:
+    token = value.strip()
+    return token.startswith("$2a$") or token.startswith("$2b$") or token.startswith("$2y$")
+
+
+def _normalized_password_bytes(password: str) -> bytes:
+    """
+    Bcrypt only accepts up to 72 bytes.
+    For longer passwords, hash first to keep deterministic verify/hash behavior.
+    """
+    raw = password.encode("utf-8")
+    if len(raw) <= 72:
+        return raw
+    return hashlib.sha256(raw).hexdigest().encode("ascii")
+
+
+def _require_bcrypt() -> None:
+    if bcrypt is None:
+        raise RuntimeError("bcrypt package is required for password hashing")
 
 
 def hash_password(password: str) -> str:
-    """SHA256 ile şifre hash'leme."""
-    return hashlib.sha256(password.encode()).hexdigest()
+    """Hash password with bcrypt."""
+    _require_bcrypt()
+    hashed = bcrypt.hashpw(_normalized_password_bytes(password), bcrypt.gensalt())
+    return hashed.decode("utf-8")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Şifre doğrulama."""
-    return hash_password(plain_password) == hashed_password
+    """Verify bcrypt hash with SHA256 fallback for legacy hashes."""
+    if not hashed_password:
+        return False
+
+    if _is_bcrypt_hash(hashed_password) and bcrypt is not None:
+        try:
+            return bcrypt.checkpw(
+                _normalized_password_bytes(plain_password),
+                hashed_password.encode("utf-8"),
+            )
+        except ValueError:
+            return False
+
+    if _is_legacy_sha256_hash(hashed_password):
+        legacy_hash = hashlib.sha256(plain_password.encode()).hexdigest()
+        return legacy_hash == hashed_password.lower()
+
+    return False
+
+
+def _resolve_password_hash(raw_password: str, raw_password_hash: str) -> str:
+    candidate_hash = raw_password_hash.strip()
+    if candidate_hash:
+        if _is_legacy_sha256_hash(candidate_hash):
+            return candidate_hash.lower()
+        if _is_bcrypt_hash(candidate_hash):
+            return candidate_hash
+        raise RuntimeError(
+            "ADMIN_PASSWORD_HASH/USER_PASSWORD_HASH invalid. "
+            "Use bcrypt hash or legacy 64-char SHA256 hex."
+        )
+
+    if raw_password.strip():
+        return hash_password(raw_password)
+
+    return ""
 
 
 # ==================== SCHEMAS ====================
 
 
 class Token(BaseModel):
-    """Token yanıtı."""
+    """Token response."""
 
     access_token: str
     token_type: str = "bearer"
@@ -82,21 +150,21 @@ class Token(BaseModel):
 
 
 class TokenData(BaseModel):
-    """Token içeriği."""
+    """Decoded token payload."""
 
     username: str | None = None
-    scopes: list[str] = []
+    scopes: list[str] = Field(default_factory=list)
 
 
 class UserLogin(BaseModel):
-    """Login isteği."""
+    """Login request."""
 
     username: str
     password: str
 
 
 class User(BaseModel):
-    """Kullanıcı modeli."""
+    """Authenticated user model."""
 
     username: str
     is_admin: bool = False
@@ -104,28 +172,26 @@ class User(BaseModel):
 
 
 # ==================== USERS DATABASE ====================
-# Production'da veritabanından alınmalı
-# Şifreler .env'den okunur - eğer ayarlanmamışsa kullanıcı devre dışı
 
 
 def _build_users_db() -> dict:
-    """Kullanıcı veritabanını environment'tan oluşturur."""
-    users = {}
+    """Build users in memory from env variables."""
+    users: dict[str, dict[str, object]] = {}
 
-    # Admin kullanıcı
-    if DEFAULT_ADMIN_PASSWORD:
+    admin_hash = _resolve_password_hash(DEFAULT_ADMIN_PASSWORD, DEFAULT_ADMIN_PASSWORD_HASH)
+    if admin_hash:
         users["admin"] = {
             "username": "admin",
-            "hashed_password": hash_password(DEFAULT_ADMIN_PASSWORD),
+            "hashed_password": admin_hash,
             "is_admin": True,
             "disabled": False,
         }
 
-    # Normal kullanıcı
-    if DEFAULT_USER_PASSWORD:
+    user_hash = _resolve_password_hash(DEFAULT_USER_PASSWORD, DEFAULT_USER_PASSWORD_HASH)
+    if user_hash:
         users["user"] = {
             "username": "user",
-            "hashed_password": hash_password(DEFAULT_USER_PASSWORD),
+            "hashed_password": user_hash,
             "is_admin": False,
             "disabled": False,
         }
@@ -140,40 +206,22 @@ USERS_DB = _build_users_db()
 
 
 def get_user(username: str) -> dict | None:
-    """Kullanıcı bilgilerini döndürür."""
+    """Return user details."""
     return USERS_DB.get(username)
 
 
 def authenticate_user(username: str, password: str) -> dict | None:
-    """
-    Kullanıcı doğrulama.
-
-    Args:
-        username: Kullanıcı adı
-        password: Düz metin şifre
-
-    Returns:
-        Kullanıcı dict'i veya None
-    """
+    """Validate username/password and return user dict on success."""
     user = get_user(username)
     if not user:
         return None
-    if not verify_password(password, user["hashed_password"]):
+    if not verify_password(password, str(user["hashed_password"])):
         return None
     return user
 
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
-    """
-    JWT access token oluşturur.
-
-    Args:
-        data: Token'a eklenecek veri
-        expires_delta: Geçerlilik süresi
-
-    Returns:
-        JWT token string
-    """
+    """Create JWT access token."""
     to_encode = data.copy()
 
     if expires_delta:
@@ -182,24 +230,14 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
         expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
 
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-
-    return encoded_jwt
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
 def verify_token(token: str) -> TokenData | None:
-    """
-    JWT token doğrulama.
-
-    Args:
-        token: JWT token string
-
-    Returns:
-        TokenData veya None
-    """
+    """Validate JWT token and return token data."""
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        username: str = payload.get("sub")
+        username: str | None = payload.get("sub")
         if username is None:
             return None
         return TokenData(username=username)
@@ -213,14 +251,7 @@ def verify_token(token: str) -> TokenData | None:
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> User:
-    """
-    Mevcut kullanıcıyı döndürür.
-
-    Dependency olarak kullanılır:
-        @app.get("/protected")
-        async def protected_route(user: User = Depends(get_current_user)):
-            ...
-    """
+    """Return currently authenticated user."""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Geçersiz kimlik bilgileri",
@@ -240,25 +271,23 @@ async def get_current_user(
     if user is None:
         raise credentials_exception
 
-    if user.get("disabled"):
+    if bool(user.get("disabled")):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Kullanıcı devre dışı",
         )
 
     return User(
-        username=user["username"],
-        is_admin=user.get("is_admin", False),
-        disabled=user.get("disabled", False),
+        username=str(user["username"]),
+        is_admin=bool(user.get("is_admin", False)),
+        disabled=bool(user.get("disabled", False)),
     )
 
 
 async def get_current_admin_user(
     current_user: User = Depends(get_current_user),
 ) -> User:
-    """
-    Admin kullanıcı gerektiren dependency.
-    """
+    """Dependency requiring admin privileges."""
     if not current_user.is_admin:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -270,11 +299,7 @@ async def get_current_admin_user(
 def get_optional_user(
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> User | None:
-    """
-    Opsiyonel kullanıcı kontrolü.
-
-    Token yoksa veya geçersizse None döner, hata vermez.
-    """
+    """Return user when token is valid; otherwise None."""
     if credentials is None:
         return None
 
@@ -285,11 +310,11 @@ def get_optional_user(
         return None
 
     user = get_user(token_data.username)
-    if user is None or user.get("disabled"):
+    if user is None or bool(user.get("disabled")):
         return None
 
     return User(
-        username=user["username"],
-        is_admin=user.get("is_admin", False),
-        disabled=user.get("disabled", False),
+        username=str(user["username"]),
+        is_admin=bool(user.get("is_admin", False)),
+        disabled=bool(user.get("disabled", False)),
     )

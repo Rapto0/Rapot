@@ -25,11 +25,11 @@ from data_loader import (
     is_dataframe_fresh,
     resample_market_data,
 )
-from database import save_signal as db_save_signal
-from database import set_signal_special_tag as db_set_signal_special_tag
 from logger import get_logger
 from news_manager import fetch_market_news
 from price_cache import cached_get_crypto_data, price_cache
+from signal_repository import save_signal as db_save_signal
+from signal_repository import set_signal_special_tag as db_set_signal_special_tag
 from signals import calculate_combo_signal, calculate_hunter_signal
 from strategy_inspector import build_strategy_ai_payload, inspect_strategy_dataframe
 from telegram_notify import send_message

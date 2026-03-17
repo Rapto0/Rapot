@@ -17,38 +17,29 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import yfinance as yf  # noqa: E402
-from fastapi import Depends, FastAPI, HTTPException, Query, Request  # noqa: E402
+from fastapi import FastAPI, HTTPException, Query, Request  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from pydantic import BaseModel, ConfigDict  # noqa: E402
-from slowapi import Limiter, _rate_limit_exceeded_handler  # noqa: E402
+from slowapi import _rate_limit_exceeded_handler  # noqa: E402
 from slowapi.errors import RateLimitExceeded  # noqa: E402
-from slowapi.util import get_remote_address  # noqa: E402
 
-from api.auth import (  # noqa: E402
-    ACCESS_TOKEN_EXPIRE_MINUTES,
-    Token,
-    User,
-    UserLogin,
-    authenticate_user,
-    create_access_token,
-    get_current_user,
-)
 from api.calendar_service import calendar_service  # noqa: E402
+from api.rate_limit import limiter  # noqa: E402
 from api.realtime import (  # noqa: E402
     broadcast_bist_update,
     broadcast_ticker,
     register_broadcast_loop,  # noqa: E402
 )
 from api.realtime import router as realtime_router  # noqa: E402
+from api.routes.auth_routes import router as auth_router  # noqa: E402
+from api.routes.symbols_routes import router as symbols_router  # noqa: E402
+from api.routes.system_routes import router as system_router  # noqa: E402
 from strategy_inspector import (  # noqa: E402
     StrategyInspectorError,
     build_strategy_ai_payload,
     inspect_strategy,
     normalize_inspector_timeframe,
 )
-
-# Rate Limiter
-limiter = Limiter(key_func=get_remote_address)
 
 # Başlangıç zamanı
 _start_time = datetime.now()
@@ -147,6 +138,9 @@ app.add_middleware(
 
 # Include Real-time WebSocket Router
 app.include_router(realtime_router)
+app.include_router(auth_router)
+app.include_router(symbols_router)
+app.include_router(system_router)
 
 # ==================== SCHEMAS ====================
 
@@ -401,45 +395,6 @@ def _build_ai_analysis_response(analysis) -> AIAnalysisResponse:
         error_code=analysis.error_code or derived_metadata.get("error_code"),
         created_at=analysis.created_at.isoformat() if analysis.created_at else None,
     )
-
-
-# ==================== AUTH ENDPOINTS ====================
-
-
-@app.post("/auth/token", response_model=Token, tags=["Authentication"])
-@limiter.limit("5/minute")
-async def login(request: Request, user_login: UserLogin):
-    """
-    Kullanıcı girişi - JWT token döndürür.
-
-    Varsayılan kullanıcılar:
-    - admin / admin123 (admin yetkili)
-    - user / user123 (normal kullanıcı)
-    """
-    user = authenticate_user(user_login.username, user_login.password)
-    if not user:
-        raise HTTPException(
-            status_code=401,
-            detail="Kullanıcı adı veya şifre hatalı",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    access_token = create_access_token(
-        data={"sub": user["username"]},
-        expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
-    )
-
-    return Token(
-        access_token=access_token,
-        token_type="bearer",
-        expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,  # saniye cinsinden
-    )
-
-
-@app.get("/auth/me", response_model=User, tags=["Authentication"])
-async def get_me(current_user: User = Depends(get_current_user)):
-    """Mevcut kullanıcı bilgilerini döndürür (token gerekli)."""
-    return current_user
 
 
 # ==================== PUBLIC ENDPOINTS ====================
@@ -817,25 +772,6 @@ async def analyze_symbol(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@app.get("/symbols/bist", tags=["Symbols"])
-@limiter.limit("60/minute")
-async def get_bist_symbols(request: Request):
-    """BIST sembol listesini döndürür."""
-    from data_loader import get_all_bist_symbols
-
-    symbols = get_all_bist_symbols()
-    return {"count": len(symbols), "symbols": symbols}
-
-
-@app.get("/symbols/crypto", tags=["Symbols"])
-@limiter.limit("60/minute")
-async def get_crypto_symbols(request: Request):
-    from data_loader import get_all_binance_symbols
-
-    symbols = get_all_binance_symbols()
-    return {"count": len(symbols), "symbols": symbols}
-
-
 # ==================== AI ANALYSIS ENDPOINTS ====================
 
 
@@ -1054,59 +990,6 @@ async def get_market_indices(
 
     except Exception as e:
         print(f"Market indices error: {e}")
-        return []
-
-
-@app.get("/scans", tags=["System"])
-@limiter.limit("30/minute")
-async def get_scan_history(request: Request, limit: int = 10):
-    """Son tarama geçmişini döndürür."""
-    from db_session import get_session
-    from models import ScanHistory
-
-    with get_session() as session:
-        scans = (
-            session.query(ScanHistory).order_by(ScanHistory.created_at.desc()).limit(limit).all()
-        )
-        return [scan.to_dict() for scan in scans]
-
-
-@app.get("/logs", tags=["System"])
-@limiter.limit("30/minute")
-async def get_system_logs(request: Request, limit: int = 50):
-    """Sistem loglarını döndürür (son N satır)."""
-    try:
-        import os
-
-        log_path = "logs/trading_bot.log"
-        if not os.path.exists(log_path):
-            return []
-
-        # Read last N lines
-        # This is a simple implementation, for very large logs use improved methods
-        with open(log_path, encoding="utf-8") as f:
-            lines = f.readlines()
-            last_lines = lines[-limit:]
-
-        logs = []
-        for line in last_lines:
-            # Simple parsing, assuming format: YYYY-MM-DD HH:MM:SS | LEVEL | ...
-            parts = line.split(" | ")
-            if len(parts) >= 3:
-                logs.append(
-                    {
-                        "timestamp": parts[0],
-                        "level": parts[1].strip(),
-                        "message": " | ".join(parts[2:]).strip(),
-                    }
-                )
-            else:
-                logs.append({"timestamp": "", "level": "INFO", "message": line.strip()})
-
-        return list(reversed(logs))  # Show newest first
-
-    except Exception as e:
-        print(f"Log error: {e}")
         return []
 
 
@@ -1906,3 +1789,5 @@ async def _stop_realtime_services() -> None:
         print("Real-time services stopped")
     except Exception as e:
         print(f"Error stopping real-time services: {e}")
+
+

@@ -44,7 +44,7 @@ indent-style = "space"
 skip-magic-trailing-comma = false
 
 [tool.ruff.lint.isort]
-known-first-party = ["config", "settings", "database", "signals"]
+known-first-party = ["config", "settings", "database", "signals", "signal_repository"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
