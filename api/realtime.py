@@ -7,6 +7,8 @@ import asyncio
 import json
 import logging
 from collections import defaultdict
+from collections.abc import Coroutine
+from contextlib import suppress
 from datetime import datetime
 from typing import Any
 
@@ -55,10 +57,8 @@ class ConnectionManager:
 
         # SSE broadcast
         for queue in self._sse_queues[channel]:
-            try:
+            with suppress(asyncio.QueueFull):
                 queue.put_nowait(message)
-            except asyncio.QueueFull:
-                pass
 
     def create_sse_queue(self, channel: str = "default") -> asyncio.Queue:
         """Create a queue for SSE client."""
@@ -79,6 +79,37 @@ class ConnectionManager:
 
 # Global connection manager
 manager = ConnectionManager()
+_broadcast_loop: asyncio.AbstractEventLoop | None = None
+
+
+def register_broadcast_loop(loop: asyncio.AbstractEventLoop | None = None) -> None:
+    """
+    Registers the event loop used by API realtime services.
+    Allows non-async threads (scanner/bot) to publish realtime events safely.
+    """
+    global _broadcast_loop
+    if loop is None:
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+    _broadcast_loop = loop
+
+
+def _schedule_coro(coro: Coroutine[Any, Any, Any]) -> bool:
+    """Schedules a coroutine on the current or registered broadcast loop."""
+    try:
+        running_loop = asyncio.get_running_loop()
+        running_loop.create_task(coro)
+        return True
+    except RuntimeError:
+        pass
+
+    if _broadcast_loop is None or not _broadcast_loop.is_running():
+        return False
+
+    asyncio.run_coroutine_threadsafe(coro, _broadcast_loop)
+    return True
 
 
 # ==================== WebSocket Endpoints ====================
@@ -92,8 +123,8 @@ async def websocket_ticker(websocket: WebSocket):
     await manager.connect(websocket, "ticker")
     try:
         # Send initial data
-        from websocket_manager import ws_manager
         from bist_service import bist_service
+        from websocket_manager import ws_manager
 
         initial_data = {
             "type": "init",
@@ -119,7 +150,7 @@ async def websocket_ticker(websocket: WebSocket):
                             "symbol": symbol
                         })
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # Send heartbeat
                 await websocket.send_json({"type": "heartbeat", "timestamp": datetime.now().isoformat()})
 
@@ -148,7 +179,7 @@ async def websocket_kline(websocket: WebSocket, symbol: str, interval: str = "1m
         while True:
             try:
                 await asyncio.wait_for(websocket.receive_text(), timeout=30)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 await websocket.send_json({"type": "heartbeat"})
 
     except WebSocketDisconnect:
@@ -175,7 +206,7 @@ async def websocket_trades(websocket: WebSocket, symbol: str):
         while True:
             try:
                 await asyncio.wait_for(websocket.receive_text(), timeout=30)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 await websocket.send_json({"type": "heartbeat"})
 
     except WebSocketDisconnect:
@@ -193,7 +224,7 @@ async def websocket_signals(websocket: WebSocket):
         while True:
             try:
                 await asyncio.wait_for(websocket.receive_text(), timeout=30)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 await websocket.send_json({"type": "heartbeat"})
 
     except WebSocketDisconnect:
@@ -209,7 +240,7 @@ async def event_generator(queue: asyncio.Queue, channel: str):
             try:
                 data = await asyncio.wait_for(queue.get(), timeout=30)
                 yield f"data: {json.dumps(data)}\n\n"
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # Send heartbeat
                 yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
     except asyncio.CancelledError:
@@ -292,6 +323,16 @@ async def broadcast_signal(signal: dict):
         "data": signal,
         "timestamp": datetime.now().isoformat(),
     }, "signals")
+
+
+def publish_signal(signal: dict) -> bool:
+    """
+    Publish a signal update from any context (sync or async).
+
+    Returns:
+        True if event was scheduled, False if no realtime loop is active.
+    """
+    return _schedule_coro(broadcast_signal(signal))
 
 
 async def broadcast_bist_update(stocks: list[dict]):

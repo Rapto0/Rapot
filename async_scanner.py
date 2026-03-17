@@ -43,6 +43,40 @@ def _serialize_signal_details(details: dict[str, Any] | None) -> str:
         return ""
 
 
+def _build_realtime_signal_payload(
+    *,
+    signal_id: int,
+    symbol: str,
+    market_type: str,
+    strategy: str,
+    signal_type: str,
+    timeframe: str,
+    score: str,
+    price: float,
+) -> dict[str, Any]:
+    return {
+        "id": signal_id,
+        "symbol": symbol,
+        "marketType": market_type,
+        "strategy": strategy,
+        "signalType": signal_type,
+        "timeframe": timeframe,
+        "score": score,
+        "price": float(price),
+        "createdAt": datetime.now().isoformat(),
+    }
+
+
+def _publish_realtime_signal(payload: dict[str, Any]) -> bool:
+    try:
+        from api.realtime import publish_signal
+
+        return publish_signal(payload)
+    except Exception as exc:
+        logger.debug("Realtime signal publish skipped: %s", exc)
+        return False
+
+
 class AsyncScannerState:
     """Async scanner durum yönetimi."""
 
@@ -191,7 +225,7 @@ async def process_signals_batch(results: list[dict[str, Any]], notify: bool = Tr
             _async_state.increment_signal()
 
             # Veritabanına kaydet
-            db_save_signal(
+            signal_id = db_save_signal(
                 symbol=symbol,
                 market_type=market_type,
                 strategy=signal["strategy"],
@@ -201,6 +235,19 @@ async def process_signals_batch(results: list[dict[str, Any]], notify: bool = Tr
                 price=signal["price"],
                 details=_serialize_signal_details(signal.get("details")),
             )
+            if signal_id:
+                _publish_realtime_signal(
+                    _build_realtime_signal_payload(
+                        signal_id=int(signal_id),
+                        symbol=symbol,
+                        market_type=market_type,
+                        strategy=str(signal["strategy"]),
+                        signal_type=str(signal["type"]),
+                        timeframe=str(signal["timeframe"]),
+                        score=str(signal["score"]),
+                        price=float(signal["price"]),
+                    )
+                )
 
     return total_signals
 

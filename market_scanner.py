@@ -8,6 +8,7 @@ import json
 import textwrap
 import time
 import unicodedata
+from datetime import datetime
 from typing import Any
 
 import pandas as pd
@@ -149,6 +150,85 @@ def increment_scan_count() -> int:
 def increment_signal_count() -> int:
     """Sinyal sayacını artırır."""
     return _scanner_state.increment_signal()
+
+
+def _build_realtime_signal_payload(
+    *,
+    signal_id: int,
+    symbol: str,
+    market_type: str,
+    strategy: str,
+    signal_type: str,
+    timeframe: str,
+    score: str,
+    price: float,
+    special_tag: str | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "id": signal_id,
+        "symbol": symbol,
+        "marketType": market_type,
+        "strategy": strategy,
+        "signalType": signal_type,
+        "timeframe": timeframe,
+        "score": score,
+        "price": float(price),
+        "createdAt": datetime.now().isoformat(),
+    }
+    if special_tag:
+        payload["specialTag"] = special_tag
+    return payload
+
+
+def _publish_realtime_signal(payload: dict[str, Any]) -> bool:
+    try:
+        from api.realtime import publish_signal
+
+        return publish_signal(payload)
+    except Exception as exc:
+        logger.debug("Realtime signal publish skipped: %s", exc)
+        return False
+
+
+def _save_signal_and_publish(
+    *,
+    symbol: str,
+    market_type: str,
+    strategy: str,
+    signal_type: str,
+    timeframe: str,
+    score: str,
+    price: float,
+    details: dict[str, Any] | None,
+    special_tag: str | None = None,
+) -> int:
+    signal_id = db_save_signal(
+        symbol=symbol,
+        market_type=market_type,
+        strategy=strategy,
+        signal_type=signal_type,
+        timeframe=timeframe,
+        score=score,
+        price=price,
+        details=_serialize_signal_details(details),
+        special_tag=special_tag,
+    )
+    increment_signal_count()
+    if signal_id:
+        _publish_realtime_signal(
+            _build_realtime_signal_payload(
+                signal_id=int(signal_id),
+                symbol=symbol,
+                market_type=market_type,
+                strategy=strategy,
+                signal_type=signal_type,
+                timeframe=timeframe,
+                score=score,
+                price=price,
+                special_tag=special_tag,
+            )
+        )
+    return signal_id
 
 
 def format_combo_debug(d: dict[str, Any]) -> str:
@@ -750,7 +830,7 @@ def process_symbol(
                     combo_hits["buy"][tf_code] = res_combo["details"]
                     print(f">>> COMBO AL: {symbol} {tf_label}")
                     # Veritabanına kaydet
-                    db_save_signal(
+                    _save_signal_and_publish(
                         symbol=symbol,
                         market_type=market_type,
                         strategy="COMBO",
@@ -758,14 +838,13 @@ def process_symbol(
                         timeframe=tf_code,
                         score=str(res_combo["details"]["Score"]),
                         price=res_combo["details"].get("PRICE", 0),
-                        details=_serialize_signal_details(res_combo.get("details")),
+                        details=res_combo.get("details"),
                     )
-                    increment_signal_count()
 
                 if res_combo["sell"]:
                     combo_hits["sell"][tf_code] = res_combo["details"]
                     # SAT sinyalini de veritabanına kaydet
-                    db_save_signal(
+                    _save_signal_and_publish(
                         symbol=symbol,
                         market_type=market_type,
                         strategy="COMBO",
@@ -773,9 +852,8 @@ def process_symbol(
                         timeframe=tf_code,
                         score=str(res_combo["details"]["Score"]),
                         price=res_combo["details"].get("PRICE", 0),
-                        details=_serialize_signal_details(res_combo.get("details")),
+                        details=res_combo.get("details"),
                     )
-                    increment_signal_count()
 
             # --- HUNTER ---
             res_hunter = calculate_hunter_signal(df_resampled, tf_code)
@@ -784,7 +862,7 @@ def process_symbol(
                     hunter_hits["buy"][tf_code] = res_hunter["details"]
                     print(f">>> HUNTER DİP: {symbol} {tf_label}")
                     # Veritabanına kaydet
-                    db_save_signal(
+                    _save_signal_and_publish(
                         symbol=symbol,
                         market_type=market_type,
                         strategy="HUNTER",
@@ -792,14 +870,13 @@ def process_symbol(
                         timeframe=tf_code,
                         score=str(res_hunter["details"]["DipScore"]),
                         price=res_hunter["details"].get("PRICE", 0),
-                        details=_serialize_signal_details(res_hunter.get("details")),
+                        details=res_hunter.get("details"),
                     )
-                    increment_signal_count()
 
                 if res_hunter["sell"]:
                     hunter_hits["sell"][tf_code] = res_hunter["details"]
                     # SAT sinyalini de veritabanına kaydet
-                    db_save_signal(
+                    _save_signal_and_publish(
                         symbol=symbol,
                         market_type=market_type,
                         strategy="HUNTER",
@@ -807,9 +884,8 @@ def process_symbol(
                         timeframe=tf_code,
                         score=str(res_hunter["details"]["TopScore"]),
                         price=res_hunter["details"].get("PRICE", 0),
-                        details=_serialize_signal_details(res_hunter.get("details")),
+                        details=res_hunter.get("details"),
                     )
-                    increment_signal_count()
 
         except Exception as e:
             logger.error(f"HATA: {symbol} - {tf_label}: {str(e)}")

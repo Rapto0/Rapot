@@ -84,6 +84,7 @@ const BINANCE_SYMBOLS = LIVE_MARKET_CATEGORIES.flatMap((category) =>
 const INDEX_SYMBOLS = LIVE_MARKET_CATEGORIES.flatMap((category) =>
   category.items.filter((item) => item.source === "indices").map((item) => item.feedSymbol)
 )
+const INDEX_REFRESH_MS = 10_000
 
 function chunkSymbols(symbols: string[], size: number): string[][] {
   const chunks: string[][] = []
@@ -100,7 +101,12 @@ export default function LandingPage() {
   const cryptoTicker = useBinanceTicker(BINANCE_SYMBOLS)
 
   useEffect(() => {
+    let isDisposed = false
+    let isFetching = false
+
     const loadIndices = async () => {
+      if (isFetching) return
+      isFetching = true
       try {
         const chunks = chunkSymbols(INDEX_SYMBOLS, 30)
         const responses = await Promise.all(chunks.map((chunk) => fetchGlobalIndices(chunk)))
@@ -110,15 +116,23 @@ export default function LandingPage() {
           next[item.symbol.toUpperCase()] = item
         }
 
+        if (isDisposed) return
         setMarketData(next)
       } catch (error) {
         console.error("Market indices load error:", error)
+      } finally {
+        isFetching = false
       }
     }
 
-    loadIndices()
-    const timer = setInterval(loadIndices, 1_000)
-    return () => clearInterval(timer)
+    void loadIndices()
+    const timer = setInterval(() => {
+      void loadIndices()
+    }, INDEX_REFRESH_MS)
+    return () => {
+      isDisposed = true
+      clearInterval(timer)
+    }
   }, [])
 
   const categorizedMarketRows = useMemo(

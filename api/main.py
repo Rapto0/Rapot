@@ -6,6 +6,7 @@ Kullanım:
     uvicorn api.main:app --reload --port 8000
 """
 
+import asyncio
 import math
 import os
 import unicodedata
@@ -33,7 +34,11 @@ from api.auth import (  # noqa: E402
     get_current_user,
 )
 from api.calendar_service import calendar_service  # noqa: E402
-from api.realtime import broadcast_bist_update, broadcast_ticker  # noqa: E402
+from api.realtime import (  # noqa: E402
+    broadcast_bist_update,
+    broadcast_ticker,
+    register_broadcast_loop,  # noqa: E402
+)
 from api.realtime import router as realtime_router  # noqa: E402
 from strategy_inspector import (  # noqa: E402
     StrategyInspectorError,
@@ -819,6 +824,15 @@ async def get_bist_symbols(request: Request):
     from data_loader import get_all_bist_symbols
 
     symbols = get_all_bist_symbols()
+    return {"count": len(symbols), "symbols": symbols}
+
+
+@app.get("/symbols/crypto", tags=["Symbols"])
+@limiter.limit("60/minute")
+async def get_crypto_symbols(request: Request):
+    from data_loader import get_all_binance_symbols
+
+    symbols = get_all_binance_symbols()
     return {"count": len(symbols), "symbols": symbols}
 
 
@@ -1869,6 +1883,7 @@ async def _start_realtime_services() -> None:
         from bist_service import bist_service
         from websocket_manager import ws_manager
 
+        register_broadcast_loop(asyncio.get_running_loop())
         ws_manager.on("ticker", broadcast_ticker)
         bist_service.on_update(broadcast_bist_update)
 
