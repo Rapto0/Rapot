@@ -36,14 +36,57 @@ jobs:
             exit 1
           fi
 
+      - name: Detect changed Python files
+        id: changed_py
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch --no-tags --prune --depth=1 origin "${{ github.base_ref }}"
+            FILES="$(git diff --name-only --diff-filter=ACMRT "origin/${{ github.base_ref }}...HEAD" | grep -E '\.pyi?$' || true)"
+          else
+            BEFORE_SHA="${{ github.event.before }}"
+            if [ -z "${BEFORE_SHA}" ] || [ "${BEFORE_SHA}" = "0000000000000000000000000000000000000000" ]; then
+              FILES="$(git ls-files '*.py' '*.pyi')"
+            else
+              FILES="$(git diff --name-only --diff-filter=ACMRT "${BEFORE_SHA}...HEAD" | grep -E '\.pyi?$' || true)"
+            fi
+          fi
+
+          {
+            echo "files<<EOF"
+            echo "${FILES}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
       - name: Run Ruff (linting)
-        run: ruff check . --output-format=github
+        if: ${{ steps.changed_py.outputs.files != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t PY_FILES < <(printf '%s\n' "${{ steps.changed_py.outputs.files }}" | sed '/^[[:space:]]*$/d')
+          ruff check --output-format=github "${PY_FILES[@]}"
 
       - name: Check Black formatting
-        run: black --check --diff .
+        if: ${{ steps.changed_py.outputs.files != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t PY_FILES < <(printf '%s\n' "${{ steps.changed_py.outputs.files }}" | sed '/^[[:space:]]*$/d')
+          black --check --diff "${PY_FILES[@]}"
 
       - name: Check import sorting
-        run: isort --check-only --diff .
+        if: ${{ steps.changed_py.outputs.files != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t PY_FILES < <(printf '%s\n' "${{ steps.changed_py.outputs.files }}" | sed '/^[[:space:]]*$/d')
+          isort --check-only --diff "${PY_FILES[@]}"
+
+      - name: Skip lint (no changed Python files)
+        if: ${{ steps.changed_py.outputs.files == '' }}
+        run: echo "No changed Python files detected; lint skipped."
 
   # ==================== TEST ====================
   test:
