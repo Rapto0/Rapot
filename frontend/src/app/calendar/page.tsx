@@ -3,10 +3,13 @@
 import { useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
+import { PageShell } from "@/components/ui/page-shell"
+import { FilterChips, type FilterChipOption } from "@/components/ui/filter-chips"
 import { cn } from "@/lib/utils"
 import { fetchEconomicCalendar, type EconomicCalendarEvent } from "@/lib/api/client"
 
 type UiImpact = "Dusuk" | "Orta" | "Yuksek"
+type ImpactFilter = UiImpact | "all"
 
 type UiEvent = {
   id: string
@@ -23,10 +26,14 @@ type UiEvent = {
 
 const IMPACT_ORDER: UiImpact[] = ["Dusuk", "Orta", "Yuksek"]
 const AUTO_REFRESH_MS = 60_000
+const IMPACT_OPTIONS: readonly FilterChipOption<ImpactFilter>[] = [
+  { value: "all", label: "Tumu" },
+  ...IMPACT_ORDER.map((value) => ({ value, label: value })),
+]
 
 export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState<string>("all")
-  const [selectedImpact, setSelectedImpact] = useState<UiImpact | "all">("all")
+  const [selectedImpact, setSelectedImpact] = useState<ImpactFilter>("all")
   const [selectedCountry, setSelectedCountry] = useState<string>("all")
 
   const fromDate = useMemo(() => formatYmd(new Date()), [])
@@ -62,6 +69,22 @@ export default function CalendarPage() {
     [events]
   )
 
+  const dateOptions = useMemo<readonly FilterChipOption<string>[]>(
+    () => [
+      { value: "all", label: "Tumu" },
+      ...dates.map((date) => ({ value: date, label: formatDateLabel(date) })),
+    ],
+    [dates]
+  )
+
+  const countryOptions = useMemo<readonly FilterChipOption<string>[]>(
+    () => [
+      { value: "all", label: "Tumu" },
+      ...countries.map((country) => ({ value: country, label: country })),
+    ],
+    [countries]
+  )
+
   const filteredEvents = useMemo(() => {
     return events.filter((event) => {
       if (selectedDate !== "all" && event.date !== selectedDate) return false
@@ -77,39 +100,38 @@ export default function CalendarPage() {
       : "--"
 
   return (
-    <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-3 p-3">
-      <section className="border border-border bg-surface p-4">
-        <div className="label-uppercase">Takvim</div>
-        <h1 className="mt-1 text-lg font-semibold tracking-[-0.02em]">Ekonomik takvim</h1>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Finnhub tabanli canli veri. Her 60 saniyede otomatik yenilenir.
-        </p>
-        <div className="mt-2 flex items-center gap-2 text-[11px] text-muted-foreground">
-          <span>Son guncelleme: {lastUpdateLabel}</span>
-          {isFetching && <span className="text-primary">Yenileniyor...</span>}
+    <PageShell
+      label="Takvim"
+      title="Ekonomik takvim"
+      description="Finnhub tabanli canli veri. Her 60 saniyede otomatik yenilenir."
+      actions={
+        <>
+          <span className="text-[11px] text-muted-foreground">Son guncelleme: {lastUpdateLabel}</span>
+          {isFetching && <span className="text-[11px] text-primary">Yenileniyor...</span>}
           <Button type="button" size="sm" variant="outline" onClick={() => refetch()}>
             Yenile
           </Button>
-        </div>
-      </section>
+        </>
+      }
+    >
 
       <section className="border border-border bg-surface p-3">
         <div className="flex flex-wrap items-center gap-3">
-          <FilterBlock
-            title="Tarih"
-            options={[["all", "Tumu"], ...dates.map((date) => [date, formatDateLabel(date)] as [string, string])]}
+          <FilterChips
+            label="Tarih"
+            options={dateOptions}
             value={selectedDate}
             onChange={setSelectedDate}
           />
-          <FilterBlock
-            title="Etki"
-            options={[["all", "Tumu"], ...IMPACT_ORDER.map((value) => [value, value] as [string, string])]}
+          <FilterChips
+            label="Etki"
+            options={IMPACT_OPTIONS}
             value={selectedImpact}
-            onChange={(value) => setSelectedImpact(value as UiImpact | "all")}
+            onChange={setSelectedImpact}
           />
-          <FilterBlock
-            title="Bolge"
-            options={[["all", "Tumu"], ...countries.map((country) => [country, country] as [string, string])]}
+          <FilterChips
+            label="Bolge"
+            options={countryOptions}
             value={selectedCountry}
             onChange={setSelectedCountry}
           />
@@ -164,38 +186,7 @@ export default function CalendarPage() {
           </div>
         )}
       </section>
-    </div>
-  )
-}
-
-function FilterBlock({
-  title,
-  options,
-  value,
-  onChange,
-}: {
-  title: string
-  options: [string, string][]
-  value: string
-  onChange: (value: string) => void
-}) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="text-xs text-muted-foreground">{title}</span>
-      <div className="flex items-center gap-1">
-        {options.map(([optionValue, label]) => (
-          <Button
-            key={optionValue}
-            type="button"
-            size="sm"
-            variant={value === optionValue ? "default" : "outline"}
-            onClick={() => onChange(optionValue)}
-          >
-            {label}
-          </Button>
-        ))}
-      </div>
-    </div>
+    </PageShell>
   )
 }
 

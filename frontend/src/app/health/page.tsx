@@ -5,6 +5,8 @@ import { useQuery } from "@tanstack/react-query"
 import { fetchLogs, fetchScanHistory } from "@/lib/api/client"
 import { useBotHealth } from "@/lib/hooks/use-health"
 import { cn } from "@/lib/utils"
+import { PageShell } from "@/components/ui/page-shell"
+import { KpiRibbon } from "@/components/ui/kpi-ribbon"
 
 export default function HealthPage() {
   const health = useBotHealth()
@@ -30,26 +32,28 @@ export default function HealthPage() {
   }, [health.isError, health.isLoading])
 
   return (
-    <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-3 p-3">
-      <section className="border border-border bg-surface p-4">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <div className="label-uppercase">Sağlık</div>
-            <h1 className="mt-1 text-lg font-semibold tracking-[-0.02em]">Bot durum ekranı</h1>
-            <p className="mt-1 text-xs text-muted-foreground">Süreç durumu, log akışı ve son taramalar.</p>
-          </div>
-          <span className={health.isRunning ? "signal-badge signal-buy" : "signal-badge signal-sell"}>
-            {health.isRunning ? "ÇALIŞIYOR" : "DURDU"}
-          </span>
-        </div>
-      </section>
-
-      <section className="grid h-16 shrink-0 grid-cols-2 border border-border bg-surface md:grid-cols-4">
-        <RibbonItem label="API" value={apiState} tone={health.isError ? "loss" : "profit"} />
-        <RibbonItem label="Tarama" value={health.isScanning ? "Sürüyor" : "Hazır"} tone={health.isScanning ? "neutral" : undefined} />
-        <RibbonItem label="Toplam" value={`${health.scanCount}`} />
-        <RibbonItem label="Uptime" value={health.uptime} />
-      </section>
+    <PageShell
+      label="Sağlık"
+      title="Bot durum ekranı"
+      description="Süreç durumu, log akışı ve son taramalar."
+      actions={
+        <span className={health.isRunning ? "signal-badge signal-buy" : "signal-badge signal-sell"}>
+          {health.isRunning ? "ÇALIŞIYOR" : "DURDU"}
+        </span>
+      }
+    >
+      <KpiRibbon
+        items={[
+          { label: "API", value: apiState, tone: health.isError ? "loss" : "profit" },
+          {
+            label: "Tarama",
+            value: health.isScanning ? "Sürüyor" : "Hazır",
+            tone: health.isScanning ? "neutral" : undefined,
+          },
+          { label: "Toplam", value: `${health.scanCount}` },
+          { label: "Uptime", value: health.uptime },
+        ]}
+      />
 
       <section className="grid min-h-0 flex-1 gap-3 lg:grid-cols-2">
         <div className="min-h-[420px] border border-border bg-surface">
@@ -110,33 +114,7 @@ export default function HealthPage() {
           ) : null}
         </div>
       </section>
-    </div>
-  )
-}
-
-function RibbonItem({
-  label,
-  value,
-  tone,
-}: {
-  label: string
-  value: string
-  tone?: "profit" | "loss" | "neutral"
-}) {
-  return (
-    <div className="flex min-w-0 flex-col justify-center gap-1 border-r border-border px-3 last:border-r-0">
-      <span className="label-uppercase">{label}</span>
-      <span
-        className={cn(
-          "mono-numbers truncate text-lg font-semibold",
-          tone === "profit" && "text-profit",
-          tone === "loss" && "text-loss",
-          tone === "neutral" && "text-neutral"
-        )}
-      >
-        {value}
-      </span>
-    </div>
+    </PageShell>
   )
 }
 

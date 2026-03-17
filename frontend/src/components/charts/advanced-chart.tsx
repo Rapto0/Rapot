@@ -15,6 +15,8 @@ import {
 } from "@/lib/api/client"
 import { useBinanceTicker } from "@/lib/hooks/use-binance-ticker"
 import { cn } from "@/lib/utils"
+import { IconButton } from "@/components/ui/icon-button"
+import { Select } from "@/components/ui/select"
 import {
     AVAILABLE_INDICATORS,
     type Candle,
@@ -2620,9 +2622,13 @@ export function AdvancedChartPage({
                                 >{tf.label}</button>
                             ))}
                             <div className="relative">
-                                <button onClick={() => setShowTimeframeMenu(!showTimeframeMenu)} className="px-2 py-1.5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted/50">
+                                <IconButton
+                                    onClick={() => setShowTimeframeMenu(!showTimeframeMenu)}
+                                    className="px-2 py-1.5 rounded-sm text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                                    label={showTimeframeMenu ? "Zaman dilimi menüsünü kapat" : "Zaman dilimi menüsünü aç"}
+                                >
                                     <ChevronDown className="h-4 w-4" />
-                                </button>
+                                </IconButton>
                                 {showTimeframeMenu && (
                                     <div className="absolute top-full right-0 mt-2 w-64 glass-panel z-50 overflow-hidden">
                                         {availableTimeframeCategories.map((cat) => (
@@ -2648,13 +2654,13 @@ export function AdvancedChartPage({
                         {/* Tools */}
                         <div className="flex items-center gap-1 bg-muted/30 rounded-sm p-1">
                             <div className="relative">
-                                <button
+                                <IconButton
                                     onClick={() => setShowIndicatorSearch(!showIndicatorSearch)}
                                     className={cn("p-2 rounded-sm transition-all", activeIndicators.length > 0 ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/50")}
-                                    title="İndikatörler"
+                                    label={showIndicatorSearch ? "İndikatör menüsünü kapat" : "İndikatör menüsünü aç"}
                                 >
                                     <LineChart className="h-4 w-4" />
-                                </button>
+                                </IconButton>
                                 {showIndicatorSearch && (
                                     <div className="absolute top-full right-0 mt-2 w-80 glass-panel z-50 overflow-hidden">
                                         <div className="p-3 border-b border-border/30">
@@ -2670,25 +2676,25 @@ export function AdvancedChartPage({
                                                     <div key={ind.id} className="flex items-center justify-between px-2 py-1.5 rounded hover:bg-muted/30">
                                                         <span className={cn("text-sm font-medium", !ind.visible && "opacity-50")}>{ind.meta.shortName}</span>
                                                         <div className="flex items-center gap-1">
-                                                            <button
+                                                            <IconButton
                                                                 onClick={() => toggleIndicatorVisibility(ind.id)}
                                                                 className="text-muted-foreground hover:text-foreground"
-                                                                title={ind.visible ? "Gizle" : "Göster"}
+                                                                label={ind.visible ? `${ind.meta.shortName} göstergesini gizle` : `${ind.meta.shortName} göstergesini göster`}
                                                             >
                                                                 {ind.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-                                                            </button>
+                                                            </IconButton>
                                                             {ind.meta.paramSchema && ind.meta.paramSchema.length > 0 && (
-                                                                <button
+                                                                <IconButton
                                                                     onClick={() => openIndicatorSettings(ind.id)}
                                                                     className="text-muted-foreground hover:text-primary"
-                                                                    title="Ayarlar"
+                                                                    label={`${ind.meta.shortName} ayarlarını aç`}
                                                                 >
                                                                     <Settings2 className="h-4 w-4" />
-                                                                </button>
+                                                                </IconButton>
                                                             )}
-                                                            <button onClick={() => removeIndicator(ind.id)} className="text-muted-foreground hover:text-loss" title="Kaldır">
+                                                            <IconButton onClick={() => removeIndicator(ind.id)} className="text-muted-foreground hover:text-loss" label={`${ind.meta.shortName} göstergesini kaldır`}>
                                                                 <Trash2 className="h-4 w-4" />
-                                                            </button>
+                                                            </IconButton>
                                                         </div>
                                                     </div>
                                                 ))}
@@ -2713,9 +2719,27 @@ export function AdvancedChartPage({
                                     </div>
                                 )}
                             </div>
-                            <button onClick={() => setActiveTool(activeTool === 'ruler' ? 'none' : 'ruler')} className={cn("p-2 rounded-sm transition-all", activeTool === 'ruler' ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/50")} title="Ölçüm Cetveli"><Ruler className="h-4 w-4" /></button>
-                            <button onClick={() => setActiveTool(activeTool === 'pencil' ? 'none' : 'pencil')} className={cn("p-2 rounded-sm transition-all", activeTool === 'pencil' ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/50")} title="Çizim Araçları"><Pencil className="h-4 w-4" /></button>
-                            <button onClick={() => setActiveTool(activeTool === 'text' ? 'none' : 'text')} className={cn("p-2 rounded-sm transition-all", activeTool === 'text' ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/50")} title="Metin Ekle"><Type className="h-4 w-4" /></button>
+                            <IconButton
+                                onClick={() => setActiveTool(activeTool === "ruler" ? "none" : "ruler")}
+                                className={cn("p-2 rounded-sm transition-all", activeTool === "ruler" ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/50")}
+                                label="Ölçüm cetvelini aç"
+                            >
+                                <Ruler className="h-4 w-4" />
+                            </IconButton>
+                            <IconButton
+                                onClick={() => setActiveTool(activeTool === "pencil" ? "none" : "pencil")}
+                                className={cn("p-2 rounded-sm transition-all", activeTool === "pencil" ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/50")}
+                                label="Çizim aracını aç"
+                            >
+                                <Pencil className="h-4 w-4" />
+                            </IconButton>
+                            <IconButton
+                                onClick={() => setActiveTool(activeTool === "text" ? "none" : "text")}
+                                className={cn("p-2 rounded-sm transition-all", activeTool === "text" ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/50")}
+                                label="Grafiğe metin ekleme aracını aç"
+                            >
+                                <Type className="h-4 w-4" />
+                            </IconButton>
                         </div>
 
                         <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/30 rounded-sm text-xs">
@@ -2723,13 +2747,21 @@ export function AdvancedChartPage({
                             <span className="text-muted-foreground">{dataSource}</span>
                         </div>
 
-                        <button onClick={() => setShowRightPanel(!showRightPanel)} className={cn("p-2 rounded-sm transition-all bg-muted/30 hover:bg-muted/50", showRightPanel && "text-primary")} title={showRightPanel ? "Paneli Gizle" : "Paneli Göster"}>
+                        <IconButton
+                            onClick={() => setShowRightPanel(!showRightPanel)}
+                            className={cn("p-2 rounded-sm transition-all bg-muted/30 hover:bg-muted/50", showRightPanel && "text-primary")}
+                            label={showRightPanel ? "Sağ paneli gizle" : "Sağ paneli göster"}
+                        >
                             {showRightPanel ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
-                        </button>
+                        </IconButton>
 
-                        <button onClick={toggleFullscreen} className="p-2 rounded-sm bg-muted/30 hover:bg-muted/50 hover:text-primary transition-all" title={isFullscreen ? "Küçült" : "Tam Ekran"}>
+                        <IconButton
+                            onClick={toggleFullscreen}
+                            className="p-2 rounded-sm bg-muted/30 hover:bg-muted/50 hover:text-primary transition-all"
+                            label={isFullscreen ? "Grafiği küçült" : "Grafiği tam ekran yap"}
+                        >
                             {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-                        </button>
+                        </IconButton>
                     </div>
                 </div>
 
@@ -2767,7 +2799,9 @@ export function AdvancedChartPage({
                         {activeTool === 'ruler' && "Ölçüm modu aktif. Grafikte iki nokta seçin."}
                         {activeTool === 'pencil' && "Çizim modu aktif. Grafikte serbest çizim yapabilirsiniz."}
                         {activeTool === 'text' && "Metin modu aktif. Grafikte bir noktaya tıklayarak metin ekleyin."}
-                        <button onClick={() => setActiveTool('none')} className="ml-auto hover:text-white"><X className="h-4 w-4" /></button>
+                        <IconButton onClick={() => setActiveTool("none")} className="ml-auto hover:text-white" label="Aktif aracı kapat">
+                            <X className="h-4 w-4" />
+                        </IconButton>
                     </div>
                 )}
 
@@ -2778,29 +2812,29 @@ export function AdvancedChartPage({
                             {visibleOverlayIndicators.map((ind) => (
                                 <div key={ind.id} className="pointer-events-auto flex items-center gap-2 rounded-sm border border-border/50 bg-background/80 px-2 py-1 backdrop-blur-sm">
                                     <span className="text-xs font-medium">{ind.meta.shortName}</span>
-                                    <button
+                                    <IconButton
                                         onClick={() => toggleIndicatorVisibility(ind.id)}
                                         className="text-muted-foreground hover:text-foreground"
-                                        title="Gizle"
+                                        label={`${ind.meta.shortName} göstergesini gizle`}
                                     >
                                         <Eye className="h-3.5 w-3.5" />
-                                    </button>
+                                    </IconButton>
                                     {ind.meta.paramSchema && ind.meta.paramSchema.length > 0 && (
-                                        <button
+                                        <IconButton
                                             onClick={() => openIndicatorSettings(ind.id)}
                                             className="text-muted-foreground hover:text-primary"
-                                            title="Ayarlar"
+                                            label={`${ind.meta.shortName} ayarlarını aç`}
                                         >
                                             <Settings2 className="h-3.5 w-3.5" />
-                                        </button>
+                                        </IconButton>
                                     )}
-                                    <button
+                                    <IconButton
                                         onClick={() => removeIndicator(ind.id)}
                                         className="text-muted-foreground hover:text-loss"
-                                        title="Kaldır"
+                                        label={`${ind.meta.shortName} göstergesini kaldır`}
                                     >
                                         <Trash2 className="h-3.5 w-3.5" />
-                                    </button>
+                                    </IconButton>
                                 </div>
                             ))}
                         </div>
@@ -2991,33 +3025,33 @@ export function AdvancedChartPage({
                                 )}
                             </div>
 
-                            <button
+                            <IconButton
                                 onClick={handleAddSymbolToWatchlist}
                                 className="flex h-7 w-7 items-center justify-center rounded-sm hover:bg-raised text-muted-foreground"
-                                title="Listeye sembol ekle"
+                                label="Listeye sembol ekle"
                             >
                                 <Plus className="h-4 w-4" />
-                            </button>
-                            <button
+                            </IconButton>
+                            <IconButton
                                 onClick={() => {
                                     refetchTickers()
                                     refetchActiveWatchlistBistQuotes()
                                 }}
                                 className="flex h-7 w-7 items-center justify-center rounded-sm hover:bg-raised text-muted-foreground"
-                                title="Veriyi yenile"
+                                label="Veriyi yenile"
                             >
                                 <RefreshCw className="h-4 w-4" />
-                            </button>
-                            <button
+                            </IconButton>
+                            <IconButton
                                 onClick={() => {
                                     setShowWatchlistMenu((prev) => !prev)
                                     setShowWatchlistSwitcher(false)
                                 }}
                                 className="flex h-7 w-7 items-center justify-center rounded-sm hover:bg-raised text-muted-foreground"
-                                title="Liste menusu"
+                                label="Liste menüsünü aç"
                             >
                                 <MoreHorizontal className="h-4 w-4" />
-                            </button>
+                            </IconButton>
 
                             {showWatchlistMenu && (
                                 <div className="absolute left-2 top-full mt-2 w-72 rounded-sm border border-border bg-overlay z-50 overflow-hidden">
@@ -3029,7 +3063,8 @@ export function AdvancedChartPage({
                                                 "h-5 w-10 rounded-full p-0.5 transition-colors",
                                                 activeWatchlist?.alarmsEnabled ? "bg-primary" : "bg-raised"
                                             )}
-                                            title="Liste alarmlari"
+                                            aria-label="Liste alarmlarını aç veya kapat"
+                                            aria-pressed={Boolean(activeWatchlist?.alarmsEnabled)}
                                         >
                                             <span
                                                 className={cn(
@@ -3124,13 +3159,13 @@ export function AdvancedChartPage({
                                             {change >= 0 ? "+" : ""}
                                             {change.toFixed(2)}%
                                         </span>
-                                        <button
+                                        <IconButton
                                             onClick={() => handleRemoveRowFromWatchlist(index)}
                                             className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-loss transition-opacity"
-                                            title="Satiri kaldir"
+                                            label={`${row.rawSymbol} satırını kaldır`}
                                         >
                                             <X className="h-3.5 w-3.5" />
-                                        </button>
+                                        </IconButton>
                                     </div>
                                 )
                             })}
@@ -3156,31 +3191,31 @@ export function AdvancedChartPage({
                                             <div className="grid grid-cols-2 gap-2">
                                                 <label className="flex flex-col gap-1">
                                                     <span className="text-[10px] uppercase text-muted-foreground">Indikator</span>
-                                                    <select
+                                                    <Select
                                                         value={alarmIndicatorDraft}
                                                         onChange={(e) => setAlarmIndicatorDraft(e.target.value as AlarmIndicator)}
-                                                        className="rounded border border-border bg-background px-2 py-1 text-xs"
+                                                        className="h-7 rounded border-border bg-background py-1 text-xs"
                                                     >
                                                         {ALARM_INDICATOR_OPTIONS.map((option) => (
                                                             <option key={option.value} value={option.value}>
                                                                 {option.label}
                                                             </option>
                                                         ))}
-                                                    </select>
+                                                    </Select>
                                                 </label>
                                                 <label className="flex flex-col gap-1">
                                                     <span className="text-[10px] uppercase text-muted-foreground">Periyot</span>
-                                                    <select
+                                                    <Select
                                                         value={alarmTimeframeDraft}
                                                         onChange={(e) => setAlarmTimeframeDraft(e.target.value as AlarmTimeframe)}
-                                                        className="rounded border border-border bg-background px-2 py-1 text-xs"
+                                                        className="h-7 rounded border-border bg-background py-1 text-xs"
                                                     >
                                                         {ALARM_TIMEFRAME_OPTIONS.map((option) => (
                                                             <option key={option.value} value={option.value}>
                                                                 {option.label}
                                                             </option>
                                                         ))}
-                                                    </select>
+                                                    </Select>
                                                 </label>
                                             </div>
 
@@ -3294,13 +3329,13 @@ export function AdvancedChartPage({
                                                                 >
                                                                     {rule.enabled ? "Acik" : "Kapali"}
                                                                 </button>
-                                                                <button
+                                                                <IconButton
                                                                     onClick={() => handleRemoveAlarmRule(rule.id)}
                                                                     className="text-muted-foreground hover:text-loss"
-                                                                    title="Kurali sil"
+                                                                    label="Alarm kuralını sil"
                                                                 >
                                                                     <X className="h-3.5 w-3.5" />
-                                                                </button>
+                                                                </IconButton>
                                                             </div>
                                                         </div>
                                                         <div className="mt-1 text-[10px] text-muted-foreground">{thresholdText}</div>
@@ -3537,23 +3572,23 @@ export function AdvancedChartPage({
                         {WATCHLIST_UTILITY_ITEMS.map((panelItem) => {
                             const Icon = panelItem.icon
                             return (
-                                <button
+                                <IconButton
                                     key={panelItem.id}
                                     onClick={() =>
                                         setActiveUtilityPanel((prev) =>
                                             prev === panelItem.id ? null : panelItem.id
                                         )
                                     }
-                                    title={panelItem.label}
                                     className={cn(
                                         "flex h-9 w-9 items-center justify-center rounded-sm transition-colors",
                                         activeUtilityPanel === panelItem.id
                                             ? "bg-raised text-primary"
                                             : "text-muted-foreground hover:bg-raised hover:text-foreground"
                                     )}
+                                    label={panelItem.label}
                                 >
                                     <Icon className="h-4 w-4" />
-                                </button>
+                                </IconButton>
                             )
                         })}
                     </div>
@@ -3568,13 +3603,13 @@ export function AdvancedChartPage({
                                 <div className="text-sm text-muted-foreground">İndikatör Ayarları</div>
                                 <div className="text-lg font-semibold">{editingIndicator.meta.name}</div>
                             </div>
-                            <button
+                            <IconButton
                                 onClick={closeIndicatorSettings}
                                 className="rounded-sm p-2 text-muted-foreground hover:bg-muted/40 hover:text-foreground"
-                                title="Kapat"
+                                label="İndikatör ayarlarını kapat"
                             >
                                 <X className="h-4 w-4" />
-                            </button>
+                            </IconButton>
                         </div>
 
                         <div className="grid max-h-[65vh] gap-4 overflow-y-auto p-4 md:grid-cols-2">
@@ -4054,7 +4089,9 @@ function IndicatorPane({
                         </span>
                     )}
                 </div>
-                <button onClick={onRemove} className="text-muted-foreground hover:text-loss"><X className="h-3 w-3" /></button>
+                <IconButton onClick={onRemove} className="text-muted-foreground hover:text-loss" label={`${indicator.meta.shortName} panelini kaldır`}>
+                    <X className="h-3 w-3" />
+                </IconButton>
             </div>
             <div ref={containerRef} className="w-full overflow-hidden" style={{ height: `${paneHeight}px` }} />
         </div>

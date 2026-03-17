@@ -17,6 +17,7 @@ import {
 import { useBotHealth } from "@/lib/hooks/use-health"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Select } from "@/components/ui/select"
 import { cn, getTimeAgo } from "@/lib/utils"
 
 type MarketKind = "BIST" | "Kripto"
@@ -774,28 +775,28 @@ export default function ScannerPage() {
 
         <div className="border-b border-border px-3 py-2">
           <div className="flex flex-wrap items-center gap-2">
-            <select value={marketFilter} onChange={(event) => setMarketFilter(event.target.value as MarketFilter)} className="h-8 min-w-[130px] bg-base px-2 text-xs">
+            <Select value={marketFilter} onChange={(event) => setMarketFilter(event.target.value as MarketFilter)} className="min-w-[130px]">
               <option value="ALL">Pazar: Tum</option>
               <option value="BIST">Pazar: BIST</option>
               <option value="Kripto">Pazar: Kripto</option>
-            </select>
-            <select value={strategyFilter} onChange={(event) => setStrategyFilter(event.target.value as StrategyFilter)} className="h-8 min-w-[150px] bg-base px-2 text-xs">
+            </Select>
+            <Select value={strategyFilter} onChange={(event) => setStrategyFilter(event.target.value as StrategyFilter)} className="min-w-[150px]">
               <option value="ALL">Strateji: Tum</option>
               <option value="COMBO">Strateji: COMBO</option>
               <option value="HUNTER">Strateji: HUNTER</option>
-            </select>
-            <select value={signalFilter} onChange={(event) => setSignalFilter(event.target.value as SignalFilter)} className="h-8 min-w-[120px] bg-base px-2 text-xs">
+            </Select>
+            <Select value={signalFilter} onChange={(event) => setSignalFilter(event.target.value as SignalFilter)} className="min-w-[120px]">
               <option value="ALL">Tip: Tum</option>
               <option value="AL">Tip: AL</option>
               <option value="SAT">Tip: SAT</option>
-            </select>
-            <select value={activeWatchlist?.id ?? ""} onChange={(event) => setActiveWatchlistId(event.target.value)} className="h-8 min-w-[180px] bg-base px-2 text-xs">
+            </Select>
+            <Select value={activeWatchlist?.id ?? ""} onChange={(event) => setActiveWatchlistId(event.target.value)} className="min-w-[180px]">
               {watchlists.map((watchlist) => (
                 <option key={watchlist.id} value={watchlist.id}>
                   {watchlist.name}
                 </option>
               ))}
-            </select>
+            </Select>
             <button type="button" onClick={() => setWatchOnly((prev) => !prev)} className={cn("h-8 rounded-sm border px-2 text-xs", watchOnly ? "border-foreground bg-raised text-foreground" : "border-border bg-base text-muted-foreground")}>
               Sadece liste
             </button>
@@ -937,7 +938,23 @@ export default function ScannerPage() {
                 {sortedRows.map((row) => {
                   const isSelected = row.key === selectedRow?.key
                   return (
-                    <tr key={row.key} onClick={() => setSelectedRowKey(row.key)} className={cn("cursor-pointer border-b border-[rgba(255,255,255,0.04)] last:border-b-0 odd:bg-surface even:bg-[rgba(255,255,255,0.01)] hover:bg-raised/40", isSelected && "border-l-2 border-foreground bg-raised/60")}>
+                    <tr
+                      key={row.key}
+                      onClick={() => setSelectedRowKey(row.key)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault()
+                          setSelectedRowKey(row.key)
+                        }
+                      }}
+                      tabIndex={0}
+                      aria-selected={isSelected}
+                      aria-label={`${row.symbol} satırını seç`}
+                      className={cn(
+                        "cursor-pointer border-b border-[rgba(255,255,255,0.04)] last:border-b-0 odd:bg-surface even:bg-[rgba(255,255,255,0.01)] hover:bg-raised/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                        isSelected && "border-l-2 border-foreground bg-raised/60"
+                      )}
+                    >
                       {visibleColumnsSafe.map((column) => (
                         <td key={`${row.key}:${column}`} className={cn("px-2 py-2", COLUMN_META[column].align === "right" ? "text-right" : "text-left")}>
                           {renderCellContent(column, row, activeWatchSet, toggleWatchSymbol)}

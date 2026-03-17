@@ -4,6 +4,9 @@ import { useMemo, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { PageShell } from "@/components/ui/page-shell"
+import { KpiRibbon } from "@/components/ui/kpi-ribbon"
+import { FilterChips, type FilterChipOption } from "@/components/ui/filter-chips"
 import {
   Table,
   TableBody,
@@ -22,6 +25,32 @@ type MarketFilter = "all" | "BIST" | "Kripto"
 type StrategyFilter = "all" | "COMBO" | "HUNTER"
 type DirectionFilter = "all" | "AL" | "SAT"
 type SpecialFilter = "all" | "BELES" | "COK_UCUZ" | "PAHALI" | "FAHIS_FIYAT"
+
+const MARKET_OPTIONS = [
+  { value: "all", label: "Tümü" },
+  { value: "BIST", label: "BIST" },
+  { value: "Kripto", label: "Kripto" },
+] as const satisfies readonly FilterChipOption<MarketFilter>[]
+
+const STRATEGY_OPTIONS = [
+  { value: "all", label: "Tümü" },
+  { value: "COMBO", label: "COMBO" },
+  { value: "HUNTER", label: "HUNTER" },
+] as const satisfies readonly FilterChipOption<StrategyFilter>[]
+
+const DIRECTION_OPTIONS = [
+  { value: "all", label: "Tümü" },
+  { value: "AL", label: "AL" },
+  { value: "SAT", label: "SAT" },
+] as const satisfies readonly FilterChipOption<DirectionFilter>[]
+
+const SPECIAL_OPTIONS = [
+  { value: "all", label: "Tümü" },
+  { value: "BELES", label: "BELEŞ" },
+  { value: "COK_UCUZ", label: "ÇOK UCUZ" },
+  { value: "PAHALI", label: "PAHALI" },
+  { value: "FAHIS_FIYAT", label: "FAHİŞ FİYAT" },
+] as const satisfies readonly FilterChipOption<SpecialFilter>[]
 
 export default function SignalsPage() {
   const [marketFilter, setMarketFilter] = useState<MarketFilter>("all")
@@ -52,34 +81,31 @@ export default function SignalsPage() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-3 p-3">
-      <section className="border border-border bg-surface p-4">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <div className="label-uppercase">Sinyaller</div>
-            <h1 className="mt-1 text-lg font-semibold tracking-[-0.02em]">Canlı sinyal akışı</h1>
-            <p className="mt-1 text-xs text-muted-foreground">
-              COMBO ve HUNTER stratejilerinden gelen kayıtlar, özel durum etiketleriyle birlikte.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => refetch()} disabled={isFetching}>
-              <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />
-              Yenile
-            </Button>
-            <Button type="button" variant="outline" size="sm" className="gap-1.5">
-              <Download className="h-3.5 w-3.5" />
-              Dışa aktar
-            </Button>
-          </div>
-        </div>
-      </section>
-
-      <section className="grid h-16 shrink-0 grid-cols-3 border border-border bg-surface">
-        <RibbonItem label="Toplam" value={`${stats.total}`} />
-        <RibbonItem label="AL" value={`${stats.buyCount}`} tone="profit" />
-        <RibbonItem label="SAT" value={`${stats.sellCount}`} tone="loss" />
-      </section>
+    <PageShell
+      label="Sinyaller"
+      title="Canlı sinyal akışı"
+      description="COMBO ve HUNTER stratejilerinden gelen kayıtlar, özel durum etiketleriyle birlikte."
+      actions={
+        <>
+          <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => refetch()} disabled={isFetching}>
+            <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />
+            Yenile
+          </Button>
+          <Button type="button" variant="outline" size="sm" className="gap-1.5">
+            <Download className="h-3.5 w-3.5" />
+            Dışa aktar
+          </Button>
+        </>
+      }
+    >
+      <KpiRibbon
+        items={[
+          { label: "Toplam", value: `${stats.total}` },
+          { label: "AL", value: `${stats.buyCount}`, tone: "profit" },
+          { label: "SAT", value: `${stats.sellCount}`, tone: "loss" },
+        ]}
+        columnsClassName="grid-cols-3"
+      />
 
       <section className="border border-border bg-surface p-3">
         <div className="flex flex-wrap items-center gap-3">
@@ -93,50 +119,32 @@ export default function SignalsPage() {
             />
           </div>
 
-          <FilterGroup
+          <FilterChips
             label="Piyasa"
-            options={[
-              ["all", "Tümü"],
-              ["BIST", "BIST"],
-              ["Kripto", "Kripto"],
-            ]}
+            options={MARKET_OPTIONS}
             value={marketFilter}
-            onChange={(value) => setMarketFilter(value as MarketFilter)}
+            onChange={setMarketFilter}
           />
 
-          <FilterGroup
+          <FilterChips
             label="Strateji"
-            options={[
-              ["all", "Tümü"],
-              ["COMBO", "COMBO"],
-              ["HUNTER", "HUNTER"],
-            ]}
+            options={STRATEGY_OPTIONS}
             value={strategyFilter}
-            onChange={(value) => setStrategyFilter(value as StrategyFilter)}
+            onChange={setStrategyFilter}
           />
 
-          <FilterGroup
+          <FilterChips
             label="Yön"
-            options={[
-              ["all", "Tümü"],
-              ["AL", "AL"],
-              ["SAT", "SAT"],
-            ]}
+            options={DIRECTION_OPTIONS}
             value={directionFilter}
-            onChange={(value) => setDirectionFilter(value as DirectionFilter)}
+            onChange={setDirectionFilter}
           />
 
-          <FilterGroup
+          <FilterChips
             label="Özel"
-            options={[
-              ["all", "Tümü"],
-              ["BELES", "BELEŞ"],
-              ["COK_UCUZ", "ÇOK UCUZ"],
-              ["PAHALI", "PAHALI"],
-              ["FAHIS_FIYAT", "FAHİŞ FİYAT"],
-            ]}
+            options={SPECIAL_OPTIONS}
             value={specialFilter}
-            onChange={(value) => setSpecialFilter(value as SpecialFilter)}
+            onChange={setSpecialFilter}
           />
         </div>
       </section>
@@ -200,10 +208,19 @@ export default function SignalsPage() {
                 <TableRow
                   key={signal.id}
                   className={cn(
-                    "cursor-pointer hover:bg-raised",
+                    "cursor-pointer hover:bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
                     selectedSignal?.id === signal.id && "bg-raised/70"
                   )}
                   onClick={() => setSelectedSignalId(signal.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault()
+                      setSelectedSignalId(signal.id)
+                    }
+                  }}
+                  tabIndex={0}
+                  aria-selected={selectedSignal?.id === signal.id}
+                  aria-label={`${signal.symbol} satırını seç`}
                 >
                   <TableCell className="font-semibold text-foreground">{signal.symbol}</TableCell>
                   <TableCell>
@@ -241,57 +258,7 @@ export default function SignalsPage() {
           </TableBody>
         </Table>
       </section>
-    </div>
-  )
-}
-
-function RibbonItem({
-  label,
-  value,
-  tone,
-}: {
-  label: string
-  value: string
-  tone?: "profit" | "loss"
-}) {
-  return (
-    <div className="flex min-w-0 flex-col justify-center gap-1 border-r border-border px-3 last:border-r-0">
-      <span className="label-uppercase">{label}</span>
-      <span className={cn("mono-numbers truncate text-lg font-semibold", tone === "profit" && "text-profit", tone === "loss" && "text-loss")}>
-        {value}
-      </span>
-    </div>
-  )
-}
-
-function FilterGroup({
-  label,
-  options,
-  value,
-  onChange,
-}: {
-  label: string
-  options: readonly [string, string][]
-  value: string
-  onChange: (value: string) => void
-}) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      <div className="flex items-center gap-1">
-        {options.map(([optionValue, optionLabel]) => (
-          <Button
-            key={optionValue}
-            type="button"
-            size="sm"
-            variant={value === optionValue ? "default" : "outline"}
-            onClick={() => onChange(optionValue)}
-          >
-            {optionLabel}
-          </Button>
-        ))}
-      </div>
-    </div>
+    </PageShell>
   )
 }
 
