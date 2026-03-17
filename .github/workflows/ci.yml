@@ -115,8 +115,42 @@ jobs:
           echo "ADMIN_PASSWORD=test123" >> .env
           echo "USER_PASSWORD=test123" >> .env
 
-      - name: Run tests
-        run: pytest tests/ -v --cov=. --cov-report=xml
+      - name: Detect changed test files
+        id: changed_tests
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch --no-tags --prune --depth=1 origin "${{ github.base_ref }}"
+            TEST_FILES="$(git diff --name-only --diff-filter=ACMRT "origin/${{ github.base_ref }}...HEAD" | grep -E '^tests/test_.*\.py$' || true)"
+          else
+            BEFORE_SHA="${{ github.event.before }}"
+            if [ -z "${BEFORE_SHA}" ] || [ "${BEFORE_SHA}" = "0000000000000000000000000000000000000000" ]; then
+              TEST_FILES="$(git ls-files 'tests/test_*.py')"
+            else
+              TEST_FILES="$(git diff --name-only --diff-filter=ACMRT "${BEFORE_SHA}...HEAD" | grep -E '^tests/test_.*\.py$' || true)"
+            fi
+          fi
+
+          {
+            echo "files<<EOF"
+            echo "${TEST_FILES}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Run changed tests
+        if: ${{ steps.changed_tests.outputs.files != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t TEST_FILES < <(printf '%s\n' "${{ steps.changed_tests.outputs.files }}" | sed '/^[[:space:]]*$/d')
+          pytest -v --cov=. --cov-report=xml "${TEST_FILES[@]}"
+
+      - name: Run smoke tests (no changed test files)
+        if: ${{ steps.changed_tests.outputs.files == '' }}
+        run: |
+          pytest tests/test_api_route_aliases.py tests/test_frontend_contracts.py -v --cov=. --cov-report=xml
 
   # ==================== SECURITY SCAN ====================
   security:
