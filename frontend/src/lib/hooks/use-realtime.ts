@@ -216,7 +216,22 @@ export function useRealtime(options: UseRealtimeOptions = {}) {
 
   const getWebSocketUrl = useCallback(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = process.env.NEXT_PUBLIC_API_URL?.replace(/^https?:\/\//, '') || 'localhost:8000';
+    const explicitWsUrl = process.env.NEXT_PUBLIC_WS_URL?.trim();
+    if (explicitWsUrl) {
+      return `${explicitWsUrl.replace(/\/$/, '')}/realtime/ws/ticker`;
+    }
+
+    const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
+    if (configuredApiUrl && /^https?:\/\//.test(configuredApiUrl)) {
+      try {
+        const parsed = new URL(configuredApiUrl);
+        return `${protocol}//${parsed.host}/realtime/ws/ticker`;
+      } catch {
+        // Continue with hostname fallback when URL parsing fails.
+      }
+    }
+
+    const host = `${window.location.hostname}:8000`;
     return `${protocol}//${host}/realtime/ws/ticker`;
   }, []);
 

@@ -13,13 +13,39 @@ import hashlib
 import os
 from datetime import datetime, timedelta
 
+from dotenv import load_dotenv
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from pydantic import BaseModel
 
 # Güvenlik ayarları - .env'den okunmalı
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-only-change-in-production-" + os.urandom(8).hex())
+load_dotenv()
+
+
+def _is_truthy(raw_value: str | None) -> bool:
+    if raw_value is None:
+        return False
+    return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _resolve_secret_key() -> str:
+    secret_key = os.getenv("JWT_SECRET_KEY", "").strip()
+    if secret_key:
+        return secret_key
+
+    if _is_truthy(os.getenv("ALLOW_INSECURE_JWT_SECRET")):
+        insecure_fallback = "dev-only-insecure-jwt-secret-change-me"
+        print("WARNING: JWT_SECRET_KEY missing, using insecure fallback secret.")
+        return insecure_fallback
+
+    raise RuntimeError(
+        "JWT_SECRET_KEY env var is required. "
+        "Set ALLOW_INSECURE_JWT_SECRET=1 only for local development."
+    )
+
+
+SECRET_KEY = _resolve_secret_key()
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "1440"))  # 24 saat
 

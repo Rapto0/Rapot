@@ -7,11 +7,15 @@ const nextConfig: NextConfig = {
     root: path.resolve(__dirname),
   },
   async rewrites() {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+    const apiBasePath = process.env.NEXT_PUBLIC_API_URL || '/api'
+    const normalizedApiBasePath =
+      apiBasePath.startsWith('/') ? apiBasePath.replace(/\/$/, '') : '/api'
+    const apiProxyTarget = (process.env.API_PROXY_TARGET || 'http://localhost:8000').replace(/\/$/, '')
+
     return [
       {
-        source: '/api/:path*',
-        destination: `${apiUrl}/:path*`, // Proxy to FastAPI
+        source: `${normalizedApiBasePath}/:path*`,
+        destination: `${apiProxyTarget}/:path*`, // Proxy to FastAPI
       },
       {
         source: '/health-api/:path*',

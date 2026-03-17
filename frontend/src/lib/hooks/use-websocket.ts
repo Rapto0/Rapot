@@ -192,7 +192,8 @@ export function useConnectionStatus() {
         // Check API connectivity
         const checkApi = async () => {
             try {
-                const response = await fetch('http://localhost:8000/', {
+                const apiBaseUrl = (process.env.NEXT_PUBLIC_API_URL || '/api').replace(/\/$/, '');
+                const response = await fetch(`${apiBaseUrl}/health`, {
                     method: 'GET',
                     signal: AbortSignal.timeout(3000),
                 });

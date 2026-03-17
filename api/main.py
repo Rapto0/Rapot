@@ -59,6 +59,31 @@ RUN_EMBEDDED_BOT = os.getenv("RUN_EMBEDDED_BOT", "0").strip().lower() in {
 }
 
 
+def _parse_bool_env(var_name: str, default: bool = False) -> bool:
+    raw_value = os.getenv(var_name)
+    if raw_value is None:
+        return default
+    return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _parse_cors_origins() -> list[str]:
+    raw_origins = os.getenv("CORS_ALLOW_ORIGINS", "").strip()
+    if not raw_origins:
+        return [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+        ]
+    parsed_origins = [item.strip() for item in raw_origins.split(",") if item.strip()]
+    return parsed_origins or ["http://localhost:3000", "http://127.0.0.1:3000"]
+
+
+CORS_ALLOW_ORIGINS = _parse_cors_origins()
+# Credentials + wildcard kombinasyonu tarayici tarafinda desteklenmez.
+CORS_ALLOW_CREDENTIALS = _parse_bool_env("CORS_ALLOW_CREDENTIALS", default=True)
+if "*" in CORS_ALLOW_ORIGINS:
+    CORS_ALLOW_CREDENTIALS = False
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -109,8 +134,8 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 # CORS - Frontend erişimi için
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Prod'da spesifik domainler kullanın
-    allow_credentials=True,
+    allow_origins=CORS_ALLOW_ORIGINS,
+    allow_credentials=CORS_ALLOW_CREDENTIALS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -1397,6 +1422,7 @@ def _build_strategy_inspector_response(report: dict) -> StrategyInspectorRespons
     )
 
 
+@app.get("/market/analysis", response_model=MarketAnalysisResponse, tags=["AI Analysis"])
 @app.get("/api/market/analysis", response_model=MarketAnalysisResponse, tags=["AI Analysis"])
 def get_market_analysis(
     market_type: str | None = Query(
@@ -1820,6 +1846,7 @@ async def get_candles(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+@app.get("/calendar", tags=["Calendar"])
 @app.get("/api/calendar", tags=["Calendar"])
 def get_calendar(from_date: str = Query(None), to_date: str = Query(None)):
     """Ekonomik takvim verilerini getirir (Finnhub)."""

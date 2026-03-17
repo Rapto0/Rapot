@@ -7,8 +7,14 @@
 // API Base URLs
 // When running in Nginx (production), /api requests are proxied to localhost:8000
 // When running locally, we need to ensure requests go to port 8000
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
-const HEALTH_API_URL = process.env.NEXT_PUBLIC_HEALTH_API_URL || '/health-api';
+function normalizeBaseUrl(rawValue: string | undefined, fallback: string): string {
+    const value = rawValue?.trim();
+    if (!value) return fallback;
+    return value.length > 1 && value.endsWith('/') ? value.slice(0, -1) : value;
+}
+
+const API_BASE_URL = normalizeBaseUrl(process.env.NEXT_PUBLIC_API_URL, '/api');
+const HEALTH_API_URL = normalizeBaseUrl(process.env.NEXT_PUBLIC_HEALTH_API_URL, '/health-api');
 
 // ==================== TYPES ====================
 

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Filter, RefreshCcw, AlertCircle } from "lucide-react"
 import { format, addDays, isSameDay, parseISO } from "date-fns"
 import { tr } from "date-fns/locale"
+import { fetchEconomicCalendar, type EconomicCalendarEvent } from "@/lib/api/client"
 
 // Types
 interface CalendarEvent {
@@ -22,18 +23,6 @@ interface CalendarEvent {
     forecast?: string
     previous?: string
     rawTime: string // Filtering for sorting
-}
-
-interface FinnhubEvent {
-    country: string
-    event: string
-    impact: string
-    time: string // "2024-01-24 14:30:00"
-    actual: number | null
-    estimate: number | null
-    previous: number | null
-    unit: string
-    currency: string
 }
 
 const COUNTRY_FLAGS: Record<string, string> = {
@@ -82,26 +71,23 @@ export function EconomicCalendar() {
 
             const from = days[0].fullDate
             const to = days[days.length - 1].fullDate
-            const res = await fetch(`http://localhost:8000/api/calendar?from_date=${from}&to_date=${to}`)
-
-            if (!res.ok) throw new Error("Veri çekilemedi")
-
-            const data: FinnhubEvent[] = await res.json()
+            const data = await fetchEconomicCalendar({ from_date: from, to_date: to })
 
             return data.map((item, index) => {
-                const date = parseISO(item.time)
+                const rawTime = normalizeCalendarTime(item.time)
+                const date = parseISO(rawTime)
                 return {
                     id: `${item.event}-${index}`,
                     time: format(date, "HH:mm"),
-                    rawTime: item.time,
-                    country: item.country,
-                    countryFlag: COUNTRY_FLAGS[item.country] || "🌍",
-                    currency: item.currency || item.country, // Fallback
-                    importance: IMPORTANCE_MAP[item.impact] || "Low",
-                    event: item.event,
-                    actual: item.actual !== null ? `${item.actual}${item.unit}` : "",
-                    forecast: item.estimate !== null ? `${item.estimate}${item.unit}` : "",
-                    previous: item.previous !== null ? `${item.previous}${item.unit}` : "",
+                    rawTime,
+                    country: item.country || "ROW",
+                    countryFlag: COUNTRY_FLAGS[item.country || ""] || "🌍",
+                    currency: item.currency || item.country || "ROW", // Fallback
+                    importance: IMPORTANCE_MAP[(item.impact || "").toLowerCase()] || "Low",
+                    event: item.event || "Ekonomik veri",
+                    actual: item.actual !== null ? `${item.actual}${item.unit || ""}` : "",
+                    forecast: item.estimate !== null ? `${item.estimate}${item.unit || ""}` : "",
+                    previous: item.previous !== null ? `${item.previous}${item.unit || ""}` : "",
                 } as CalendarEvent
             }).sort((a, b) => a.rawTime.localeCompare(b.rawTime))
         },
@@ -254,6 +240,11 @@ export function EconomicCalendar() {
             </ScrollArea>
         </div>
     )
+}
+
+function normalizeCalendarTime(timeValue: EconomicCalendarEvent["time"]): string {
+    if (!timeValue) return new Date().toISOString()
+    return timeValue.includes("T") ? timeValue : timeValue.replace(" ", "T")
 }
 
 function TabButton({ label, active, onClick }: { label: string, active?: boolean, onClick: () => void }) {

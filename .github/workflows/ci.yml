@@ -27,17 +27,23 @@ jobs:
         run: |
           pip install ruff black isort
 
+      - name: Ensure SQLite artifacts are not tracked
+        run: |
+          TRACKED_DB_FILES=$(git ls-files '*.db' '*.db-shm' '*.db-wal' '*.sqlite3')
+          if [ -n "$TRACKED_DB_FILES" ]; then
+            echo "Tracked SQLite files detected:"
+            echo "$TRACKED_DB_FILES"
+            exit 1
+          fi
+
       - name: Run Ruff (linting)
         run: ruff check . --output-format=github
-        continue-on-error: true
 
       - name: Check Black formatting
         run: black --check --diff .
-        continue-on-error: true
 
       - name: Check import sorting
         run: isort --check-only --diff .
-        continue-on-error: true
 
   # ==================== TEST ====================
   test:
@@ -67,8 +73,7 @@ jobs:
           echo "USER_PASSWORD=test123" >> .env
 
       - name: Run tests
-        run: pytest tests/ -v --cov=. --cov-report=xml || echo "No tests found"
-        continue-on-error: true
+        run: pytest tests/ -v --cov=. --cov-report=xml
 
   # ==================== SECURITY SCAN ====================
   security:
