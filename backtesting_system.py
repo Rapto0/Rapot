@@ -9,13 +9,14 @@ from typing import Any
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from isyatirimhisse import fetch_stock_data
 from tqdm import tqdm
 
 from data_loader import (
-    get_bist_data,
     get_crypto_data,
     resample_market_data,
 )
+from isyatirim_ssl import ensure_isyatirim_ca_bundle
 from signals import calculate_combo_signal, calculate_hunter_signal
 
 warnings.filterwarnings("ignore")
@@ -27,17 +28,76 @@ def get_bist_data_isyatirim_only(
     """
     Backtest tarafında BIST verisini yalnızca İş Yatırım kaynağından kabul eder.
     """
-    df = get_bist_data(symbol, start_date=start_date)
-    if df is None or df.empty:
+    ensure_isyatirim_ca_bundle()
+
+    try:
+        raw_df = fetch_stock_data(symbols=[symbol], start_date=start_date)
+    except Exception as exc:
+        print(f"[WARN] {symbol}: Is Yatirim veri cekimi basarisiz: {exc}")
         return None
 
-    source_hint = str(df.attrs.get("source_hint", "")).strip().lower()
-    if source_hint != "isyatirim":
-        print(
-            f"⚠️  {symbol}: İş Yatırım dışı kaynak tespit edildi "
-            f"({source_hint or 'bilinmiyor'}), veri reddedildi."
-        )
+    if raw_df is None or raw_df.empty:
+        print(f"[WARN] {symbol}: Is Yatirim veri kaynaginda veri bulunamadi.")
         return None
+
+    rename_map = {
+        "HGDG_TARIH": "Date",
+        "HGDG_KAPANIS": "Close",
+        "HGDG_MIN": "Low",
+        "HGDG_MAX": "High",
+        "HGDG_HACIM": "Volume",
+    }
+    df = raw_df.rename(columns=rename_map).copy()
+
+    if "Date" not in df.columns:
+        print(f"[WARN] {symbol}: Is Yatirim verisinde tarih kolonu bulunamadi.")
+        return None
+
+    open_candidates = (
+        "HGDG_ACILIS",
+        "HGDG_ACIK",
+        "HGDG_OPEN",
+        "ACILIS",
+        "ACIK",
+        "OPEN",
+        "HGDG_AOF",
+        "HG_AOF",
+    )
+
+    open_quality = "provider"
+    discovered_open = next((column for column in open_candidates if column in raw_df.columns), None)
+    if discovered_open is not None:
+        df["Open"] = raw_df[discovered_open]
+        if discovered_open in {"HGDG_AOF", "HG_AOF"}:
+            open_quality = "aof_proxy"
+    elif "Close" in df.columns:
+        df["Open"] = df["Close"]
+        open_quality = "close_proxy"
+    else:
+        print(f"[WARN] {symbol}: Is Yatirim verisinde Open/Close kolonu bulunamadi.")
+        return None
+
+    required = ("Open", "High", "Low", "Close", "Volume")
+    missing = [column for column in required if column not in df.columns]
+    if missing:
+        print(f"[WARN] {symbol}: Is Yatirim verisinde eksik kolonlar: {', '.join(missing)}")
+        return None
+
+    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+    df = df.dropna(subset=["Date"]).set_index("Date")
+
+    for column in required:
+        df[column] = pd.to_numeric(df[column], errors="coerce")
+
+    df = df[list(required)].dropna().sort_index()
+    if df.empty:
+        print(f"[WARN] {symbol}: Is Yatirim verisi normalize sonrasi bos kaldi.")
+        return None
+
+    fetched_at = datetime.utcnow().isoformat()
+    df.attrs["source_hint"] = "isyatirim"
+    df.attrs["open_quality"] = open_quality
+    df.attrs["fetched_at_iso"] = fetched_at
 
     return df
 
@@ -836,7 +896,8 @@ class BenchmarkComparison:
     """Strateji performansını benchmark ile karşılaştırır"""
 
     BENCHMARKS = {
-        "BIST": "XU100",  # BIST100 endeksi
+        # XU100, İş Yatırım hisse veri kaynağında doğrudan desteklenmediği için devre dışı.
+        "BIST": None,
         "CRYPTO": "BTCUSDT",  # Bitcoin
     }
 
@@ -911,7 +972,7 @@ class BenchmarkComparison:
             "portfolio_return": portfolio_return,
             "benchmark_return": benchmark_return,
             "alpha": alpha,
-            "benchmark_symbol": self.BENCHMARKS.get(market_type, "N/A"),
+            "benchmark_symbol": self.BENCHMARKS.get(market_type) or "N/A",
         }
 
 
@@ -1107,7 +1168,7 @@ def main():
     print("=" * 70)
     print("\n⚙️  Yeni Özellikler:")
     print("   • Komisyon + Slippage desteği (%0.15 toplam)")
-    print("   • Benchmark karşılaştırma (BIST100, BTC)")
+    print("   • Benchmark karşılaştırma (Crypto/BTC)")
     print("   • Walk-Forward analiz")
     print("   • Paralel backtest (multiprocessing)\n")
 
@@ -1143,8 +1204,7 @@ def main():
 
     bist_comp = benchmark.compare(portfolio_bist, "BIST")
     print(f"  BIST Strateji: {bist_comp['portfolio_return']:.2f}%")
-    print(f"  BIST100 ({bist_comp['benchmark_symbol']}): {bist_comp['benchmark_return']:.2f}%")
-    print(f"  Alpha: {bist_comp['alpha']:+.2f}%")
+    print("  BIST Benchmark: Devre dışı (XU100 İş Yatırım kaynağında yok)")
 
     crypto_comp = benchmark.compare(portfolio_crypto, "CRYPTO")
     print(f"\n  Crypto Strateji: {crypto_comp['portfolio_return']:.2f}%")
