@@ -1,7 +1,9 @@
 import multiprocessing
+import traceback
 import warnings
 from collections import deque
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -398,7 +400,7 @@ class BacktestEngine:
                         hits["buy"][tf_code] = True
                     if result["sell"]:
                         hits["sell"][tf_code] = True
-            except (ValueError, KeyError, TypeError):
+            except (ValueError, KeyError, TypeError, IndexError, ZeroDivisionError):
                 continue
 
         # ALIM SİGNALLERİ
@@ -474,7 +476,8 @@ class BacktestEngine:
             return None
 
         if pbar:
-            pbar.set_postfix({"İşlenen": symbol})
+            with suppress(Exception):
+                pbar.set_postfix({"Islenen": symbol})
 
         # ============================================================
         # DÜZELTME: Döngü artık backtest_start_idx'ten başlıyor!
@@ -543,7 +546,8 @@ class BacktestEngine:
                                 ]
                             )
                 except Exception:
-                    pass
+                    print(f"[ERROR] {symbol}: backtest sirasinda beklenmeyen hata.")
+                    traceback.print_exc()
                 finally:
                     pbar.update(1)
 
@@ -1178,11 +1182,7 @@ def main():
     bist_symbols = [
         "BSOKE",  # BIST100'den
     ]
-    crypto_symbols = [
-        "BTCUSDT",
-        "ETHUSDT",
-        "BNBUSDT",
-    ]
+    crypto_symbols = ["BTCUSDT"]
 
     # BIST Backtest (normal)
     portfolio_bist = engine.run_backtest(
