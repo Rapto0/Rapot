@@ -21,6 +21,27 @@ from signals import calculate_combo_signal, calculate_hunter_signal
 warnings.filterwarnings("ignore")
 
 
+def get_bist_data_isyatirim_only(
+    symbol: str, start_date: str = "01-01-2006"
+) -> pd.DataFrame | None:
+    """
+    Backtest tarafında BIST verisini yalnızca İş Yatırım kaynağından kabul eder.
+    """
+    df = get_bist_data(symbol, start_date=start_date)
+    if df is None or df.empty:
+        return None
+
+    source_hint = str(df.attrs.get("source_hint", "")).strip().lower()
+    if source_hint != "isyatirim":
+        print(
+            f"⚠️  {symbol}: İş Yatırım dışı kaynak tespit edildi "
+            f"({source_hint or 'bilinmiyor'}), veri reddedildi."
+        )
+        return None
+
+    return df
+
+
 # ============================================================
 # İŞLEM MALİYETLERİ KONFÜGÜRASYONU
 # ============================================================
@@ -338,7 +359,7 @@ class BacktestEngine:
 
         # Veri çek - TÜM geçmiş veriyi al
         if market_type == "BIST":
-            df = get_bist_data(symbol, start_date="01-01-2006")
+            df = get_bist_data_isyatirim_only(symbol, start_date="01-01-2006")
         else:
             # Crypto için daha uzun süre - en az 8 yıl
             df = get_crypto_data(symbol, start_str="8 years ago")
@@ -832,7 +853,7 @@ class BenchmarkComparison:
 
         try:
             if market_type == "BIST":
-                df = get_bist_data(symbol, start_date="01-01-2006")
+                df = get_bist_data_isyatirim_only(symbol, start_date="01-01-2006")
             else:
                 df = get_crypto_data(symbol, start_str="8 years ago")
 
@@ -938,7 +959,7 @@ class WalkForwardAnalysis:
         """Walk-forward analiz çalıştır"""
         # Veri çek
         if market_type == "BIST":
-            df = get_bist_data(symbol, start_date="01-01-2006")
+            df = get_bist_data_isyatirim_only(symbol, start_date="01-01-2006")
         else:
             df = get_crypto_data(symbol, start_str="8 years ago")
 
@@ -999,7 +1020,7 @@ def _run_symbol_backtest(args: tuple) -> dict[str, Any]:
 
         # Sadece trade sayısı ve kar/zarar döndür (hafıza optimizasyonu)
         if market_type == "BIST":
-            df = get_bist_data(symbol, start_date="01-01-2006")
+            df = get_bist_data_isyatirim_only(symbol, start_date="01-01-2006")
             initial_cash = 100000
         else:
             df = get_crypto_data(symbol, start_str="8 years ago")
