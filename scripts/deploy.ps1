@@ -113,6 +113,7 @@ $serverCommands += "git checkout '$Branch'"
 if ($ForceServerReset) {
     $serverCommands += "git reset --hard '$Remote/$Branch'"
 } else {
+    $serverCommands += 'if [ -n "$(git status --porcelain)" ]; then STASH_NAME="pre-deploy-$(date +%Y%m%d-%H%M%S)"; echo "WARNING: Dirty working tree detected. Stashing local changes as $STASH_NAME"; git stash push --include-untracked -m "$STASH_NAME"; fi'
     $serverCommands += "git pull --ff-only '$Remote' '$Branch'"
 }
 
