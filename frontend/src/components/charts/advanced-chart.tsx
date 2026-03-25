@@ -15,8 +15,10 @@ import {
 } from "@/lib/api/client"
 import { useBinanceTicker } from "@/lib/hooks/use-binance-ticker"
 import { cn } from "@/lib/utils"
+import { ActionDialog } from "@/components/ui/action-dialog"
 import { IconButton } from "@/components/ui/icon-button"
 import { Select } from "@/components/ui/select"
+import { useToast } from "@/components/ui/toast"
 import {
     AVAILABLE_INDICATORS,
     type Candle,
@@ -189,6 +191,16 @@ interface WatchlistSignalFeedItem {
     specialTag: string
     createdAt: string
 }
+
+type WatchlistDialogState =
+    | { type: "textDrawing"; anchor: ChartAnchorPoint; value: string }
+    | { type: "addSymbol"; value: string }
+    | { type: "renameWatchlist"; watchlistId: string; value: string }
+    | { type: "createWatchlist"; value: string }
+    | { type: "deleteWatchlist"; watchlistId: string; watchlistName: string }
+    | { type: "clearWatchlist"; watchlistId: string; watchlistName: string }
+    | { type: "clearWatchlistNotes"; watchlistId: string; watchlistName: string }
+    | null
 
 const INDICATOR_SETTINGS_STORAGE_KEY = "rapot.dashboard.indicators.v1"
 const DEFAULT_OVERLAY_INDICATOR_IDS = ["combo", "hunter"] as const
@@ -701,6 +713,7 @@ export function AdvancedChartPage({
     showSignals = true,
     showWatchlist = true,
 }: ChartPageProps) {
+    const { addToast } = useToast()
     // Basic state
     const [symbol, setSymbol] = useState(initialSymbol)
     const [marketType, setMarketType] = useState<MarketType>(initialMarket)
@@ -717,6 +730,7 @@ export function AdvancedChartPage({
     const [activeUtilityPanel, setActiveUtilityPanel] = useState<RightUtilityPanelId | null>("alerts")
     const [watchlistsHydrated, setWatchlistsHydrated] = useState(false)
     const [watchlistNotice, setWatchlistNotice] = useState<string | null>(null)
+    const [watchlistDialog, setWatchlistDialog] = useState<WatchlistDialogState>(null)
     const [serverClockLabel, setServerClockLabel] = useState("--")
     const [watchlistAlarmRules, setWatchlistAlarmRules] = useState<WatchlistAlarmRule[]>([])
     const [watchlistAlarmRulesHydrated, setWatchlistAlarmRulesHydrated] = useState(false)
@@ -812,7 +826,7 @@ export function AdvancedChartPage({
                 if (visibleRange && typeof paneTimeScale.setVisibleRange === "function") {
                     paneTimeScale.setVisibleRange(visibleRange)
                 }
-            } catch (error) {
+            } catch {
                 // Ignore stale indicator chart handles.
             }
         })
@@ -968,13 +982,11 @@ export function AdvancedChartPage({
         }
 
         if (activeTool === "text") {
-            const text = window.prompt("Grafiğe eklenecek metni girin:")
-            if (!text || !text.trim()) return
-            setTextDrawings((prev) => [...prev, {
-                id: `${Date.now().toString(36)}-${prev.length}`,
-                point: anchor,
-                text: text.trim(),
-            }])
+            setWatchlistDialog({
+                type: "textDrawing",
+                anchor,
+                value: "",
+            })
         }
     }, [activeTool, anchorFromClientPoint])
 
@@ -1254,11 +1266,21 @@ export function AdvancedChartPage({
     }, [activeIndicators, indicatorStateHydrated])
 
     // Fetch candle data
-    const { data: candlesResponse, isLoading } = useQuery({
+    const {
+        data: candlesResponse,
+        isLoading: isCandlesLoading,
+        isError: isCandlesError,
+        error: candlesError,
+        isFetching: isCandlesFetching,
+        refetch: refetchCandles,
+    } = useQuery({
         queryKey: ['chart-candles', symbol, marketType, timeframe],
         queryFn: () => fetchCandles(symbol, marketType, timeframe, 1000),
         refetchInterval: 60000,
     })
+
+    const candlesErrorMessage =
+        candlesError instanceof Error ? candlesError.message : "Grafik verisi alinamadi."
 
     // Fetch BIST symbols for search
     const { data: bistSymbols } = useQuery({
@@ -1737,7 +1759,7 @@ export function AdvancedChartPage({
                 if (markersInstance.current) {
                     try {
                         markersInstance.current.detach()
-                    } catch (e) {
+                    } catch {
                         // Ignore
                     }
                     markersInstance.current = null
@@ -1850,7 +1872,7 @@ export function AdvancedChartPage({
                                 if (markersInstance.current) {
                                     try {
                                         markersInstance.current.detach()
-                                    } catch (e) {
+                                    } catch {
                                         // Ignore detach errors
                                     }
                                     markersInstance.current = null
@@ -2019,6 +2041,8 @@ export function AdvancedChartPage({
     )
 
     const projectedDrawings = useMemo(() => {
+        // Force recalculation when projection refresh nonce increments.
+        void overlayRenderNonce
         const stepSeconds = getTimeframeStepSeconds(timeframe)
 
         const projectRuler = (ruler: RulerDrawing) => {
@@ -2270,33 +2294,15 @@ export function AdvancedChartPage({
     )
 
     const handleAddSymbolToWatchlist = useCallback(() => {
-        if (!activeWatchlist) return
-        const value = window.prompt("Sembol girin (ör: BTCUSDT, ETH/USD veya THYAO)")
-        if (!value) return
-        const parsed = parseSymbolInput(value)
-        if (!parsed) {
-            showWatchlistToast("Geçersiz sembol. Binance veya BIST sembolü deneyin.")
+        if (!activeWatchlist) {
+            showWatchlistToast("Aktif liste olmadan sembol eklenemez.")
             return
         }
-
-        let added = false
-        updateActiveWatchlist((watchlist) => {
-            const exists = watchlist.rows.some(
-                (row) =>
-                    row.kind === "symbol" &&
-                    row.rawSymbol === parsed.rawSymbol &&
-                    row.marketType === parsed.marketType
-            )
-            if (exists) return watchlist
-            added = true
-            return { ...watchlist, rows: [...watchlist.rows, parsed] }
+        setWatchlistDialog({
+            type: "addSymbol",
+            value: "",
         })
-        showWatchlistToast(
-            added
-                ? `${parsed.rawSymbol} listeye eklendi.`
-                : `${parsed.rawSymbol} zaten listede var.`
-        )
-    }, [activeWatchlist, parseSymbolInput, showWatchlistToast, updateActiveWatchlist])
+    }, [activeWatchlist, showWatchlistToast])
 
     const handleRemoveRowFromWatchlist = useCallback(
         (rowIndex: number) => {
@@ -2333,20 +2339,12 @@ export function AdvancedChartPage({
 
     const handleRenameWatchlist = useCallback(() => {
         if (!activeWatchlist) return
-        const nextName = window.prompt("Yeni liste adı", activeWatchlist.name)
-        if (!nextName || !nextName.trim()) return
-        const normalizedName = nextName.trim()
-        updateActiveWatchlist((watchlist) => ({ ...watchlist, name: normalizedName }))
-        setWatchlistAlarmRules((prev) =>
-            prev.map((rule) =>
-                rule.watchlistId === activeWatchlist.id
-                    ? { ...rule, watchlistName: normalizedName, updatedAt: new Date().toISOString() }
-                    : rule
-            )
-        )
-        setShowWatchlistMenu(false)
-        showWatchlistToast("Liste adı güncellendi.")
-    }, [activeWatchlist, showWatchlistToast, updateActiveWatchlist])
+        setWatchlistDialog({
+            type: "renameWatchlist",
+            watchlistId: activeWatchlist.id,
+            value: activeWatchlist.name,
+        })
+    }, [activeWatchlist])
 
     const handleDeleteWatchlist = useCallback(() => {
         if (!activeWatchlist) return
@@ -2354,44 +2352,28 @@ export function AdvancedChartPage({
             showWatchlistToast("En az bir liste kalmalı.")
             return
         }
-        const approved = window.confirm(`${activeWatchlist.name} listesini silmek istiyor musunuz?`)
-        if (!approved) return
-
-        const fallback = watchlists.find((watchlist) => watchlist.id !== activeWatchlist.id)
-        setWatchlists((prev) => prev.filter((watchlist) => watchlist.id !== activeWatchlist.id))
-        setWatchlistAlarmRules((prev) => prev.filter((rule) => rule.watchlistId !== activeWatchlist.id))
-        if (fallback) {
-            setActiveWatchlistId(fallback.id)
-        }
-        setShowWatchlistMenu(false)
-        showWatchlistToast("Liste silindi.")
+        setWatchlistDialog({
+            type: "deleteWatchlist",
+            watchlistId: activeWatchlist.id,
+            watchlistName: activeWatchlist.name,
+        })
     }, [activeWatchlist, watchlists, showWatchlistToast])
 
     const handleClearWatchlist = useCallback(() => {
         if (!activeWatchlist) return
-        const approved = window.confirm(`${activeWatchlist.name} listesini temizlemek istiyor musunuz?`)
-        if (!approved) return
-        updateActiveWatchlist((watchlist) => ({ ...watchlist, rows: [] }))
-        setShowWatchlistMenu(false)
-        showWatchlistToast("Liste temizlendi.")
-    }, [activeWatchlist, showWatchlistToast, updateActiveWatchlist])
+        setWatchlistDialog({
+            type: "clearWatchlist",
+            watchlistId: activeWatchlist.id,
+            watchlistName: activeWatchlist.name,
+        })
+    }, [activeWatchlist])
 
     const handleCreateWatchlist = useCallback(() => {
-        const listName = window.prompt("Yeni liste adı")
-        if (!listName || !listName.trim()) return
-        const watchlist: WatchlistModel = {
-            id: makeWatchlistId(listName),
-            name: listName.trim(),
-            alarmsEnabled: false,
-            notes: "",
-            rows: [],
-        }
-        setWatchlists((prev) => [watchlist, ...prev])
-        setActiveWatchlistId(watchlist.id)
-        setShowWatchlistMenu(false)
-        setShowWatchlistSwitcher(false)
-        showWatchlistToast("Yeni liste oluşturuldu.")
-    }, [showWatchlistToast])
+        setWatchlistDialog({
+            type: "createWatchlist",
+            value: "",
+        })
+    }, [])
 
     const handleLoadWatchlist = useCallback(() => {
         setShowWatchlistSwitcher(true)
@@ -2412,10 +2394,15 @@ export function AdvancedChartPage({
             await navigator.clipboard.writeText(payload)
             showWatchlistToast("Liste panoya kopyalandı.")
         } catch {
-            window.prompt("Panoya kopyalayın", payload)
+            addToast({
+                type: "error",
+                title: "Pano erisimi yok",
+                message: payload,
+                duration: 9000,
+            })
         }
         setShowWatchlistMenu(false)
-    }, [activeWatchlist, showWatchlistToast])
+    }, [activeWatchlist, addToast, showWatchlistToast])
 
     const handleWatchlistNotesChange = useCallback(
         (value: string) => {
@@ -2444,17 +2431,192 @@ export function AdvancedChartPage({
             await navigator.clipboard.writeText(text)
             showWatchlistToast("Notlar panoya kopyalandi.")
         } catch {
-            window.prompt("Notlari kopyalayin", text)
+            addToast({
+                type: "error",
+                title: "Pano erisimi yok",
+                message: text,
+                duration: 9000,
+            })
         }
-    }, [activeWatchlist, showWatchlistToast])
+    }, [activeWatchlist, addToast, showWatchlistToast])
 
     const handleClearWatchlistNotes = useCallback(() => {
         if (!activeWatchlist) return
-        const approved = window.confirm(`${activeWatchlist.name} notlari temizlensin mi?`)
-        if (!approved) return
-        updateActiveWatchlist((watchlist) => ({ ...watchlist, notes: "" }))
-        showWatchlistToast("Notlar temizlendi.")
-    }, [activeWatchlist, showWatchlistToast, updateActiveWatchlist])
+        setWatchlistDialog({
+            type: "clearWatchlistNotes",
+            watchlistId: activeWatchlist.id,
+            watchlistName: activeWatchlist.name,
+        })
+    }, [activeWatchlist])
+
+    const closeWatchlistDialog = useCallback(() => {
+        setWatchlistDialog(null)
+    }, [])
+
+    const confirmWatchlistDialog = useCallback(() => {
+        if (!watchlistDialog) return
+
+        if (watchlistDialog.type === "textDrawing") {
+            const text = watchlistDialog.value.trim()
+            if (!text) {
+                addToast({
+                    type: "error",
+                    title: "Metin gerekli",
+                    message: "Grafige eklenecek metni bos birakamazsiniz.",
+                })
+                return
+            }
+            setTextDrawings((prev) => [...prev, {
+                id: `${Date.now().toString(36)}-${prev.length}`,
+                point: watchlistDialog.anchor,
+                text,
+            }])
+            closeWatchlistDialog()
+            return
+        }
+
+        if (watchlistDialog.type === "addSymbol") {
+            if (!activeWatchlist) {
+                closeWatchlistDialog()
+                return
+            }
+
+            const parsed = parseSymbolInput(watchlistDialog.value)
+            if (!parsed) {
+                addToast({
+                    type: "error",
+                    title: "Gecersiz sembol",
+                    message: "Binance veya BIST sembolu deneyin.",
+                })
+                return
+            }
+
+            let added = false
+            updateActiveWatchlist((watchlist) => {
+                const exists = watchlist.rows.some(
+                    (row) =>
+                        row.kind === "symbol" &&
+                        row.rawSymbol === parsed.rawSymbol &&
+                        row.marketType === parsed.marketType
+                )
+                if (exists) return watchlist
+                added = true
+                return { ...watchlist, rows: [...watchlist.rows, parsed] }
+            })
+
+            showWatchlistToast(
+                added
+                    ? `${parsed.rawSymbol} listeye eklendi.`
+                    : `${parsed.rawSymbol} zaten listede var.`
+            )
+            closeWatchlistDialog()
+            return
+        }
+
+        if (watchlistDialog.type === "renameWatchlist") {
+            const normalizedName = watchlistDialog.value.trim()
+            if (!normalizedName) {
+                addToast({
+                    type: "error",
+                    title: "Liste adi gerekli",
+                    message: "Watchlist adini bos birakamazsiniz.",
+                })
+                return
+            }
+            setWatchlists((prev) =>
+                prev.map((watchlist) =>
+                    watchlist.id === watchlistDialog.watchlistId
+                        ? { ...watchlist, name: normalizedName }
+                        : watchlist
+                )
+            )
+            setWatchlistAlarmRules((prev) =>
+                prev.map((rule) =>
+                    rule.watchlistId === watchlistDialog.watchlistId
+                        ? { ...rule, watchlistName: normalizedName, updatedAt: new Date().toISOString() }
+                        : rule
+                )
+            )
+            setShowWatchlistMenu(false)
+            showWatchlistToast("Liste adı güncellendi.")
+            closeWatchlistDialog()
+            return
+        }
+
+        if (watchlistDialog.type === "createWatchlist") {
+            const listName = watchlistDialog.value.trim()
+            if (!listName) {
+                addToast({
+                    type: "error",
+                    title: "Liste adi gerekli",
+                    message: "Yeni watchlist icin bir isim girin.",
+                })
+                return
+            }
+            const watchlist: WatchlistModel = {
+                id: makeWatchlistId(listName),
+                name: listName,
+                alarmsEnabled: false,
+                notes: "",
+                rows: [],
+            }
+            setWatchlists((prev) => [watchlist, ...prev])
+            setActiveWatchlistId(watchlist.id)
+            setShowWatchlistMenu(false)
+            setShowWatchlistSwitcher(false)
+            showWatchlistToast("Yeni liste oluşturuldu.")
+            closeWatchlistDialog()
+            return
+        }
+
+        if (watchlistDialog.type === "deleteWatchlist") {
+            const fallback = watchlists.find((watchlist) => watchlist.id !== watchlistDialog.watchlistId)
+            setWatchlists((prev) => prev.filter((watchlist) => watchlist.id !== watchlistDialog.watchlistId))
+            setWatchlistAlarmRules((prev) => prev.filter((rule) => rule.watchlistId !== watchlistDialog.watchlistId))
+            if (fallback) {
+                setActiveWatchlistId(fallback.id)
+            }
+            setShowWatchlistMenu(false)
+            showWatchlistToast("Liste silindi.")
+            closeWatchlistDialog()
+            return
+        }
+
+        if (watchlistDialog.type === "clearWatchlist") {
+            setWatchlists((prev) =>
+                prev.map((watchlist) =>
+                    watchlist.id === watchlistDialog.watchlistId
+                        ? { ...watchlist, rows: [] }
+                        : watchlist
+                )
+            )
+            setShowWatchlistMenu(false)
+            showWatchlistToast("Liste temizlendi.")
+            closeWatchlistDialog()
+            return
+        }
+
+        if (watchlistDialog.type === "clearWatchlistNotes") {
+            setWatchlists((prev) =>
+                prev.map((watchlist) =>
+                    watchlist.id === watchlistDialog.watchlistId
+                        ? { ...watchlist, notes: "" }
+                        : watchlist
+                )
+            )
+            showWatchlistToast("Notlar temizlendi.")
+            closeWatchlistDialog()
+        }
+    }, [
+        activeWatchlist,
+        addToast,
+        closeWatchlistDialog,
+        parseSymbolInput,
+        showWatchlistToast,
+        updateActiveWatchlist,
+        watchlistDialog,
+        watchlists,
+    ])
 
     const handleAlarmThresholdDraftChange = useCallback(
         (key: keyof AlarmThresholds, rawValue: string) => {
@@ -2840,11 +3002,27 @@ export function AdvancedChartPage({
                         </div>
                     )}
 
-                    {isLoading && (
+                    {isCandlesLoading && (
                         <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm z-10 pointer-events-none">
                             <div className="flex flex-col items-center gap-3">
                                 <div className="w-10 h-10 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
                                 <span className="text-sm text-muted-foreground">Grafik yükleniyor...</span>
+                            </div>
+                        </div>
+                    )}
+                    {isCandlesError && !isCandlesLoading && (
+                        <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/90 backdrop-blur-sm">
+                            <div className="max-w-sm space-y-3 border border-loss/40 bg-surface p-4 text-center">
+                                <div className="text-sm font-semibold text-loss">Grafik verisi yüklenemedi</div>
+                                <div className="text-xs text-muted-foreground">{candlesErrorMessage}</div>
+                                <button
+                                    type="button"
+                                    onClick={() => void refetchCandles()}
+                                    disabled={isCandlesFetching}
+                                    className="inline-flex h-8 items-center justify-center rounded-sm border border-border px-3 text-xs text-foreground hover:bg-raised disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    {isCandlesFetching ? "Yenileniyor..." : "Tekrar dene"}
+                                </button>
                             </div>
                         </div>
                     )}
@@ -3673,6 +3851,85 @@ export function AdvancedChartPage({
                     </div>
                 </div>
             )}
+
+            <ActionDialog
+                open={watchlistDialog !== null}
+                title={
+                    watchlistDialog?.type === "textDrawing"
+                        ? "Grafik notu ekle"
+                        : watchlistDialog?.type === "addSymbol"
+                            ? "Watchlist sembol ekle"
+                            : watchlistDialog?.type === "renameWatchlist"
+                                ? "Watchlist adini degistir"
+                                : watchlistDialog?.type === "createWatchlist"
+                                    ? "Yeni watchlist"
+                                    : watchlistDialog?.type === "deleteWatchlist"
+                                        ? "Watchlist silinecek"
+                                        : watchlistDialog?.type === "clearWatchlist"
+                                            ? "Watchlist temizlenecek"
+                                            : watchlistDialog?.type === "clearWatchlistNotes"
+                                                ? "Notlar silinecek"
+                                                : ""
+                }
+                description={
+                    watchlistDialog?.type === "textDrawing"
+                        ? "Grafige eklenecek aciklama metnini girin."
+                        : watchlistDialog?.type === "addSymbol"
+                            ? "Ornek: BTCUSDT, ETH/USD veya THYAO"
+                            : watchlistDialog?.type === "deleteWatchlist"
+                                ? `${watchlistDialog.watchlistName} listesini silmek istiyor musunuz?`
+                                : watchlistDialog?.type === "clearWatchlist"
+                                    ? `${watchlistDialog.watchlistName} listesindeki tum satirlar silinecek.`
+                                    : watchlistDialog?.type === "clearWatchlistNotes"
+                                        ? `${watchlistDialog.watchlistName} notlari temizlenecek.`
+                                        : "Degeri girip onaylayin."
+                }
+                mode={
+                    watchlistDialog?.type === "deleteWatchlist" ||
+                    watchlistDialog?.type === "clearWatchlist" ||
+                    watchlistDialog?.type === "clearWatchlistNotes"
+                        ? "confirm"
+                        : "prompt"
+                }
+                variant={
+                    watchlistDialog?.type === "deleteWatchlist" ||
+                    watchlistDialog?.type === "clearWatchlist" ||
+                    watchlistDialog?.type === "clearWatchlistNotes"
+                        ? "danger"
+                        : "default"
+                }
+                value={watchlistDialog && "value" in watchlistDialog ? watchlistDialog.value : ""}
+                placeholder={
+                    watchlistDialog?.type === "textDrawing"
+                        ? "Not metni"
+                        : watchlistDialog?.type === "addSymbol"
+                            ? "Sembol"
+                            : watchlistDialog?.type === "renameWatchlist" || watchlistDialog?.type === "createWatchlist"
+                                ? "Watchlist adi"
+                                : undefined
+                }
+                confirmLabel={
+                    watchlistDialog?.type === "textDrawing"
+                        ? "Ekle"
+                        : watchlistDialog?.type === "addSymbol"
+                            ? "Ekle"
+                            : watchlistDialog?.type === "renameWatchlist"
+                                ? "Guncelle"
+                                : watchlistDialog?.type === "createWatchlist"
+                                    ? "Olustur"
+                                    : watchlistDialog?.type === "deleteWatchlist"
+                                        ? "Sil"
+                                        : watchlistDialog?.type === "clearWatchlist" || watchlistDialog?.type === "clearWatchlistNotes"
+                                            ? "Temizle"
+                                            : "Onayla"
+                }
+                cancelLabel="Vazgec"
+                onValueChange={(value) =>
+                    setWatchlistDialog((prev) => (prev && "value" in prev ? { ...prev, value } : prev))
+                }
+                onCancel={closeWatchlistDialog}
+                onConfirm={confirmWatchlistDialog}
+            />
         </div>
     )
 }
@@ -3764,7 +4021,7 @@ function IndicatorPane({
             if (chartRef.current) {
                 try {
                     chartRef.current.remove()
-                } catch (e) {
+                } catch {
                     // Chart already disposed
                 }
                 chartRef.current = null
@@ -3809,10 +4066,8 @@ function IndicatorPane({
             })
 
             let series: any = null
-            let primaryLine: Array<{ time: string | number, value: number }> = []
 
             const setPrimarySeriesPoints = (line: Array<{ time: string | number, value: number }>) => {
-                primaryLine = line
                 primarySeriesPointsRef.current = line
                     .map((point) => ({
                         rawTime: point.time,
@@ -3943,7 +4198,7 @@ function IndicatorPane({
                         }
                         isSyncingRef.current = false
                     }
-                } catch (e) {
+                } catch {
                     // Chart disposed or not ready
                 }
             }
@@ -3958,7 +4213,7 @@ function IndicatorPane({
 
                     // Initial sync
                     syncWithMain()
-                } catch (e) {
+                } catch {
                     // Main chart not ready
                 }
             }
@@ -3970,7 +4225,7 @@ function IndicatorPane({
                             width: containerRef.current.clientWidth,
                             height: paneHeightRef.current,
                         })
-                    } catch (e) {
+                    } catch {
                         // Chart disposed
                     }
                 }
@@ -3984,14 +4239,14 @@ function IndicatorPane({
 
                 // Unsubscribe from events
                 if (mainTimeScale) {
-                    try { mainTimeScale.unsubscribeVisibleLogicalRangeChange(syncWithMain) } catch (e) { /* ignore */ }
+                    try { mainTimeScale.unsubscribeVisibleLogicalRangeChange(syncWithMain) } catch { /* ignore */ }
                 }
 
                 // Remove chart
                 if (chartRef.current) {
                     try {
                         chartRef.current.remove()
-                    } catch (e) {
+                    } catch {
                         // Already disposed
                     }
                     chartRef.current = null
@@ -4015,7 +4270,7 @@ function IndicatorPane({
                     visible: showTimeScale,
                 },
             })
-        } catch (e) {
+        } catch {
             // Chart disposed
         }
     }, [paneHeight, showTimeScale])
@@ -4033,7 +4288,7 @@ function IndicatorPane({
             lastHoverValueRef.current = null
             setHoveredValue((prev) => (prev === null ? prev : null))
             if (typeof chartRef.current.clearCrosshairPosition === "function") {
-                try { chartRef.current.clearCrosshairPosition() } catch (e) { /* ignore */ }
+                try { chartRef.current.clearCrosshairPosition() } catch { /* ignore */ }
             }
             return
         }
@@ -4055,7 +4310,7 @@ function IndicatorPane({
             if (typeof chartRef.current.setCrosshairPosition === "function") {
                 try {
                     chartRef.current.setCrosshairPosition(nearest.value, hoveredUnixTime as any, primarySeriesRef.current)
-                } catch (e) {
+                } catch {
                     // Ignore crosshair sync errors
                 }
             }

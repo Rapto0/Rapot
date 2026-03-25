@@ -1,33 +1,23 @@
-﻿"use client"
-
 import { AdvancedChartPage } from "@/components/charts/advanced-chart"
-import { useSearchParams } from "next/navigation"
-import { Suspense } from "react"
 
-function ChartPageContent() {
-  const searchParams = useSearchParams()
-  const symbol = searchParams.get("symbol") || "THYAO"
-  const market = (searchParams.get("market") as "BIST" | "Kripto") || "BIST"
+interface ChartPageProps {
+  searchParams?: {
+    symbol?: string | string[]
+    market?: string | string[]
+  }
+}
+
+const pickFirst = (value: string | string[] | undefined): string | undefined =>
+  Array.isArray(value) ? value[0] : value
+
+export default function ChartPage({ searchParams }: ChartPageProps) {
+  const symbol = (pickFirst(searchParams?.symbol) || "THYAO").toUpperCase()
+  const marketParam = pickFirst(searchParams?.market)
+  const market: "BIST" | "Kripto" = marketParam === "Kripto" ? "Kripto" : "BIST"
 
   return (
     <div className="h-full min-h-0">
       <AdvancedChartPage initialSymbol={symbol} initialMarket={market} />
-    </div>
-  )
-}
-
-export default function ChartPage() {
-  return (
-    <div className="h-full min-h-0">
-      <Suspense
-        fallback={
-          <div className="flex h-full min-h-[420px] items-center justify-center border border-border bg-surface text-xs text-muted-foreground">
-            Grafik yükleniyor...
-          </div>
-        }
-      >
-        <ChartPageContent />
-      </Suspense>
     </div>
   )
 }

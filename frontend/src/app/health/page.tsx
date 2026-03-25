@@ -7,18 +7,33 @@ import { useBotHealth } from "@/lib/hooks/use-health"
 import { cn } from "@/lib/utils"
 import { PageShell } from "@/components/ui/page-shell"
 import { KpiRibbon } from "@/components/ui/kpi-ribbon"
+import { Button } from "@/components/ui/button"
 
 export default function HealthPage() {
   const health = useBotHealth()
 
-  const { data: logs, isLoading: logsLoading } = useQuery({
+  const {
+    data: logs,
+    isLoading: logsLoading,
+    isError: logsError,
+    error: logsErrorObj,
+    refetch: refetchLogs,
+    isFetching: logsFetching,
+  } = useQuery({
     queryKey: ["logs"],
     queryFn: () => fetchLogs(60),
     refetchInterval: 15_000,
     refetchIntervalInBackground: false,
   })
 
-  const { data: recentScans, isLoading: scansLoading } = useQuery({
+  const {
+    data: recentScans,
+    isLoading: scansLoading,
+    isError: scansError,
+    error: scansErrorObj,
+    refetch: refetchScans,
+    isFetching: scansFetching,
+  } = useQuery({
     queryKey: ["scanHistory", "health"],
     queryFn: () => fetchScanHistory(10),
     refetchInterval: 30_000,
@@ -66,11 +81,24 @@ export default function HealthPage() {
               <div className="px-2 py-6 text-center text-xs text-muted-foreground">Yükleniyor...</div>
             ) : null}
 
-            {!logsLoading && (!logs || logs.length === 0) ? (
+            {!logsLoading && logsError ? (
+              <div className="space-y-2 px-2 py-6 text-center">
+                <div className="text-xs text-loss">Loglar yüklenemedi.</div>
+                {logsErrorObj instanceof Error ? (
+                  <div className="text-[11px] text-muted-foreground">{logsErrorObj.message}</div>
+                ) : null}
+                <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={() => void refetchLogs()} disabled={logsFetching}>
+                  {logsFetching ? "Yenileniyor..." : "Tekrar dene"}
+                </Button>
+              </div>
+            ) : null}
+
+            {!logsLoading && !logsError && (!logs || logs.length === 0) ? (
               <div className="px-2 py-6 text-center text-xs text-muted-foreground">Log bulunamadı.</div>
             ) : null}
 
             {!logsLoading &&
+              !logsError &&
               logs?.map((log, index) => (
                 <LogLine key={`${log.timestamp}-${index}`} log={log} />
               ))}
@@ -86,11 +114,23 @@ export default function HealthPage() {
             <div className="px-3 py-8 text-center text-xs text-muted-foreground">Yükleniyor...</div>
           ) : null}
 
-          {!scansLoading && (!recentScans || recentScans.length === 0) ? (
+          {!scansLoading && scansError ? (
+            <div className="space-y-2 px-3 py-8 text-center">
+              <div className="text-xs text-loss">Taramalar yüklenemedi.</div>
+              {scansErrorObj instanceof Error ? (
+                <div className="text-[11px] text-muted-foreground">{scansErrorObj.message}</div>
+              ) : null}
+              <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={() => void refetchScans()} disabled={scansFetching}>
+                {scansFetching ? "Yenileniyor..." : "Tekrar dene"}
+              </Button>
+            </div>
+          ) : null}
+
+          {!scansLoading && !scansError && (!recentScans || recentScans.length === 0) ? (
             <div className="px-3 py-8 text-center text-xs text-muted-foreground">Kayıt bulunamadı.</div>
           ) : null}
 
-          {!scansLoading && recentScans && recentScans.length > 0 ? (
+          {!scansLoading && !scansError && recentScans && recentScans.length > 0 ? (
             <div className="divide-y divide-border">
               {recentScans.map((scan) => (
                 <div key={scan.id} className="grid grid-cols-[72px_1fr_96px_80px] items-center gap-2 px-3 py-2">

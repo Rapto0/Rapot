@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchStats, transformStats } from '@/lib/api/client';
-import { mockKPIStats } from '@/lib/mock-data';
 
 export interface DashboardKPIs {
     totalPnL: number;

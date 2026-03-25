@@ -1,31 +1,104 @@
-﻿"use client"
+"use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { useMutation } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
-import { Check, Eye, EyeOff, Save } from "lucide-react"
+import { useToast } from "@/components/ui/toast"
+import { Eye, EyeOff, RefreshCw, Save } from "lucide-react"
+
+interface TerminalSettings {
+  telegramChatId: string
+  telegramToken: string
+  binanceApiKey: string
+  binanceSecretKey: string
+  rsiOversold: number
+  rsiOverbought: number
+  hunterMinScore: number
+  scanInterval: number
+  notifications: boolean
+}
+
+const SETTINGS_STORAGE_KEY = "rapot.settings.v1"
+
+const DEFAULT_SETTINGS: TerminalSettings = {
+  telegramChatId: "123456789",
+  telegramToken: "bot1234567890:ABCdefGHIjklMNOpqrsTUVwxyz",
+  binanceApiKey: "aBcDeFgHiJkLmNoPqRsTuVwXyZ123456",
+  binanceSecretKey: "aBcDeFgHiJkLmNoPqRsTuVwXyZ789012",
+  rsiOversold: 30,
+  rsiOverbought: 70,
+  hunterMinScore: 10,
+  scanInterval: 30,
+  notifications: true,
+}
+
+const parseStoredSettings = (raw: string): TerminalSettings | null => {
+  try {
+    const parsed = JSON.parse(raw) as Partial<TerminalSettings>
+    if (
+      typeof parsed.telegramChatId !== "string" ||
+      typeof parsed.telegramToken !== "string" ||
+      typeof parsed.binanceApiKey !== "string" ||
+      typeof parsed.binanceSecretKey !== "string" ||
+      typeof parsed.rsiOversold !== "number" ||
+      typeof parsed.rsiOverbought !== "number" ||
+      typeof parsed.hunterMinScore !== "number" ||
+      typeof parsed.scanInterval !== "number" ||
+      typeof parsed.notifications !== "boolean"
+    ) {
+      return null
+    }
+
+    return parsed as TerminalSettings
+  } catch {
+    return null
+  }
+}
+
+const persistSettings = async (settings: TerminalSettings): Promise<void> => {
+  if (typeof window === "undefined") {
+    throw new Error("Tarayici baglami bulunamadi.")
+  }
+  window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings))
+}
 
 export default function SettingsPage() {
+  const { addToast } = useToast()
   const [showApiKey, setShowApiKey] = useState(false)
   const [showTelegramToken, setShowTelegramToken] = useState(false)
-  const [saved, setSaved] = useState(false)
+  const [settings, setSettings] = useState<TerminalSettings>(DEFAULT_SETTINGS)
 
-  const [settings, setSettings] = useState({
-    telegramChatId: "123456789",
-    telegramToken: "bot1234567890:ABCdefGHIjklMNOpqrsTUVwxyz",
-    binanceApiKey: "aBcDeFgHiJkLmNoPqRsTuVwXyZ123456",
-    binanceSecretKey: "aBcDeFgHiJkLmNoPqRsTuVwXyZ789012",
-    rsiOversold: 30,
-    rsiOverbought: 70,
-    hunterMinScore: 10,
-    scanInterval: 30,
-    notifications: true,
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY)
+    if (!raw) return
+    const restored = parseStoredSettings(raw)
+    if (!restored) return
+    setSettings(restored)
+  }, [])
+
+  const saveMutation = useMutation({
+    mutationFn: persistSettings,
+    onSuccess: () => {
+      addToast({
+        type: "success",
+        title: "Ayarlar kaydedildi",
+        message: "Degisiklikler yerel olarak saklandi.",
+      })
+    },
+    onError: (error) => {
+      addToast({
+        type: "error",
+        title: "Kaydetme basarisiz",
+        message: error instanceof Error ? error.message : "Ayarlar kaydedilemedi.",
+      })
+    },
   })
 
   const handleSave = () => {
-    setSaved(true)
-    window.setTimeout(() => setSaved(false), 2000)
+    saveMutation.mutate(settings)
   }
 
   return (
@@ -37,9 +110,9 @@ export default function SettingsPage() {
             <h1 className="mt-1 text-lg font-semibold tracking-[-0.02em]">Bot ve strateji parametreleri</h1>
             <p className="mt-1 text-xs text-muted-foreground">API anahtarları, bildirimler ve temel eşik değerleri.</p>
           </div>
-          <Button onClick={handleSave} variant="outline" className="gap-1.5">
-            {saved ? <Check className="h-3.5 w-3.5" /> : <Save className="h-3.5 w-3.5" />}
-            {saved ? "Kaydedildi" : "Kaydet"}
+          <Button onClick={handleSave} variant="outline" className="gap-1.5" disabled={saveMutation.isPending}>
+            {saveMutation.isPending ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            {saveMutation.isPending ? "Kaydediliyor..." : "Kaydet"}
           </Button>
         </div>
       </section>

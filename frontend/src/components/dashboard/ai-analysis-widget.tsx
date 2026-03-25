@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
-import { BrainCircuit, TrendingUp, TrendingDown, Minus, AlertTriangle, ShieldCheck } from "lucide-react"
+import { BrainCircuit, AlertTriangle, ShieldCheck } from "lucide-react"
 
 interface AIAnalysisData {
     sentiment_score: number
@@ -54,12 +54,6 @@ export function AIAnalysisWidget({ symbol, data, isLoading }: AIAnalysisWidgetPr
         if (score <= 25) return "text-[#f23645]" // Strong Sell
         if (score <= 45) return "text-[#f23645]" // Sell
         return "text-[#d1d4dc]" // Neutral
-    }
-
-    const getScoreBg = (score: number) => {
-        if (score >= 55) return "bg-[#089981]"
-        if (score <= 45) return "bg-[#f23645]"
-        return "bg-[#787b86]"
     }
 
     return (

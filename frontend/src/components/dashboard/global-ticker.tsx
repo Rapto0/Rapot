@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { TrendingUp, TrendingDown, Minus, Wifi, WifiOff } from 'lucide-react';
 import { useRealtime, useTickerData, useAnimatedNumber } from '@/lib/hooks/use-realtime';
 import { cn } from '@/lib/utils';
@@ -266,7 +266,8 @@ export function PriceBadge({
   size = 'md',
 }: PriceBadgeProps) {
   const isPositive = changePercent >= 0;
-  const Icon = changePercent === 0 ? Minus : isPositive ? TrendingUp : TrendingDown;
+  const isFlat = change === 0 && changePercent === 0;
+  const Icon = isFlat ? Minus : isPositive ? TrendingUp : TrendingDown;
 
   const sizeClasses = {
     sm: 'text-xs px-2 py-1',
@@ -288,7 +289,7 @@ export function PriceBadge({
       <div
         className={cn(
           'flex items-center gap-0.5',
-          isPositive ? 'text-profit' : changePercent === 0 ? 'text-neutral' : 'text-loss'
+          isPositive ? 'text-profit' : isFlat ? 'text-neutral' : 'text-loss'
         )}
       >
         <Icon className={cn(size === 'sm' ? 'w-3 h-3' : 'w-4 h-4')} />

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { fetchHealth, fetchBotStatus, type ApiHealth, type ApiBotStatus } from '@/lib/api/client';
+import { fetchHealth, fetchBotStatus } from '@/lib/api/client';
 
 // Health check hook
 export function useHealthCheck() {

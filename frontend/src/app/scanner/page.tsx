@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { Check, ListPlus, RefreshCw, Search, Settings2, Star, StarOff } from "lucide-react"
+import { AlertTriangle, Check, ListPlus, RefreshCw, Search, Settings2, Star, StarOff } from "lucide-react"
 import {
   fetchMarketMetrics,
   fetchSpecialTagHealth,
@@ -18,6 +18,8 @@ import { useBotHealth } from "@/lib/hooks/use-health"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
+import { ActionDialog } from "@/components/ui/action-dialog"
+import { useToast } from "@/components/ui/toast"
 import { cn, getTimeAgo } from "@/lib/utils"
 
 type MarketKind = "BIST" | "Kripto"
@@ -321,7 +323,15 @@ const DEFAULT_WATCHLISTS: WatchlistModel[] = [
 
 const KNOWN_TIMEFRAME_ORDER = ["15 DAKIKA", "30 DAKIKA", "1 SAAT", "4 SAAT", "1 GUN", "1 HAFTA", "2 HAFTA", "3 HAFTA", "1 AY"]
 
+type ScannerDialogState =
+  | { type: "columnFilter"; column: NumericFilterColumnId; value: string }
+  | { type: "createWatchlist"; value: string }
+  | { type: "renameWatchlist"; watchlistId: string; value: string }
+  | { type: "deleteWatchlist"; watchlistId: string; watchlistName: string }
+  | null
+
 export default function ScannerPage() {
+  const { addToast } = useToast()
   const health = useBotHealth()
 
   const [searchQuery, setSearchQuery] = useState("")
@@ -345,6 +355,7 @@ export default function ScannerPage() {
   const [showWatchlistPanel, setShowWatchlistPanel] = useState(false)
   const [selectedRowKey, setSelectedRowKey] = useState<string | null>(null)
   const [hydrated, setHydrated] = useState(false)
+  const [dialogState, setDialogState] = useState<ScannerDialogState>(null)
 
   const scansQuery = useQuery({
     queryKey: ["scanner-v2", "scanHistory"],
@@ -498,6 +509,25 @@ export default function ScannerPage() {
     kriptoSignalsQuery.isFetching ||
     marketMetricQuery.isFetching
 
+  const isScreenerDataLoading =
+    (bistSignalsQuery.isLoading && !bistSignalsQuery.data) ||
+    (kriptoSignalsQuery.isLoading && !kriptoSignalsQuery.data) ||
+    (metricTargets.length > 0 && marketMetricQuery.isLoading && !marketMetricQuery.data)
+
+  const hasScreenerDataError =
+    bistSignalsQuery.isError ||
+    kriptoSignalsQuery.isError ||
+    marketMetricQuery.isError
+
+  const screenerDataErrorMessage = useMemo(() => {
+    const messages: string[] = []
+    if (bistSignalsQuery.error instanceof Error) messages.push(`BIST: ${bistSignalsQuery.error.message}`)
+    if (kriptoSignalsQuery.error instanceof Error) messages.push(`Kripto: ${kriptoSignalsQuery.error.message}`)
+    if (marketMetricQuery.error instanceof Error) messages.push(`Metrikler: ${marketMetricQuery.error.message}`)
+    if (messages.length === 0) return "Tarama verisi alinamadi. Ag veya API durumunu kontrol edin."
+    return messages.join(" | ")
+  }, [bistSignalsQuery.error, kriptoSignalsQuery.error, marketMetricQuery.error])
+
   useEffect(() => {
     if (typeof window === "undefined") return
     try {
@@ -634,22 +664,11 @@ export default function ScannerPage() {
   const applyColumnFilterPrompt = (column: NumericFilterColumnId) => {
     const currentInput = columnFilterInputs[column]
     const currentText = currentInput ? summarizeColumnFilterInput(currentInput) : ""
-    const raw = window.prompt(
-      `${COLUMN_META[column].label} filtresi\nOrnek: >= 7, <= 10, = 30, 20..40\nBos birakirsan filtre temizlenir.`,
-      currentText
-    )
-    if (raw === null) return
-    const trimmed = raw.trim()
-    if (!trimmed) {
-      clearColumnFilterInput(column)
-      return
-    }
-    const parsed = parseColumnFilterExpression(trimmed)
-    if (!parsed) {
-      window.alert("Filtre formati gecersiz. Ornekler: >= 7, <= 10, = 30, 20..40")
-      return
-    }
-    updateColumnFilterInput(column, parsed)
+    setDialogState({
+      type: "columnFilter",
+      column,
+      value: currentText,
+    })
   }
 
   const upsertActiveWatchlist = (updater: (watchlist: WatchlistModel) => WatchlistModel) => {
@@ -700,21 +719,19 @@ export default function ScannerPage() {
   }
 
   const createWatchlist = () => {
-    const nextName = window.prompt("Yeni liste adi")
-    if (!nextName || !nextName.trim()) return
-    const model: WatchlistModel = { id: makeWatchlistId(nextName.trim()), name: nextName.trim(), symbols: [] }
-    setWatchlists((prev) => [model, ...prev])
-    setActiveWatchlistId(model.id)
-    setWatchOnly(true)
-    setWatchlistNotice("Yeni liste olusturuldu.")
+    setDialogState({
+      type: "createWatchlist",
+      value: "",
+    })
   }
 
   const renameWatchlist = () => {
     if (!activeWatchlist) return
-    const nextName = window.prompt("Liste adi", activeWatchlist.name)
-    if (!nextName || !nextName.trim()) return
-    upsertActiveWatchlist((watchlist) => ({ ...watchlist, name: nextName.trim() }))
-    setWatchlistNotice("Liste adi guncellendi.")
+    setDialogState({
+      type: "renameWatchlist",
+      watchlistId: activeWatchlist.id,
+      value: activeWatchlist.name,
+    })
   }
 
   const deleteWatchlist = () => {
@@ -723,11 +740,108 @@ export default function ScannerPage() {
       setWatchlistNotice("En az bir watchlist kalmali.")
       return
     }
-    if (!window.confirm(`${activeWatchlist.name} silinsin mi?`)) return
-    const fallback = watchlists.find((watchlist) => watchlist.id !== activeWatchlist.id)
-    setWatchlists((prev) => prev.filter((watchlist) => watchlist.id !== activeWatchlist.id))
-    if (fallback) setActiveWatchlistId(fallback.id)
-    setWatchlistNotice("Watchlist silindi.")
+    setDialogState({
+      type: "deleteWatchlist",
+      watchlistId: activeWatchlist.id,
+      watchlistName: activeWatchlist.name,
+    })
+  }
+
+  const closeDialog = () => {
+    setDialogState(null)
+  }
+
+  const handleDialogConfirm = () => {
+    if (!dialogState) return
+
+    if (dialogState.type === "columnFilter") {
+      const trimmed = dialogState.value.trim()
+      if (!trimmed) {
+        clearColumnFilterInput(dialogState.column)
+        closeDialog()
+        return
+      }
+
+      const parsed = parseColumnFilterExpression(trimmed)
+      if (!parsed) {
+        addToast({
+          type: "error",
+          title: "Gecersiz filtre formati",
+          message: "Ornekler: >= 7, <= 10, = 30, 20..40",
+        })
+        return
+      }
+
+      updateColumnFilterInput(dialogState.column, parsed)
+      closeDialog()
+      return
+    }
+
+    if (dialogState.type === "createWatchlist") {
+      const nextName = dialogState.value.trim()
+      if (!nextName) {
+        addToast({
+          type: "error",
+          title: "Liste adi gerekli",
+          message: "Yeni watchlist icin bir isim girin.",
+        })
+        return
+      }
+      const model: WatchlistModel = { id: makeWatchlistId(nextName), name: nextName, symbols: [] }
+      setWatchlists((prev) => [model, ...prev])
+      setActiveWatchlistId(model.id)
+      setWatchOnly(true)
+      setWatchlistNotice("Yeni liste olusturuldu.")
+      addToast({
+        type: "success",
+        title: "Watchlist olusturuldu",
+        message: `${nextName} aktif liste olarak secildi.`,
+      })
+      closeDialog()
+      return
+    }
+
+    if (dialogState.type === "renameWatchlist") {
+      const nextName = dialogState.value.trim()
+      if (!nextName) {
+        addToast({
+          type: "error",
+          title: "Liste adi gerekli",
+          message: "Watchlist adini bos birakamazsiniz.",
+        })
+        return
+      }
+      setWatchlists((prev) =>
+        prev.map((watchlist) =>
+          watchlist.id === dialogState.watchlistId
+            ? { ...watchlist, name: nextName }
+            : watchlist
+        )
+      )
+      setWatchlistNotice("Liste adi guncellendi.")
+      addToast({
+        type: "success",
+        title: "Watchlist guncellendi",
+        message: `Yeni ad: ${nextName}`,
+      })
+      closeDialog()
+      return
+    }
+
+    if (dialogState.type === "deleteWatchlist") {
+      const fallback = watchlists.find((watchlist) => watchlist.id !== dialogState.watchlistId)
+      setWatchlists((prev) =>
+        prev.filter((watchlist) => watchlist.id !== dialogState.watchlistId)
+      )
+      if (fallback) setActiveWatchlistId(fallback.id)
+      setWatchlistNotice("Watchlist silindi.")
+      addToast({
+        type: "success",
+        title: "Watchlist silindi",
+        message: `${dialogState.watchlistName} listesi kaldirildi.`,
+      })
+      closeDialog()
+    }
   }
 
   const sortIconForColumn = (column: ColumnId) => {
@@ -875,7 +989,26 @@ export default function ScannerPage() {
           </div>
         </div>
 
-        {sortedRows.length === 0 ? (
+        {isScreenerDataLoading ? (
+          <div className="space-y-2 px-3 py-3">
+            {Array.from({ length: 8 }).map((_, index) => (
+              <div key={`scanner-skeleton-${index}`} className="h-7 animate-pulse border border-border bg-base" />
+            ))}
+          </div>
+        ) : hasScreenerDataError ? (
+          <div className="flex flex-col items-center justify-center gap-3 px-3 py-12 text-center">
+            <div className="flex h-10 w-10 items-center justify-center border border-loss/40 bg-loss/10 text-loss">
+              <AlertTriangle className="h-4 w-4" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-semibold text-loss">Tarama verisi yuklenemedi.</p>
+              <p className="max-w-3xl text-[11px] text-muted-foreground">{screenerDataErrorMessage}</p>
+            </div>
+            <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => void refreshAll()}>
+              Tekrar dene
+            </Button>
+          </div>
+        ) : sortedRows.length === 0 ? (
           <div className="px-3 py-12 text-center text-xs text-muted-foreground">Filtreye uygun kayit bulunamadi.</div>
         ) : (
           <div className="max-h-[640px] overflow-auto">
@@ -1116,6 +1249,55 @@ export default function ScannerPage() {
           </div>
         </Panel>
       </section>
+
+      <ActionDialog
+        open={dialogState !== null}
+        title={
+          dialogState?.type === "columnFilter"
+            ? `${COLUMN_META[dialogState.column].label} filtresi`
+            : dialogState?.type === "createWatchlist"
+              ? "Yeni watchlist"
+              : dialogState?.type === "renameWatchlist"
+                ? "Watchlist adini guncelle"
+                : dialogState?.type === "deleteWatchlist"
+                  ? "Watchlist silinecek"
+                  : ""
+        }
+        description={
+          dialogState?.type === "columnFilter"
+            ? "Ornek: >= 7, <= 10, = 30, 20..40. Bos birakirsan filtre kaldirilir."
+            : dialogState?.type === "deleteWatchlist"
+              ? `${dialogState.watchlistName} listesini silmek istiyor musunuz?`
+              : "Deger girip onaylayin."
+        }
+        mode={dialogState?.type === "deleteWatchlist" ? "confirm" : "prompt"}
+        variant={dialogState?.type === "deleteWatchlist" ? "danger" : "default"}
+        value={dialogState && "value" in dialogState ? dialogState.value : ""}
+        placeholder={
+          dialogState?.type === "columnFilter"
+            ? ">= 7"
+            : dialogState?.type === "createWatchlist" || dialogState?.type === "renameWatchlist"
+              ? "Watchlist adi"
+              : undefined
+        }
+        confirmLabel={
+          dialogState?.type === "columnFilter"
+            ? "Uygula"
+            : dialogState?.type === "createWatchlist"
+              ? "Olustur"
+              : dialogState?.type === "renameWatchlist"
+                ? "Guncelle"
+                : dialogState?.type === "deleteWatchlist"
+                  ? "Sil"
+                  : "Onayla"
+        }
+        cancelLabel="Vazgec"
+        onValueChange={(value) =>
+          setDialogState((prev) => (prev && "value" in prev ? { ...prev, value } : prev))
+        }
+        onCancel={closeDialog}
+        onConfirm={handleDialogConfirm}
+      />
     </div>
   )
 }

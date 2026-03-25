@@ -1,10 +1,9 @@
 "use client"
 
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { cn } from "@/lib/utils"
-import { Bot, Play, Pause, Activity, TrendingUp, DollarSign, Clock } from "lucide-react"
+import { Bot, Pause, Activity, TrendingUp, Clock } from "lucide-react"
 import { useQuery } from "@tanstack/react-query"
 import { fetchBotStatus, fetchStats, fetchTrades } from "@/lib/api/client"
 

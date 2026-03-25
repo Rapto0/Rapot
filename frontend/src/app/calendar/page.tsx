@@ -7,6 +7,7 @@ import { PageShell } from "@/components/ui/page-shell"
 import { FilterChips, type FilterChipOption } from "@/components/ui/filter-chips"
 import { cn } from "@/lib/utils"
 import { fetchEconomicCalendar, type EconomicCalendarEvent } from "@/lib/api/client"
+import { RefreshCw } from "lucide-react"
 
 type UiImpact = "Dusuk" | "Orta" | "Yuksek"
 type ImpactFilter = UiImpact | "all"
@@ -108,7 +109,16 @@ export default function CalendarPage() {
         <>
           <span className="text-[11px] text-muted-foreground">Son guncelleme: {lastUpdateLabel}</span>
           {isFetching && <span className="text-[11px] text-primary">Yenileniyor...</span>}
-          <Button type="button" size="sm" variant="outline" onClick={() => refetch()}>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            aria-busy={isFetching}
+            className="gap-1.5"
+          >
+            <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />
             Yenile
           </Button>
         </>

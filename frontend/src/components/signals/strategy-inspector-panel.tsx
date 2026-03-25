@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { Search, Target } from "lucide-react"
+import { Loader2, Search, Target } from "lucide-react"
 
 import {
   fetchStrategyInspector,
@@ -141,8 +141,9 @@ export function StrategyInspectorPanel({
             className="h-9 text-xs"
             onClick={runInspection}
             disabled={isLoading}
+            aria-busy={isLoading}
           >
-            <Search className="mr-1.5 h-3.5 w-3.5" />
+            {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Search className="mr-1.5 h-3.5 w-3.5" />}
             {isLoading ? "Hesaplaniyor" : "Hesapla"}
           </Button>
 

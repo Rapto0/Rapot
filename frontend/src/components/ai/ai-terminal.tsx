@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { Brain, RefreshCw, Target } from "lucide-react"
+import { Brain, Loader2, RefreshCw, Target } from "lucide-react"
 
 import {
   fetchAIAnalysis,
@@ -172,7 +172,15 @@ export function AITerminal() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={refreshPageData} disabled={isRefreshing}>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={refreshPageData}
+              disabled={isRefreshing}
+              aria-busy={isRefreshing}
+            >
               <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")} />
               Veri tazele
             </Button>
@@ -292,8 +300,15 @@ export function AITerminal() {
                 <option value="1M">1 Aylik</option>
               </select>
 
-              <Button type="button" variant="outline" className="h-9 text-xs" onClick={runAnalysis} disabled={isLoading}>
-                <Brain className="mr-1.5 h-3.5 w-3.5" />
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 text-xs"
+                onClick={runAnalysis}
+                disabled={isLoading}
+                aria-busy={isLoading}
+              >
+                {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Brain className="mr-1.5 h-3.5 w-3.5" />}
                 {isLoading ? "Yorumlaniyor" : "AI Yorumla"}
               </Button>
 

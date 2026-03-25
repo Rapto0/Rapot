@@ -21,18 +21,6 @@ export const MiniSparkline = memo(function MiniSparkline({
     const chartContainerRef = useRef<HTMLDivElement>(null);
     const chartRef = useRef<IChartApi | null>(null);
 
-    // Determine color based on trend
-    const getColor = () => {
-        switch (trend) {
-            case 'up':
-                return '#00c853'; // profit green
-            case 'down':
-                return '#ff3d00'; // loss red
-            default:
-                return '#8b949e'; // neutral gray
-        }
-    };
-
     useEffect(() => {
         if (!chartContainerRef.current || data.length === 0) return;
 
@@ -65,7 +53,12 @@ export const MiniSparkline = memo(function MiniSparkline({
         chartRef.current = chart;
 
         // Add line series
-        const color = getColor();
+        const color =
+            trend === 'up'
+                ? '#00c853'
+                : trend === 'down'
+                    ? '#ff3d00'
+                    : '#8b949e';
         const lineSeries = chart.addSeries(LineSeries, {
             color,
             lineWidth: 2,
