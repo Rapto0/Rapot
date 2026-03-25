@@ -23,6 +23,9 @@ from signals import calculate_combo_signal, calculate_hunter_signal
 from telegram_notify import send_message
 
 logger = get_logger(__name__)
+_REALTIME_PUBLISH_FAILURE_COUNT = 0
+_ASYNC_SCAN_COUNT_KEY = "async_scan_count"
+_ASYNC_SIGNAL_COUNT_KEY = "async_signal_count"
 
 
 def _json_default(value: Any):
@@ -68,13 +71,23 @@ def _build_realtime_signal_payload(
 
 
 def _publish_realtime_signal(payload: dict[str, Any]) -> bool:
+    global _REALTIME_PUBLISH_FAILURE_COUNT
     try:
         from api.realtime import publish_signal
 
         return publish_signal(payload)
     except Exception as exc:
-        logger.debug("Realtime signal publish skipped: %s", exc)
+        _REALTIME_PUBLISH_FAILURE_COUNT += 1
+        logger.warning(
+            "Realtime signal publish skipped (%s failures): %s",
+            _REALTIME_PUBLISH_FAILURE_COUNT,
+            exc,
+        )
         return False
+
+
+def get_realtime_publish_failure_count() -> int:
+    return _REALTIME_PUBLISH_FAILURE_COUNT
 
 
 class AsyncScannerState:
@@ -95,6 +108,12 @@ class AsyncScannerState:
         self._scan_count += 1
         self._is_scanning = True
         self._last_scan_time = datetime.now()
+        try:
+            from ops_repository import set_bot_stat_int
+
+            set_bot_stat_int(_ASYNC_SCAN_COUNT_KEY, self._scan_count)
+        except Exception as exc:
+            logger.warning("Async scan count persistence failed: %s", exc)
         return self._scan_count
 
     def end_scan(self, duration: float) -> None:
@@ -103,7 +122,17 @@ class AsyncScannerState:
 
     def increment_signal(self) -> int:
         self._signal_count += 1
+        try:
+            from ops_repository import set_bot_stat_int
+
+            set_bot_stat_int(_ASYNC_SIGNAL_COUNT_KEY, self._signal_count)
+        except Exception as exc:
+            logger.warning("Async signal count persistence failed: %s", exc)
         return self._signal_count
+
+    def restore(self, scan_count: int, signal_count: int) -> None:
+        self._scan_count = max(0, int(scan_count))
+        self._signal_count = max(0, int(signal_count))
 
     def get_stats(self) -> dict[str, Any]:
         return {
@@ -116,6 +145,18 @@ class AsyncScannerState:
 
 # Singleton state
 _async_state = AsyncScannerState()
+
+
+def restore_async_scanner_state_from_db() -> None:
+    try:
+        from ops_repository import get_bot_stat_int
+
+        scan_count = get_bot_stat_int(_ASYNC_SCAN_COUNT_KEY, default=0)
+        signal_count = get_bot_stat_int(_ASYNC_SIGNAL_COUNT_KEY, default=0)
+        _async_state.restore(scan_count=scan_count, signal_count=signal_count)
+        logger.info("Async scanner state restored | scans=%s signals=%s", scan_count, signal_count)
+    except Exception as exc:
+        logger.warning("Async scanner state restore skipped: %s", exc)
 
 
 async def process_symbol_async(symbol: str, df_daily, market_type: str) -> dict[str, Any]:
@@ -303,6 +344,8 @@ async def scan_market_async(
     total_signals = 0
     bist_data = {}
     crypto_data = {}
+    scan_failed = False
+    scan_error = ""
 
     try:
         # BIST Tarama
@@ -321,9 +364,7 @@ async def scan_market_async(
         logger.info(f"BIST sinyalleri: {bist_signals}")
 
         # Kripto Tarama
-        crypto_symbols = (
-            get_all_binance_symbols_async() if "Kripto" in selected_markets else []
-        )
+        crypto_symbols = get_all_binance_symbols_async() if "Kripto" in selected_markets else []
         logger.info(f"Kripto taranıyor: {len(crypto_symbols)} çift")
 
         crypto_data = await fetch_multiple_crypto_async(crypto_symbols, batch_size=50)
@@ -338,13 +379,36 @@ async def scan_market_async(
         logger.info(f"Kripto sinyalleri: {crypto_signals}")
 
     except Exception as e:
-        logger.error(f"Async tarama hatası: {e}")
-        send_message(f"❌ Tarama hatası: {str(e)}")
+        scan_failed = True
+        scan_error = str(e)
+        logger.exception("Async tarama hatasi.")
+        send_message(f"❌ Tarama hatasi: {scan_error}")
 
     duration = time.time() - start_time
     _async_state.end_scan(duration)
 
-    # Sonuç mesajı
+    if scan_failed:
+        failure_summary = (
+            f"Tarama #{scan_num} basarisiz\n"
+            f"Sure: {duration:.1f}s\n"
+            f"BIST: {len(bist_data)} sembol\n"
+            f"Kripto: {len(crypto_data)} sembol\n"
+            f"Toplam Sinyal: {total_signals}\n"
+            f"Piyasalar: {market_label}\n"
+            f"Hata: {scan_error}"
+        )
+        send_message(failure_summary)
+        logger.error(failure_summary.replace("\n", " | "))
+        return {
+            "status": "failed",
+            "error": scan_error,
+            "scan_num": scan_num,
+            "duration": duration,
+            "bist_count": len(bist_data),
+            "crypto_count": len(crypto_data),
+            "total_signals": total_signals,
+        }
+
     summary = (
         f"Tarama #{scan_num} tamamlandi\n"
         f"Sure: {duration:.1f}s\n"
@@ -357,6 +421,8 @@ async def scan_market_async(
     logger.info(summary.replace("\n", " | "))
 
     return {
+        "status": "success",
+        "error": None,
         "scan_num": scan_num,
         "duration": duration,
         "bist_count": len(bist_data),
@@ -373,3 +439,6 @@ def run_async_scan(markets: str | list[str] | tuple[str, ...] | set[str] | None 
 def get_async_scanner_stats() -> dict[str, Any]:
     """Scanner istatistiklerini döndürür."""
     return _async_state.get_stats()
+
+
+restore_async_scanner_state_from_db()

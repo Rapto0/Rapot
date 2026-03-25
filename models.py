@@ -189,6 +189,63 @@ class Trade(Base):
         }
 
 
+class Order(Base):
+    """
+    Exchange order lifecycle modeli.
+
+    Bot yeniden başlatıldığında aktif emirlerin state reconciliation adımlarında kullanılır.
+    """
+
+    __tablename__ = "orders"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    exchange = Column(String(20), default="binance", nullable=False)
+    exchange_order_id = Column(String(64), nullable=True, unique=True, index=True)
+    client_order_id = Column(String(64), nullable=True, index=True)
+    symbol = Column(String(20), nullable=False, index=True)
+    market_type = Column(String(10), nullable=False, index=True)
+    side = Column(String(8), nullable=False)  # BUY, SELL
+    order_type = Column(String(20), default="MARKET", nullable=False)
+    status = Column(String(20), default="NEW", nullable=False, index=True)
+    quantity = Column(Float, nullable=False, default=0.0)
+    price = Column(Float, nullable=True)
+    filled_quantity = Column(Float, nullable=False, default=0.0)
+    avg_fill_price = Column(Float, nullable=True)
+    raw_payload = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, index=True)
+    closed_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (Index("idx_orders_symbol_status", "symbol", "status"),)
+
+    def __repr__(self) -> str:
+        return (
+            f"<Order(id={self.id}, symbol='{self.symbol}', side='{self.side}', "
+            f"status='{self.status}')>"
+        )
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "exchange": self.exchange,
+            "exchange_order_id": self.exchange_order_id,
+            "client_order_id": self.client_order_id,
+            "symbol": self.symbol,
+            "market_type": self.market_type,
+            "side": self.side,
+            "order_type": self.order_type,
+            "status": self.status,
+            "quantity": self.quantity,
+            "price": self.price,
+            "filled_quantity": self.filled_quantity,
+            "avg_fill_price": self.avg_fill_price,
+            "raw_payload": self.raw_payload,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "closed_at": self.closed_at.isoformat() if self.closed_at else None,
+        }
+
+
 class ScanHistory(Base):
     """
     Tarama geçmişi modeli.

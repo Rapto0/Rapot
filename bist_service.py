@@ -5,7 +5,6 @@ Fetches and caches BIST data with automatic refresh.
 
 import asyncio
 import json
-import logging
 import ssl
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -16,8 +15,9 @@ import aiohttp
 from aiohttp import TCPConnector
 
 from isyatirim_ssl import get_isyatirim_ssl_context
+from logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass

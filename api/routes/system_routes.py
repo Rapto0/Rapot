@@ -3,8 +3,10 @@ import os
 from fastapi import APIRouter, Request
 
 from api.rate_limit import limiter
+from logger import get_logger
 
 router = APIRouter(tags=["System"])
+logger = get_logger(__name__)
 
 
 @router.get("/scans")
@@ -14,7 +16,9 @@ async def get_scan_history(request: Request, limit: int = 10):
     from models import ScanHistory
 
     with get_session() as session:
-        scans = session.query(ScanHistory).order_by(ScanHistory.created_at.desc()).limit(limit).all()
+        scans = (
+            session.query(ScanHistory).order_by(ScanHistory.created_at.desc()).limit(limit).all()
+        )
         return [scan.to_dict() for scan in scans]
 
 
@@ -45,6 +49,6 @@ async def get_system_logs(request: Request, limit: int = 50):
                 logs.append({"timestamp": "", "level": "INFO", "message": line.strip()})
 
         return list(reversed(logs))
-    except Exception as e:
-        print(f"Log error: {e}")
+    except Exception:
+        logger.exception("System log retrieval failed.")
         return []

@@ -1,12 +1,34 @@
 """
-Merkezi Logging Modülü
-Rotating file handler ile profesyonel log yönetimi.
+Merkezi Logging ModÃ¼lÃ¼
+Rotating file handler ile profesyonel log yÃ¶netimi.
 """
 
 import logging
 import sys
+import time
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+
+_FALLBACK_RATE_LIMIT_SECONDS = 60.0
+_fallback_last_emit: dict[str, float] = {}
+
+
+def _emit_rate_limited_stderr(context: str, exc: Exception) -> None:
+    """
+    Emit minimal fallback error to stderr when logger internals fail.
+    Rate-limited to avoid flooding.
+    """
+    try:
+        now = time.time()
+        last_emit = _fallback_last_emit.get(context, 0.0)
+        if now - last_emit < _FALLBACK_RATE_LIMIT_SECONDS:
+            return
+        _fallback_last_emit[context] = now
+        sys.stderr.write(f"[logger-fallback] {context}: {type(exc).__name__}: {exc}\n")
+        sys.stderr.flush()
+    except Exception:
+        # Final fallback intentionally silent.
+        pass
 
 
 def setup_logger(
@@ -18,18 +40,18 @@ def setup_logger(
     backup_count: int = 5,
 ) -> logging.Logger:
     """
-    Merkezi logger oluşturur.
+    Merkezi logger oluÅŸturur.
 
     Args:
         name: Logger ismi
-        log_file: Log dosyası yolu
-        console_level: Konsol log seviyesi (varsayılan: INFO)
-        file_level: Dosya log seviyesi (varsayılan: DEBUG)
+        log_file: Log dosyasÄ± yolu
+        console_level: Konsol log seviyesi (varsayÄ±lan: INFO)
+        file_level: Dosya log seviyesi (varsayÄ±lan: DEBUG)
         max_bytes: Maksimum dosya boyutu (byte)
-        backup_count: Saklanacak eski log sayısı
+        backup_count: Saklanacak eski log sayÄ±sÄ±
 
     Returns:
-        Yapılandırılmış Logger instance
+        YapÄ±landÄ±rÄ±lmÄ±ÅŸ Logger instance
     """
     logger = logging.getLogger(name)
 
@@ -37,7 +59,7 @@ def setup_logger(
     if logger.handlers:
         return logger
 
-    # En düşük seviyeyi ayarla (DEBUG)
+    # En dÃ¼ÅŸÃ¼k seviyeyi ayarla (DEBUG)
     logger.setLevel(logging.DEBUG)
 
     # Format
@@ -50,7 +72,7 @@ def setup_logger(
         "%(asctime)s | %(levelname)-8s | %(message)s", datefmt="%H:%M:%S"
     )
 
-    # Logs klasörü oluştur
+    # Logs klasÃ¶rÃ¼ oluÅŸtur
     log_dir = Path("logs")
     log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -62,7 +84,7 @@ def setup_logger(
     file_handler.setFormatter(detailed_formatter)
     logger.addHandler(file_handler)
 
-    # Error file handler - sadece ERROR ve üstü
+    # Error file handler - sadece ERROR ve Ã¼stÃ¼
     error_handler = RotatingFileHandler(
         log_dir / "errors.log", maxBytes=max_bytes, backupCount=backup_count, encoding="utf-8"
     )
@@ -82,22 +104,22 @@ def setup_logger(
         telegram_handler.setLevel(logging.CRITICAL)
         telegram_handler.setFormatter(simple_formatter)
         logger.addHandler(telegram_handler)
-    except Exception:
-        pass  # Telegram ayarları yoksa sessizce geç
+    except Exception as exc:
+        _emit_rate_limited_stderr("setup_logger.telegram_handler", exc)
 
     return logger
 
 
 class TelegramHandler(logging.Handler):
     """
-    Kritik hataları Telegram'a gönderen handler.
-    Rate limiting ile spam önlenir.
+    Kritik hatalarÄ± Telegram'a gÃ¶nderen handler.
+    Rate limiting ile spam Ã¶nlenir.
     """
 
     def __init__(self, min_interval: int = 60):
         """
         Args:
-            min_interval: Aynı mesaj için minimum bekleme süresi (saniye)
+            min_interval: AynÄ± mesaj iÃ§in minimum bekleme sÃ¼resi (saniye)
         """
         super().__init__()
         self._last_sent = {}
@@ -105,7 +127,7 @@ class TelegramHandler(logging.Handler):
         self._lock = __import__("threading").Lock()
 
     def emit(self, record):
-        """Log kaydını Telegram'a gönderir."""
+        """Log kaydÄ±nÄ± Telegram'a gÃ¶nderir."""
         try:
             import time
 
@@ -120,48 +142,50 @@ class TelegramHandler(logging.Handler):
             if not token or not chat_id:
                 return
 
-            # Rate limiting - aynı hatayı tekrar gönderme
+            # Rate limiting - aynÄ± hatayÄ± tekrar gÃ¶nderme
             msg_key = f"{record.filename}:{record.lineno}"
             current_time = time.time()
 
             with self._lock:
-                if msg_key in self._last_sent:
-                    if current_time - self._last_sent[msg_key] < self._min_interval:
-                        return
+                if (
+                    msg_key in self._last_sent
+                    and current_time - self._last_sent[msg_key] < self._min_interval
+                ):
+                    return
                 self._last_sent[msg_key] = current_time
 
             # Mesaj formatla
-            emoji = "🚨" if record.levelno >= logging.CRITICAL else "❌"
+            emoji = "ğŸš¨" if record.levelno >= logging.CRITICAL else "âŒ"
             msg = (
-                f"{emoji} <b>KRİTİK HATA</b>\n"
-                f"━━━━━━━━━━━━━━━━━━━━\n"
-                f"📁 {record.filename}:{record.lineno}\n"
-                f"⚠️ {record.getMessage()[:500]}\n"
-                f"🕐 {self.formatter.formatTime(record) if self.formatter else ''}"
+                f"{emoji} <b>KRÄ°TÄ°K HATA</b>\n"
+                f"â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”\n"
+                f"ğŸ“ {record.filename}:{record.lineno}\n"
+                f"âš ï¸ {record.getMessage()[:500]}\n"
+                f"ğŸ• {self.formatter.formatTime(record) if self.formatter else ''}"
             )
 
-            # Telegram'a gönder (async değil, blocking)
+            # Telegram'a gÃ¶nder (async deÄŸil, blocking)
             url = f"https://api.telegram.org/bot{token}/sendMessage"
             requests.post(
                 url, data={"chat_id": chat_id, "text": msg, "parse_mode": "HTML"}, timeout=5
             )
 
-        except Exception:
-            pass  # Handler hatası loglanmamalı (infinite loop riski)
+        except Exception as exc:
+            _emit_rate_limited_stderr("telegram_handler.emit", exc)
 
 
 def get_logger(module_name: str) -> logging.Logger:
     """
-    Modül bazlı child logger döndürür.
-    Parent logger'ın handler'larını kullanır.
+    ModÃ¼l bazlÄ± child logger dÃ¶ndÃ¼rÃ¼r.
+    Parent logger'Ä±n handler'larÄ±nÄ± kullanÄ±r.
 
     Args:
-        module_name: Modül adı (genellikle __name__)
+        module_name: ModÃ¼l adÄ± (genellikle __name__)
 
     Returns:
         Child logger instance
     """
-    # Parent logger'ın kurulduğundan emin ol
+    # Parent logger'Ä±n kurulduÄŸundan emin ol
     parent = logging.getLogger("trading_bot")
     if not parent.handlers:
         setup_logger()
@@ -174,11 +198,11 @@ def send_critical_alert(message: str) -> None:
     Manuel kritik hata bildirimi.
 
     Args:
-        message: Hata mesajı
+        message: Hata mesajÄ±
     """
     logger = logging.getLogger("trading_bot")
     logger.critical(message)
 
 
-# İlk import'ta logger'ı kur
+# Ä°lk import'ta logger'Ä± kur
 _main_logger = setup_logger()

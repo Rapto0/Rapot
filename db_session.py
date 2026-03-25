@@ -6,12 +6,14 @@ SQLAlchemy engine, session ve connection pooling.
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, scoped_session, sessionmaker
 
 from logger import get_logger
 from models import Base
+from settings import settings
 
 logger = get_logger(__name__)
 
@@ -36,13 +38,42 @@ def get_database_url(db_path: Path | str | None = None) -> str:
         SQLite connection URL
     """
     if db_path is None:
-        import os
+        configured_url = str(settings.database_url or "").strip()
+        if configured_url:
+            return configured_url
+        configured_path = str(settings.database_path or "").strip()
+        db_path = Path(configured_path) if configured_path else DEFAULT_DB_PATH
 
-        env_url = os.getenv("DATABASE_URL")
-        if env_url:
-            return env_url
-        db_path = DEFAULT_DB_PATH
-    return f"sqlite:///{db_path}"
+    if isinstance(db_path, str) and "://" in db_path:
+        return db_path
+
+    return f"sqlite:///{Path(db_path)}"
+
+
+def _sanitize_database_url_for_log(database_url: str) -> str:
+    """
+    Mask credentials from DB URL before logging.
+    """
+    try:
+        parsed = urlsplit(database_url)
+    except Exception:
+        return "<invalid-db-url>"
+
+    if not parsed.scheme:
+        return database_url
+
+    username = parsed.username
+    password = parsed.password
+    hostname = parsed.hostname
+
+    if username is None or password is None or hostname is None:
+        return database_url
+
+    netloc = f"{username}:***@{hostname}"
+    if parsed.port:
+        netloc = f"{netloc}:{parsed.port}"
+
+    return urlunsplit((parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment))
 
 
 # Engine oluştur
@@ -88,7 +119,7 @@ def get_engine(db_path: Path | str | None = None):
             cursor.execute("PRAGMA temp_store=MEMORY")
             cursor.close()
 
-        logger.info(f"Database engine oluşturuldu: {database_url}")
+        logger.info("Database engine oluşturuldu: %s", _sanitize_database_url_for_log(database_url))
 
     return _engine
 
@@ -260,7 +291,7 @@ def get_table_stats() -> dict:
         Her tablo için kayıt sayısı
     """
     stats = {}
-    tables = ["signals", "trades", "scan_history", "bot_stats", "ai_analyses"]
+    tables = ["signals", "trades", "orders", "scan_history", "bot_stats", "ai_analyses"]
 
     for table in tables:
         try:

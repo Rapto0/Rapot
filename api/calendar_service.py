@@ -1,19 +1,19 @@
 import datetime
-import logging
-import os
 from typing import Any
 
 import requests
 
+from logger import get_logger
+from settings import settings
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class CalendarService:
     def __init__(self) -> None:
-        self.api_key = os.getenv("FINNHUB_API_KEY")
+        self.api_key = str(settings.finnhub_api_key or "").strip()
         self.base_url = "https://finnhub.io/api/v1/calendar/economic"
-        self.cache_ttl_seconds = int(os.getenv("CALENDAR_CACHE_SECONDS", "60"))
+        self.cache_ttl_seconds = int(settings.calendar_cache_seconds)
         self._cache: dict[str, list[dict[str, Any]]] = {}
         self._cache_expiry: dict[str, datetime.datetime] = {}
 

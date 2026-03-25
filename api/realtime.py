@@ -5,7 +5,6 @@ Provides real-time market data streams to frontend clients.
 
 import asyncio
 import json
-import logging
 from collections import defaultdict
 from collections.abc import Coroutine
 from contextlib import suppress
@@ -15,7 +14,9 @@ from typing import Any
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 
-logger = logging.getLogger(__name__)
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/realtime", tags=["Real-time Data"])
 
@@ -48,7 +49,13 @@ class ConnectionManager:
         for connection in self._active_connections[channel]:
             try:
                 await connection.send_text(data)
-            except Exception:
+            except Exception as exc:
+                logger.warning(
+                    "Realtime send failed on channel %s (%s): %s",
+                    channel,
+                    type(exc).__name__,
+                    exc,
+                )
                 dead_connections.append(connection)
 
         # Cleanup dead connections
@@ -114,6 +121,7 @@ def _schedule_coro(coro: Coroutine[Any, Any, Any]) -> bool:
 
 # ==================== WebSocket Endpoints ====================
 
+
 @router.websocket("/ws/ticker")
 async def websocket_ticker(websocket: WebSocket):
     """
@@ -145,19 +153,18 @@ async def websocket_ticker(websocket: WebSocket):
                     symbol = message.get("symbol")
                     if symbol:
                         await ws_manager.subscribe_ticker(symbol)
-                        await websocket.send_json({
-                            "type": "subscribed",
-                            "symbol": symbol
-                        })
+                        await websocket.send_json({"type": "subscribed", "symbol": symbol})
 
             except TimeoutError:
                 # Send heartbeat
-                await websocket.send_json({"type": "heartbeat", "timestamp": datetime.now().isoformat()})
+                await websocket.send_json(
+                    {"type": "heartbeat", "timestamp": datetime.now().isoformat()}
+                )
 
     except WebSocketDisconnect:
         manager.disconnect(websocket, "ticker")
-    except Exception as e:
-        logger.error(f"WebSocket error: {e}")
+    except Exception:
+        logger.exception("WebSocket error on /realtime/ws/ticker.")
         manager.disconnect(websocket, "ticker")
 
 
@@ -184,8 +191,8 @@ async def websocket_kline(websocket: WebSocket, symbol: str, interval: str = "1m
 
     except WebSocketDisconnect:
         manager.disconnect(websocket, channel)
-    except Exception as e:
-        logger.error(f"Kline WebSocket error: {e}")
+    except Exception:
+        logger.exception("Kline WebSocket error on /realtime/ws/kline/%s.", symbol)
         manager.disconnect(websocket, channel)
 
 
@@ -211,6 +218,9 @@ async def websocket_trades(websocket: WebSocket, symbol: str):
 
     except WebSocketDisconnect:
         manager.disconnect(websocket, channel)
+    except Exception:
+        logger.exception("Trades WebSocket error on /realtime/ws/trades/%s.", symbol)
+        manager.disconnect(websocket, channel)
 
 
 @router.websocket("/ws/signals")
@@ -229,9 +239,13 @@ async def websocket_signals(websocket: WebSocket):
 
     except WebSocketDisconnect:
         manager.disconnect(websocket, "signals")
+    except Exception:
+        logger.exception("Signals WebSocket error on /realtime/ws/signals.")
+        manager.disconnect(websocket, "signals")
 
 
 # ==================== SSE Endpoints ====================
+
 
 async def event_generator(queue: asyncio.Queue, channel: str):
     """Generate SSE events from queue."""
@@ -264,7 +278,7 @@ async def sse_ticker():
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
-        }
+        },
     )
 
 
@@ -281,48 +295,61 @@ async def sse_signals():
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-        }
+        },
     )
 
 
 # ==================== Data Broadcasting Functions ====================
 
+
 async def broadcast_ticker(data: dict):
     """Broadcast ticker update to all connected clients."""
-    await manager.broadcast({
-        "type": "ticker",
-        "data": data,
-        "timestamp": datetime.now().isoformat(),
-    }, "ticker")
+    await manager.broadcast(
+        {
+            "type": "ticker",
+            "data": data,
+            "timestamp": datetime.now().isoformat(),
+        },
+        "ticker",
+    )
 
 
 async def broadcast_kline(symbol: str, interval: str, data: dict):
     """Broadcast kline update to subscribers."""
     channel = f"kline_{symbol}_{interval}"
-    await manager.broadcast({
-        "type": "kline",
-        "data": data,
-        "timestamp": datetime.now().isoformat(),
-    }, channel)
+    await manager.broadcast(
+        {
+            "type": "kline",
+            "data": data,
+            "timestamp": datetime.now().isoformat(),
+        },
+        channel,
+    )
 
 
 async def broadcast_trade(symbol: str, data: dict):
     """Broadcast trade to subscribers."""
     channel = f"trades_{symbol}"
-    await manager.broadcast({
-        "type": "trade",
-        "data": data,
-        "timestamp": datetime.now().isoformat(),
-    }, channel)
+    await manager.broadcast(
+        {
+            "type": "trade",
+            "data": data,
+            "timestamp": datetime.now().isoformat(),
+        },
+        channel,
+    )
 
 
 async def broadcast_signal(signal: dict):
     """Broadcast new trading signal."""
-    await manager.broadcast({
-        "type": "signal",
-        "data": signal,
-        "timestamp": datetime.now().isoformat(),
-    }, "signals")
+    await manager.broadcast(
+        {
+            "type": "signal",
+            "data": signal,
+            "timestamp": datetime.now().isoformat(),
+        },
+        "signals",
+    )
 
 
 def publish_signal(signal: dict) -> bool:
@@ -337,23 +364,24 @@ def publish_signal(signal: dict) -> bool:
 
 async def broadcast_bist_update(stocks: list[dict]):
     """Broadcast BIST data update."""
-    await manager.broadcast({
-        "type": "bist",
-        "data": stocks,
-        "timestamp": datetime.now().isoformat(),
-    }, "ticker")
+    await manager.broadcast(
+        {
+            "type": "bist",
+            "data": stocks,
+            "timestamp": datetime.now().isoformat(),
+        },
+        "ticker",
+    )
 
 
 # ==================== Status Endpoint ====================
+
 
 @router.get("/status")
 async def realtime_status():
     """Get real-time service status."""
     return {
         "connections": manager.total_connections,
-        "channels": {
-            channel: len(conns)
-            for channel, conns in manager._active_connections.items()
-        },
+        "channels": {channel: len(conns) for channel, conns in manager._active_connections.items()},
         "timestamp": datetime.now().isoformat(),
     }

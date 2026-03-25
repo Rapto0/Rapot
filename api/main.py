@@ -8,16 +8,11 @@ Kullanım:
 
 import asyncio
 import math
-import os
 import unicodedata
 from datetime import datetime, timedelta
 
-from dotenv import load_dotenv
-
-load_dotenv()
-
 import yfinance as yf  # noqa: E402
-from fastapi import FastAPI, HTTPException, Query, Request  # noqa: E402
+from fastapi import FastAPI, HTTPException, Query, Request, Response  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from pydantic import BaseModel, ConfigDict  # noqa: E402
 from slowapi import _rate_limit_exceeded_handler  # noqa: E402
@@ -34,6 +29,8 @@ from api.realtime import router as realtime_router  # noqa: E402
 from api.routes.auth_routes import router as auth_router  # noqa: E402
 from api.routes.symbols_routes import router as symbols_router  # noqa: E402
 from api.routes.system_routes import router as system_router  # noqa: E402
+from logger import get_logger  # noqa: E402
+from settings import settings  # noqa: E402
 from strategy_inspector import (  # noqa: E402
     StrategyInspectorError,
     build_strategy_ai_payload,
@@ -47,37 +44,20 @@ _start_time = datetime.now()
 import threading  # noqa: E402
 from contextlib import asynccontextmanager, suppress  # noqa: E402
 
-RUN_EMBEDDED_BOT = os.getenv("RUN_EMBEDDED_BOT", "0").strip().lower() in {
-    "1",
-    "true",
-    "yes",
-    "on",
-}
-
-
-def _parse_bool_env(var_name: str, default: bool = False) -> bool:
-    raw_value = os.getenv(var_name)
-    if raw_value is None:
-        return default
-    return raw_value.strip().lower() in {"1", "true", "yes", "on"}
-
-
-def _parse_cors_origins() -> list[str]:
-    raw_origins = os.getenv("CORS_ALLOW_ORIGINS", "").strip()
-    if not raw_origins:
-        return [
-            "http://localhost:3000",
-            "http://127.0.0.1:3000",
-        ]
-    parsed_origins = [item.strip() for item in raw_origins.split(",") if item.strip()]
-    return parsed_origins or ["http://localhost:3000", "http://127.0.0.1:3000"]
-
-
-CORS_ALLOW_ORIGINS = _parse_cors_origins()
+RUN_EMBEDDED_BOT = bool(settings.run_embedded_bot)
+CORS_ALLOW_ORIGINS = settings.cors_origins_list
 # Credentials + wildcard kombinasyonu tarayici tarafinda desteklenmez.
-CORS_ALLOW_CREDENTIALS = _parse_bool_env("CORS_ALLOW_CREDENTIALS", default=True)
+CORS_ALLOW_CREDENTIALS = bool(settings.cors_allow_credentials)
 if "*" in CORS_ALLOW_ORIGINS:
     CORS_ALLOW_CREDENTIALS = False
+
+logger = get_logger(__name__)
+
+_RUNTIME_STATE = {
+    "db_ready": False,
+    "realtime_ready": False,
+    "realtime_error": None,
+}
 
 
 @asynccontextmanager
@@ -93,13 +73,13 @@ async def lifespan(app: FastAPI):
         # Bot Thread Başlat
         def run_scheduler():
             try:
-                print("Embedded bot mode enabled in API process.")
+                logger.info("Embedded bot mode enabled in API process.")
                 from scheduler import start_bot
 
                 # Async modda çalıştır (kendi event loop'unu yönetir)
                 start_bot(use_async=True)
-            except Exception as e:
-                print(f"Embedded bot thread error: {e}")
+            except Exception:
+                logger.exception("Embedded bot thread error.")
 
         # Daemon thread: Ana process kapanınca bu da kapanır
         bot_thread = threading.Thread(target=run_scheduler, daemon=True)
@@ -109,8 +89,8 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         await _stop_realtime_services()
-        print("API shutting down.")
-        print("Otonom Analiz API kapatildi")
+        logger.info("API shutting down.")
+        logger.info("Otonom Analiz API kapatildi")
 
 
 # FastAPI uygulaması
@@ -151,6 +131,7 @@ class HealthResponse(BaseModel):
     status: str
     uptime_seconds: float
     database: str
+    realtime: str
     version: str
 
 
@@ -548,7 +529,7 @@ async def root(request: Request):
 
 @app.get("/health", response_model=HealthResponse, tags=["System"])
 @limiter.limit("60/minute")
-async def health_check(request: Request):
+async def health_check(request: Request, response: Response):
     """
     Sistem sağlık kontrolü.
 
@@ -557,18 +538,31 @@ async def health_check(request: Request):
     uptime = (datetime.now() - _start_time).total_seconds()
 
     # Veritabanı kontrolü
-    try:
-        from db_session import get_table_stats
+    db_ok = bool(_RUNTIME_STATE.get("db_ready"))
+    db_status = "error"
+    if db_ok:
+        try:
+            from db_session import get_table_stats
 
-        _ = get_table_stats()
-        db_status = "connected"
-    except Exception:
-        db_status = "error"
+            _ = get_table_stats()
+            db_status = "connected"
+        except Exception:
+            db_ok = False
+            db_status = "error"
+            logger.exception("Health check DB probe failed.")
+
+    realtime_ok = bool(_RUNTIME_STATE.get("realtime_ready"))
+    realtime_status = "running" if realtime_ok else "error"
+
+    overall_status = "healthy" if db_ok and realtime_ok else "unhealthy"
+    if overall_status != "healthy":
+        response.status_code = 503
 
     return HealthResponse(
-        status="healthy",
+        status=overall_status,
         uptime_seconds=uptime,
         database=db_status,
+        realtime=realtime_status,
         version="1.0.0",
     )
 
@@ -1021,8 +1015,8 @@ async def get_market_overview(request: Request):
         _market_overview_cache = (now, data)
         return data
 
-    except Exception as e:
-        print(f"Market overview error: {e}")
+    except Exception:
+        logger.exception("Market overview error.")
         fallback = {
             "bist": {"currentValue": 0, "change": 0, "history": []},
             "crypto": {"currentValue": 0, "change": 0, "history": []},
@@ -1135,8 +1129,8 @@ async def get_market_indices(
 
         return items
 
-    except Exception as e:
-        print(f"Market indices error: {e}")
+    except Exception:
+        logger.exception("Market indices error.")
         return []
 
 
@@ -1195,8 +1189,8 @@ async def get_market_ticker(request: Request):
         _market_ticker_cache = (now, tickers)
         return tickers
 
-    except Exception as e:
-        print(f"Ticker error: {e}")
+    except Exception:
+        logger.exception("Ticker error.")
         _market_ticker_cache = (now, [])
         return []
 
@@ -1295,8 +1289,8 @@ def _fetch_binance_24h_metrics(symbols: list[str]) -> dict[str, dict[str, float 
 
         client = Client()
         rows = client.get_ticker()
-    except Exception as exc:
-        print(f"Binance 24h ticker error: {exc}")
+    except Exception:
+        logger.exception("Binance 24h ticker error.")
         return {}
 
     wanted = {_normalize_binance_symbol(symbol) for symbol in symbols}
@@ -1378,8 +1372,8 @@ async def get_market_metrics(
                 _fetch_yfinance_download,
                 tickers if len(tickers) > 1 else tickers[0],
             )
-        except Exception as exc:
-            print(f"Market metrics download error ({market}): {exc}")
+        except Exception:
+            logger.exception("Market metrics download error (%s).", market)
             continue
 
         for key_name, ticker in items:
@@ -1560,7 +1554,7 @@ def get_market_analysis(
     except StrategyInspectorError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as e:
-        print(f"Analiz hatasi: {e}")
+        logger.exception("Analiz hatasi.")
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -1711,8 +1705,8 @@ async def get_candles(
                         if timeframe != yf_interval
                         else "yfinance_intraday_session"
                     )
-            except Exception as yf_err:
-                print(f"yfinance intraday error for {symbol}: {yf_err}")
+            except Exception:
+                logger.exception("yfinance intraday error for %s.", symbol)
                 df = None
 
         # For Crypto with intraday: Fetch directly from Binance with the interval
@@ -1749,8 +1743,8 @@ async def get_candles(
                     df.set_index("timestamp", inplace=True)
                     df = df[["Open", "High", "Low", "Close", "Volume"]].astype(float)
                     source = "binance"
-            except Exception as binance_err:
-                print(f"Binance intraday error for {symbol}: {binance_err}")
+            except Exception:
+                logger.exception("Binance intraday error for %s.", symbol)
                 df = None
 
         # For non-intraday or if intraday failed, use standard approach
@@ -1766,14 +1760,14 @@ async def get_candles(
 
                         if is_suspicious_bist_ohlcv(df):
                             price_cache.invalidate(symbol, "BIST")
-                            print(f"Invalidated suspicious BIST cache: {symbol}")
+                            logger.warning("Invalidated suspicious BIST cache: %s", symbol)
                             df = None
                         else:
                             source = "cache"
                     else:
                         source = "cache"
-            except Exception as cache_err:
-                print(f"Cache error for {symbol}: {cache_err}")
+            except Exception:
+                logger.exception("Cache error for %s.", symbol)
                 df = None
 
             # 2. If cache miss, fetch from source
@@ -1794,11 +1788,13 @@ async def get_candles(
 
                                 if is_suspicious_bist_ohlcv(df):
                                     pc.invalidate(symbol, market_type)
-                                    print(f"Skipped suspicious BIST cache write: {symbol}")
+                                    logger.warning(
+                                        "Skipped suspicious BIST cache write: %s", symbol
+                                    )
                                 else:
                                     pc.set(symbol, market_type, df)
-                    except Exception as bist_err:
-                        print(f"BIST data error for {symbol}: {bist_err}")
+                    except Exception:
+                        logger.exception("BIST data error for %s.", symbol)
                         df = None
 
                 elif market_type in ["Kripto", "CRYPTO"]:
@@ -1815,8 +1811,8 @@ async def get_candles(
                                 from price_cache import price_cache as pc
 
                                 pc.set(symbol, "Kripto", df)
-                    except Exception as crypto_err:
-                        print(f"Crypto data error for {symbol}: {crypto_err}")
+                    except Exception:
+                        logger.exception("Crypto data error for %s.", symbol)
                         df = None
 
         # 3. Final fallback: yfinance
@@ -1849,8 +1845,8 @@ async def get_candles(
                     df = resampled
                     if timeframe != "1d":
                         source = f"{source}_market_custom"
-            except Exception as resample_err:
-                print(f"Resample error: {resample_err}")
+            except Exception:
+                logger.exception("Resample error for %s (%s).", symbol, timeframe)
 
         # 5. Format output timestamps
         import pytz
@@ -1912,7 +1908,7 @@ async def get_candles(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"Candle error for {symbol}: {e}")
+        logger.exception("Candle error for %s.", symbol)
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
@@ -1929,12 +1925,43 @@ def get_calendar(from_date: str = Query(None), to_date: str = Query(None)):
 def _run_startup_sequence() -> None:
     """Uygulama baslangicinda gerekli senkron hazirligi yapar."""
     from db_session import init_db
+    from ops_repository import reconcile_active_orders_on_startup
 
-    init_db()
+    _RUNTIME_STATE["db_ready"] = False
+    try:
+        init_db()
+        reconcile_summary = reconcile_active_orders_on_startup()
+        logger.info(
+            "Startup order reconcile completed | checked=%s stale=%s unknown=%s exchange_sync=%s exchange_errors=%s",
+            reconcile_summary.get("checked", 0),
+            reconcile_summary.get("marked_stale", 0),
+            reconcile_summary.get("marked_unknown", 0),
+            reconcile_summary.get("exchange_sync_attempted", False),
+            reconcile_summary.get("exchange_errors", 0),
+        )
+        try:
+            from market_scanner import restore_scanner_state_from_db
+
+            restore_scanner_state_from_db()
+        except Exception as exc:
+            logger.warning("Sync scanner state restore at startup failed: %s", exc)
+        try:
+            from async_scanner import restore_async_scanner_state_from_db
+
+            restore_async_scanner_state_from_db()
+        except Exception as exc:
+            logger.warning("Async scanner state restore at startup failed: %s", exc)
+        _RUNTIME_STATE["db_ready"] = True
+        logger.info("Startup DB initialization completed.")
+    except Exception:
+        logger.exception("Startup DB initialization failed.")
+        raise
 
 
 async def _start_realtime_services() -> None:
     """Real-time servislerini baslatir."""
+    _RUNTIME_STATE["realtime_ready"] = False
+    _RUNTIME_STATE["realtime_error"] = None
     try:
         from bist_service import bist_service
         from websocket_manager import ws_manager
@@ -1945,10 +1972,13 @@ async def _start_realtime_services() -> None:
 
         await ws_manager.start()
         await bist_service.start()
-        print("Real-time WebSocket services started")
-        print("Otonom Analiz API baslatildi")
-    except Exception as e:
-        print(f"Real-time services failed to start: {e}")
+        _RUNTIME_STATE["realtime_ready"] = True
+        logger.info("Real-time WebSocket services started")
+        logger.info("Otonom Analiz API baslatildi")
+    except Exception as exc:
+        _RUNTIME_STATE["realtime_error"] = str(exc)
+        logger.exception("Real-time services failed to start.")
+        raise
 
 
 async def _stop_realtime_services() -> None:
@@ -1959,6 +1989,8 @@ async def _stop_realtime_services() -> None:
 
         await ws_manager.stop()
         await bist_service.stop()
-        print("Real-time services stopped")
-    except Exception as e:
-        print(f"Error stopping real-time services: {e}")
+        logger.info("Real-time services stopped")
+    except Exception:
+        logger.exception("Error stopping real-time services.")
+    finally:
+        _RUNTIME_STATE["realtime_ready"] = False

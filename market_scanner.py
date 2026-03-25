@@ -35,6 +35,9 @@ from strategy_inspector import build_strategy_ai_payload, inspect_strategy_dataf
 from telegram_notify import send_message
 
 logger = get_logger(__name__)
+_REALTIME_PUBLISH_FAILURE_COUNT = 0
+_SYNC_SCAN_COUNT_KEY = "sync_scan_count"
+_SYNC_SIGNAL_COUNT_KEY = "sync_signal_count"
 
 
 def _json_default(value: Any):
@@ -127,6 +130,11 @@ class ScannerState:
             self._signal_count += 1
             return self._signal_count
 
+    def restore(self, scan_count: int, signal_count: int) -> None:
+        with self._lock:
+            self._scan_count = max(0, int(scan_count))
+            self._signal_count = max(0, int(signal_count))
+
 
 # Singleton instance
 _scanner_state = ScannerState()
@@ -144,12 +152,38 @@ def get_signal_count() -> int:
 
 def increment_scan_count() -> int:
     """Tarama sayacını artırır."""
-    return _scanner_state.increment_scan()
+    updated = _scanner_state.increment_scan()
+    try:
+        from ops_repository import set_bot_stat_int
+
+        set_bot_stat_int(_SYNC_SCAN_COUNT_KEY, updated)
+    except Exception as exc:
+        logger.warning("Sync scan count persistence failed: %s", exc)
+    return updated
 
 
 def increment_signal_count() -> int:
     """Sinyal sayacını artırır."""
-    return _scanner_state.increment_signal()
+    updated = _scanner_state.increment_signal()
+    try:
+        from ops_repository import set_bot_stat_int
+
+        set_bot_stat_int(_SYNC_SIGNAL_COUNT_KEY, updated)
+    except Exception as exc:
+        logger.warning("Sync signal count persistence failed: %s", exc)
+    return updated
+
+
+def restore_scanner_state_from_db() -> None:
+    try:
+        from ops_repository import get_bot_stat_int
+
+        scan_count = get_bot_stat_int(_SYNC_SCAN_COUNT_KEY, default=0)
+        signal_count = get_bot_stat_int(_SYNC_SIGNAL_COUNT_KEY, default=0)
+        _scanner_state.restore(scan_count=scan_count, signal_count=signal_count)
+        logger.info("Sync scanner state restored | scans=%s signals=%s", scan_count, signal_count)
+    except Exception as exc:
+        logger.warning("Sync scanner state restore skipped: %s", exc)
 
 
 def _build_realtime_signal_payload(
@@ -181,13 +215,23 @@ def _build_realtime_signal_payload(
 
 
 def _publish_realtime_signal(payload: dict[str, Any]) -> bool:
+    global _REALTIME_PUBLISH_FAILURE_COUNT
     try:
         from api.realtime import publish_signal
 
         return publish_signal(payload)
     except Exception as exc:
-        logger.debug("Realtime signal publish skipped: %s", exc)
+        _REALTIME_PUBLISH_FAILURE_COUNT += 1
+        logger.warning(
+            "Realtime signal publish skipped (%s failures): %s",
+            _REALTIME_PUBLISH_FAILURE_COUNT,
+            exc,
+        )
         return False
+
+
+def get_realtime_publish_failure_count() -> int:
+    return _REALTIME_PUBLISH_FAILURE_COUNT
 
 
 def _save_signal_and_publish(
@@ -828,7 +872,7 @@ def process_symbol(
             if res_combo:
                 if res_combo["buy"]:
                     combo_hits["buy"][tf_code] = res_combo["details"]
-                    print(f">>> COMBO AL: {symbol} {tf_label}")
+                    logger.info("COMBO AL signal | %s %s", symbol, tf_label)
                     # Veritabanına kaydet
                     _save_signal_and_publish(
                         symbol=symbol,
@@ -860,7 +904,7 @@ def process_symbol(
             if res_hunter:
                 if res_hunter["buy"]:
                     hunter_hits["buy"][tf_code] = res_hunter["details"]
-                    print(f">>> HUNTER DİP: {symbol} {tf_label}")
+                    logger.info("HUNTER DIP signal | %s %s", symbol, tf_label)
                     # Veritabanına kaydet
                     _save_signal_and_publish(
                         symbol=symbol,
@@ -919,10 +963,7 @@ def process_symbol(
         special_tag: str,
         trigger_rule: list[str],
     ) -> None:
-        if (
-            market_type == "BIST"
-            and signal_guard_settings.BIST_REQUIRE_SECOND_SOURCE_CONFIRMATION
-        ):
+        if market_type == "BIST" and signal_guard_settings.BIST_REQUIRE_SECOND_SOURCE_CONFIRMATION:
             ok, reason = _verify_bist_second_source(
                 symbol=symbol,
                 strategy_name=strategy_name,
@@ -1133,15 +1174,16 @@ def scan_market(
     increment_scan_count()
     scan_num = get_scan_count()
     logger.info(f"Tarama #{scan_num} başladı")
-    print(f"\n--- Tarama Başladı: {time.strftime('%H:%M:%S')} ---")
+    logger.info("--- Tarama Basladi: %s ---", time.strftime("%H:%M:%S"))
 
     # BIST Tarama
     symbols = get_all_bist_symbols() if "BIST" in selected_markets else []
     logger.info(f"BIST taranıyor: {len(symbols)} hisse")
-    print(f"🏢 BIST Taranıyor ({len(symbols)} hisse)...")
+    logger.info("BIST taraniyor (%s hisse)", len(symbols))
 
     for i, sym in enumerate(symbols):
-        print(f"\rBIST: {i + 1}/{len(symbols)} {sym}", end="")
+        if (i + 1) % 50 == 0 or i == len(symbols) - 1:
+            logger.debug("BIST progress: %s/%s %s", i + 1, len(symbols), sym)
         try:
             # Trade-time BIST akisinda cache bypass: her turde kaynaktan taze veri cek.
             df = get_bist_data(sym, start_date="01-01-2015")
@@ -1164,10 +1206,11 @@ def scan_market(
 
     # Kripto Tarama
     crypto_syms = get_all_binance_symbols() if "Kripto" in selected_markets else []
-    print(f"\n\n₿ Kripto Taranıyor ({len(crypto_syms)} çift)...")
+    logger.info("Kripto taraniyor (%s cift)", len(crypto_syms))
 
     for i, sym in enumerate(crypto_syms):
-        print(f"\rKripto: {i + 1}/{len(crypto_syms)} {sym}", end="")
+        if (i + 1) % 100 == 0 or i == len(crypto_syms) - 1:
+            logger.debug("Kripto progress: %s/%s %s", i + 1, len(crypto_syms), sym)
         try:
             df = cached_get_crypto_data(sym)
             process_symbol(df, sym, "Kripto")
@@ -1185,6 +1228,9 @@ def scan_market(
     cache_stats = price_cache.get_stats()
     logger.info(f"Cache: {cache_stats['session_hits']} hit, {cache_stats['session_misses']} miss")
     logger.info(f"Tarama #{scan_num} tamamlandi | Piyasalar: {market_label}")
-    print("\nTarama bitti.")
+    logger.info("Tarama bitti.")
     send_message(f"Tarama tamamlandi ({market_label}).")
     return
+
+
+restore_scanner_state_from_db()

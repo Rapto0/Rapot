@@ -7,41 +7,72 @@ Usage:
 """
 
 import hashlib
-import os
 from datetime import datetime, timedelta
 
-from dotenv import load_dotenv
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from pydantic import BaseModel, Field
+
+from logger import get_logger
+from settings import get_settings
 
 try:
     import bcrypt
 except Exception:  # pragma: no cover - optional import safety
     bcrypt = None
 
-load_dotenv()
+logger = get_logger(__name__)
+get_settings.cache_clear()
+runtime_settings = get_settings()
 
 
 # ==================== CONFIGURATION ====================
 
 
-def _is_truthy(raw_value: str | None) -> bool:
-    if raw_value is None:
-        return False
-    return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+def _resolve_runtime_env() -> str:
+    return str(runtime_settings.app_env or "production").strip().lower()
+
+
+def _is_unsafe_secret(secret_key: str) -> bool:
+    normalized = secret_key.strip().lower()
+    if not normalized:
+        return True
+    blocked_markers = (
+        "change_me",
+        "dev-only",
+        "insecure",
+        "example",
+        "your_",
+        "replace_with",
+        "placeholder",
+    )
+    return any(marker in normalized for marker in blocked_markers)
 
 
 def _resolve_secret_key() -> str:
-    secret_key = os.getenv("JWT_SECRET_KEY", "").strip()
+    secret_key = str(runtime_settings.jwt_secret_key or "").strip()
     if secret_key:
+        if _is_unsafe_secret(secret_key):
+            raise RuntimeError(
+                "JWT_SECRET_KEY appears to be an insecure placeholder. "
+                "Set a strong unique secret for production."
+            )
         return secret_key
 
-    if _is_truthy(os.getenv("ALLOW_INSECURE_JWT_SECRET")):
+    allow_insecure = bool(runtime_settings.allow_insecure_jwt_secret)
+    runtime_env = _resolve_runtime_env()
+    if allow_insecure and runtime_env in {"development", "dev", "local", "test", "testing"}:
         insecure_fallback = "dev-only-insecure-jwt-secret-change-me"
-        print("WARNING: JWT_SECRET_KEY missing, using insecure fallback secret.")
+        logger.warning(
+            "JWT_SECRET_KEY missing. Using insecure fallback secret in %s environment.",
+            runtime_env,
+        )
         return insecure_fallback
+    if allow_insecure:
+        raise RuntimeError(
+            "ALLOW_INSECURE_JWT_SECRET is only allowed in local/development environments."
+        )
 
     raise RuntimeError(
         "JWT_SECRET_KEY env var is required. "
@@ -51,12 +82,12 @@ def _resolve_secret_key() -> str:
 
 SECRET_KEY = _resolve_secret_key()
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("JWT_EXPIRE_MINUTES", "1440"))
+ACCESS_TOKEN_EXPIRE_MINUTES = int(runtime_settings.jwt_expire_minutes)
 
-DEFAULT_ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
-DEFAULT_USER_PASSWORD = os.getenv("USER_PASSWORD", "")
-DEFAULT_ADMIN_PASSWORD_HASH = os.getenv("ADMIN_PASSWORD_HASH", "")
-DEFAULT_USER_PASSWORD_HASH = os.getenv("USER_PASSWORD_HASH", "")
+DEFAULT_ADMIN_PASSWORD = str(runtime_settings.admin_password or "")
+DEFAULT_USER_PASSWORD = str(runtime_settings.user_password or "")
+DEFAULT_ADMIN_PASSWORD_HASH = str(runtime_settings.admin_password_hash or "")
+DEFAULT_USER_PASSWORD_HASH = str(runtime_settings.user_password_hash or "")
 
 security = HTTPBearer(auto_error=False)
 

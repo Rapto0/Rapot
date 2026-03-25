@@ -4,6 +4,8 @@ Time-based scanning loop for bot operations.
 """
 
 import asyncio
+import os
+import socket
 import time
 import warnings
 from datetime import datetime
@@ -24,6 +26,8 @@ SPECIAL_TAG_HEALTH_SUMMARY_KEY = "special_tag_health_summary"
 BIST_SCAN_TIMES_TR = ("10:15", "13:00", "17:00")
 CRYPTO_SCAN_TIMES_TR = ("07:00", "15:00", "23:00")
 _SCAN_LOCK = Lock()
+_DISTRIBUTED_SCAN_LOCK_NAME = "scheduled_scan"
+_SCHEDULER_LOCK_OWNER = f"{socket.gethostname()}:{os.getpid()}"
 
 
 def _format_special_tag_issue_summary(issues: list[dict]) -> str:
@@ -83,8 +87,8 @@ def run_special_tag_health_check() -> None:
                     "SPECIAL TAG RECOVERY OK\nSon 24 saatte ozel etiket kapsama farki kalmadi.",
                     priority=MessagePriority.HIGH,
                 )
-    except Exception as exc:
-        logger.error(f"Ozel etiket kapsama kontrolu hatasi: {exc}")
+    except Exception:
+        logger.exception("Ozel etiket kapsama kontrolu hatasi.")
 
 
 def _tr_clock_to_local_clock(tr_clock: str) -> str:
@@ -125,15 +129,45 @@ def _run_scheduled_scan(scan_func, label: str) -> None:
         logger.warning(f"{label} atlandi: onceki tarama hala devam ediyor.")
         return
 
+    release_lock_fn = None
+    distributed_locked = False
+    lock_owner = f"{_SCHEDULER_LOCK_OWNER}:{label}"
     started_at = time.time()
     try:
+        try:
+            from ops_repository import acquire_distributed_lock, release_distributed_lock
+        except Exception as exc:
+            acquire_distributed_lock = None
+            logger.warning("Distributed lock helper import failed; local lock only: %s", exc)
+
+        if acquire_distributed_lock is not None:
+            release_lock_fn = release_distributed_lock
+            try:
+                distributed_locked = acquire_distributed_lock(
+                    _DISTRIBUTED_SCAN_LOCK_NAME,
+                    owner=lock_owner,
+                    ttl_seconds=3600,
+                )
+            except Exception as exc:
+                logger.warning("%s atlandi: distributed lock alinamadi (%s).", label, exc)
+                return
+
+            if not distributed_locked:
+                logger.warning("%s atlandi: baska bir process tarama lock'unu tutuyor.", label)
+                return
+
         logger.info(f"{label} basladi.")
         scan_func()
-    except Exception as exc:
-        logger.error(f"{label} hatasi: {exc}")
+    except Exception:
+        logger.exception("%s hatasi.", label)
     finally:
         elapsed = time.time() - started_at
         logger.info(f"{label} tamamlandi ({elapsed:.1f}s).")
+        if distributed_locked and release_lock_fn is not None:
+            try:
+                release_lock_fn(_DISTRIBUTED_SCAN_LOCK_NAME, owner=lock_owner)
+            except Exception as exc:
+                logger.warning("Distributed lock release failed for %s: %s", label, exc)
         _SCAN_LOCK.release()
 
 
@@ -184,8 +218,8 @@ def run_bot_loop(scan_func, check_commands_func) -> None:
             logger.info("Bot kapatiliyor...")
             send_message("Bot kapatildi.")
             break
-        except Exception as e:
-            logger.error(f"Dongu hatasi: {e}")
+        except Exception:
+            logger.exception("Dongu hatasi.")
             time.sleep(5)
 
 
@@ -197,8 +231,8 @@ def run_async_scan_wrapper(markets: str | list[str] | tuple[str, ...] | set[str]
 
     try:
         asyncio.run(scan_market_async(markets=markets))
-    except Exception as e:
-        logger.error(f"Async tarama hatasi: {e}")
+    except Exception:
+        logger.exception("Async tarama hatasi.")
         logger.info("Sync taramaya geri donuluyor...")
         from market_scanner import scan_market
 
@@ -215,20 +249,20 @@ def start_bot(use_async: bool = True) -> None:
 
     mode = "Async" if use_async else "Sync"
     logger.info(f"Bot baslatiliyor... ({mode} mode)")
-    print(f"Bot baslatiliyor... ({mode} mode)")
 
     try:
         init_db()
         logger.info("Bot baslangicinda veritabani semasi dogrulandi.")
-    except Exception as e:
-        logger.error(f"Veritabani baslatilamadi, bot durduruluyor: {e}")
+    except Exception:
+        logger.exception("Veritabani baslatilamadi, bot durduruluyor.")
         raise
 
     try:
         from health_api import start_health_server
+        from settings import settings
 
-        start_health_server(port=5000)
-        logger.info("Health API: http://localhost:5000")
+        start_health_server(host=settings.health_api_host, port=settings.health_api_port)
+        logger.info("Health API: http://%s:%s", settings.health_api_host, settings.health_api_port)
     except Exception as e:
         logger.warning(f"Health API baslatilamadi: {e}")
 

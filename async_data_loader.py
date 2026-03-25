@@ -32,6 +32,9 @@ def _get_binance_client():
 # Rate limiting semaphore
 BIST_SEMAPHORE = asyncio.Semaphore(5)  # Max 5 eşzamanlı BIST isteği
 CRYPTO_SEMAPHORE = asyncio.Semaphore(10)  # Max 10 eşzamanlı kripto isteği
+_RETRYABLE_HTTP_STATUSES = {429, 500, 502, 503, 504}
+_MAX_BINANCE_HTTP_RETRIES = 3
+_HTTP_BODY_LOG_LIMIT = 240
 
 
 async def fetch_bist_data_async(
@@ -110,23 +113,52 @@ async def fetch_crypto_data_async(
 
             # Pagination ile tüm veriyi çek
             while True:
-                async with session.get(url, params=params) as response:
-                    if response.status != 200:
-                        break
+                klines = None
+                retry_count = 0
+                while True:
+                    async with session.get(url, params=params) as response:
+                        if response.status == 200:
+                            klines = await response.json()
+                            break
 
-                    klines = await response.json()
-                    if not klines:
-                        break
+                        body_preview = (await response.text())[:_HTTP_BODY_LOG_LIMIT]
+                        retryable = response.status in _RETRYABLE_HTTP_STATUSES
+                        if retryable and retry_count < _MAX_BINANCE_HTTP_RETRIES:
+                            wait_seconds = min(2**retry_count, 8)
+                            logger.warning(
+                                "Binance klines non-200 (%s) for %s. Retry %s/%s in %ss. body=%s",
+                                response.status,
+                                symbol,
+                                retry_count + 1,
+                                _MAX_BINANCE_HTTP_RETRIES,
+                                wait_seconds,
+                                body_preview,
+                            )
+                            retry_count += 1
+                            await asyncio.sleep(wait_seconds)
+                            continue
 
-                    all_klines.extend(klines)
+                        logger.error(
+                            "Binance klines request failed for %s (status=%s, retryable=%s). body=%s",
+                            symbol,
+                            response.status,
+                            retryable,
+                            body_preview,
+                        )
+                        return None
 
-                    # Son verinin timestamp'i
-                    last_time = klines[-1][0]
-                    if last_time >= end_time or len(klines) < 1000:
-                        break
+                if not klines:
+                    break
 
-                    params["startTime"] = last_time + 1
-                    await asyncio.sleep(0.1)  # Rate limit
+                all_klines.extend(klines)
+
+                # Son verinin timestamp'i
+                last_time = klines[-1][0]
+                if last_time >= end_time or len(klines) < 1000:
+                    break
+
+                params["startTime"] = last_time + 1
+                await asyncio.sleep(0.1)  # Rate limit
 
             if not all_klines:
                 return None
@@ -161,8 +193,8 @@ async def fetch_crypto_data_async(
 
             return df
 
-        except Exception as e:
-            logger.error(f"Async kripto veri hatası ({symbol}): {e}")
+        except Exception:
+            logger.exception("Async kripto veri hatasi (%s).", symbol)
             return None
 
 

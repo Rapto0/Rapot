@@ -16,6 +16,9 @@ from data_loader import get_bist_data
 from logger import get_logger
 
 logger = get_logger(__name__)
+_RETRYABLE_HTTP_STATUSES = {429, 500, 502, 503, 504}
+_MAX_BINANCE_HTTP_RETRIES = 3
+_HTTP_BODY_LOG_LIMIT = 240
 
 
 @dataclass
@@ -324,22 +327,51 @@ class BatchDataLoader:
             all_klines = []
 
             while True:
-                async with session.get(url, params=params) as response:
-                    if response.status != 200:
-                        break
+                klines = None
+                retry_count = 0
+                while True:
+                    async with session.get(url, params=params) as response:
+                        if response.status == 200:
+                            klines = await response.json()
+                            break
 
-                    klines = await response.json()
-                    if not klines:
-                        break
+                        body_preview = (await response.text())[:_HTTP_BODY_LOG_LIMIT]
+                        retryable = response.status in _RETRYABLE_HTTP_STATUSES
+                        if retryable and retry_count < _MAX_BINANCE_HTTP_RETRIES:
+                            wait_seconds = min(2**retry_count, 8)
+                            logger.warning(
+                                "Binance klines non-200 (%s) for %s. Retry %s/%s in %ss. body=%s",
+                                response.status,
+                                symbol,
+                                retry_count + 1,
+                                _MAX_BINANCE_HTTP_RETRIES,
+                                wait_seconds,
+                                body_preview,
+                            )
+                            retry_count += 1
+                            await asyncio.sleep(wait_seconds)
+                            continue
 
-                    all_klines.extend(klines)
+                        logger.error(
+                            "Binance klines request failed for %s (status=%s, retryable=%s). body=%s",
+                            symbol,
+                            response.status,
+                            retryable,
+                            body_preview,
+                        )
+                        return None
 
-                    last_time = klines[-1][0]
-                    if last_time >= end_time or len(klines) < 1000:
-                        break
+                if not klines:
+                    break
 
-                    params["startTime"] = last_time + 1
-                    await asyncio.sleep(rate_limits.CRYPTO_DELAY)
+                all_klines.extend(klines)
+
+                last_time = klines[-1][0]
+                if last_time >= end_time or len(klines) < 1000:
+                    break
+
+                params["startTime"] = last_time + 1
+                await asyncio.sleep(rate_limits.CRYPTO_DELAY)
 
             if not all_klines:
                 return None

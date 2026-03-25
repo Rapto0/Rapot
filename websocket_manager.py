@@ -5,7 +5,6 @@ Handles ticker, depth, and trade streams with automatic reconnection.
 
 import asyncio
 import json
-import logging
 from collections import defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -15,7 +14,9 @@ from typing import Any
 
 import aiohttp
 
-logger = logging.getLogger(__name__)
+from logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class StreamType(Enum):
@@ -190,7 +191,20 @@ class BinanceWebSocketManager:
 
         async for msg in self._ws:
             if msg.type == aiohttp.WSMsgType.TEXT:
-                await self._handle_message(json.loads(msg.data))
+                try:
+                    payload = json.loads(msg.data)
+                except json.JSONDecodeError as exc:
+                    logger.warning("Malformed JSON payload received: %s", exc)
+                    continue
+
+                try:
+                    await self._handle_message(payload)
+                except (KeyError, ValueError, TypeError) as exc:
+                    logger.warning("Malformed websocket payload ignored: %s", exc)
+                    continue
+                except Exception:
+                    logger.exception("Unexpected websocket payload handling error.")
+                    continue
             elif msg.type == aiohttp.WSMsgType.ERROR:
                 logger.error(f"WebSocket error: {self._ws.exception()}")
                 break
@@ -246,28 +260,33 @@ class BinanceWebSocketManager:
             elif "@kline_" in stream_name:
                 event_type = "kline"
 
-        # Parse and distribute data
-        if event_type == "24hrMiniTicker":
-            ticker = self._parse_mini_ticker(payload)
-            self._ticker_cache[ticker.symbol] = ticker
-            await self._notify("ticker", ticker.to_dict())
+        try:
+            # Parse and distribute data
+            if event_type == "24hrMiniTicker":
+                ticker = self._parse_mini_ticker(payload)
+                self._ticker_cache[ticker.symbol] = ticker
+                await self._notify("ticker", ticker.to_dict())
 
-        elif event_type == "24hrTicker":
-            ticker = self._parse_ticker(payload)
-            self._ticker_cache[ticker.symbol] = ticker
-            await self._notify("ticker", ticker.to_dict())
+            elif event_type == "24hrTicker":
+                ticker = self._parse_ticker(payload)
+                self._ticker_cache[ticker.symbol] = ticker
+                await self._notify("ticker", ticker.to_dict())
 
-        elif event_type == "trade":
-            trade = self._parse_trade(payload)
-            await self._notify("trade", trade.to_dict())
+            elif event_type == "trade":
+                trade = self._parse_trade(payload)
+                await self._notify("trade", trade.to_dict())
 
-        elif event_type == "kline":
-            kline = self._parse_kline(payload)
-            await self._notify("kline", kline.to_dict())
+            elif event_type == "kline":
+                kline = self._parse_kline(payload)
+                await self._notify("kline", kline.to_dict())
 
-        elif event_type == "aggTrade":
-            trade = self._parse_agg_trade(payload)
-            await self._notify("trade", trade.to_dict())
+            elif event_type == "aggTrade":
+                trade = self._parse_agg_trade(payload)
+                await self._notify("trade", trade.to_dict())
+        except (KeyError, TypeError, ValueError) as exc:
+            logger.warning("Malformed payload for stream %s ignored: %s", stream_name, exc)
+        except Exception:
+            logger.exception("Unexpected payload processing error for stream %s.", stream_name)
 
     def _parse_mini_ticker(self, data: dict) -> TickerData:
         """Parse mini ticker data."""
