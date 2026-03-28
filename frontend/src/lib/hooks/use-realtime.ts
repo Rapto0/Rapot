@@ -197,8 +197,10 @@ interface UseRealtimeOptions {
 
 export function useRealtime(options: UseRealtimeOptions = {}) {
   const { autoConnect = true, onSignal } = options;
-  const wsRef = useRef<WebSocket | null>(null);
+  const tickerWsRef = useRef<WebSocket | null>(null);
+  const signalWsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const signalReconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const onSignalRef = useRef(onSignal);
 
@@ -214,29 +216,73 @@ export function useRealtime(options: UseRealtimeOptions = {}) {
   const priceChanges = useRealtimeStore((state) => state.priceChanges);
   const realtimeSignals = useRealtimeStore((state) => state.realtimeSignals);
 
-  const getWebSocketUrl = useCallback(() => {
+  const getRealtimeWsBaseUrl = useCallback(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const explicitWsUrl = process.env.NEXT_PUBLIC_WS_URL?.trim();
     if (explicitWsUrl) {
-      return `${explicitWsUrl.replace(/\/$/, '')}/realtime/ws/ticker`;
+      return `${explicitWsUrl.replace(/\/$/, '')}/realtime/ws`;
     }
 
     const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
     if (configuredApiUrl && /^https?:\/\//.test(configuredApiUrl)) {
       try {
         const parsed = new URL(configuredApiUrl);
-        return `${protocol}//${parsed.host}/realtime/ws/ticker`;
+        return `${protocol}//${parsed.host}/realtime/ws`;
       } catch {
         // Continue with hostname fallback when URL parsing fails.
       }
     }
 
     const host = `${window.location.hostname}:8000`;
-    return `${protocol}//${host}/realtime/ws/ticker`;
+    return `${protocol}//${host}/realtime/ws`;
   }, []);
 
+  const handleRealtimeSignal = useCallback((signal: SignalData) => {
+    const store = useRealtimeStore.getState();
+    store.addSignal(signal);
+    onSignalRef.current?.(signal);
+  }, []);
+
+  const ensureSignalSocket = useCallback(() => {
+    if (signalWsRef.current?.readyState === WebSocket.OPEN) return;
+    if (signalWsRef.current?.readyState === WebSocket.CONNECTING) return;
+
+    try {
+      const signalWs = new WebSocket(`${getRealtimeWsBaseUrl()}/signals`);
+
+      signalWs.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          if (message.type === 'signal') {
+            handleRealtimeSignal(message.data as SignalData);
+          }
+        } catch (error) {
+          console.error('[Realtime] Failed to parse signal message:', error);
+        }
+      };
+
+      signalWs.onclose = () => {
+        signalWsRef.current = null;
+        if (tickerWsRef.current?.readyState === WebSocket.OPEN) {
+          if (signalReconnectTimeoutRef.current) clearTimeout(signalReconnectTimeoutRef.current);
+          signalReconnectTimeoutRef.current = setTimeout(() => {
+            ensureSignalSocket();
+          }, 3000);
+        }
+      };
+
+      signalWs.onerror = () => {
+        // Avoid noisy logs; onclose handles retry.
+      };
+
+      signalWsRef.current = signalWs;
+    } catch (error) {
+      console.error('[Realtime] Signal socket connection error:', error);
+    }
+  }, [getRealtimeWsBaseUrl, handleRealtimeSignal]);
+
   const connect = useCallback(() => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
+    if (tickerWsRef.current?.readyState === WebSocket.OPEN) {
       return;
     }
 
@@ -244,15 +290,16 @@ export function useRealtime(options: UseRealtimeOptions = {}) {
     store.setConnectionState('connecting');
 
     try {
-      const ws = new WebSocket(getWebSocketUrl());
+      const tickerWs = new WebSocket(`${getRealtimeWsBaseUrl()}/ticker`);
 
-      ws.onopen = () => {
+      tickerWs.onopen = () => {
         useRealtimeStore.getState().setConnectionState('connected');
         reconnectAttemptsRef.current = 0;
         console.log('[Realtime] Connected to WebSocket');
+        ensureSignalSocket();
       };
 
-      ws.onmessage = (event) => {
+      tickerWs.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data);
           const store = useRealtimeStore.getState();
@@ -287,9 +334,8 @@ export function useRealtime(options: UseRealtimeOptions = {}) {
               break;
 
             case 'signal':
-              const signal = message.data as SignalData;
-              store.addSignal(signal);
-              onSignalRef.current?.(signal);
+              // Backward compatibility: some deployments may still send signal on ticker channel.
+              handleRealtimeSignal(message.data as SignalData);
               break;
 
             case 'heartbeat':
@@ -304,8 +350,12 @@ export function useRealtime(options: UseRealtimeOptions = {}) {
         }
       };
 
-      ws.onclose = () => {
+      tickerWs.onclose = () => {
         useRealtimeStore.getState().setConnectionState('disconnected');
+        if (signalWsRef.current) {
+          signalWsRef.current.close();
+          signalWsRef.current = null;
+        }
 
         // Auto-reconnect with exponential backoff (max 5 attempts)
         if (reconnectAttemptsRef.current < 5) {
@@ -320,32 +370,39 @@ export function useRealtime(options: UseRealtimeOptions = {}) {
         }
       };
 
-      ws.onerror = () => {
+      tickerWs.onerror = () => {
         useRealtimeStore.getState().setConnectionState('error');
         // Suppress verbose error logging - onclose handles reconnection
       };
 
-      wsRef.current = ws;
+      tickerWsRef.current = tickerWs;
     } catch (error) {
       useRealtimeStore.getState().setConnectionState('error');
       console.error('[Realtime] Connection error:', error);
     }
-  }, [getWebSocketUrl]);
+  }, [ensureSignalSocket, getRealtimeWsBaseUrl, handleRealtimeSignal]);
 
   const disconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
     }
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
+    if (signalReconnectTimeoutRef.current) {
+      clearTimeout(signalReconnectTimeoutRef.current);
+    }
+    if (tickerWsRef.current) {
+      tickerWsRef.current.close();
+      tickerWsRef.current = null;
+    }
+    if (signalWsRef.current) {
+      signalWsRef.current.close();
+      signalWsRef.current = null;
     }
     useRealtimeStore.getState().setConnectionState('disconnected');
   }, []);
 
   const subscribe = useCallback((type: 'ticker' | 'kline' | 'trade', symbol: string) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({
+    if (tickerWsRef.current?.readyState === WebSocket.OPEN) {
+      tickerWsRef.current.send(JSON.stringify({
         action: 'subscribe',
         type,
         symbol,

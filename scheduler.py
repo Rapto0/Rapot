@@ -15,18 +15,21 @@ from zoneinfo import ZoneInfo
 import schedule
 
 from logger import get_logger
+from state_keys import (
+    SCHEDULED_SCAN_LOCK_NAME,
+    SPECIAL_TAG_HEALTH_STATE_KEY,
+    SPECIAL_TAG_HEALTH_SUMMARY_KEY,
+)
 from telegram_notify import MessagePriority, send_message
 
 logger = get_logger(__name__)
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
 
-SPECIAL_TAG_HEALTH_STATE_KEY = "special_tag_health_state"
-SPECIAL_TAG_HEALTH_SUMMARY_KEY = "special_tag_health_summary"
 BIST_SCAN_TIMES_TR = ("10:15", "13:00", "17:00")
 CRYPTO_SCAN_TIMES_TR = ("07:00", "15:00", "23:00")
 _SCAN_LOCK = Lock()
-_DISTRIBUTED_SCAN_LOCK_NAME = "scheduled_scan"
+_DISTRIBUTED_SCAN_LOCK_NAME = SCHEDULED_SCAN_LOCK_NAME
 _SCHEDULER_LOCK_OWNER = f"{socket.gethostname()}:{os.getpid()}"
 
 

@@ -1,0 +1,2943 @@
+{
+  "components": {
+    "schemas": {
+      "AIAnalysisResponse": {
+        "description": "AI Analiz yanıtı.",
+        "properties": {
+          "analysis_text": {
+            "title": "Analysis Text",
+            "type": "string"
+          },
+          "backend": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Backend"
+          },
+          "confidence_score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence Score"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "headline_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Headline Count"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Ms"
+          },
+          "market_type": {
+            "title": "Market Type",
+            "type": "string"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "news_bias": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "News Bias"
+          },
+          "news_strength": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "News Strength"
+          },
+          "prompt_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Version"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "risk_level": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Risk Level"
+          },
+          "scenario_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scenario Name"
+          },
+          "sentiment_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sentiment Label"
+          },
+          "sentiment_score": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sentiment Score"
+          },
+          "signal_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signal Id"
+          },
+          "signal_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signal Type"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "technical_bias": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Technical Bias"
+          },
+          "technical_data": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Technical Data"
+          },
+          "technical_strength": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Technical Strength"
+          }
+        },
+        "required": [
+          "id",
+          "symbol",
+          "market_type",
+          "analysis_text"
+        ],
+        "title": "AIAnalysisResponse",
+        "type": "object"
+      },
+      "CalendarEventResponse": {
+        "properties": {
+          "actual": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actual"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "estimate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimate"
+          },
+          "event": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Event"
+          },
+          "impact": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Impact"
+          },
+          "previous": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous"
+          },
+          "time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Time"
+          },
+          "timestamp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timestamp"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "title": "CalendarEventResponse",
+        "type": "object"
+      },
+      "CandlePointResponse": {
+        "description": "Single candle row.",
+        "properties": {
+          "close": {
+            "title": "Close",
+            "type": "number"
+          },
+          "high": {
+            "title": "High",
+            "type": "number"
+          },
+          "low": {
+            "title": "Low",
+            "type": "number"
+          },
+          "open": {
+            "title": "Open",
+            "type": "number"
+          },
+          "time": {
+            "title": "Time",
+            "type": "string"
+          },
+          "volume": {
+            "title": "Volume",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "time",
+          "open",
+          "high",
+          "low",
+          "close",
+          "volume"
+        ],
+        "title": "CandlePointResponse",
+        "type": "object"
+      },
+      "CandlesResponse": {
+        "description": "Candles endpoint response.",
+        "properties": {
+          "candles": {
+            "items": {
+              "$ref": "#/components/schemas/CandlePointResponse"
+            },
+            "title": "Candles",
+            "type": "array"
+          },
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "market_type": {
+            "title": "Market Type",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "timeframe": {
+            "title": "Timeframe",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "market_type",
+          "timeframe",
+          "source",
+          "count",
+          "candles"
+        ],
+        "title": "CandlesResponse",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HealthResponse": {
+        "description": "Sağlık kontrolü yanıtı.",
+        "properties": {
+          "database": {
+            "title": "Database",
+            "type": "string"
+          },
+          "realtime": {
+            "title": "Realtime",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "timestamp": {
+            "title": "Timestamp",
+            "type": "string"
+          },
+          "uptime_human": {
+            "title": "Uptime Human",
+            "type": "string"
+          },
+          "uptime_seconds": {
+            "title": "Uptime Seconds",
+            "type": "number"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "uptime_seconds",
+          "uptime_human",
+          "database",
+          "realtime",
+          "version",
+          "timestamp"
+        ],
+        "title": "HealthResponse",
+        "type": "object"
+      },
+      "MarketAnalysisResponse": {
+        "description": "Manual AI analysis response.",
+        "properties": {
+          "inspection": {
+            "$ref": "#/components/schemas/StrategyInspectorResponse"
+          },
+          "market_type": {
+            "title": "Market Type",
+            "type": "string"
+          },
+          "score": {
+            "title": "Score",
+            "type": "string"
+          },
+          "strategy": {
+            "title": "Strategy",
+            "type": "string"
+          },
+          "structured_analysis": {
+            "additionalProperties": true,
+            "title": "Structured Analysis",
+            "type": "object"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "timeframe": {
+            "title": "Timeframe",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "market_type",
+          "strategy",
+          "timeframe",
+          "score",
+          "summary",
+          "structured_analysis",
+          "inspection",
+          "updated_at"
+        ],
+        "title": "MarketAnalysisResponse",
+        "type": "object"
+      },
+      "MarketHistoryPointResponse": {
+        "description": "Single market history datapoint.",
+        "properties": {
+          "time": {
+            "title": "Time",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "number"
+          }
+        },
+        "required": [
+          "time",
+          "value"
+        ],
+        "title": "MarketHistoryPointResponse",
+        "type": "object"
+      },
+      "MarketIndexResponse": {
+        "description": "Global index/ticker row for landing feed.",
+        "properties": {
+          "regularMarketChangePercent": {
+            "title": "Regularmarketchangepercent",
+            "type": "number"
+          },
+          "regularMarketPrice": {
+            "title": "Regularmarketprice",
+            "type": "number"
+          },
+          "shortName": {
+            "title": "Shortname",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "regularMarketPrice",
+          "regularMarketChangePercent",
+          "shortName"
+        ],
+        "title": "MarketIndexResponse",
+        "type": "object"
+      },
+      "MarketMetricsItemResponse": {
+        "description": "Scanner metrics row.",
+        "properties": {
+          "change_pct": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change Pct"
+          },
+          "latest_price": {
+            "title": "Latest Price",
+            "type": "number"
+          },
+          "perf_30d": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Perf 30D"
+          },
+          "perf_7d": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Perf 7D"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "required": [
+          "latest_price"
+        ],
+        "title": "MarketMetricsItemResponse",
+        "type": "object"
+      },
+      "MarketOverviewResponse": {
+        "description": "Market overview payload.",
+        "properties": {
+          "bist": {
+            "$ref": "#/components/schemas/MarketSeriesResponse"
+          },
+          "crypto": {
+            "$ref": "#/components/schemas/MarketSeriesResponse"
+          }
+        },
+        "required": [
+          "bist",
+          "crypto"
+        ],
+        "title": "MarketOverviewResponse",
+        "type": "object"
+      },
+      "MarketSeriesResponse": {
+        "description": "Market overview row.",
+        "properties": {
+          "change": {
+            "title": "Change",
+            "type": "number"
+          },
+          "currentValue": {
+            "title": "Currentvalue",
+            "type": "number"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/MarketHistoryPointResponse"
+            },
+            "title": "History",
+            "type": "array"
+          }
+        },
+        "required": [
+          "currentValue",
+          "change",
+          "history"
+        ],
+        "title": "MarketSeriesResponse",
+        "type": "object"
+      },
+      "MarketTickerResponse": {
+        "description": "Ticker strip row.",
+        "properties": {
+          "change": {
+            "title": "Change",
+            "type": "number"
+          },
+          "changePercent": {
+            "title": "Changepercent",
+            "type": "number"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "price": {
+            "title": "Price",
+            "type": "number"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "name",
+          "price",
+          "change",
+          "changePercent"
+        ],
+        "title": "MarketTickerResponse",
+        "type": "object"
+      },
+      "SignalResponse": {
+        "description": "Sinyal yanıtı.",
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "details": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "anyOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "boolean"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "type": "object"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "market_type": {
+            "title": "Market Type",
+            "type": "string"
+          },
+          "price": {
+            "title": "Price",
+            "type": "number"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "signal_type": {
+            "title": "Signal Type",
+            "type": "string"
+          },
+          "special_tag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Special Tag"
+          },
+          "strategy": {
+            "title": "Strategy",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "timeframe": {
+            "title": "Timeframe",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "symbol",
+          "market_type",
+          "strategy",
+          "signal_type",
+          "timeframe",
+          "price"
+        ],
+        "title": "SignalResponse",
+        "type": "object"
+      },
+      "SpecialTagHealthResponse": {
+        "description": "Ozel etiket kapsama ozet durumu.",
+        "properties": {
+          "checked_window_hours": {
+            "title": "Checked Window Hours",
+            "type": "integer"
+          },
+          "checked_window_seconds": {
+            "title": "Checked Window Seconds",
+            "type": "integer"
+          },
+          "last_checked_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Checked At"
+          },
+          "market_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market Type"
+          },
+          "missing_total": {
+            "title": "Missing Total",
+            "type": "integer"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/SpecialTagHealthRuleResponse"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "stored_state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stored State"
+          },
+          "strategy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          }
+        },
+        "required": [
+          "status",
+          "checked_window_hours",
+          "checked_window_seconds",
+          "missing_total",
+          "rows"
+        ],
+        "title": "SpecialTagHealthResponse",
+        "type": "object"
+      },
+      "SpecialTagHealthRuleResponse": {
+        "description": "Ozel etiket kapsama kural satiri.",
+        "properties": {
+          "candidates": {
+            "title": "Candidates",
+            "type": "integer"
+          },
+          "missing": {
+            "title": "Missing",
+            "type": "integer"
+          },
+          "signal_type": {
+            "title": "Signal Type",
+            "type": "string"
+          },
+          "strategy": {
+            "title": "Strategy",
+            "type": "string"
+          },
+          "tag": {
+            "title": "Tag",
+            "type": "string"
+          },
+          "tagged": {
+            "title": "Tagged",
+            "type": "integer"
+          },
+          "target_timeframe": {
+            "title": "Target Timeframe",
+            "type": "string"
+          }
+        },
+        "required": [
+          "tag",
+          "strategy",
+          "signal_type",
+          "target_timeframe",
+          "candidates",
+          "tagged",
+          "missing"
+        ],
+        "title": "SpecialTagHealthRuleResponse",
+        "type": "object"
+      },
+      "StatsResponse": {
+        "description": "İstatistik yanıtı.",
+        "properties": {
+          "open_trades": {
+            "title": "Open Trades",
+            "type": "integer"
+          },
+          "scan_count": {
+            "title": "Scan Count",
+            "type": "integer"
+          },
+          "total_pnl": {
+            "title": "Total Pnl",
+            "type": "number"
+          },
+          "total_signals": {
+            "title": "Total Signals",
+            "type": "integer"
+          },
+          "total_trades": {
+            "title": "Total Trades",
+            "type": "integer"
+          },
+          "win_rate": {
+            "title": "Win Rate",
+            "type": "number"
+          }
+        },
+        "required": [
+          "total_signals",
+          "total_trades",
+          "open_trades",
+          "total_pnl",
+          "win_rate",
+          "scan_count"
+        ],
+        "title": "StatsResponse",
+        "type": "object"
+      },
+      "StrategyInspectorResponse": {
+        "description": "Strategy inspector response.",
+        "properties": {
+          "generated_at": {
+            "title": "Generated At",
+            "type": "string"
+          },
+          "indicator_labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Indicator Labels",
+            "type": "object"
+          },
+          "indicator_order": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Indicator Order",
+            "type": "array"
+          },
+          "market_type": {
+            "title": "Market Type",
+            "type": "string"
+          },
+          "strategy": {
+            "title": "Strategy",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          },
+          "timeframes": {
+            "items": {
+              "$ref": "#/components/schemas/StrategyInspectorTimeframeResponse"
+            },
+            "title": "Timeframes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "symbol",
+          "market_type",
+          "strategy",
+          "indicator_order",
+          "indicator_labels",
+          "generated_at",
+          "timeframes"
+        ],
+        "title": "StrategyInspectorResponse",
+        "type": "object"
+      },
+      "StrategyInspectorTimeframeResponse": {
+        "description": "Single timeframe inspection row.",
+        "properties": {
+          "active_indicators": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Indicators"
+          },
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date"
+          },
+          "indicators": {
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "title": "Indicators",
+            "type": "object"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          },
+          "primary_score": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Primary Score"
+          },
+          "primary_score_label": {
+            "title": "Primary Score Label",
+            "type": "string"
+          },
+          "raw_score": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Score"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "secondary_score": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Secondary Score"
+          },
+          "secondary_score_label": {
+            "title": "Secondary Score Label",
+            "type": "string"
+          },
+          "signal_status": {
+            "title": "Signal Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "label",
+          "available",
+          "signal_status",
+          "primary_score_label",
+          "secondary_score_label",
+          "indicators"
+        ],
+        "title": "StrategyInspectorTimeframeResponse",
+        "type": "object"
+      },
+      "Token": {
+        "description": "Token response.",
+        "properties": {
+          "access_token": {
+            "title": "Access Token",
+            "type": "string"
+          },
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "token_type": {
+            "default": "bearer",
+            "title": "Token Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "access_token",
+          "expires_in"
+        ],
+        "title": "Token",
+        "type": "object"
+      },
+      "TradeResponse": {
+        "description": "Trade yanıtı.",
+        "properties": {
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "direction": {
+            "title": "Direction",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "market_type": {
+            "title": "Market Type",
+            "type": "string"
+          },
+          "pnl": {
+            "title": "Pnl",
+            "type": "number"
+          },
+          "price": {
+            "title": "Price",
+            "type": "number"
+          },
+          "quantity": {
+            "title": "Quantity",
+            "type": "number"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "symbol": {
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "symbol",
+          "market_type",
+          "direction",
+          "price",
+          "quantity",
+          "pnl",
+          "status"
+        ],
+        "title": "TradeResponse",
+        "type": "object"
+      },
+      "User": {
+        "description": "Authenticated user model.",
+        "properties": {
+          "disabled": {
+            "default": false,
+            "title": "Disabled",
+            "type": "boolean"
+          },
+          "is_admin": {
+            "default": false,
+            "title": "Is Admin",
+            "type": "boolean"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username"
+        ],
+        "title": "User",
+        "type": "object"
+      },
+      "UserLogin": {
+        "description": "Login request.",
+        "properties": {
+          "password": {
+            "title": "Password",
+            "type": "string"
+          },
+          "username": {
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "UserLogin",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "7/24 Finansal Sinyal ve Analiz REST API",
+    "title": "Otonom Analiz API",
+    "version": "1.0.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/": {
+      "get": {
+        "description": "API kök endpoint.",
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Root",
+        "tags": [
+          "Root"
+        ]
+      }
+    },
+    "/analyses": {
+      "get": {
+        "description": "AI Analiz listesini döndürür.\n\nGemini AI tarafından üretilen tüm analizleri listeler.",
+        "operationId": "get_analyses_analyses_get",
+        "parameters": [
+          {
+            "description": "Sembol filtresi",
+            "in": "query",
+            "name": "symbol",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Sembol filtresi",
+              "title": "Symbol"
+            }
+          },
+          {
+            "description": "Piyasa türü (BIST/Kripto)",
+            "in": "query",
+            "name": "market_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Piyasa türü (BIST/Kripto)",
+              "title": "Market Type"
+            }
+          },
+          {
+            "description": "Maksimum kayıt sayısı",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "description": "Maksimum kayıt sayısı",
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AIAnalysisResponse"
+                  },
+                  "title": "Response Get Analyses Analyses Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Analyses",
+        "tags": [
+          "AI Analysis"
+        ]
+      }
+    },
+    "/analyses/{analysis_id}": {
+      "get": {
+        "description": "Belirli bir AI analizini döndürür.",
+        "operationId": "get_analysis_analyses__analysis_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "analysis_id",
+            "required": true,
+            "schema": {
+              "title": "Analysis Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AIAnalysisResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Analysis",
+        "tags": [
+          "AI Analysis"
+        ]
+      }
+    },
+    "/analyze/{symbol}": {
+      "post": {
+        "description": "Belirli bir sembol için manuel analiz başlatır.",
+        "operationId": "analyze_symbol_analyze__symbol__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "symbol",
+            "required": true,
+            "schema": {
+              "title": "Symbol",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Piyasa türü",
+            "in": "query",
+            "name": "market_type",
+            "required": false,
+            "schema": {
+              "default": "BIST",
+              "description": "Piyasa türü",
+              "title": "Market Type",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Analyze Symbol",
+        "tags": [
+          "Analysis"
+        ]
+      }
+    },
+    "/api/calendar": {
+      "get": {
+        "operationId": "get_calendar_api_calendar_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "from_date",
+            "required": false,
+            "schema": {
+              "title": "From Date",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to_date",
+            "required": false,
+            "schema": {
+              "title": "To Date",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CalendarEventResponse"
+                  },
+                  "title": "Response Get Calendar Api Calendar Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Calendar",
+        "tags": [
+          "Calendar"
+        ]
+      }
+    },
+    "/api/market/analysis": {
+      "get": {
+        "description": "Belirli bir sembol icin gercek teknik veriyle AI yorumu getirir.",
+        "operationId": "get_market_analysis_api_market_analysis_get",
+        "parameters": [
+          {
+            "description": "Piyasa tipi: BIST, Kripto veya AUTO",
+            "in": "query",
+            "name": "market_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Piyasa tipi: BIST, Kripto veya AUTO",
+              "title": "Market Type"
+            }
+          },
+          {
+            "description": "Sembol",
+            "in": "query",
+            "name": "symbol",
+            "required": true,
+            "schema": {
+              "description": "Sembol",
+              "title": "Symbol",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Strateji: COMBO veya HUNTER",
+            "in": "query",
+            "name": "strategy",
+            "required": false,
+            "schema": {
+              "default": "HUNTER",
+              "description": "Strateji: COMBO veya HUNTER",
+              "title": "Strategy",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Periyot: 1D, 1W, 2W, 3W, 1M veya ALL",
+            "in": "query",
+            "name": "timeframe",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Periyot: 1D, 1W, 2W, 3W, 1M veya ALL",
+              "title": "Timeframe"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketAnalysisResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Market Analysis",
+        "tags": [
+          "AI Analysis"
+        ]
+      }
+    },
+    "/auth/me": {
+      "get": {
+        "operationId": "get_me_auth_me_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Me",
+        "tags": [
+          "Authentication"
+        ]
+      }
+    },
+    "/auth/token": {
+      "post": {
+        "operationId": "login_auth_token_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserLogin"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Token"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Login",
+        "tags": [
+          "Authentication"
+        ]
+      }
+    },
+    "/calendar": {
+      "get": {
+        "operationId": "get_calendar_calendar_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "from_date",
+            "required": false,
+            "schema": {
+              "title": "From Date",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to_date",
+            "required": false,
+            "schema": {
+              "title": "To Date",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CalendarEventResponse"
+                  },
+                  "title": "Response Get Calendar Calendar Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Calendar",
+        "tags": [
+          "Calendar"
+        ]
+      }
+    },
+    "/candles/{symbol}": {
+      "get": {
+        "description": "OHLCV mum grafiği verisi döndürür.\n\nHibrit yaklaşım: Önce price_cache'e bakar, yoksa API'den çeker.\nBIST için İşyatırım, Kripto için Binance kullanır.",
+        "operationId": "get_candles_candles__symbol__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "symbol",
+            "required": true,
+            "schema": {
+              "title": "Symbol",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Piyasa türü (BIST/Kripto)",
+            "in": "query",
+            "name": "market_type",
+            "required": false,
+            "schema": {
+              "default": "BIST",
+              "description": "Piyasa türü (BIST/Kripto)",
+              "title": "Market Type",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Timeframe (15m, 30m, 1h, 2h, 4h, 8h, 12h, 1d, 2d, 3d, 4d, 5d, 6d, 1wk, 2wk, 3wk, 1mo, 2mo, 3mo)",
+            "in": "query",
+            "name": "timeframe",
+            "required": false,
+            "schema": {
+              "default": "1d",
+              "description": "Timeframe (15m, 30m, 1h, 2h, 4h, 8h, 12h, 1d, 2d, 3d, 4d, 5d, 6d, 1wk, 2wk, 3wk, 1mo, 2mo, 3mo)",
+              "title": "Timeframe",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Number of candles (max 2000)",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 500,
+              "description": "Number of candles (max 2000)",
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CandlesResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Candles",
+        "tags": [
+          "Market Data"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "description": "Sistem sağlık kontrolü.\n\nBot durumu, uptime ve veritabanı bağlantısını kontrol eder.",
+        "operationId": "health_check_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health Check",
+        "tags": [
+          "System"
+        ]
+      }
+    },
+    "/logs": {
+      "get": {
+        "operationId": "get_system_logs_logs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get System Logs",
+        "tags": [
+          "System"
+        ]
+      }
+    },
+    "/market/analysis": {
+      "get": {
+        "description": "Belirli bir sembol icin gercek teknik veriyle AI yorumu getirir.",
+        "operationId": "get_market_analysis_market_analysis_get",
+        "parameters": [
+          {
+            "description": "Piyasa tipi: BIST, Kripto veya AUTO",
+            "in": "query",
+            "name": "market_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Piyasa tipi: BIST, Kripto veya AUTO",
+              "title": "Market Type"
+            }
+          },
+          {
+            "description": "Sembol",
+            "in": "query",
+            "name": "symbol",
+            "required": true,
+            "schema": {
+              "description": "Sembol",
+              "title": "Symbol",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Strateji: COMBO veya HUNTER",
+            "in": "query",
+            "name": "strategy",
+            "required": false,
+            "schema": {
+              "default": "HUNTER",
+              "description": "Strateji: COMBO veya HUNTER",
+              "title": "Strategy",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Periyot: 1D, 1W, 2W, 3W, 1M veya ALL",
+            "in": "query",
+            "name": "timeframe",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Periyot: 1D, 1W, 2W, 3W, 1M veya ALL",
+              "title": "Timeframe"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketAnalysisResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Market Analysis",
+        "tags": [
+          "AI Analysis"
+        ]
+      }
+    },
+    "/market/indices": {
+      "get": {
+        "description": "Landing sayfası için global endeks özet verisi döndürür.",
+        "operationId": "get_market_indices_market_indices_get",
+        "parameters": [
+          {
+            "description": "Global endeks sembolleri. Örnek: ?symbol=^GSPC&symbol=^NDX&symbol=XU100.IS",
+            "in": "query",
+            "name": "symbol",
+            "required": false,
+            "schema": {
+              "default": [
+                "^GSPC",
+                "^NDX",
+                "XU100.IS"
+              ],
+              "description": "Global endeks sembolleri. Örnek: ?symbol=^GSPC&symbol=^NDX&symbol=XU100.IS",
+              "items": {
+                "type": "string"
+              },
+              "title": "Symbol",
+              "type": "array"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MarketIndexResponse"
+                  },
+                  "title": "Response Get Market Indices Market Indices Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Market Indices",
+        "tags": [
+          "Market Data"
+        ]
+      }
+    },
+    "/market/metrics": {
+      "get": {
+        "description": "Scanner icin toplu piyasa metrikleri dondurur.\nTek cagriyla birden fazla sembolun latest/change/perf7/perf30 degerini verir.",
+        "operationId": "get_market_metrics_market_metrics_get",
+        "parameters": [
+          {
+            "description": "Market key listesi (ornek: BIST:THYAO, Kripto:BTCUSDT)",
+            "in": "query",
+            "name": "key",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Market key listesi (ornek: BIST:THYAO, Kripto:BTCUSDT)",
+              "title": "Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/MarketMetricsItemResponse"
+                  },
+                  "title": "Response Get Market Metrics Market Metrics Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Market Metrics",
+        "tags": [
+          "Market Data"
+        ]
+      }
+    },
+    "/market/overview": {
+      "get": {
+        "description": "Piyasa genel bakış verilerini döndürür (BIST 100 ve Bitcoin).\nSon 24 saatlik mini grafik verisi içerir.",
+        "operationId": "get_market_overview_market_overview_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketOverviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Market Overview",
+        "tags": [
+          "Market Data"
+        ]
+      }
+    },
+    "/market/ticker": {
+      "get": {
+        "description": "Header ticker için popüler sembol verilerini döndürür.",
+        "operationId": "get_market_ticker_market_ticker_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MarketTickerResponse"
+                  },
+                  "title": "Response Get Market Ticker Market Ticker Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Market Ticker",
+        "tags": [
+          "Market Data"
+        ]
+      }
+    },
+    "/ops/special-tag-health": {
+      "get": {
+        "description": "Ozel sinyal etiketleme kapsama durumunu dondurur.\n\nOps kullanimi icindir. Scheduler tarafindaki health check ile ayni veri kaynagini kullanir.",
+        "operationId": "get_special_tag_health_ops_special_tag_health_get",
+        "parameters": [
+          {
+            "description": "Piyasa tipi (BIST/Kripto/ALL)",
+            "in": "query",
+            "name": "market_type",
+            "required": false,
+            "schema": {
+              "default": "BIST",
+              "description": "Piyasa tipi (BIST/Kripto/ALL)",
+              "title": "Market Type",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Strateji filtresi (COMBO/HUNTER)",
+            "in": "query",
+            "name": "strategy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Strateji filtresi (COMBO/HUNTER)",
+              "title": "Strategy"
+            }
+          },
+          {
+            "description": "Geri bakis penceresi (saat)",
+            "in": "query",
+            "name": "since_hours",
+            "required": false,
+            "schema": {
+              "default": 24,
+              "description": "Geri bakis penceresi (saat)",
+              "maximum": 720,
+              "minimum": 1,
+              "title": "Since Hours",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Kural eslesme toleransi (saniye)",
+            "in": "query",
+            "name": "window_seconds",
+            "required": false,
+            "schema": {
+              "default": 900,
+              "description": "Kural eslesme toleransi (saniye)",
+              "maximum": 86400,
+              "minimum": 0,
+              "title": "Window Seconds",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpecialTagHealthResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Special Tag Health",
+        "tags": [
+          "Operations"
+        ]
+      }
+    },
+    "/ops/strategy-inspector": {
+      "get": {
+        "description": "Tek sembol icin strateji indikator dump'i dondurur.\n\nTelegram inspector araci ve frontend denetim paneli bu endpoint'i kullanir.",
+        "operationId": "get_strategy_inspector_ops_strategy_inspector_get",
+        "parameters": [
+          {
+            "description": "Sembol",
+            "in": "query",
+            "name": "symbol",
+            "required": true,
+            "schema": {
+              "description": "Sembol",
+              "maxLength": 20,
+              "minLength": 1,
+              "title": "Symbol",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Strateji (COMBO/HUNTER)",
+            "in": "query",
+            "name": "strategy",
+            "required": true,
+            "schema": {
+              "description": "Strateji (COMBO/HUNTER)",
+              "title": "Strategy",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Piyasa tipi (BIST/Kripto/AUTO)",
+            "in": "query",
+            "name": "market_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Piyasa tipi (BIST/Kripto/AUTO)",
+              "title": "Market Type"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StrategyInspectorResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Strategy Inspector",
+        "tags": [
+          "Operations"
+        ]
+      }
+    },
+    "/realtime/sse/signals": {
+      "get": {
+        "description": "SSE endpoint for trading signals.",
+        "operationId": "sse_signals_realtime_sse_signals_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Sse Signals",
+        "tags": [
+          "Real-time Data"
+        ]
+      }
+    },
+    "/realtime/sse/ticker": {
+      "get": {
+        "description": "Server-Sent Events endpoint for ticker data.\nAlternative to WebSocket for simpler clients.",
+        "operationId": "sse_ticker_realtime_sse_ticker_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Sse Ticker",
+        "tags": [
+          "Real-time Data"
+        ]
+      }
+    },
+    "/realtime/status": {
+      "get": {
+        "description": "Get real-time service status.",
+        "operationId": "realtime_status_realtime_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Realtime Status",
+        "tags": [
+          "Real-time Data"
+        ]
+      }
+    },
+    "/scans": {
+      "get": {
+        "operationId": "get_scan_history_scans_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Scan History",
+        "tags": [
+          "System"
+        ]
+      }
+    },
+    "/signals": {
+      "get": {
+        "description": "Sinyal listesini döndürür.\n\nOpsiyonel filtreler: symbol, strategy, signal_type, market_type, special_tag",
+        "operationId": "get_signals_signals_get",
+        "parameters": [
+          {
+            "description": "Sembol filtresi",
+            "in": "query",
+            "name": "symbol",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Sembol filtresi",
+              "title": "Symbol"
+            }
+          },
+          {
+            "description": "Strateji filtresi (COMBO/HUNTER)",
+            "in": "query",
+            "name": "strategy",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Strateji filtresi (COMBO/HUNTER)",
+              "title": "Strategy"
+            }
+          },
+          {
+            "description": "Sinyal türü (AL/SAT)",
+            "in": "query",
+            "name": "signal_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Sinyal türü (AL/SAT)",
+              "title": "Signal Type"
+            }
+          },
+          {
+            "description": "Piyasa türü (BIST/Kripto)",
+            "in": "query",
+            "name": "market_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Piyasa türü (BIST/Kripto)",
+              "title": "Market Type"
+            }
+          },
+          {
+            "description": "Ozel etiket filtresi (BELES/COK_UCUZ/PAHALI/FAHIS_FIYAT)",
+            "in": "query",
+            "name": "special_tag",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Ozel etiket filtresi (BELES/COK_UCUZ/PAHALI/FAHIS_FIYAT)",
+              "title": "Special Tag"
+            }
+          },
+          {
+            "description": "Maksimum kayıt sayısı",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "description": "Maksimum kayıt sayısı",
+              "maximum": 1000,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/SignalResponse"
+                  },
+                  "title": "Response Get Signals Signals Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Signals",
+        "tags": [
+          "Signals"
+        ]
+      }
+    },
+    "/signals/{signal_id}": {
+      "get": {
+        "description": "Belirli bir sinyali döndürür.",
+        "operationId": "get_signal_signals__signal_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "signal_id",
+            "required": true,
+            "schema": {
+              "title": "Signal Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Signal",
+        "tags": [
+          "Signals"
+        ]
+      }
+    },
+    "/signals/{signal_id}/analysis": {
+      "get": {
+        "description": "Belirli bir sinyale ait AI analizini döndürür.",
+        "operationId": "get_signal_analysis_signals__signal_id__analysis_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "signal_id",
+            "required": true,
+            "schema": {
+              "title": "Signal Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/AIAnalysisResponse"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Get Signal Analysis Signals  Signal Id  Analysis Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Signal Analysis",
+        "tags": [
+          "AI Analysis"
+        ]
+      }
+    },
+    "/stats": {
+      "get": {
+        "description": "Bot ve trade istatistiklerini döndürür.",
+        "operationId": "get_stats_stats_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Stats",
+        "tags": [
+          "Statistics"
+        ]
+      }
+    },
+    "/symbols/bist": {
+      "get": {
+        "operationId": "get_bist_symbols_symbols_bist_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Bist Symbols",
+        "tags": [
+          "Symbols"
+        ]
+      }
+    },
+    "/symbols/crypto": {
+      "get": {
+        "operationId": "get_crypto_symbols_symbols_crypto_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Crypto Symbols",
+        "tags": [
+          "Symbols"
+        ]
+      }
+    },
+    "/trades": {
+      "get": {
+        "description": "Trade listesini döndürür.\n\nOpsiyonel filtreler: symbol, status",
+        "operationId": "get_trades_trades_get",
+        "parameters": [
+          {
+            "description": "Sembol filtresi",
+            "in": "query",
+            "name": "symbol",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Sembol filtresi",
+              "title": "Symbol"
+            }
+          },
+          {
+            "description": "Durum filtresi (OPEN/CLOSED)",
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Durum filtresi (OPEN/CLOSED)",
+              "title": "Status"
+            }
+          },
+          {
+            "description": "Maksimum kayıt sayısı",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "description": "Maksimum kayıt sayısı",
+              "maximum": 500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/TradeResponse"
+                  },
+                  "title": "Response Get Trades Trades Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Trades",
+        "tags": [
+          "Trades"
+        ]
+      }
+    }
+  }
+}

@@ -17,13 +17,19 @@ from sqlalchemy.orm import aliased
 from db_session import get_session
 from logger import get_logger
 from models import BotStat, Order, Signal, Trade
+from state_keys import (
+    ASYNC_SCAN_COUNT_KEY,
+    ASYNC_SIGNAL_COUNT_KEY,
+    SYNC_SCAN_COUNT_KEY,
+    SYNC_SIGNAL_COUNT_KEY,
+)
 
 logger = get_logger(__name__)
 
-SYNC_SCAN_COUNT_STAT_KEY = "sync_scan_count"
-SYNC_SIGNAL_COUNT_STAT_KEY = "sync_signal_count"
-ASYNC_SCAN_COUNT_STAT_KEY = "async_scan_count"
-ASYNC_SIGNAL_COUNT_STAT_KEY = "async_signal_count"
+SYNC_SCAN_COUNT_STAT_KEY = SYNC_SCAN_COUNT_KEY
+SYNC_SIGNAL_COUNT_STAT_KEY = SYNC_SIGNAL_COUNT_KEY
+ASYNC_SCAN_COUNT_STAT_KEY = ASYNC_SCAN_COUNT_KEY
+ASYNC_SIGNAL_COUNT_STAT_KEY = ASYNC_SIGNAL_COUNT_KEY
 
 ACTIVE_ORDER_STATUSES = ("NEW", "PENDING", "OPEN", "PARTIALLY_FILLED")
 

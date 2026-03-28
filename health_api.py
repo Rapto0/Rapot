@@ -6,7 +6,20 @@ from typing import Any
 
 from flask import Flask, jsonify
 
+from api.contracts.health_contract import build_health_payload, format_uptime
 from logger import get_logger
+from state_keys import (
+    ASYNC_SCAN_COUNT_KEY,
+    ASYNC_SIGNAL_COUNT_KEY,
+    RUNTIME_ERROR_COUNT_KEY,
+    RUNTIME_IS_RUNNING_KEY,
+    RUNTIME_IS_SCANNING_KEY,
+    RUNTIME_LAST_ERROR_KEY,
+    RUNTIME_LAST_SCAN_TIME_KEY,
+    SCHEDULED_SCAN_LOCK_NAME,
+    SYNC_SCAN_COUNT_KEY,
+    SYNC_SIGNAL_COUNT_KEY,
+)
 
 logger = get_logger(__name__)
 app = Flask(__name__)
@@ -21,16 +34,6 @@ _bot_status = {
     "error_count": 0,
     "last_error": None,
 }
-
-_SYNC_SCAN_COUNT_KEY = "sync_scan_count"
-_SYNC_SIGNAL_COUNT_KEY = "sync_signal_count"
-_ASYNC_SCAN_COUNT_KEY = "async_scan_count"
-_ASYNC_SIGNAL_COUNT_KEY = "async_signal_count"
-_RUNTIME_IS_RUNNING_KEY = "runtime_is_running"
-_RUNTIME_IS_SCANNING_KEY = "runtime_is_scanning"
-_RUNTIME_LAST_SCAN_TIME_KEY = "runtime_last_scan_time"
-_RUNTIME_ERROR_COUNT_KEY = "runtime_error_count"
-_RUNTIME_LAST_ERROR_KEY = "runtime_last_error"
 
 
 def get_uptime_seconds() -> float:
@@ -87,17 +90,17 @@ def _load_scanner_counters() -> dict[str, Any]:
     try:
         from ops_repository import get_bot_stat_int, get_bot_stats_last_updated
 
-        sync_scans = get_bot_stat_int(_SYNC_SCAN_COUNT_KEY, default=0)
-        sync_signals = get_bot_stat_int(_SYNC_SIGNAL_COUNT_KEY, default=0)
-        async_scans = get_bot_stat_int(_ASYNC_SCAN_COUNT_KEY, default=0)
-        async_signals = get_bot_stat_int(_ASYNC_SIGNAL_COUNT_KEY, default=0)
+        sync_scans = get_bot_stat_int(SYNC_SCAN_COUNT_KEY, default=0)
+        sync_signals = get_bot_stat_int(SYNC_SIGNAL_COUNT_KEY, default=0)
+        async_scans = get_bot_stat_int(ASYNC_SCAN_COUNT_KEY, default=0)
+        async_signals = get_bot_stat_int(ASYNC_SIGNAL_COUNT_KEY, default=0)
 
         last_updated = get_bot_stats_last_updated(
             (
-                _SYNC_SCAN_COUNT_KEY,
-                _SYNC_SIGNAL_COUNT_KEY,
-                _ASYNC_SCAN_COUNT_KEY,
-                _ASYNC_SIGNAL_COUNT_KEY,
+                SYNC_SCAN_COUNT_KEY,
+                SYNC_SIGNAL_COUNT_KEY,
+                ASYNC_SCAN_COUNT_KEY,
+                ASYNC_SIGNAL_COUNT_KEY,
             )
         )
 
@@ -137,14 +140,14 @@ def _load_runtime_state_from_repo() -> dict[str, Any]:
             get_distributed_lock_state,
         )
 
-        distributed_scan_lock = get_distributed_lock_state("scheduled_scan")
-        is_running = _parse_stat_bool(get_bot_stat(_RUNTIME_IS_RUNNING_KEY), default=True)
-        runtime_scanning = _parse_stat_bool(get_bot_stat(_RUNTIME_IS_SCANNING_KEY), default=False)
-        last_scan_time = get_bot_stat(_RUNTIME_LAST_SCAN_TIME_KEY) or _bot_status.get(
+        distributed_scan_lock = get_distributed_lock_state(SCHEDULED_SCAN_LOCK_NAME)
+        is_running = _parse_stat_bool(get_bot_stat(RUNTIME_IS_RUNNING_KEY), default=True)
+        runtime_scanning = _parse_stat_bool(get_bot_stat(RUNTIME_IS_SCANNING_KEY), default=False)
+        last_scan_time = get_bot_stat(RUNTIME_LAST_SCAN_TIME_KEY) or _bot_status.get(
             "last_scan_time"
         )
-        error_count = get_bot_stat_int(_RUNTIME_ERROR_COUNT_KEY, default=0)
-        last_error = get_bot_stat(_RUNTIME_LAST_ERROR_KEY)
+        error_count = get_bot_stat_int(RUNTIME_ERROR_COUNT_KEY, default=0)
+        last_error = get_bot_stat(RUNTIME_LAST_ERROR_KEY)
 
         return {
             "is_running": bool(is_running),
@@ -182,17 +185,19 @@ except ImportError:
 def health():
     uptime = get_uptime_seconds()
     db_ok = _probe_database()
+    runtime_state = _load_runtime_state_from_repo()
     status = "healthy" if db_ok else "unhealthy"
+    realtime_status = "running" if runtime_state.get("is_running", False) else "error"
 
-    return jsonify(
-        {
-            "status": status,
-            "database": "connected" if db_ok else "disconnected",
-            "uptime_seconds": round(uptime, 2),
-            "uptime_human": format_uptime(uptime),
-            "timestamp": datetime.now().isoformat(),
-        }
-    ), (200 if db_ok else 503)
+    payload = build_health_payload(
+        status=status,
+        uptime_seconds=uptime,
+        database="connected" if db_ok else "disconnected",
+        realtime=realtime_status,
+        version="1.0.0",
+    )
+
+    return jsonify(payload), (200 if db_ok else 503)
 
 
 @app.route("/status")
@@ -278,18 +283,6 @@ def signals():
     except Exception:
         logger.exception("Health signals endpoint failed.")
         return jsonify({"error": "signals_unavailable"}), 500
-
-
-def format_uptime(seconds: float) -> str:
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
-    secs = int(seconds % 60)
-
-    if hours > 0:
-        return f"{hours}h {minutes}m {secs}s"
-    if minutes > 0:
-        return f"{minutes}m {secs}s"
-    return f"{secs}s"
 
 
 def start_health_server(host: str | None = None, port: int | None = None) -> threading.Thread:

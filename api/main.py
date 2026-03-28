@@ -18,19 +18,23 @@ from pydantic import BaseModel, ConfigDict  # noqa: E402
 from slowapi import _rate_limit_exceeded_handler  # noqa: E402
 from slowapi.errors import RateLimitExceeded  # noqa: E402
 
-from api.calendar_service import calendar_service  # noqa: E402
+from api.contracts.health_contract import build_health_payload  # noqa: E402
 from api.rate_limit import limiter  # noqa: E402
 from api.realtime import (  # noqa: E402
     broadcast_bist_update,
     broadcast_ticker,
+    publish_signal,
     register_broadcast_loop,  # noqa: E402
 )
 from api.realtime import router as realtime_router  # noqa: E402
 from api.routes.auth_routes import router as auth_router  # noqa: E402
+from api.routes.calendar_routes import router as calendar_router  # noqa: E402
 from api.routes.symbols_routes import router as symbols_router  # noqa: E402
 from api.routes.system_routes import router as system_router  # noqa: E402
 from logger import get_logger  # noqa: E402
 from settings import settings  # noqa: E402
+from signal_dispatcher import register_signal_publisher  # noqa: E402
+from state_keys import SPECIAL_TAG_HEALTH_STATE_KEY, SPECIAL_TAG_HEALTH_SUMMARY_KEY  # noqa: E402
 from strategy_inspector import (  # noqa: E402
     StrategyInspectorError,
     build_strategy_ai_payload,
@@ -119,6 +123,7 @@ app.add_middleware(
 # Include Real-time WebSocket Router
 app.include_router(realtime_router)
 app.include_router(auth_router)
+app.include_router(calendar_router)
 app.include_router(symbols_router)
 app.include_router(system_router)
 
@@ -130,9 +135,11 @@ class HealthResponse(BaseModel):
 
     status: str
     uptime_seconds: float
+    uptime_human: str
     database: str
     realtime: str
     version: str
+    timestamp: str
 
 
 class SignalResponse(BaseModel):
@@ -363,27 +370,11 @@ class CandlesResponse(BaseModel):
     candles: list[CandlePointResponse]
 
 
-class CalendarEventResponse(BaseModel):
-    """Economic calendar event row."""
-
-    country: str | None = None
-    event: str | None = None
-    impact: str | None = None
-    time: str | None = None
-    actual: float | int | str | None = None
-    estimate: float | int | str | None = None
-    previous: float | int | str | None = None
-    unit: str | None = None
-    currency: str | None = None
-
-    model_config = ConfigDict(extra="ignore")
-
-
 # ==================== ENDPOINTS ====================
 
 _SPECIAL_TAG_CODES = {"BELES", "COK_UCUZ", "PAHALI", "FAHIS_FIYAT"}
-_SPECIAL_TAG_HEALTH_STATE_KEY = "special_tag_health_state"
-_SPECIAL_TAG_HEALTH_SUMMARY_KEY = "special_tag_health_summary"
+_SPECIAL_TAG_HEALTH_STATE_KEY = SPECIAL_TAG_HEALTH_STATE_KEY
+_SPECIAL_TAG_HEALTH_SUMMARY_KEY = SPECIAL_TAG_HEALTH_SUMMARY_KEY
 _MARKET_INDEX_CANONICAL = {
     # Yahoo tarafinda spot altin/gumus bazi hesaplarda 404 donebildigi icin
     # emtia futures sembollerine canonical map uyguluyoruz.
@@ -558,13 +549,14 @@ async def health_check(request: Request, response: Response):
     if overall_status != "healthy":
         response.status_code = 503
 
-    return HealthResponse(
+    payload = build_health_payload(
         status=overall_status,
         uptime_seconds=uptime,
         database=db_status,
         realtime=realtime_status,
         version="1.0.0",
     )
+    return HealthResponse(**payload)
 
 
 @app.get("/ops/special-tag-health", response_model=SpecialTagHealthResponse, tags=["Operations"])
@@ -1912,13 +1904,6 @@ async def get_candles(
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
-@app.get("/calendar", response_model=list[CalendarEventResponse], tags=["Calendar"])
-@app.get("/api/calendar", response_model=list[CalendarEventResponse], tags=["Calendar"])
-def get_calendar(from_date: str = Query(None), to_date: str = Query(None)):
-    """Ekonomik takvim verilerini getirir (Finnhub)."""
-    return calendar_service.get_economic_calendar(from_date, to_date)
-
-
 # ==================== STARTUP/SHUTDOWN ====================
 
 
@@ -1972,6 +1957,7 @@ async def _start_realtime_services() -> None:
 
         await ws_manager.start()
         await bist_service.start()
+        register_signal_publisher(publish_signal)
         _RUNTIME_STATE["realtime_ready"] = True
         logger.info("Real-time WebSocket services started")
         logger.info("Otonom Analiz API baslatildi")
@@ -1993,4 +1979,5 @@ async def _stop_realtime_services() -> None:
     except Exception:
         logger.exception("Error stopping real-time services.")
     finally:
+        register_signal_publisher(None)
         _RUNTIME_STATE["realtime_ready"] = False

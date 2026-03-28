@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query"
 import {
     fetchCandles,
     fetchBistSymbols,
+    fetchCryptoSymbols,
     fetchEconomicCalendar,
     fetchGlobalIndices,
     fetchSignals,
@@ -1292,14 +1293,7 @@ export function AdvancedChartPage({
     // Fetch all Binance USDT pairs
     const { data: binanceSymbols } = useQuery({
         queryKey: ['binance-symbols'],
-        queryFn: async () => {
-            const res = await fetch('https://api.binance.com/api/v3/exchangeInfo')
-            const data = await res.json()
-            return data.symbols
-                .filter((s: any) => s.quoteAsset === 'USDT' && s.status === 'TRADING')
-                .map((s: any) => s.symbol)
-                .sort()
-        },
+        queryFn: async () => (await fetchCryptoSymbols()).symbols,
         staleTime: 3600000,
     })
 

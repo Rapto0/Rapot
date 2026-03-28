@@ -28,16 +28,16 @@ from data_loader import (
 from logger import get_logger
 from news_manager import fetch_market_news
 from price_cache import cached_get_crypto_data, price_cache
+from signal_dispatcher import publish_signal_event
 from signal_repository import save_signal as db_save_signal
 from signal_repository import set_signal_special_tag as db_set_signal_special_tag
 from signals import calculate_combo_signal, calculate_hunter_signal
+from state_keys import SYNC_SCAN_COUNT_KEY, SYNC_SIGNAL_COUNT_KEY
 from strategy_inspector import build_strategy_ai_payload, inspect_strategy_dataframe
 from telegram_notify import send_message
 
 logger = get_logger(__name__)
 _REALTIME_PUBLISH_FAILURE_COUNT = 0
-_SYNC_SCAN_COUNT_KEY = "sync_scan_count"
-_SYNC_SIGNAL_COUNT_KEY = "sync_signal_count"
 
 
 def _json_default(value: Any):
@@ -156,7 +156,7 @@ def increment_scan_count() -> int:
     try:
         from ops_repository import set_bot_stat_int
 
-        set_bot_stat_int(_SYNC_SCAN_COUNT_KEY, updated)
+        set_bot_stat_int(SYNC_SCAN_COUNT_KEY, updated)
     except Exception as exc:
         logger.warning("Sync scan count persistence failed: %s", exc)
     return updated
@@ -168,7 +168,7 @@ def increment_signal_count() -> int:
     try:
         from ops_repository import set_bot_stat_int
 
-        set_bot_stat_int(_SYNC_SIGNAL_COUNT_KEY, updated)
+        set_bot_stat_int(SYNC_SIGNAL_COUNT_KEY, updated)
     except Exception as exc:
         logger.warning("Sync signal count persistence failed: %s", exc)
     return updated
@@ -178,8 +178,8 @@ def restore_scanner_state_from_db() -> None:
     try:
         from ops_repository import get_bot_stat_int
 
-        scan_count = get_bot_stat_int(_SYNC_SCAN_COUNT_KEY, default=0)
-        signal_count = get_bot_stat_int(_SYNC_SIGNAL_COUNT_KEY, default=0)
+        scan_count = get_bot_stat_int(SYNC_SCAN_COUNT_KEY, default=0)
+        signal_count = get_bot_stat_int(SYNC_SIGNAL_COUNT_KEY, default=0)
         _scanner_state.restore(scan_count=scan_count, signal_count=signal_count)
         logger.info("Sync scanner state restored | scans=%s signals=%s", scan_count, signal_count)
     except Exception as exc:
@@ -217,9 +217,7 @@ def _build_realtime_signal_payload(
 def _publish_realtime_signal(payload: dict[str, Any]) -> bool:
     global _REALTIME_PUBLISH_FAILURE_COUNT
     try:
-        from api.realtime import publish_signal
-
-        return publish_signal(payload)
+        return publish_signal_event(payload)
     except Exception as exc:
         _REALTIME_PUBLISH_FAILURE_COUNT += 1
         logger.warning(

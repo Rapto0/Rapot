@@ -18,14 +18,14 @@ from async_data_loader import (
 from config import TIMEFRAMES
 from data_loader import get_all_bist_symbols, resample_market_data
 from logger import get_logger
+from signal_dispatcher import publish_signal_event
 from signal_repository import save_signal as db_save_signal
 from signals import calculate_combo_signal, calculate_hunter_signal
+from state_keys import ASYNC_SCAN_COUNT_KEY, ASYNC_SIGNAL_COUNT_KEY
 from telegram_notify import send_message
 
 logger = get_logger(__name__)
 _REALTIME_PUBLISH_FAILURE_COUNT = 0
-_ASYNC_SCAN_COUNT_KEY = "async_scan_count"
-_ASYNC_SIGNAL_COUNT_KEY = "async_signal_count"
 
 
 def _json_default(value: Any):
@@ -73,9 +73,7 @@ def _build_realtime_signal_payload(
 def _publish_realtime_signal(payload: dict[str, Any]) -> bool:
     global _REALTIME_PUBLISH_FAILURE_COUNT
     try:
-        from api.realtime import publish_signal
-
-        return publish_signal(payload)
+        return publish_signal_event(payload)
     except Exception as exc:
         _REALTIME_PUBLISH_FAILURE_COUNT += 1
         logger.warning(
@@ -111,7 +109,7 @@ class AsyncScannerState:
         try:
             from ops_repository import set_bot_stat_int
 
-            set_bot_stat_int(_ASYNC_SCAN_COUNT_KEY, self._scan_count)
+            set_bot_stat_int(ASYNC_SCAN_COUNT_KEY, self._scan_count)
         except Exception as exc:
             logger.warning("Async scan count persistence failed: %s", exc)
         return self._scan_count
@@ -125,7 +123,7 @@ class AsyncScannerState:
         try:
             from ops_repository import set_bot_stat_int
 
-            set_bot_stat_int(_ASYNC_SIGNAL_COUNT_KEY, self._signal_count)
+            set_bot_stat_int(ASYNC_SIGNAL_COUNT_KEY, self._signal_count)
         except Exception as exc:
             logger.warning("Async signal count persistence failed: %s", exc)
         return self._signal_count
@@ -151,8 +149,8 @@ def restore_async_scanner_state_from_db() -> None:
     try:
         from ops_repository import get_bot_stat_int
 
-        scan_count = get_bot_stat_int(_ASYNC_SCAN_COUNT_KEY, default=0)
-        signal_count = get_bot_stat_int(_ASYNC_SIGNAL_COUNT_KEY, default=0)
+        scan_count = get_bot_stat_int(ASYNC_SCAN_COUNT_KEY, default=0)
+        signal_count = get_bot_stat_int(ASYNC_SIGNAL_COUNT_KEY, default=0)
         _async_state.restore(scan_count=scan_count, signal_count=signal_count)
         logger.info("Async scanner state restored | scans=%s signals=%s", scan_count, signal_count)
     except Exception as exc:

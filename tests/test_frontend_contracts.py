@@ -2,10 +2,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FRONTEND_SRC = REPO_ROOT / "frontend" / "src"
-ECONOMIC_CALENDAR_COMPONENT = (
-    FRONTEND_SRC / "components" / "dashboard" / "economic-calendar.tsx"
-)
+ECONOMIC_CALENDAR_COMPONENT = FRONTEND_SRC / "components" / "dashboard" / "economic-calendar.tsx"
 API_CLIENT_FILE = FRONTEND_SRC / "lib" / "api" / "client.ts"
+REALTIME_HOOK_FILE = FRONTEND_SRC / "lib" / "hooks" / "use-realtime.ts"
 
 
 def _iter_frontend_source_files():
@@ -40,3 +39,9 @@ def test_api_client_normalizes_public_base_urls():
 
     assert "function normalizeBaseUrl" in source
     assert "const API_BASE_URL = normalizeBaseUrl" in source
+
+
+def test_realtime_hook_uses_dedicated_signal_channel():
+    source = REALTIME_HOOK_FILE.read_text(encoding="utf-8", errors="ignore")
+
+    assert "/realtime/ws/signals" in source or "/signals" in source
