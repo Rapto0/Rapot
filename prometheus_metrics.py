@@ -166,9 +166,9 @@ def register_prometheus_endpoint(app):
 
         # Trade metriklerini güncelle
         try:
-            from database import db
+            from infrastructure.persistence.trade_repository import list_open_trades
 
-            trades = db.get_open_trades()
+            trades = list_open_trades()
             update_trades_metric(len(trades))
         except Exception:
             pass

@@ -1,5 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { fetchStats, transformStats } from '@/lib/api/client';
+import {
+    fetchOpsOverviewReadModel,
+    fetchStats,
+    transformOpsOverviewReadModel,
+    transformStats,
+} from '@/lib/api/client';
 
 export interface DashboardKPIs {
     totalPnL: number;
@@ -15,8 +20,13 @@ export interface DashboardKPIs {
 
 // Fetch dashboard KPIs from API
 async function fetchDashboardKPIs(): Promise<DashboardKPIs> {
-    const apiStats = await fetchStats();
-    return transformStats(apiStats);
+    try {
+        const overview = await fetchOpsOverviewReadModel();
+        return transformOpsOverviewReadModel(overview);
+    } catch {
+        const apiStats = await fetchStats();
+        return transformStats(apiStats);
+    }
 }
 
 export function useDashboardKPIs() {

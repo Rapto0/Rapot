@@ -4,7 +4,7 @@ import threading
 from datetime import datetime
 from typing import Any
 
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 
 from api.contracts.health_contract import build_health_payload, format_uptime
 from logger import get_logger
@@ -43,7 +43,7 @@ def get_uptime_seconds() -> float:
 def update_status(key: str, value: Any) -> None:
     _bot_status[key] = value
     try:
-        from ops_repository import set_bot_stat
+        from infrastructure.persistence.ops_repository import set_bot_stat
 
         set_bot_stat(f"runtime_{key}", str(value))
     except Exception as exc:
@@ -54,7 +54,7 @@ def increment_counter(key: str) -> int:
     current = int(_bot_status.get(key, 0) or 0) + 1
     _bot_status[key] = current
     try:
-        from ops_repository import increment_bot_stat_int
+        from infrastructure.persistence.ops_repository import increment_bot_stat_int
 
         current = increment_bot_stat_int(f"runtime_{key}", step=1)
     except Exception as exc:
@@ -88,7 +88,10 @@ def _load_scanner_counters() -> dict[str, Any]:
     }
 
     try:
-        from ops_repository import get_bot_stat_int, get_bot_stats_last_updated
+        from infrastructure.persistence.ops_repository import (
+            get_bot_stat_int,
+            get_bot_stats_last_updated,
+        )
 
         sync_scans = get_bot_stat_int(SYNC_SCAN_COUNT_KEY, default=0)
         sync_signals = get_bot_stat_int(SYNC_SIGNAL_COUNT_KEY, default=0)
@@ -124,6 +127,13 @@ def _parse_stat_bool(raw_value: str | None, default: bool) -> bool:
     return str(raw_value).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _parse_query_bool(key: str, default: bool = False) -> bool:
+    raw_value = request.args.get(key)
+    if raw_value is None:
+        return default
+    return str(raw_value).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _load_runtime_state_from_repo() -> dict[str, Any]:
     defaults = {
         "is_running": bool(_bot_status.get("is_running", True)),
@@ -134,7 +144,7 @@ def _load_runtime_state_from_repo() -> dict[str, Any]:
     }
 
     try:
-        from ops_repository import (
+        from infrastructure.persistence.ops_repository import (
             get_bot_stat,
             get_bot_stat_int,
             get_distributed_lock_state,
@@ -206,38 +216,58 @@ def status():
     db_ok = _probe_database()
     counters = _load_scanner_counters()
     runtime_state = _load_runtime_state_from_repo()
+    include_compat_telemetry = _parse_query_bool("include_compat_telemetry", default=False)
+    include_wrapper_details = _parse_query_bool("include_wrapper_details", default=False)
 
-    return jsonify(
-        {
-            "bot": {
-                "is_running": bool(runtime_state.get("is_running", True)) and db_ok,
-                "is_scanning": bool(runtime_state.get("is_scanning", False)),
-                "uptime_seconds": round(uptime, 2),
-                "uptime_human": format_uptime(uptime),
-                "started_at": BOT_START_TIME.isoformat(),
-                "database": "connected" if db_ok else "disconnected",
-            },
-            "scanning": {
-                "last_scan_time": counters.get("last_updated")
-                or runtime_state.get("last_scan_time"),
-                "sync_scan_count": counters["sync_scans"],
-                "async_scan_count": counters["async_scans"],
-                "scan_count": counters["total_scans"],
-                "signal_count": counters["total_signals"],
-            },
-            "errors": {
-                "error_count": int(runtime_state.get("error_count", 0) or 0),
-                "last_error": runtime_state.get("last_error"),
-            },
-            "timestamp": datetime.now().isoformat(),
-        }
-    )
+    payload = {
+        "bot": {
+            "is_running": bool(runtime_state.get("is_running", True)) and db_ok,
+            "is_scanning": bool(runtime_state.get("is_scanning", False)),
+            "uptime_seconds": round(uptime, 2),
+            "uptime_human": format_uptime(uptime),
+            "started_at": BOT_START_TIME.isoformat(),
+            "database": "connected" if db_ok else "disconnected",
+        },
+        "scanning": {
+            "last_scan_time": counters.get("last_updated") or runtime_state.get("last_scan_time"),
+            "sync_scan_count": counters["sync_scans"],
+            "async_scan_count": counters["async_scans"],
+            "scan_count": counters["total_scans"],
+            "signal_count": counters["total_signals"],
+        },
+        "errors": {
+            "error_count": int(runtime_state.get("error_count", 0) or 0),
+            "last_error": runtime_state.get("last_error"),
+        },
+        "timestamp": datetime.now().isoformat(),
+    }
+
+    if include_compat_telemetry:
+        try:
+            from infrastructure.compat import build_wrapper_usage_summary
+            from settings import settings
+
+            app_env = str(settings.app_env or "production").strip().lower()
+            details_included = bool(include_wrapper_details and app_env != "production")
+            telemetry = build_wrapper_usage_summary(
+                include_details=details_included,
+                detail_limit=20,
+            )
+            telemetry["details_requested"] = bool(include_wrapper_details)
+            telemetry["details_included"] = bool(details_included)
+            if include_wrapper_details and not details_included:
+                telemetry["details_hidden_reason"] = "details_disabled_in_production"
+            payload["compatibility_wrappers"] = telemetry
+        except Exception:
+            logger.exception("Compatibility wrapper telemetry build failed for /status.")
+
+    return jsonify(payload)
 
 
 @app.route("/stats")
 def stats():
     try:
-        from ops_repository import get_trade_stats
+        from infrastructure.persistence.ops_repository import get_trade_stats
         from price_cache import price_cache
 
         counters = _load_scanner_counters()
@@ -269,7 +299,7 @@ def stats():
 @app.route("/signals")
 def signals():
     try:
-        from ops_repository import get_recent_signals
+        from infrastructure.persistence.ops_repository import get_recent_signals
 
         signals_list = get_recent_signals(limit=20)
 

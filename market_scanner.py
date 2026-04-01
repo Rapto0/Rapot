@@ -1,6 +1,6 @@
 """
-Market Scanner Modülü
-Piyasa tarama ve sinyal işleme fonksiyonları.
+Market Scanner ModÃ¼lÃ¼
+Piyasa tarama ve sinyal iÅŸleme fonksiyonlarÄ±.
 """
 
 import html
@@ -15,6 +15,7 @@ import pandas as pd
 
 from ai_analyst import analyze_with_gemini
 from ai_schema import AIResponseSchemaError, parse_ai_response
+from application.scanner.signal_handlers import persist_and_publish_signal_event
 from config import TIMEFRAMES, rate_limits, signal_guard_settings
 from data_loader import (
     get_all_binance_symbols,
@@ -25,12 +26,15 @@ from data_loader import (
     is_dataframe_fresh,
     resample_market_data,
 )
+from domain.events import SignalDomainEvent
+from infrastructure.persistence.signal_repository import save_signal as db_save_signal
+from infrastructure.persistence.signal_repository import (
+    set_signal_special_tag as db_set_signal_special_tag,
+)
 from logger import get_logger
 from news_manager import fetch_market_news
 from price_cache import cached_get_crypto_data, price_cache
 from signal_dispatcher import publish_signal_event
-from signal_repository import save_signal as db_save_signal
-from signal_repository import set_signal_special_tag as db_set_signal_special_tag
 from signals import calculate_combo_signal, calculate_hunter_signal
 from state_keys import SYNC_SCAN_COUNT_KEY, SYNC_SIGNAL_COUNT_KEY
 from strategy_inspector import build_strategy_ai_payload, inspect_strategy_dataframe
@@ -62,7 +66,7 @@ SPECIAL_TAG_DISPLAY: dict[str, tuple[str, str]] = {
     "BELES": ("BELEŞ", "Tarihi Fırsat"),
     "COK_UCUZ": ("ÇOK UCUZ", "Dip Bölgesi"),
     "PAHALI": ("PAHALI", "Tepe Bölgesi"),
-    "FAHIS_FIYAT": ("FAHİŞ FİYAT", "Aşırı Tepe"),
+    "FAHIS_FIYAT": ("FAHÄ°Å FÄ°YAT", "AÅŸÄ±rÄ± Tepe"),
 }
 
 SPECIAL_TAG_TARGET_TIMEFRAME = {
@@ -84,10 +88,10 @@ NEUTRAL_TOKEN_DISPLAY = {
     "VALUE_COMPRESSION_EXTREME_BUY": "BELEŞ",
     "VALUE_COMPRESSION_BUY": "ÇOK UCUZ",
     "VALUE_EXTENSION_SELL": "PAHALI",
-    "VALUE_EXTENSION_EXTREME_SELL": "FAHİŞ FİYAT",
+    "VALUE_EXTENSION_EXTREME_SELL": "FAHÄ°Å FÄ°YAT",
     "LONG_BIAS": "AL",
     "SHORT_BIAS": "SAT",
-    "RSI_Fast": "Hızlı RSI",
+    "RSI_Fast": "HÄ±zlÄ± RSI",
     "TopScore": "Tepe Skoru",
     "DipScore": "Dip Skoru",
 }
@@ -95,8 +99,8 @@ NEUTRAL_TOKEN_DISPLAY = {
 
 class ScannerState:
     """
-    Thread-safe tarama durumu yönetimi.
-    Global değişkenler yerine class içinde durum tutar.
+    Thread-safe tarama durumu yÃ¶netimi.
+    Global deÄŸiÅŸkenler yerine class iÃ§inde durum tutar.
     """
 
     def __init__(self):
@@ -108,24 +112,24 @@ class ScannerState:
 
     @property
     def scan_count(self) -> int:
-        """Toplam tarama sayısını döndürür."""
+        """Toplam tarama sayÄ±sÄ±nÄ± dÃ¶ndÃ¼rÃ¼r."""
         with self._lock:
             return self._scan_count
 
     @property
     def signal_count(self) -> int:
-        """Üretilen sinyal sayısını döndürür."""
+        """Ãœretilen sinyal sayÄ±sÄ±nÄ± dÃ¶ndÃ¼rÃ¼r."""
         with self._lock:
             return self._signal_count
 
     def increment_scan(self) -> int:
-        """Tarama sayacını artırır ve yeni değeri döndürür."""
+        """Tarama sayacÄ±nÄ± artÄ±rÄ±r ve yeni deÄŸeri dÃ¶ndÃ¼rÃ¼r."""
         with self._lock:
             self._scan_count += 1
             return self._scan_count
 
     def increment_signal(self) -> int:
-        """Sinyal sayacını artırır ve yeni değeri döndürür."""
+        """Sinyal sayacÄ±nÄ± artÄ±rÄ±r ve yeni deÄŸeri dÃ¶ndÃ¼rÃ¼r."""
         with self._lock:
             self._signal_count += 1
             return self._signal_count
@@ -141,20 +145,20 @@ _scanner_state = ScannerState()
 
 
 def get_scan_count() -> int:
-    """Toplam tarama sayısını döndürür."""
+    """Toplam tarama sayÄ±sÄ±nÄ± dÃ¶ndÃ¼rÃ¼r."""
     return _scanner_state.scan_count
 
 
 def get_signal_count() -> int:
-    """Üretilen sinyal sayısını döndürür."""
+    """Ãœretilen sinyal sayÄ±sÄ±nÄ± dÃ¶ndÃ¼rÃ¼r."""
     return _scanner_state.signal_count
 
 
 def increment_scan_count() -> int:
-    """Tarama sayacını artırır."""
+    """Tarama sayacÄ±nÄ± artÄ±rÄ±r."""
     updated = _scanner_state.increment_scan()
     try:
-        from ops_repository import set_bot_stat_int
+        from infrastructure.persistence.ops_repository import set_bot_stat_int
 
         set_bot_stat_int(SYNC_SCAN_COUNT_KEY, updated)
     except Exception as exc:
@@ -163,10 +167,10 @@ def increment_scan_count() -> int:
 
 
 def increment_signal_count() -> int:
-    """Sinyal sayacını artırır."""
+    """Sinyal sayacÄ±nÄ± artÄ±rÄ±r."""
     updated = _scanner_state.increment_signal()
     try:
-        from ops_repository import set_bot_stat_int
+        from infrastructure.persistence.ops_repository import set_bot_stat_int
 
         set_bot_stat_int(SYNC_SIGNAL_COUNT_KEY, updated)
     except Exception as exc:
@@ -176,7 +180,7 @@ def increment_signal_count() -> int:
 
 def restore_scanner_state_from_db() -> None:
     try:
-        from ops_repository import get_bot_stat_int
+        from infrastructure.persistence.ops_repository import get_bot_stat_int
 
         scan_count = get_bot_stat_int(SYNC_SCAN_COUNT_KEY, default=0)
         signal_count = get_bot_stat_int(SYNC_SIGNAL_COUNT_KEY, default=0)
@@ -244,7 +248,7 @@ def _save_signal_and_publish(
     details: dict[str, Any] | None,
     special_tag: str | None = None,
 ) -> int:
-    signal_id = db_save_signal(
+    event = SignalDomainEvent(
         symbol=symbol,
         market_type=market_type,
         strategy=strategy,
@@ -252,24 +256,17 @@ def _save_signal_and_publish(
         timeframe=timeframe,
         score=score,
         price=price,
-        details=_serialize_signal_details(details),
+        details=details,
         special_tag=special_tag,
     )
+    signal_id = persist_and_publish_signal_event(
+        event=event,
+        save_signal_fn=db_save_signal,
+        publish_signal_fn=_publish_realtime_signal,
+        payload_builder_fn=_build_realtime_signal_payload,
+        details_serializer=_serialize_signal_details,
+    )
     increment_signal_count()
-    if signal_id:
-        _publish_realtime_signal(
-            _build_realtime_signal_payload(
-                signal_id=int(signal_id),
-                symbol=symbol,
-                market_type=market_type,
-                strategy=strategy,
-                signal_type=signal_type,
-                timeframe=timeframe,
-                score=score,
-                price=price,
-                special_tag=special_tag,
-            )
-        )
     return signal_id
 
 
@@ -278,22 +275,22 @@ def format_combo_debug(d: dict[str, Any]) -> str:
     COMBO stratejisi debug raporu formatlar.
 
     Args:
-        d: İndikator değerlerini iceren sozluk (MACD, RSI, WR, CCI vb.)
+        d: Ä°ndikator deÄŸerlerini iceren sozluk (MACD, RSI, WR, CCI vb.)
 
     Returns:
-        Formatlanmıs rapor metni
+        FormatlanmÄ±s rapor metni
     """
 
     def fmt(val, decimals=2):
-        """Güvenli float formatlama."""
+        """GÃ¼venli float formatlama."""
         try:
             return f"{float(val):.{decimals}f}"
         except (ValueError, TypeError):
             return str(val)
 
     return (
-        f"📊 --- COMBO RAPORU ---\n"
-        f"📅 Tarih: {d.get('DATE', 'Yok')} | Fiyat: {d.get('PRICE', 'Yok')}\n"
+        f"ğŸ“Š --- COMBO RAPORU ---\n"
+        f"ğŸ“… Tarih: {d.get('DATE', 'Yok')} | Fiyat: {d.get('PRICE', 'Yok')}\n"
         f"-----------------------------\n"
         f"1. MACD: {fmt(d.get('MACD', 0), 4)}\n"
         f"2. RSI (14): {fmt(d.get('RSI', 0))}\n"
@@ -311,11 +308,11 @@ def format_hunter_debug(d: dict[str, Any]) -> str:
         d: 15 indikator degerini iceren sozluk
 
     Returns:
-        Formatlanmıs rapor metni
+        FormatlanmÄ±s rapor metni
     """
     return (
-        f"📊 --- HUNTER RAPORU ---\n"
-        f"📅 Tarih: {d.get('DATE', 'Yok')} | Fiyat: {d.get('PRICE', 'Yok')}\n"
+        f"ğŸ“Š --- HUNTER RAPORU ---\n"
+        f"ğŸ“… Tarih: {d.get('DATE', 'Yok')} | Fiyat: {d.get('PRICE', 'Yok')}\n"
         f"-----------------------------\n"
         f"1.  RSI (14): {d.get('RSI', 'N/A')}\n"
         f"2.  RSI Fast: {d.get('RSI_Fast', 'N/A')}\n"
@@ -353,29 +350,33 @@ def generate_manual_report(
     """
     # Null-check: eksik veri durumu
     if not combo_res or not hunter_res:
-        return f"⚠️ {symbol} için analiz verisi eksik."
+        return f"âš ï¸ {symbol} iÃ§in analiz verisi eksik."
 
     cd = combo_res.get("details", {})
     hd = hunter_res.get("details", {})
     c_signal = (
-        "🟢 AL" if combo_res.get("buy") else ("🔴 SAT" if combo_res.get("sell") else "⚪️ NÖTR")
+        "ğŸŸ¢ AL"
+        if combo_res.get("buy")
+        else ("ğŸ”´ SAT" if combo_res.get("sell") else "âšªï¸ NÃ–TR")
     )
     h_signal = (
-        "🟢 DİP" if hunter_res.get("buy") else ("🔴 TEPE" if hunter_res.get("sell") else "⚪️ NÖTR")
+        "ğŸŸ¢ DÄ°P"
+        if hunter_res.get("buy")
+        else ("ğŸ”´ TEPE" if hunter_res.get("sell") else "âšªï¸ NÃ–TR")
     )
 
     msg = (
-        f"🔎 <b>DETAYLI ANALİZ RAPORU: #{symbol}</b>\n"
-        f"Piyasa: {market_type} | Periyot: GÜNLÜK\n"
+        f"ğŸ” <b>DETAYLI ANALÄ°Z RAPORU: #{symbol}</b>\n"
+        f"Piyasa: {market_type} | Periyot: GÃœNLÃœK\n"
         f"Fiyat: {cd.get('PRICE', 'N/A')}\n"
         f"-----------------------------------\n"
-        f"🎯 <b>GENEL DURUM</b>\n"
-        f"• Combo Sinyali: <b>{c_signal}</b> ({cd.get('Score', 'N/A')})\n"
-        f"• Hunter Sinyali: <b>{h_signal}</b> (Dip: {hd.get('DipScore', 'N/A')} - Tepe: {hd.get('TopScore', 'N/A')})\n"
+        f"ğŸ¯ <b>GENEL DURUM</b>\n"
+        f"â€¢ Combo Sinyali: <b>{c_signal}</b> ({cd.get('Score', 'N/A')})\n"
+        f"â€¢ Hunter Sinyali: <b>{h_signal}</b> (Dip: {hd.get('DipScore', 'N/A')} - Tepe: {hd.get('TopScore', 'N/A')})\n"
         f"-----------------------------------\n"
-        f"📈 <b>TEMEL İNDİKATÖRLER</b>\n"
-        f"• RSI (14): {cd.get('RSI', 'N/A')}\n"
-        f"• MACD: {cd.get('MACD', 'N/A')}\n"
+        f"ğŸ“ˆ <b>TEMEL Ä°NDÄ°KATÃ–RLER</b>\n"
+        f"â€¢ RSI (14): {cd.get('RSI', 'N/A')}\n"
+        f"â€¢ MACD: {cd.get('MACD', 'N/A')}\n"
     )
     return msg
 
@@ -419,10 +420,10 @@ def _display_sentiment_label(label: str | None) -> str:
     upper = str(label or "NOTR").upper()
     mapping = {
         "AL": "AL",
-        "GUCLU AL": "GÜÇLÜ AL",
+        "GUCLU AL": "GÃœÃ‡LÃœ AL",
         "SAT": "SAT",
-        "GUCLU SAT": "GÜÇLÜ SAT",
-        "NOTR": "NÖTR",
+        "GUCLU SAT": "GÃœÃ‡LÃœ SAT",
+        "NOTR": "NÃ–TR",
     }
     return mapping.get(upper, upper.replace("_", " "))
 
@@ -430,9 +431,9 @@ def _display_sentiment_label(label: str | None) -> str:
 def _display_risk_level(level: str | None) -> str:
     upper = str(level or "Belirsiz").upper()
     mapping = {
-        "DUSUK": "Düşük",
+        "DUSUK": "DÃ¼ÅŸÃ¼k",
         "ORTA": "Orta",
-        "YUKSEK": "Yüksek",
+        "YUKSEK": "YÃ¼ksek",
         "BELIRSIZ": "Belirsiz",
     }
     return mapping.get(upper, str(level or "Belirsiz"))
@@ -456,7 +457,7 @@ def _signal_meta(
     elif upper_signal == "SAT":
         direction_label = "\U0001f534 SAT"
     else:
-        direction_label = "\u26aa NÖTR"
+        direction_label = "\u26aa NÃ–TR"
 
     return {
         "display_name": display_name,
@@ -480,7 +481,7 @@ def _build_trigger_score_lines(
     payload: Any,
 ) -> list[str]:
     if not report or not trigger_rule:
-        return [f"AI Güveni: {int(payload.sentiment_score or 50)} / 100"]
+        return [f"AI GÃ¼veni: {int(payload.sentiment_score or 50)} / 100"]
 
     timeframes = {item.get("code"): item for item in report.get("timeframes", [])}
     score_key = "secondary_score" if str(signal_dir or "").upper() == "SAT" else "primary_score"
@@ -496,14 +497,14 @@ def _build_trigger_score_lines(
         label = TIMEFRAME_DISPLAY_LABELS.get(timeframe_code, timeframe_code)
         lines.append(f"{label}: {_format_explanatory_score(score_value)}")
 
-    return lines or [f"AI Güveni: {int(payload.sentiment_score or 50)} / 100"]
+    return lines or [f"AI GÃ¼veni: {int(payload.sentiment_score or 50)} / 100"]
 
 
 def _wrap_box_text(text: str, width: int = 46, max_lines: int = 10) -> list[str]:
     cleaned = _replace_internal_ai_tokens(text)
     wrapped = textwrap.wrap(cleaned, width=width, break_long_words=False, break_on_hyphens=False)
     if not wrapped:
-        return ["Detaylı yorum üretilemedi."]
+        return ["DetaylÄ± yorum Ã¼retilemedi."]
     return wrapped[:max_lines]
 
 
@@ -511,7 +512,7 @@ def _extract_primary_comment(text: str) -> str:
     normalized = _replace_internal_ai_tokens(text)
     compact = " ".join(normalized.split()).strip()
     if not compact:
-        return "Detaylı yorum üretilemedi."
+        return "DetaylÄ± yorum Ã¼retilemedi."
 
     for separator in [". ", ".\n", "! ", "!\n", "? ", "?\n"]:
         if separator in compact:
@@ -586,7 +587,7 @@ def _build_news_lines(summary_items: list[str]) -> str:
     if not picked:
         picked = ["Haber teyidi yok; analiz teknik veriye dayanıyor."]
 
-    return "\n".join(f"• {html.escape(item)}" for item in picked[:2])
+    return "\n".join(f"â€¢ {html.escape(item)}" for item in picked[:2])
 
 
 def _build_level_block(levels: list[str], prefix: str) -> str | None:
@@ -709,14 +710,14 @@ def _verify_bist_second_source(
 
 def _resolve_levels_heading(has_support: bool, has_resistance: bool) -> str:
     if has_support and has_resistance:
-        return "<b>\U0001f4cd KRİTİK SEVİYELER</b>"
+        return "<b>\U0001f4cd KRÄ°TÄ°K SEVÄ°YELER</b>"
     if has_support:
         return "<b>\U0001f4cd DESTEK BÖLGESİ</b>"
     return "<b>\U0001f4cd DİRENÇ BÖLGESİ</b>"
 
 
 def _build_risk_note(header: str, payload: Any) -> str:
-    reason = str(payload.error or "AI analizi üretilemedi.").strip()
+    reason = str(payload.error or "AI analizi Ã¼retilemedi.").strip()
     error_code = str(payload.error_code or "").strip().lower()
     if reason.lower() in {"", "null", "none", "nan"}:
         reason = "Model geçerli bir yanıt döndürmedi."
@@ -766,7 +767,7 @@ def format_ai_message_for_telegram(
 
     sentiment_display = _display_sentiment_label(sentiment_label)
     explanation = _replace_internal_ai_tokens(
-        payload.explanation or "Detaylı açıklama üretilemedi."
+        payload.explanation or "DetaylÄ± aÃ§Ä±klama Ã¼retilemedi."
     )
     summary_items = payload.summary or []
     risk_level = _display_risk_level(payload.risk_level or "Belirsiz")
@@ -791,29 +792,29 @@ def format_ai_message_for_telegram(
 
     sections = [
         header,
-        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-        "<b>📊 TEKNİK DURUM</b>",
-        f"├─ Strateji: {html.escape(signal_meta['display_name'])} ({html.escape(signal_meta['display_hint'])})",
-        f"├─ Yön: {html.escape(signal_meta['direction_label'])}",
+        "â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”â”",
+        "<b>ğŸ“Š TEKNÄ°K DURUM</b>",
+        f"â”œâ”€ Strateji: {html.escape(signal_meta['display_name'])} ({html.escape(signal_meta['display_hint'])})",
+        f"â”œâ”€ YÃ¶n: {html.escape(signal_meta['direction_label'])}",
     ]
 
     if len(score_lines) == 1:
-        sections.append(f"└─ Skor: {html.escape(score_lines[0])}")
+        sections.append(f"â””â”€ Skor: {html.escape(score_lines[0])}")
     else:
         sections.append("├─ Koşul Skorları:")
         for index, score_line in enumerate(score_lines):
-            branch = "└─" if index == len(score_lines) - 1 else "├─"
+            branch = "â””â”€" if index == len(score_lines) - 1 else "â”œâ”€"
             sections.append(f"{branch} {html.escape(score_line)}")
 
     sections.extend(
         [
             "",
-            "<b>🧠 AI ANALİZİ</b>",
-            "┌─────────────────────────────",
-            f"│ {sentiment_icon} <b>{html.escape(str(sentiment_display))}</b> • Risk: {html.escape(str(risk_level))}",
-            "│",
-            *[f"│ {html.escape(line)}" for line in box_lines],
-            "└─────────────────────────────",
+            "<b>ğŸ§  AI ANALÄ°ZÄ°</b>",
+            "â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€",
+            f"â”‚ {sentiment_icon} <b>{html.escape(str(sentiment_display))}</b> â€¢ Risk: {html.escape(str(risk_level))}",
+            "â”‚",
+            *[f"â”‚ {html.escape(line)}" for line in box_lines],
+            "â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€",
             "",
             "<b>📌 ÖNE ÇIKANLAR</b>",
             summary_lines,
@@ -825,14 +826,16 @@ def format_ai_message_for_telegram(
             [
                 "",
                 _resolve_levels_heading(has_support, has_resistance),
-                "┌─────────────────────────────",
+                "â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€",
             ]
         )
         if support_line:
             sections.append(html.escape(support_line))
         if resistance_line:
             sections.append(html.escape(resistance_line))
-        sections.append("└─────────────────────────────")
+        sections.append(
+            "â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€"
+        )
 
     return "\n".join(sections)
 
@@ -871,7 +874,7 @@ def process_symbol(
                 if res_combo["buy"]:
                     combo_hits["buy"][tf_code] = res_combo["details"]
                     logger.info("COMBO AL signal | %s %s", symbol, tf_label)
-                    # Veritabanına kaydet
+                    # VeritabanÄ±na kaydet
                     _save_signal_and_publish(
                         symbol=symbol,
                         market_type=market_type,
@@ -885,7 +888,7 @@ def process_symbol(
 
                 if res_combo["sell"]:
                     combo_hits["sell"][tf_code] = res_combo["details"]
-                    # SAT sinyalini de veritabanına kaydet
+                    # SAT sinyalini de veritabanÄ±na kaydet
                     _save_signal_and_publish(
                         symbol=symbol,
                         market_type=market_type,
@@ -903,7 +906,7 @@ def process_symbol(
                 if res_hunter["buy"]:
                     hunter_hits["buy"][tf_code] = res_hunter["details"]
                     logger.info("HUNTER DIP signal | %s %s", symbol, tf_label)
-                    # Veritabanına kaydet
+                    # VeritabanÄ±na kaydet
                     _save_signal_and_publish(
                         symbol=symbol,
                         market_type=market_type,
@@ -917,7 +920,7 @@ def process_symbol(
 
                 if res_hunter["sell"]:
                     hunter_hits["sell"][tf_code] = res_hunter["details"]
-                    # SAT sinyalini de veritabanına kaydet
+                    # SAT sinyalini de veritabanÄ±na kaydet
                     _save_signal_and_publish(
                         symbol=symbol,
                         market_type=market_type,
@@ -932,7 +935,7 @@ def process_symbol(
         except Exception as e:
             logger.error(f"HATA: {symbol} - {tf_label}: {str(e)}")
 
-    # --- ÖZEL SİNYALLER & YAPAY ZEKA ANALİZİ ---
+    # --- Ã–ZEL SÄ°NYALLER & YAPAY ZEKA ANALÄ°ZÄ° ---
     secondary_df_cache: pd.DataFrame | None = None
     secondary_df_loaded = False
 
@@ -1044,7 +1047,7 @@ def process_symbol(
     if "1D" in combo_hits["buy"] and "W-FRI" in combo_hits["buy"] and "3W-FRI" in combo_hits["buy"]:
         mark_special_signal("COMBO", "AL", "COK_UCUZ", "3W-FRI")
         trigger_ai_analysis(
-            "🔥🔥 COMBO: ÇOK UCUZ!",
+            "ğŸ”¥ğŸ”¥ COMBO: ÇOK UCUZ!",
             "COMBO",
             "AL",
             "COK_UCUZ",
@@ -1058,7 +1061,7 @@ def process_symbol(
     ):
         mark_special_signal("HUNTER", "AL", "COK_UCUZ", "3W-FRI")
         trigger_ai_analysis(
-            "🔥🔥 HUNTER: ÇOK UCUZ!",
+            "ğŸ”¥ğŸ”¥ HUNTER: ÇOK UCUZ!",
             "HUNTER",
             "AL",
             "COK_UCUZ",
@@ -1069,7 +1072,7 @@ def process_symbol(
     if "1D" in combo_hits["buy"] and "2W-FRI" in combo_hits["buy"] and "ME" in combo_hits["buy"]:
         mark_special_signal("COMBO", "AL", "BELES", "ME")
         trigger_ai_analysis(
-            "💎💎💎 COMBO: BELEŞ (TARİHİ FIRSAT)!",
+            "ğŸ’ğŸ’ğŸ’ COMBO: BELEŞ (TARÄ°HÄ° FIRSAT)!",
             "COMBO",
             "AL",
             "BELES",
@@ -1079,7 +1082,7 @@ def process_symbol(
     if "1D" in hunter_hits["buy"] and "2W-FRI" in hunter_hits["buy"] and "ME" in hunter_hits["buy"]:
         mark_special_signal("HUNTER", "AL", "BELES", "ME")
         trigger_ai_analysis(
-            "💎💎💎 HUNTER: BELEŞ (TARİHİ FIRSAT)!",
+            "ğŸ’ğŸ’ğŸ’ HUNTER: BELEŞ (TARÄ°HÄ° FIRSAT)!",
             "HUNTER",
             "AL",
             "BELES",
@@ -1090,7 +1093,7 @@ def process_symbol(
     if "1D" in combo_hits["sell"] and "W-FRI" in combo_hits["sell"]:
         mark_special_signal("COMBO", "SAT", "PAHALI", "W-FRI")
         trigger_ai_analysis(
-            "⚠️⚠️ COMBO: PAHALI!",
+            "âš ï¸âš ï¸ COMBO: PAHALI!",
             "COMBO",
             "SAT",
             "PAHALI",
@@ -1100,18 +1103,18 @@ def process_symbol(
     if "1D" in hunter_hits["sell"] and "W-FRI" in hunter_hits["sell"]:
         mark_special_signal("HUNTER", "SAT", "PAHALI", "W-FRI")
         trigger_ai_analysis(
-            "⚠️⚠️ HUNTER: PAHALI!",
+            "âš ï¸âš ï¸ HUNTER: PAHALI!",
             "HUNTER",
             "SAT",
             "PAHALI",
             ["1D", "W-FRI"],
         )
 
-    # FAHİŞ FİYAT
+    # FAHÄ°Å FÄ°YAT
     if "1D" in combo_hits["sell"] and "W-FRI" in combo_hits["sell"] and "ME" in combo_hits["sell"]:
         mark_special_signal("COMBO", "SAT", "FAHIS_FIYAT", "ME")
         trigger_ai_analysis(
-            "🚨🚨🚨 COMBO: FAHİŞ FİYAT!",
+            "ğŸš¨ğŸš¨ğŸš¨ COMBO: FAHÄ°Å FÄ°YAT!",
             "COMBO",
             "SAT",
             "FAHIS_FIYAT",
@@ -1125,7 +1128,7 @@ def process_symbol(
     ):
         mark_special_signal("HUNTER", "SAT", "FAHIS_FIYAT", "ME")
         trigger_ai_analysis(
-            "🚨🚨🚨 HUNTER: FAHİŞ FİYAT!",
+            "ğŸš¨ğŸš¨ğŸš¨ HUNTER: FAHÄ°Å FÄ°YAT!",
             "HUNTER",
             "SAT",
             "FAHIS_FIYAT",
@@ -1171,12 +1174,12 @@ def scan_market(
 
     increment_scan_count()
     scan_num = get_scan_count()
-    logger.info(f"Tarama #{scan_num} başladı")
+    logger.info(f"Tarama #{scan_num} baÅŸladÄ±")
     logger.info("--- Tarama Basladi: %s ---", time.strftime("%H:%M:%S"))
 
     # BIST Tarama
     symbols = get_all_bist_symbols() if "BIST" in selected_markets else []
-    logger.info(f"BIST taranıyor: {len(symbols)} hisse")
+    logger.info(f"BIST taranÄ±yor: {len(symbols)} hisse")
     logger.info("BIST taraniyor (%s hisse)", len(symbols))
 
     for i, sym in enumerate(symbols):
@@ -1196,7 +1199,7 @@ def scan_market(
                 continue
             process_symbol(df, sym, "BIST")
         except Exception as e:
-            logger.error(f"VERİ ÇEKME HATASI (BIST): {sym} - {str(e)}")
+            logger.error(f"VERÄ° Ã‡EKME HATASI (BIST): {sym} - {str(e)}")
 
         if i % 10 == 0 and check_commands_callback:
             check_commands_callback()
@@ -1213,13 +1216,13 @@ def scan_market(
             df = cached_get_crypto_data(sym)
             process_symbol(df, sym, "Kripto")
         except Exception as e:
-            logger.error(f"VERİ ÇEKME HATASI (KRIPTO): {sym} - {str(e)}")
+            logger.error(f"VERÄ° Ã‡EKME HATASI (KRIPTO): {sym} - {str(e)}")
 
         if i % 10 == 0 and check_commands_callback:
             check_commands_callback()
         time.sleep(rate_limits.CRYPTO_DELAY)
 
-    # Süresi dolmuş cache temizle
+    # SÃ¼resi dolmuÅŸ cache temizle
     price_cache.clear_expired()
 
     # Cache istatistikleri logla

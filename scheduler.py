@@ -52,7 +52,7 @@ def run_special_tag_health_check() -> None:
     Sends Telegram only on state transitions.
     """
     try:
-        from ops_repository import (
+        from infrastructure.persistence.ops_repository import (
             get_bot_stat,
             get_special_tag_coverage,
             set_bot_stat,
@@ -138,7 +138,10 @@ def _run_scheduled_scan(scan_func, label: str) -> None:
     started_at = time.time()
     try:
         try:
-            from ops_repository import acquire_distributed_lock, release_distributed_lock
+            from infrastructure.persistence.ops_repository import (
+                acquire_distributed_lock,
+                release_distributed_lock,
+            )
         except Exception as exc:
             acquire_distributed_lock = None
             logger.warning("Distributed lock helper import failed; local lock only: %s", exc)

@@ -6,7 +6,6 @@ Kullanım:
     uvicorn api.main:app --reload --port 8000
 """
 
-import asyncio
 import math
 import unicodedata
 from datetime import datetime, timedelta
@@ -20,20 +19,19 @@ from slowapi.errors import RateLimitExceeded  # noqa: E402
 
 from api.contracts.health_contract import build_health_payload  # noqa: E402
 from api.rate_limit import limiter  # noqa: E402
-from api.realtime import (  # noqa: E402
-    broadcast_bist_update,
-    broadcast_ticker,
-    publish_signal,
-    register_broadcast_loop,  # noqa: E402
-)
 from api.realtime import router as realtime_router  # noqa: E402
 from api.routes.auth_routes import router as auth_router  # noqa: E402
 from api.routes.calendar_routes import router as calendar_router  # noqa: E402
 from api.routes.symbols_routes import router as symbols_router  # noqa: E402
 from api.routes.system_routes import router as system_router  # noqa: E402
+from api.runtime.realtime_bootstrap import (  # noqa: E402
+    start_realtime_services as runtime_start_realtime_services,
+)
+from api.runtime.realtime_bootstrap import (  # noqa: E402
+    stop_realtime_services as runtime_stop_realtime_services,
+)
 from logger import get_logger  # noqa: E402
 from settings import settings  # noqa: E402
-from signal_dispatcher import register_signal_publisher  # noqa: E402
 from state_keys import SPECIAL_TAG_HEALTH_STATE_KEY, SPECIAL_TAG_HEALTH_SUMMARY_KEY  # noqa: E402
 from strategy_inspector import (  # noqa: E402
     StrategyInspectorError,
@@ -391,6 +389,7 @@ _MARKET_OVERVIEW_CACHE_TTL = timedelta(seconds=15)
 _market_overview_cache: tuple[datetime, dict[str, dict]] | None = None
 _MARKET_TICKER_CACHE_TTL = timedelta(seconds=10)
 _market_ticker_cache: tuple[datetime, list[dict[str, float | str]]] | None = None
+_market_data_provider = None
 
 
 def _normalize_special_tag(value: str | None) -> str | None:
@@ -575,7 +574,7 @@ async def get_special_tag_health(
 
     Ops kullanimi icindir. Scheduler tarafindaki health check ile ayni veri kaynagini kullanir.
     """
-    from ops_repository import (
+    from infrastructure.persistence.ops_repository import (
         get_bot_stat,
         get_bot_stats_last_updated,
         get_special_tag_coverage,
@@ -712,72 +711,32 @@ async def get_signals(
 
     Opsiyonel filtreler: symbol, strategy, signal_type, market_type, special_tag
     """
-    from db_session import get_session
-    from models import Signal
+    from application.services.signal_trade_service import list_signals as list_signals_service
 
-    with get_session() as session:
-        query = session.query(Signal)
+    normalized_special_tag = _normalize_special_tag(special_tag)
+    if special_tag is not None and normalized_special_tag is None:
+        return []
 
-        if symbol:
-            query = query.filter(Signal.symbol == symbol.upper())
-        if strategy:
-            query = query.filter(Signal.strategy == strategy.upper())
-        if signal_type:
-            query = query.filter(Signal.signal_type == signal_type.upper())
-        if market_type:
-            query = query.filter(Signal.market_type == market_type)
-
-        normalized_special_tag = _normalize_special_tag(special_tag)
-        if special_tag is not None and normalized_special_tag is None:
-            return []
-        if normalized_special_tag:
-            query = query.filter(Signal.special_tag == normalized_special_tag)
-
-        signals = query.order_by(Signal.created_at.desc()).limit(limit).all()
-
-        return [
-            SignalResponse(
-                id=s.id,
-                symbol=s.symbol,
-                market_type=s.market_type,
-                strategy=s.strategy,
-                signal_type=s.signal_type,
-                timeframe=s.timeframe,
-                score=s.score,
-                price=s.price,
-                created_at=s.created_at.isoformat() + "Z" if s.created_at else None,
-                special_tag=s.special_tag,
-                details=s.details,
-            )
-            for s in signals
-        ]
+    signal_rows = list_signals_service(
+        symbol=symbol,
+        strategy=strategy,
+        signal_type=signal_type,
+        market_type=market_type,
+        special_tag=normalized_special_tag,
+        limit=limit,
+    )
+    return [SignalResponse(**row) for row in signal_rows]
 
 
 @app.get("/signals/{signal_id}", response_model=SignalResponse, tags=["Signals"])
 async def get_signal(signal_id: int):
     """Belirli bir sinyali döndürür."""
-    from db_session import get_session
-    from models import Signal
+    from application.services.signal_trade_service import get_signal_by_id
 
-    with get_session() as session:
-        signal = session.query(Signal).filter(Signal.id == signal_id).first()
-
-        if not signal:
-            raise HTTPException(status_code=404, detail="Sinyal bulunamadı")
-
-        return SignalResponse(
-            id=signal.id,
-            symbol=signal.symbol,
-            market_type=signal.market_type,
-            strategy=signal.strategy,
-            signal_type=signal.signal_type,
-            timeframe=signal.timeframe,
-            score=signal.score,
-            price=signal.price,
-            created_at=signal.created_at.isoformat() if signal.created_at else None,
-            special_tag=signal.special_tag,
-            details=signal.details,
-        )
+    signal = get_signal_by_id(signal_id)
+    if not signal:
+        raise HTTPException(status_code=404, detail="Sinyal bulunamadı")
+    return SignalResponse(**signal)
 
 
 @app.get("/trades", response_model=list[TradeResponse], tags=["Trades"])
@@ -793,33 +752,10 @@ async def get_trades(
 
     Opsiyonel filtreler: symbol, status
     """
-    from db_session import get_session
-    from models import Trade
+    from application.services.signal_trade_service import list_trades as list_trades_service
 
-    with get_session() as session:
-        query = session.query(Trade)
-
-        if symbol:
-            query = query.filter(Trade.symbol == symbol.upper())
-        if status:
-            query = query.filter(Trade.status == status.upper())
-
-        trades = query.order_by(Trade.created_at.desc()).limit(limit).all()
-
-        return [
-            TradeResponse(
-                id=t.id,
-                symbol=t.symbol,
-                market_type=t.market_type,
-                direction=t.direction,
-                price=t.price,
-                quantity=t.quantity,
-                pnl=t.pnl,
-                status=t.status,
-                created_at=t.created_at.isoformat() if t.created_at else None,
-            )
-            for t in trades
-        ]
+    trade_rows = list_trades_service(symbol=symbol, status=status, limit=limit)
+    return [TradeResponse(**row) for row in trade_rows]
 
 
 @app.get("/stats", response_model=StatsResponse, tags=["Statistics"])
@@ -828,46 +764,10 @@ async def get_stats(request: Request):
     """
     Bot ve trade istatistiklerini döndürür.
     """
-    from db_session import get_session
-    from models import Signal, Trade
+    from application.services.signal_trade_service import get_trade_stats_summary
 
-    with get_session() as session:
-        # Sinyal sayısı
-        total_signals = session.query(Signal).count()
-
-        # Trade istatistikleri
-        total_trades = session.query(Trade).count()
-        open_trades = session.query(Trade).filter(Trade.status == "OPEN").count()
-
-        # PnL hesaplama
-        from sqlalchemy import func
-
-        pnl_result = session.query(func.sum(Trade.pnl)).filter(Trade.status == "CLOSED").scalar()
-        total_pnl = pnl_result or 0.0
-
-        # Win rate
-        closed_trades = session.query(Trade).filter(Trade.status == "CLOSED").count()
-        winning_trades = (
-            session.query(Trade).filter(Trade.status == "CLOSED", Trade.pnl > 0).count()
-        )
-        win_rate = (winning_trades / closed_trades * 100) if closed_trades > 0 else 0.0
-
-        # Tarama sayısı
-        try:
-            from market_scanner import get_scan_count
-
-            scan_count = get_scan_count()
-        except Exception:
-            scan_count = 0
-
-        return StatsResponse(
-            total_signals=total_signals,
-            total_trades=total_trades,
-            open_trades=open_trades,
-            total_pnl=total_pnl,
-            win_rate=round(win_rate, 2),
-            scan_count=scan_count,
-        )
+    stats = get_trade_stats_summary()
+    return StatsResponse(**stats)
 
 
 @app.post("/analyze/{symbol}", tags=["Analysis"])
@@ -905,35 +805,21 @@ async def get_analyses(
 
     Gemini AI tarafından üretilen tüm analizleri listeler.
     """
-    from db_session import get_session
-    from models import AIAnalysis
+    from application.services.analysis_service import list_ai_analyses
 
-    with get_session() as session:
-        query = session.query(AIAnalysis)
-
-        if symbol:
-            query = query.filter(AIAnalysis.symbol == symbol.upper())
-        if market_type:
-            query = query.filter(AIAnalysis.market_type == market_type)
-
-        analyses = query.order_by(AIAnalysis.created_at.desc()).limit(limit).all()
-
-        return [_build_ai_analysis_response(a) for a in analyses]
+    analyses = list_ai_analyses(symbol=symbol, market_type=market_type, limit=limit)
+    return [_build_ai_analysis_response(a) for a in analyses]
 
 
 @app.get("/analyses/{analysis_id}", response_model=AIAnalysisResponse, tags=["AI Analysis"])
 async def get_analysis(analysis_id: int):
     """Belirli bir AI analizini döndürür."""
-    from db_session import get_session
-    from models import AIAnalysis
+    from application.services.analysis_service import get_ai_analysis_by_id
 
-    with get_session() as session:
-        analysis = session.query(AIAnalysis).filter(AIAnalysis.id == analysis_id).first()
-
-        if not analysis:
-            raise HTTPException(status_code=404, detail="Analiz bulunamadı")
-
-        return _build_ai_analysis_response(analysis)
+    analysis = get_ai_analysis_by_id(analysis_id)
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Analiz bulunamadı")
+    return _build_ai_analysis_response(analysis)
 
 
 @app.get(
@@ -941,16 +827,12 @@ async def get_analysis(analysis_id: int):
 )
 async def get_signal_analysis(signal_id: int):
     """Belirli bir sinyale ait AI analizini döndürür."""
-    from db_session import get_session
-    from models import AIAnalysis
+    from application.services.analysis_service import get_ai_analysis_by_signal_id
 
-    with get_session() as session:
-        analysis = session.query(AIAnalysis).filter(AIAnalysis.signal_id == signal_id).first()
-
-        if not analysis:
-            return None
-
-        return _build_ai_analysis_response(analysis)
+    analysis = get_ai_analysis_by_signal_id(signal_id)
+    if not analysis:
+        return None
+    return _build_ai_analysis_response(analysis)
 
 
 @app.get("/market/overview", response_model=MarketOverviewResponse, tags=["Market Data"])
@@ -966,44 +848,9 @@ async def get_market_overview(request: Request):
         return _market_overview_cache[1]
 
     try:
-        symbols = {"bist": "XU100.IS", "crypto": "BTC-USD"}
-        data = {}
+        from application.services.market_data_service import build_market_overview_payload
 
-        for key, symbol in symbols.items():
-            # yfinance period values do not support "24h"; use "1d" for the last day
-            df = await asyncio.to_thread(
-                _fetch_history_with_fallback,
-                symbol,
-                period="1d",
-                fallback_period="5d",
-                interval="15m",
-            )
-            if df.empty:
-                df = await asyncio.to_thread(
-                    _fetch_history_with_fallback,
-                    symbol,
-                    period="5d",
-                    fallback_period=None,
-                    interval="60m",
-                )
-
-            history = []
-            if not df.empty:
-                current_value = float(df["Close"].iloc[-1])
-                first_value = float(df["Open"].iloc[0])
-                change_percent = ((current_value - first_value) / first_value) * 100
-
-                for index, row in df.iterrows():
-                    history.append({"time": index.strftime("%H:%M"), "value": float(row["Close"])})
-
-                data[key] = {
-                    "currentValue": current_value,
-                    "change": change_percent,
-                    "history": history,
-                }
-            else:
-                data[key] = {"currentValue": 0, "change": 0, "history": []}
-
+        data = await build_market_overview_payload(provider=_get_market_data_provider())
         _market_overview_cache = (now, data)
         return data
 
@@ -1030,96 +877,16 @@ async def get_market_indices(
     Landing sayfası için global endeks özet verisi döndürür.
     """
     try:
-        display_names = {
-            "^GSPC": "S&P 500",
-            "^NDX": "Nasdaq 100",
-            "XU100.IS": "BIST 100",
-            "^VIX": "VIX",
-            "DX-Y.NYB": "DXY",
-            "TRY=X": "USD/TRY",
-            "XAUUSD=X": "XAUUSD",
-            "XAGUSD=X": "XAGUSD",
-            "GC=F": "XAUUSD",
-            "SI=F": "XAGUSD",
-        }
+        from application.services.market_data_service import build_market_indices_payload
 
-        unique_symbols = []
-        for raw_symbol in symbol:
-            normalized = raw_symbol.strip().upper().lstrip("$")
-            if not normalized:
-                continue
-            if normalized in unique_symbols:
-                continue
-            unique_symbols.append(normalized)
-
-        unique_symbols = unique_symbols[:30]
-
-        items: list[dict[str, float | str]] = []
-        now = datetime.now()
-        for ticker_symbol in unique_symbols:
-            cached = _market_index_cache.get(ticker_symbol)
-            if cached and now - cached[0] <= _MARKET_INDEX_CACHE_TTL:
-                items.append(dict(cached[1]))
-                continue
-
-            canonical_symbol = _MARKET_INDEX_CANONICAL.get(ticker_symbol, ticker_symbol)
-            candidate_symbols = [canonical_symbol]
-            fallback_symbol = _MARKET_INDEX_FALLBACKS.get(canonical_symbol)
-            if fallback_symbol and fallback_symbol not in candidate_symbols:
-                candidate_symbols.append(fallback_symbol)
-
-            hist = None
-            for candidate in candidate_symbols:
-                hist = await asyncio.to_thread(
-                    _fetch_history_with_fallback,
-                    candidate,
-                    period="2d",
-                    fallback_period="5d",
-                    interval=None,
-                )
-                if not hist.empty:
-                    break
-
-            if hist is None or hist.empty:
-                continue
-
-            close_series = hist.get("Close")
-            open_series = hist.get("Open")
-            if close_series is None:
-                continue
-
-            close_values = close_series.dropna()
-            if close_values.empty:
-                continue
-
-            current_price = float(close_values.iloc[-1])
-            if not math.isfinite(current_price):
-                continue
-
-            if len(close_values) > 1:
-                previous_close = float(close_values.iloc[-2])
-            elif open_series is not None and not open_series.dropna().empty:
-                previous_close = float(open_series.dropna().iloc[-1])
-            else:
-                previous_close = current_price
-
-            if not math.isfinite(previous_close):
-                previous_close = current_price
-
-            change_percent = (
-                ((current_price - previous_close) / previous_close) * 100 if previous_close else 0.0
-            )
-
-            item: dict[str, float | str] = {
-                "symbol": ticker_symbol,
-                "regularMarketPrice": current_price,
-                "regularMarketChangePercent": change_percent,
-                "shortName": display_names.get(ticker_symbol, ticker_symbol),
-            }
-            _market_index_cache[ticker_symbol] = (now, item)
-            items.append(item)
-
-        return items
+        return await build_market_indices_payload(
+            symbols=symbol,
+            market_index_cache=_market_index_cache,
+            market_index_cache_ttl=_MARKET_INDEX_CACHE_TTL,
+            market_index_canonical=_MARKET_INDEX_CANONICAL,
+            market_index_fallbacks=_MARKET_INDEX_FALLBACKS,
+            provider=_get_market_data_provider(),
+        )
 
     except Exception:
         logger.exception("Market indices error.")
@@ -1138,46 +905,9 @@ async def get_market_ticker(request: Request):
         return _market_ticker_cache[1]
 
     try:
-        symbols = [
-            {"symbol": "XU100.IS", "name": "BIST 100"},
-            {"symbol": "THYAO.IS", "name": "THY"},
-            {"symbol": "GARAN.IS", "name": "Garanti"},
-            {"symbol": "AKBNK.IS", "name": "Akbank"},
-            {"symbol": "BTC-USD", "name": "Bitcoin"},
-            {"symbol": "ETH-USD", "name": "Ethereum"},
-        ]
+        from application.services.market_data_service import build_market_ticker_payload
 
-        tickers = []
-        for item in symbols:
-            s_symbol = item["symbol"]
-            hist = await asyncio.to_thread(
-                _fetch_history_with_fallback,
-                s_symbol,
-                period="2d",
-                fallback_period=None,
-                interval=None,
-            )
-
-            if not hist.empty and len(hist) >= 1:
-                current_price = float(hist["Close"].iloc[-1])
-                # Calculate change from previous close if available, else open
-                prev_close = (
-                    float(hist["Close"].iloc[-2]) if len(hist) > 1 else float(hist["Open"].iloc[0])
-                )
-
-                change = current_price - prev_close
-                change_percent = (change / prev_close) * 100
-
-                tickers.append(
-                    {
-                        "symbol": s_symbol.replace(".IS", "").replace("-USD", "USDT"),
-                        "name": item["name"],
-                        "price": current_price,
-                        "change": change,
-                        "changePercent": change_percent,
-                    }
-                )
-
+        tickers = await build_market_ticker_payload(provider=_get_market_data_provider())
         _market_ticker_cache = (now, tickers)
         return tickers
 
@@ -1304,6 +1034,21 @@ def _fetch_binance_24h_metrics(symbols: list[str]) -> dict[str, dict[str, float 
     return out
 
 
+def _get_market_data_provider():
+    global _market_data_provider
+    if _market_data_provider is None:
+        from api.providers.market_data_provider import CallableMarketDataProvider
+
+        _market_data_provider = CallableMarketDataProvider(
+            history_fetcher=_fetch_history_with_fallback,
+            yfinance_download_fetcher=_fetch_yfinance_download,
+            binance_klines_fetcher=_fetch_binance_klines,
+            binance_24h_metrics_fetcher=_fetch_binance_24h_metrics,
+            binance_symbol_normalizer=_normalize_binance_symbol,
+        )
+    return _market_data_provider
+
+
 @app.get(
     "/market/metrics",
     response_model=dict[str, MarketMetricsItemResponse],
@@ -1321,93 +1066,15 @@ async def get_market_metrics(
     Scanner icin toplu piyasa metrikleri dondurur.
     Tek cagriyla birden fazla sembolun latest/change/perf7/perf30 degerini verir.
     """
-    normalized_keys = []
-    for item in key or []:
-        if not item or ":" not in item:
-            continue
-        market_raw, symbol_raw = item.split(":", 1)
-        market = "BIST" if market_raw.strip().upper() == "BIST" else "Kripto"
-        symbol = symbol_raw.strip().upper()
-        if not symbol:
-            continue
-        normalized_keys.append(f"{market}:{symbol}")
+    from application.services.market_data_service import build_market_metrics_payload
 
-    # Stable unique order
-    normalized_keys = list(dict.fromkeys(normalized_keys))[:600]
-    if not normalized_keys:
-        return {}
-
-    groups: dict[str, list[tuple[str, str]]] = {"BIST": [], "Kripto": []}
-    for item in normalized_keys:
-        market, symbol = item.split(":", 1)
-        if market == "BIST":
-            ticker = symbol if symbol.endswith(".IS") else f"{symbol}.IS"
-            groups["BIST"].append((item, ticker))
-        else:
-            if symbol.endswith("USDT"):
-                ticker = symbol.replace("USDT", "-USD")
-            elif "-" in symbol:
-                ticker = symbol
-            else:
-                ticker = f"{symbol}-USD"
-            groups["Kripto"].append((item, ticker))
-
-    metrics: dict[str, dict[str, float | None | str]] = {}
-
-    for market, items in groups.items():
-        if not items:
-            continue
-        tickers = [ticker for _, ticker in items]
-        try:
-            # Single batch request per market
-            download_df = await asyncio.to_thread(
-                _fetch_yfinance_download,
-                tickers if len(tickers) > 1 else tickers[0],
-            )
-        except Exception:
-            logger.exception("Market metrics download error (%s).", market)
-            continue
-
-        for key_name, ticker in items:
-            close_series = _extract_close_series_from_download(download_df, ticker)
-            payload = _calculate_market_metric_payload(close_series)
-            if payload:
-                payload["source"] = "yfinance_batch"
-                metrics[key_name] = payload
-
-        # Batch sonucunda bos kalanlar icin tekil yfinance fallback (ozellikle BIST tarafi).
-        missing_items = [
-            (key_name, ticker) for key_name, ticker in items if key_name not in metrics
-        ]
-        for key_name, ticker in missing_items:
-            try:
-                single_hist = await asyncio.to_thread(
-                    _fetch_history_with_fallback,
-                    ticker,
-                    period="3mo",
-                    fallback_period=None,
-                    interval="1d",
-                )
-                close_series = _extract_close_series_from_download(single_hist, ticker)
-                payload = _calculate_market_metric_payload(close_series)
-                if payload:
-                    payload["source"] = "yfinance_single"
-                    metrics[key_name] = payload
-            except Exception:
-                continue
-
-    # Crypto tarafinda yfinance'de olmayan pariteler icin Binance 24h fallback.
-    missing_crypto = [item for item, _ in groups["Kripto"] if item not in metrics]
-    if missing_crypto:
-        symbols = [item.split(":", 1)[1] for item in missing_crypto]
-        binance_metrics = await asyncio.to_thread(_fetch_binance_24h_metrics, symbols)
-        for key_name in missing_crypto:
-            symbol = _normalize_binance_symbol(key_name.split(":", 1)[1])
-            payload = binance_metrics.get(symbol)
-            if payload:
-                metrics[key_name] = payload
-
-    return metrics
+    return await build_market_metrics_payload(
+        keys=key,
+        extract_close_series_from_download=_extract_close_series_from_download,
+        calculate_market_metric_payload=_calculate_market_metric_payload,
+        provider=_get_market_data_provider(),
+        logger=logger,
+    )
 
 
 def _select_manual_analysis_timeframes(
@@ -1562,346 +1229,16 @@ async def get_candles(
     ),
     limit: int = Query(500, description="Number of candles (max 2000)"),
 ):
-    """
-    OHLCV mum grafiği verisi döndürür.
+    from application.services.market_data_service import build_candles_payload
 
-    Hibrit yaklaşım: Önce price_cache'e bakar, yoksa API'den çeker.
-    BIST için İşyatırım, Kripto için Binance kullanır.
-    """
-
-    symbol = symbol.upper()
-    limit = min(limit, 2000)  # Max limit
-
-    raw_timeframe = timeframe.strip()
-    timeframe_aliases = {
-        "GUNLUK": "1d",
-        "GÜNLÜK": "1d",
-        "D": "1d",
-        "HAFTALIK": "1wk",
-        "W": "1wk",
-        "2 HAFTALIK": "2wk",
-        "3 HAFTALIK": "3wk",
-        "AYLIK": "1mo",
-        "M": "1mo",
-    }
-    timeframe = timeframe_aliases.get(raw_timeframe.upper(), raw_timeframe.lower())
-
-    # Binance interval mapping for intraday crypto data
-    binance_interval_map = {
-        "15m": "15m",
-        "30m": "30m",
-        "1h": "1h",
-        "2h": "2h",
-        "4h": "4h",
-        "8h": "8h",
-        "12h": "12h",
-        "18h": "12h",  # Binance doesn't have 18h, use 12h
-        "1d": "1d",
-        "2d": "1d",  # Will resample from daily
-        "3d": "3d",
-        "1wk": "1w",
-        "2wk": "1w",  # Will resample
-        "3wk": "1w",  # Will resample
-        "1mo": "1M",
-        "2mo": "1M",  # Will resample
-        "3mo": "1M",  # Will resample
-    }
-
-    # Check if this is an intraday timeframe
-    is_intraday = timeframe in ["15m", "30m", "1h", "2h", "4h", "8h", "12h"]
-    binance_interval = binance_interval_map.get(timeframe, "1d")
-
-    df = None
-    source = "cache"
-
-    try:
-        # For BIST with intraday: Use yfinance
-        if market_type == "BIST" and is_intraday:
-            try:
-                import pandas as pd
-                import pytz
-
-                yf_symbol = symbol + ".IS" if not symbol.endswith(".IS") else symbol
-                # Intraday bars are anchored to BIST session open (10:00 TR).
-                # Fetch denser data where needed, then resample with 10:00 offset.
-                if timeframe in ["15m", "30m", "1h"]:
-                    yf_interval = "15m"
-                    period = "60d"
-                else:
-                    yf_interval = "1h"
-                    period = "730d"
-
-                df = await asyncio.to_thread(
-                    _fetch_history_with_fallback,
-                    yf_symbol,
-                    period=period,
-                    fallback_period=None,
-                    interval=yf_interval,
-                    auto_adjust=False,
-                    actions=False,
-                )
-
-                if df is not None and not df.empty:
-                    turkey_tz = pytz.timezone("Europe/Istanbul")
-                    if hasattr(df.index, "tz") and df.index.tz is not None:
-                        df.index = df.index.tz_convert(turkey_tz)
-                    else:
-                        with suppress(Exception):
-                            df.index = df.index.tz_localize("UTC").tz_convert(turkey_tz)
-
-                    # Keep only exchange session rows (Mon-Fri, 10:00-18:00 TR).
-                    df = df[df.index.dayofweek < 5]
-                    session_mask = (
-                        (df.index.hour > 10) | ((df.index.hour == 10) & (df.index.minute >= 0))
-                    ) & (df.index.hour < 18)
-                    df = df[session_mask]
-
-                    agg_map = {
-                        "Open": "first",
-                        "High": "max",
-                        "Low": "min",
-                        "Close": "last",
-                        "Volume": "sum",
-                    }
-
-                    intraday_rule_map = {
-                        "30m": "30min",
-                        "1h": "1h",
-                        "2h": "2h",
-                        "4h": "4h",
-                        "8h": "8h",
-                        "12h": "12h",
-                    }
-                    rule = intraday_rule_map.get(timeframe)
-                    if rule:
-                        df = (
-                            df.resample(
-                                rule,
-                                label="left",
-                                closed="left",
-                                origin="start_day",
-                                offset="10h",
-                            )
-                            .agg(agg_map)
-                            .dropna()
-                        )
-
-                    # Remove any bucket starting outside the trading session.
-                    session_start_mask = (
-                        (df.index.hour > 10) | ((df.index.hour == 10) & (df.index.minute >= 0))
-                    ) & (df.index.hour < 18)
-                    df = df[session_start_mask]
-
-                    source = (
-                        "yfinance_intraday_session_resampled"
-                        if timeframe != yf_interval
-                        else "yfinance_intraday_session"
-                    )
-            except Exception:
-                logger.exception("yfinance intraday error for %s.", symbol)
-                df = None
-
-        # For Crypto with intraday: Fetch directly from Binance with the interval
-        elif market_type in ["Kripto", "CRYPTO"] and is_intraday:
-            try:
-                import pandas as pd
-
-                klines = await asyncio.to_thread(
-                    _fetch_binance_klines,
-                    symbol,
-                    binance_interval,
-                    limit,
-                )
-
-                if klines:
-                    df = pd.DataFrame(
-                        klines,
-                        columns=[
-                            "timestamp",
-                            "Open",
-                            "High",
-                            "Low",
-                            "Close",
-                            "Volume",
-                            "close_time",
-                            "quote_volume",
-                            "trades",
-                            "taker_buy_base",
-                            "taker_buy_quote",
-                            "ignore",
-                        ],
-                    )
-                    df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms")
-                    df.set_index("timestamp", inplace=True)
-                    df = df[["Open", "High", "Low", "Close", "Volume"]].astype(float)
-                    source = "binance"
-            except Exception:
-                logger.exception("Binance intraday error for %s.", symbol)
-                df = None
-
-        # For non-intraday or if intraday failed, use standard approach
-        if df is None or df.empty:
-            # 1. Try price_cache first (hibrit yaklaşım)
-            try:
-                from price_cache import price_cache
-
-                df = price_cache.get(symbol, market_type)
-                if df is not None and not df.empty:
-                    if market_type == "BIST":
-                        from data_loader import is_suspicious_bist_ohlcv
-
-                        if is_suspicious_bist_ohlcv(df):
-                            price_cache.invalidate(symbol, "BIST")
-                            logger.warning("Invalidated suspicious BIST cache: %s", symbol)
-                            df = None
-                        else:
-                            source = "cache"
-                    else:
-                        source = "cache"
-            except Exception:
-                logger.exception("Cache error for %s.", symbol)
-                df = None
-
-            # 2. If cache miss, fetch from source
-            if df is None or df.empty:
-                if market_type == "BIST":
-                    # BIST: Use İşyatırım via data_loader
-                    try:
-                        from data_loader import get_bist_data
-
-                        df = get_bist_data(symbol, start_date="01-01-2010")
-                        source = str(getattr(df, "attrs", {}).get("source_hint", "isyatirim"))
-
-                        # Save to cache for next time
-                        if df is not None and not df.empty:
-                            with suppress(Exception):
-                                from data_loader import is_suspicious_bist_ohlcv
-                                from price_cache import price_cache as pc
-
-                                if is_suspicious_bist_ohlcv(df):
-                                    pc.invalidate(symbol, market_type)
-                                    logger.warning(
-                                        "Skipped suspicious BIST cache write: %s", symbol
-                                    )
-                                else:
-                                    pc.set(symbol, market_type, df)
-                    except Exception:
-                        logger.exception("BIST data error for %s.", symbol)
-                        df = None
-
-                elif market_type in ["Kripto", "CRYPTO"]:
-                    # Crypto: Use Binance via data_loader (daily data)
-                    try:
-                        from data_loader import get_crypto_data
-
-                        df = get_crypto_data(symbol, start_str="10 years ago")
-                        source = "binance"
-
-                        # Save to cache
-                        if df is not None and not df.empty:
-                            with suppress(Exception):
-                                from price_cache import price_cache as pc
-
-                                pc.set(symbol, "Kripto", df)
-                    except Exception:
-                        logger.exception("Crypto data error for %s.", symbol)
-                        df = None
-
-        # 3. Final fallback: yfinance
-        if df is None or df.empty:
-            yf_symbol = symbol
-            if market_type == "BIST" and not symbol.endswith(".IS"):
-                yf_symbol = symbol + ".IS"
-            elif symbol.endswith("USDT"):
-                yf_symbol = symbol.replace("USDT", "-USD")
-
-            df = await asyncio.to_thread(
-                _fetch_history_with_fallback,
-                yf_symbol,
-                period="max",
-                fallback_period=None,
-                interval="1d",
-            )
-            source = "yfinance"
-
-            if df.empty:
-                raise HTTPException(status_code=404, detail=f"{symbol} için veri bulunamadı")
-
-        # 4. Resample daily+ data via market-aware candle engine
-        if not is_intraday and df is not None and not df.empty:
-            try:
-                from data_loader import resample_market_data
-
-                resampled = resample_market_data(df, timeframe, market_type)
-                if resampled is not None and not resampled.empty:
-                    df = resampled
-                    if timeframe != "1d":
-                        source = f"{source}_market_custom"
-            except Exception:
-                logger.exception("Resample error for %s (%s).", symbol, timeframe)
-
-        # 5. Format output timestamps
-        import pytz
-
-        turkey_tz = pytz.timezone("Europe/Istanbul")
-        utc_tz = pytz.UTC
-        candles = []
-        if df is not None and not df.empty:
-            # Take last N candles
-            df_tail = df.tail(limit)
-
-            for index, row in df_tail.iterrows():
-                ts = index
-                if is_intraday:
-                    if market_type == "BIST":
-                        # BIST intraday bars are represented in TR exchange session wall-time.
-                        if hasattr(ts, "tzinfo") and ts.tzinfo is not None:
-                            ts = ts.astimezone(turkey_tz)
-                        elif hasattr(ts, "tz_localize"):
-                            with suppress(Exception):
-                                ts = ts.tz_localize("UTC").tz_convert(turkey_tz)
-                    else:
-                        # Crypto intraday bars stay in UTC reference (00:00 boundary).
-                        if hasattr(ts, "tzinfo") and ts.tzinfo is not None:
-                            if hasattr(ts, "tz_convert"):
-                                ts = ts.tz_convert(utc_tz)
-                            else:
-                                ts = ts.astimezone(utc_tz)
-                            if hasattr(ts, "tz_localize"):
-                                with suppress(Exception):
-                                    ts = ts.tz_localize(None)
-                        elif hasattr(ts, "tz_localize"):
-                            with suppress(Exception):
-                                ts = ts.tz_localize("UTC").tz_localize(None)
-                    time_val = ts.strftime("%Y-%m-%d %H:%M")
-                else:
-                    time_val = ts.strftime("%Y-%m-%d")
-
-                candles.append(
-                    {
-                        "time": time_val,
-                        "open": float(row.get("Open", row.get("open", 0))),
-                        "high": float(row.get("High", row.get("high", 0))),
-                        "low": float(row.get("Low", row.get("low", 0))),
-                        "close": float(row.get("Close", row.get("close", 0))),
-                        "volume": int(row.get("Volume", row.get("volume", 0))),
-                    }
-                )
-
-        return {
-            "symbol": symbol,
-            "market_type": market_type,
-            "timeframe": timeframe,
-            "source": source,
-            "count": len(candles),
-            "candles": candles,
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("Candle error for %s.", symbol)
-        raise HTTPException(status_code=500, detail=str(e)) from e
+    return await build_candles_payload(
+        symbol=symbol,
+        market_type=market_type,
+        timeframe=timeframe,
+        limit=limit,
+        provider=_get_market_data_provider(),
+        logger=logger,
+    )
 
 
 # ==================== STARTUP/SHUTDOWN ====================
@@ -1910,7 +1247,7 @@ async def get_candles(
 def _run_startup_sequence() -> None:
     """Uygulama baslangicinda gerekli senkron hazirligi yapar."""
     from db_session import init_db
-    from ops_repository import reconcile_active_orders_on_startup
+    from infrastructure.persistence.ops_repository import reconcile_active_orders_on_startup
 
     _RUNTIME_STATE["db_ready"] = False
     try:
@@ -1945,39 +1282,9 @@ def _run_startup_sequence() -> None:
 
 async def _start_realtime_services() -> None:
     """Real-time servislerini baslatir."""
-    _RUNTIME_STATE["realtime_ready"] = False
-    _RUNTIME_STATE["realtime_error"] = None
-    try:
-        from bist_service import bist_service
-        from websocket_manager import ws_manager
-
-        register_broadcast_loop(asyncio.get_running_loop())
-        ws_manager.on("ticker", broadcast_ticker)
-        bist_service.on_update(broadcast_bist_update)
-
-        await ws_manager.start()
-        await bist_service.start()
-        register_signal_publisher(publish_signal)
-        _RUNTIME_STATE["realtime_ready"] = True
-        logger.info("Real-time WebSocket services started")
-        logger.info("Otonom Analiz API baslatildi")
-    except Exception as exc:
-        _RUNTIME_STATE["realtime_error"] = str(exc)
-        logger.exception("Real-time services failed to start.")
-        raise
+    await runtime_start_realtime_services(runtime_state=_RUNTIME_STATE, logger=logger)
 
 
 async def _stop_realtime_services() -> None:
     """Real-time servislerini kapatir."""
-    try:
-        from bist_service import bist_service
-        from websocket_manager import ws_manager
-
-        await ws_manager.stop()
-        await bist_service.stop()
-        logger.info("Real-time services stopped")
-    except Exception:
-        logger.exception("Error stopping real-time services.")
-    finally:
-        register_signal_publisher(None)
-        _RUNTIME_STATE["realtime_ready"] = False
+    await runtime_stop_realtime_services(runtime_state=_RUNTIME_STATE, logger=logger)

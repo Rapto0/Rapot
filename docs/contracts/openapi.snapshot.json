@@ -465,6 +465,124 @@
         "title": "CandlesResponse",
         "type": "object"
       },
+      "CompatibilityWrapperTelemetryResponse": {
+        "properties": {
+          "active_wrappers": {
+            "title": "Active Wrappers",
+            "type": "integer"
+          },
+          "details_hidden_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Details Hidden Reason"
+          },
+          "details_included": {
+            "title": "Details Included",
+            "type": "boolean"
+          },
+          "details_requested": {
+            "title": "Details Requested",
+            "type": "boolean"
+          },
+          "planned_removal_buckets": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Planned Removal Buckets",
+            "type": "object"
+          },
+          "total_import_events": {
+            "title": "Total Import Events",
+            "type": "integer"
+          },
+          "total_wrappers": {
+            "title": "Total Wrappers",
+            "type": "integer"
+          },
+          "wrappers": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/CompatibilityWrapperUsageItemResponse"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Wrappers"
+          }
+        },
+        "required": [
+          "total_wrappers",
+          "active_wrappers",
+          "total_import_events",
+          "planned_removal_buckets",
+          "details_requested",
+          "details_included"
+        ],
+        "title": "CompatibilityWrapperTelemetryResponse",
+        "type": "object"
+      },
+      "CompatibilityWrapperUsageItemResponse": {
+        "properties": {
+          "canonical_module": {
+            "title": "Canonical Module",
+            "type": "string"
+          },
+          "first_seen_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Seen At"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
+          "planned_removal": {
+            "title": "Planned Removal",
+            "type": "string"
+          },
+          "usage_count": {
+            "title": "Usage Count",
+            "type": "integer"
+          },
+          "wrapper_module": {
+            "title": "Wrapper Module",
+            "type": "string"
+          }
+        },
+        "required": [
+          "wrapper_module",
+          "canonical_module",
+          "usage_count",
+          "planned_removal",
+          "first_seen_at",
+          "last_seen_at"
+        ],
+        "title": "CompatibilityWrapperUsageItemResponse",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -758,6 +876,199 @@
           "changePercent"
         ],
         "title": "MarketTickerResponse",
+        "type": "object"
+      },
+      "OpsOverviewReadModelResponse": {
+        "properties": {
+          "compatibility_wrappers": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CompatibilityWrapperTelemetryResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "last_scan_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Scan At"
+          },
+          "last_signal_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Signal At"
+          },
+          "last_trade_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Trade At"
+          },
+          "open_trades": {
+            "title": "Open Trades",
+            "type": "integer"
+          },
+          "total_pnl": {
+            "title": "Total Pnl",
+            "type": "number"
+          },
+          "total_scans": {
+            "title": "Total Scans",
+            "type": "integer"
+          },
+          "total_signals": {
+            "title": "Total Signals",
+            "type": "integer"
+          },
+          "total_trades": {
+            "title": "Total Trades",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_signals",
+          "total_trades",
+          "open_trades",
+          "total_scans",
+          "total_pnl",
+          "last_signal_at",
+          "last_trade_at",
+          "last_scan_at"
+        ],
+        "title": "OpsOverviewReadModelResponse",
+        "type": "object"
+      },
+      "ScannerActivityItemResponse": {
+        "properties": {
+          "action": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "item_id": {
+            "title": "Item Id",
+            "type": "string"
+          },
+          "item_type": {
+            "title": "Item Type",
+            "type": "string"
+          },
+          "market_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Market Type"
+          },
+          "numeric_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Numeric Value"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          },
+          "strategy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy"
+          },
+          "symbol": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Symbol"
+          },
+          "timeframe": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeframe"
+          }
+        },
+        "required": [
+          "item_type",
+          "item_id",
+          "symbol",
+          "market_type",
+          "strategy",
+          "action",
+          "timeframe",
+          "status",
+          "numeric_value",
+          "created_at"
+        ],
+        "title": "ScannerActivityItemResponse",
         "type": "object"
       },
       "SignalResponse": {
@@ -1889,7 +2200,6 @@
     },
     "/candles/{symbol}": {
       "get": {
-        "description": "OHLCV mum grafiği verisi döndürür.\n\nHibrit yaklaşım: Önce price_cache'e bakar, yoksa API'den çeker.\nBIST için İşyatırım, Kripto için Binance kullanır.",
         "operationId": "get_candles_candles__symbol__get",
         "parameters": [
           {
@@ -2283,6 +2593,110 @@
         "summary": "Get Market Ticker",
         "tags": [
           "Market Data"
+        ]
+      }
+    },
+    "/ops/read-model/overview": {
+      "get": {
+        "operationId": "get_ops_overview_read_model_ops_read_model_overview_get",
+        "parameters": [
+          {
+            "description": "Include compatibility wrapper telemetry summary in response.",
+            "in": "query",
+            "name": "include_compat_telemetry",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Include compatibility wrapper telemetry summary in response.",
+              "title": "Include Compat Telemetry",
+              "type": "boolean"
+            }
+          },
+          {
+            "description": "Include per-wrapper details (disabled in production env).",
+            "in": "query",
+            "name": "include_wrapper_details",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Include per-wrapper details (disabled in production env).",
+              "title": "Include Wrapper Details",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpsOverviewReadModelResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Ops Overview Read Model",
+        "tags": [
+          "System"
+        ]
+      }
+    },
+    "/ops/read-model/scanner-feed": {
+      "get": {
+        "operationId": "get_scanner_activity_read_model_ops_read_model_scanner_feed_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ScannerActivityItemResponse"
+                  },
+                  "title": "Response Get Scanner Activity Read Model Ops Read Model Scanner Feed Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Scanner Activity Read Model",
+        "tags": [
+          "System"
         ]
       }
     },

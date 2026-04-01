@@ -457,6 +457,10 @@ class TestTelegramSignalFiltering:
                 },
             },
         )
+        monkeypatch.setattr(
+            "market_scanner._verify_bist_second_source",
+            lambda **_kwargs: (True, "disabled_for_test"),
+        )
         monkeypatch.setattr("market_scanner.db_save_signal", lambda **kwargs: None)
         monkeypatch.setattr("market_scanner.increment_signal_count", lambda: None)
         monkeypatch.setattr("market_scanner.send_message", sent_messages.append)

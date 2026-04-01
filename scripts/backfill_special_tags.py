@@ -69,7 +69,10 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     _ensure_repo_on_path()
 
-    from database import backfill_special_tags, get_special_tag_coverage
+    from infrastructure.persistence.ops_repository import (
+        backfill_special_tags,
+        get_special_tag_coverage,
+    )
 
     args = parse_args()
     market_type = args.market_type.strip() or None

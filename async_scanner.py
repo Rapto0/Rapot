@@ -1,6 +1,6 @@
 """
-Async Market Scanner Modülü
-Paralel piyasa tarama ve sinyal işleme.
+Async Market Scanner ModÃ¼lÃ¼
+Paralel piyasa tarama ve sinyal iÅŸleme.
 """
 
 import asyncio
@@ -10,6 +10,7 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
+from application.scanner.signal_handlers import persist_and_publish_signal_event
 from async_data_loader import (
     fetch_multiple_bist_async,
     fetch_multiple_crypto_async,
@@ -17,9 +18,10 @@ from async_data_loader import (
 )
 from config import TIMEFRAMES
 from data_loader import get_all_bist_symbols, resample_market_data
+from domain.events import SignalDomainEvent
+from infrastructure.persistence.signal_repository import save_signal as db_save_signal
 from logger import get_logger
 from signal_dispatcher import publish_signal_event
-from signal_repository import save_signal as db_save_signal
 from signals import calculate_combo_signal, calculate_hunter_signal
 from state_keys import ASYNC_SCAN_COUNT_KEY, ASYNC_SIGNAL_COUNT_KEY
 from telegram_notify import send_message
@@ -89,7 +91,7 @@ def get_realtime_publish_failure_count() -> int:
 
 
 class AsyncScannerState:
-    """Async scanner durum yönetimi."""
+    """Async scanner durum yÃ¶netimi."""
 
     def __init__(self):
         self._scan_count = 0
@@ -107,7 +109,7 @@ class AsyncScannerState:
         self._is_scanning = True
         self._last_scan_time = datetime.now()
         try:
-            from ops_repository import set_bot_stat_int
+            from infrastructure.persistence.ops_repository import set_bot_stat_int
 
             set_bot_stat_int(ASYNC_SCAN_COUNT_KEY, self._scan_count)
         except Exception as exc:
@@ -121,7 +123,7 @@ class AsyncScannerState:
     def increment_signal(self) -> int:
         self._signal_count += 1
         try:
-            from ops_repository import set_bot_stat_int
+            from infrastructure.persistence.ops_repository import set_bot_stat_int
 
             set_bot_stat_int(ASYNC_SIGNAL_COUNT_KEY, self._signal_count)
         except Exception as exc:
@@ -147,7 +149,7 @@ _async_state = AsyncScannerState()
 
 def restore_async_scanner_state_from_db() -> None:
     try:
-        from ops_repository import get_bot_stat_int
+        from infrastructure.persistence.ops_repository import get_bot_stat_int
 
         scan_count = get_bot_stat_int(ASYNC_SCAN_COUNT_KEY, default=0)
         signal_count = get_bot_stat_int(ASYNC_SIGNAL_COUNT_KEY, default=0)
@@ -159,12 +161,12 @@ def restore_async_scanner_state_from_db() -> None:
 
 async def process_symbol_async(symbol: str, df_daily, market_type: str) -> dict[str, Any]:
     """
-    Tek sembol için asenkron sinyal analizi.
+    Tek sembol iÃ§in asenkron sinyal analizi.
 
     Args:
         symbol: Sembol
         df_daily: OHLCV verisi
-        market_type: Piyasa türü
+        market_type: Piyasa tÃ¼rÃ¼
 
     Returns:
         Bulunan sinyaller
@@ -237,21 +239,21 @@ async def process_symbol_async(symbol: str, df_daily, market_type: str) -> dict[
                     )
 
         except Exception as e:
-            logger.error(f"Sinyal hesaplama hatası ({symbol} - {tf_code}): {e}")
+            logger.error(f"Sinyal hesaplama hatasÄ± ({symbol} - {tf_code}): {e}")
 
     return {"symbol": symbol, "market_type": market_type, "signals": signals}
 
 
 async def process_signals_batch(results: list[dict[str, Any]], notify: bool = True) -> int:
     """
-    Sinyal sonuçlarını işler ve bildirim gönderir.
+    Sinyal sonuÃ§larÄ±nÄ± iÅŸler ve bildirim gÃ¶nderir.
 
     Args:
-        results: Sembol sonuçları listesi
-        notify: Telegram bildirimi gönder
+        results: Sembol sonuÃ§larÄ± listesi
+        notify: Telegram bildirimi gÃ¶nder
 
     Returns:
-        Toplam sinyal sayısı
+        Toplam sinyal sayÄ±sÄ±
     """
     total_signals = 0
 
@@ -263,30 +265,24 @@ async def process_signals_batch(results: list[dict[str, Any]], notify: bool = Tr
             total_signals += 1
             _async_state.increment_signal()
 
-            # Veritabanına kaydet
-            signal_id = db_save_signal(
+            event = SignalDomainEvent(
                 symbol=symbol,
                 market_type=market_type,
-                strategy=signal["strategy"],
-                signal_type=signal["type"],
-                timeframe=signal["timeframe"],
+                strategy=str(signal["strategy"]),
+                signal_type=str(signal["type"]),
+                timeframe=str(signal["timeframe"]),
                 score=str(signal["score"]),
-                price=signal["price"],
-                details=_serialize_signal_details(signal.get("details")),
+                price=float(signal["price"]),
+                details=signal.get("details"),
+                special_tag=None,
             )
-            if signal_id:
-                _publish_realtime_signal(
-                    _build_realtime_signal_payload(
-                        signal_id=int(signal_id),
-                        symbol=symbol,
-                        market_type=market_type,
-                        strategy=str(signal["strategy"]),
-                        signal_type=str(signal["type"]),
-                        timeframe=str(signal["timeframe"]),
-                        score=str(signal["score"]),
-                        price=float(signal["price"]),
-                    )
-                )
+            persist_and_publish_signal_event(
+                event=event,
+                save_signal_fn=db_save_signal,
+                publish_signal_fn=_publish_realtime_signal,
+                payload_builder_fn=_build_realtime_signal_payload,
+                details_serializer=_serialize_signal_details,
+            )
 
     return total_signals
 
@@ -317,14 +313,14 @@ async def scan_market_async(
     """
     Asenkron piyasa tarama.
 
-    BIST ve kripto piyasalarını paralel tarar.
+    BIST ve kripto piyasalarÄ±nÄ± paralel tarar.
 
     Args:
-        notify: Telegram bildirimleri gönder
-        progress_callback: İlerleme callback'i
+        notify: Telegram bildirimleri gÃ¶nder
+        progress_callback: Ä°lerleme callback'i
 
     Returns:
-        Tarama sonuç istatistikleri
+        Tarama sonuÃ§ istatistikleri
     """
     if _async_state.is_scanning:
         logger.warning("Tarama zaten devam ediyor")
@@ -336,8 +332,8 @@ async def scan_market_async(
     scan_num = _async_state.start_scan()
     start_time = time.time()
 
-    logger.info(f"Async tarama #{scan_num} başladı")
-    send_message(f"🔄 Tarama #{scan_num} başladı (Async Mode)")
+    logger.info(f"Async tarama #{scan_num} baÅŸladÄ±")
+    send_message(f"ğŸ”„ Tarama #{scan_num} baÅŸladÄ± (Async Mode)")
 
     total_signals = 0
     bist_data = {}
@@ -348,10 +344,10 @@ async def scan_market_async(
     try:
         # BIST Tarama
         bist_symbols = get_all_bist_symbols() if "BIST" in selected_markets else []
-        logger.info(f"BIST taranıyor: {len(bist_symbols)} hisse")
+        logger.info(f"BIST taranÄ±yor: {len(bist_symbols)} hisse")
 
         bist_data = await fetch_multiple_bist_async(bist_symbols, batch_size=30)
-        logger.info(f"BIST verisi çekildi: {len(bist_data)} sembol")
+        logger.info(f"BIST verisi Ã§ekildi: {len(bist_data)} sembol")
 
         # BIST sinyalleri paralel hesapla
         bist_tasks = [process_symbol_async(sym, df, "BIST") for sym, df in bist_data.items()]
@@ -363,10 +359,10 @@ async def scan_market_async(
 
         # Kripto Tarama
         crypto_symbols = get_all_binance_symbols_async() if "Kripto" in selected_markets else []
-        logger.info(f"Kripto taranıyor: {len(crypto_symbols)} çift")
+        logger.info(f"Kripto taranÄ±yor: {len(crypto_symbols)} Ã§ift")
 
         crypto_data = await fetch_multiple_crypto_async(crypto_symbols, batch_size=50)
-        logger.info(f"Kripto verisi çekildi: {len(crypto_data)} sembol")
+        logger.info(f"Kripto verisi Ã§ekildi: {len(crypto_data)} sembol")
 
         # Kripto sinyalleri paralel hesapla
         crypto_tasks = [process_symbol_async(sym, df, "Kripto") for sym, df in crypto_data.items()]
@@ -380,7 +376,7 @@ async def scan_market_async(
         scan_failed = True
         scan_error = str(e)
         logger.exception("Async tarama hatasi.")
-        send_message(f"❌ Tarama hatasi: {scan_error}")
+        send_message(f"âŒ Tarama hatasi: {scan_error}")
 
     duration = time.time() - start_time
     _async_state.end_scan(duration)
@@ -435,7 +431,7 @@ def run_async_scan(markets: str | list[str] | tuple[str, ...] | set[str] | None 
 
 
 def get_async_scanner_stats() -> dict[str, Any]:
-    """Scanner istatistiklerini döndürür."""
+    """Scanner istatistiklerini dÃ¶ndÃ¼rÃ¼r."""
     return _async_state.get_stats()
 
 

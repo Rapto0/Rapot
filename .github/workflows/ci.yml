@@ -115,6 +115,10 @@ jobs:
           echo "ADMIN_PASSWORD=test123" >> .env
           echo "USER_PASSWORD=test123" >> .env
 
+      - name: Run architecture boundary gate
+        run: |
+          pytest -q tests/test_architecture_boundaries.py tests/test_frontend_contracts.py tests/test_frontend_backend_contract_sync.py
+
       - name: Detect changed test files
         id: changed_tests
         shell: bash
