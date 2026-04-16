@@ -66,6 +66,7 @@ class TestAIAnalystPhaseOne:
 
     @pytest.mark.unit
     def test_analyze_with_gemini_uses_fallback_model_only_when_enabled(self, monkeypatch):
+        monkeypatch.setattr(ai_analyst.settings, "ai_enabled", True)
         monkeypatch.setattr(ai_analyst.settings, "ai_provider", "gemini")
         monkeypatch.setattr(ai_analyst.settings, "ai_model", "gemini-2.5-flash")
         monkeypatch.setattr(ai_analyst.settings, "ai_enable_fallback", True)
@@ -114,6 +115,7 @@ class TestAIAnalystPhaseOne:
 
     @pytest.mark.unit
     def test_analyze_with_gemini_rejects_unsupported_provider(self, monkeypatch):
+        monkeypatch.setattr(ai_analyst.settings, "ai_enabled", True)
         monkeypatch.setattr(ai_analyst.settings, "ai_provider", "openai")
         monkeypatch.setattr(ai_analyst.settings, "ai_model", "gpt-5-mini")
 
@@ -133,7 +135,35 @@ class TestAIAnalystPhaseOne:
         assert payload["prompt_version"] == ai_analyst.AI_PROMPT_VERSION
 
     @pytest.mark.unit
+    def test_analyze_with_gemini_returns_disabled_error_when_ai_is_off(self, monkeypatch):
+        monkeypatch.setattr(ai_analyst.settings, "ai_enabled", False)
+        monkeypatch.setattr(ai_analyst.settings, "ai_provider", "gemini")
+        monkeypatch.setattr(ai_analyst.settings, "ai_model", "gemini-2.5-flash")
+        monkeypatch.setattr(
+            ai_analyst,
+            "_ensure_gemini_backend",
+            lambda: (_ for _ in ()).throw(AssertionError("backend should not be called")),
+        )
+
+        response = ai_analyst.analyze_with_gemini(
+            symbol="THYAO",
+            scenario_name="Test",
+            signal_type="AL",
+            technical_data={"PRICE": 1, "RSI": 50, "MACD": 0},
+            save_to_db=False,
+        )
+        payload = json.loads(response)
+
+        assert payload["error_code"] == "generation_error"
+        assert payload["summary"] == ["AI analizi devre disi."]
+        assert "AI modu devre disi" in payload["error"]
+        assert payload["provider"] == "gemini"
+        assert payload["model"] == "gemini-2.5-flash"
+        assert payload["prompt_version"] == ai_analyst.AI_PROMPT_VERSION
+
+    @pytest.mark.unit
     def test_analyze_with_gemini_returns_structured_error_for_invalid_json(self, monkeypatch):
+        monkeypatch.setattr(ai_analyst.settings, "ai_enabled", True)
         monkeypatch.setattr(ai_analyst.settings, "ai_provider", "gemini")
         monkeypatch.setattr(ai_analyst.settings, "ai_model", "gemini-2.5-flash")
         monkeypatch.setattr(ai_analyst.settings, "ai_enable_fallback", False)
@@ -275,6 +305,7 @@ class TestAIAnalystPhaseOne:
 
     @pytest.mark.unit
     def test_analyze_with_gemini_embeds_multitimeframe_payload_in_prompt(self, monkeypatch):
+        monkeypatch.setattr(ai_analyst.settings, "ai_enabled", True)
         monkeypatch.setattr(ai_analyst.settings, "ai_provider", "gemini")
         monkeypatch.setattr(ai_analyst.settings, "ai_model", "gemini-2.5-flash")
         monkeypatch.setattr(ai_analyst.settings, "ai_enable_fallback", False)

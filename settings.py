@@ -60,6 +60,7 @@ class Settings(BaseSettings):
     health_api_host: str = Field("0.0.0.0", description="Health API host")
 
     # ==================== AI ====================
+    ai_enabled: bool = Field(True, description="Master switch for AI analysis")
     ai_timeout: int = Field(30, ge=10, le=120, description="AI timeout (seconds)")
     ai_provider: str = Field("gemini", description="AI provider")
     ai_model: str = Field("gemini-2.5-flash", description="Default AI model")

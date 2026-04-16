@@ -65,6 +65,7 @@ def _normalize_ai_provider(value: str | None) -> str:
 
 def get_ai_runtime_settings() -> dict[str, Any]:
     return {
+        "enabled": bool(settings.ai_enabled),
         "provider": _normalize_ai_provider(settings.ai_provider),
         "model": (settings.ai_model or "gemini-2.5-flash").strip(),
         "enable_fallback": bool(settings.ai_enable_fallback),
@@ -617,6 +618,15 @@ def analyze_with_gemini(
     provider = runtime["provider"]
     primary_model = runtime["model"]
     started_at = time.perf_counter()
+
+    if not runtime["enabled"]:
+        return _error_response(
+            error="AI modu devre disi (AI_ENABLED=0).",
+            error_code="generation_error",
+            provider=provider,
+            model_name=primary_model,
+            summary="AI analizi devre disi.",
+        )
 
     if provider != "gemini":
         return _error_response(
