@@ -10,6 +10,8 @@ __pycache__/
 *.so
 .Python
 alembic/
+!middleware/infra/alembic/
+!middleware/infra/alembic/**
 venv/
 ENV/
 env/
