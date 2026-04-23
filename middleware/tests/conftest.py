@@ -39,7 +39,8 @@ def configure_test_environment():
     settings.max_orders_per_day = None
     settings.symbol_tick_overrides_json = "{}"
     settings.allowed_symbols_csv = None
-    settings.webhook_auth_token = None
+    settings.require_webhook_auth = True
+    settings.webhook_auth_token = "test-token"
     _clear_settings_cache()
 
     configure_engine(settings.database_url)
@@ -52,7 +53,7 @@ def configure_test_environment():
 
 @pytest.fixture
 def client() -> TestClient:
-    with TestClient(app) as test_client:
+    with TestClient(app, headers={"X-Webhook-Token": "test-token"}) as test_client:
         yield test_client
 
 

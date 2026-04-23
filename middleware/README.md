@@ -75,6 +75,29 @@ Rules:
 - `signalCode` and `side` must match canonical mapping.
 - Duplicate payloads are deduplicated by deterministic `event_hash`.
 
+## TradingView Real Webhook Setup
+
+TradingView alert webhooks do not support arbitrary custom headers.
+For this reason, middleware accepts auth token either from:
+- Header: `X-Webhook-Token` (recommended for non-TradingView clients)
+- Query parameter: `?token=...` (TradingView-compatible)
+
+Production endpoint pattern:
+
+```text
+https://<your-domain>/webhooks/tradingview?token=<MW_WEBHOOK_AUTH_TOKEN>
+```
+
+TradingView alert configuration:
+1. `Condition`: your indicator alert condition.
+2. `Webhook URL`: `https://<your-domain>/webhooks/tradingview?token=<token>`.
+3. `Message`: normalized JSON payload expected by middleware.
+4. Ensure `Message` is valid JSON and includes required keys exactly.
+
+Security note:
+- Keep token high entropy (at least 32 random bytes, hex/base64 encoded).
+- Rotate token periodically and after any suspected exposure.
+
 ## Risk and Sizing Rules
 
 Buy:
@@ -118,6 +141,8 @@ Most important:
 - `MW_EXECUTION_MODE` (`DRY_RUN` or `LIVE`)
 - `MW_TRADING_ENABLED` (`false` by default)
 - `MW_BROKER_NAME` (`MOCK` by default)
+- `MW_REQUIRE_WEBHOOK_AUTH` (`true` by default)
+- `MW_WEBHOOK_AUTH_TOKEN` (**required** when `MW_REQUIRE_WEBHOOK_AUTH=true`)
 - `MW_BASE_BUDGET_TL`
 - `MW_BUY_BPS`, `MW_SELL_BPS`
 - `MW_MAX_OPEN_TRANCHES_PER_SYMBOL`
@@ -152,7 +177,7 @@ Most important:
 Webhook:
 
 ```bash
-curl -X POST "http://localhost:8010/webhooks/tradingview" \
+curl -X POST "http://localhost:8010/webhooks/tradingview?token=REPLACE_WITH_LONG_RANDOM_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "source":"Combo+Hunter",
@@ -167,6 +192,15 @@ curl -X POST "http://localhost:8010/webhooks/tradingview" \
     "barIndex":12345,
     "isRealtime":true
   }'
+```
+
+For non-TradingView clients, header authentication is also supported:
+
+```bash
+curl -X POST "http://localhost:8010/webhooks/tradingview" \
+  -H "Content-Type: application/json" \
+  -H "X-Webhook-Token: REPLACE_WITH_LONG_RANDOM_TOKEN" \
+  -d '{ "...": "..." }'
 ```
 
 List positions:

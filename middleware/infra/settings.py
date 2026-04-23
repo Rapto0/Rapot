@@ -27,6 +27,7 @@ class MiddlewareSettings(BaseSettings):
     execution_mode: ExecutionMode = ExecutionMode.DRY_RUN
     broker_name: BrokerName = BrokerName.MOCK
     webhook_auth_token: str | None = None
+    require_webhook_auth: bool = True
     allow_admin_endpoints: bool = True
 
     base_budget_tl: Decimal = Decimal("10000")

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import Depends, Header, HTTPException, status
+from fastapi import Depends, Header, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from middleware.broker_adapters.factory import build_broker_client
@@ -32,10 +32,18 @@ def require_admin_enabled() -> None:
 
 def verify_webhook_auth(
     x_webhook_token: Annotated[str | None, Header(alias="X-Webhook-Token")] = None,
+    token: Annotated[str | None, Query(alias="token")] = None,
 ) -> None:
-    if not settings.webhook_auth_token:
-        return
-    if x_webhook_token != settings.webhook_auth_token:
+    # TradingView cannot set arbitrary custom headers.
+    # Allow query token fallback: /webhooks/tradingview?token=...
+    provided = x_webhook_token or token
+    expected = settings.webhook_auth_token
+    if not expected:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="server misconfigured: MW_WEBHOOK_AUTH_TOKEN is not set",
+        )
+    if provided != expected:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid webhook token"
         )
