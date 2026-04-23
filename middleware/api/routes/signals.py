@@ -23,6 +23,7 @@ def list_signals(
         SignalItem(
             id=row.id,
             event_hash=row.event_hash,
+            schema_version=row.schema_version,
             source=row.source,
             symbol=row.symbol,
             ticker=row.ticker,

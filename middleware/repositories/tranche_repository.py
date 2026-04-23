@@ -23,8 +23,10 @@ class TrancheRepository:
     def __init__(self, session: Session):
         self.session = session
 
-    def get(self, tranche_id: int) -> Tranche | None:
+    def get(self, tranche_id: int, *, for_update: bool = False) -> Tranche | None:
         stmt = select(Tranche).where(Tranche.id == tranche_id)
+        if for_update:
+            stmt = stmt.with_for_update()
         return self.session.execute(stmt).scalar_one_or_none()
 
     def count_open(self, symbol: str) -> int:
@@ -46,7 +48,7 @@ class TrancheRepository:
         value = self.session.execute(stmt).scalar()
         return Decimal(str(value or 0))
 
-    def oldest_open(self, symbol: str) -> Tranche | None:
+    def oldest_open(self, symbol: str, *, for_update: bool = False) -> Tranche | None:
         stmt = (
             select(Tranche)
             .where(
@@ -57,7 +59,21 @@ class TrancheRepository:
             .order_by(Tranche.entry_time.asc(), Tranche.id.asc())
             .limit(1)
         )
+        if for_update:
+            stmt = stmt.with_for_update()
         return self.session.execute(stmt).scalar_one_or_none()
+
+    def lock_symbol_open_tranches(self, symbol: str) -> None:
+        stmt = (
+            select(Tranche.id)
+            .where(
+                Tranche.symbol == symbol.upper(),
+                Tranche.status == TrancheStatus.OPEN.value,
+                Tranche.remaining_lots > 0,
+            )
+            .with_for_update()
+        )
+        self.session.execute(stmt)
 
     def get_or_create_by_open_order(
         self,
@@ -139,7 +155,7 @@ class TrancheRepository:
         fill_lots: int,
         fill_price: Decimal,
     ) -> SellFillResult:
-        tranche = self.get(target_tranche_id)
+        tranche = self.get(target_tranche_id, for_update=True)
         if tranche is None:
             raise ValueError(f"target tranche not found: {target_tranche_id}")
 

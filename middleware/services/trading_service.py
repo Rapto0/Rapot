@@ -69,163 +69,227 @@ class TradingService:
         bypass_idempotency: bool = False,
     ) -> ProcessSignalResponse:
         event_hash = self.signal_repo.build_event_hash(payload)
-        if not bypass_idempotency:
-            existing = self.signal_repo.get_by_event_hash(event_hash)
-            if existing:
-                existing_order = self.order_repo.get_by_signal_event_id(existing.id)
-                return ProcessSignalResponse(
-                    signal_event_id=existing.id,
-                    order_id=existing_order.id if existing_order else None,
-                    duplicate=True,
-                    status=(
-                        OrderStatus(existing_order.status)
-                        if existing_order
-                        and existing_order.status in OrderStatus._value2member_map_
-                        else None
-                    ),
-                    message="duplicate signal ignored",
-                    broker_order_id=existing_order.broker_order_id if existing_order else None,
-                )
-
         idempotency_key = (
             event_hash
             if not bypass_idempotency
             else f"{event_hash}:replay:{int(datetime.now(UTC).timestamp() * 1000)}"
         )
-        signal_event = self.signal_repo.create(payload, event_hash=event_hash)
-        order_intent = self._build_intent(payload)
-        order = self.order_repo.create(
-            signal_event_id=signal_event.id,
-            idempotency_key=idempotency_key,
-            symbol=order_intent.symbol,
-            side=order_intent.side,
-            signal_code=order_intent.signal_code,
-            requested_lots=order_intent.requested_lots,
-            limit_price=order_intent.limit_price,
-            budget_tl=order_intent.budget_tl,
-            status=OrderStatus.RECEIVED,
-            broker_name=self.broker_client.name,
-            mode=self.cfg.execution_mode.value,
-            target_tranche_id=order_intent.target_tranche_id,
-        )
-        self.execution_repo.add(
-            order_id=order.id,
-            event_type="lifecycle",
-            status=OrderStatus.RECEIVED.value,
-            message="order received",
-            payload={"event_hash": event_hash},
-        )
+        with self.session.begin():
+            if not bypass_idempotency:
+                existing = self.signal_repo.get_by_event_hash(event_hash)
+                if existing:
+                    existing_order = self.order_repo.get_by_signal_event_id(existing.id)
+                    if existing_order is not None:
+                        logger.info(
+                            "duplicate signal ignored",
+                            extra={
+                                "extra_fields": {
+                                    "signal_event_id": existing.id,
+                                    "order_id": existing_order.id,
+                                    "symbol": payload.symbol,
+                                    "signal_code": payload.signalCode,
+                                }
+                            },
+                        )
+                        return self._build_duplicate_response(existing.id)
 
-        risk_reason = self._run_risk(payload=payload, order_intent=order_intent)
-        if risk_reason:
-            self.order_repo.set_status(order, OrderStatus.REJECTED, rejection_reason=risk_reason)
+            signal_event, signal_created = self.signal_repo.create_or_get(
+                payload,
+                event_hash=event_hash,
+            )
+            if not signal_created and not bypass_idempotency:
+                existing_order = self.order_repo.get_by_signal_event_id(signal_event.id)
+                if existing_order is not None:
+                    logger.info(
+                        "duplicate signal ignored after create-or-get",
+                        extra={
+                            "extra_fields": {
+                                "signal_event_id": signal_event.id,
+                                "order_id": existing_order.id,
+                                "symbol": payload.symbol,
+                                "signal_code": payload.signalCode,
+                            }
+                        },
+                    )
+                    return self._build_duplicate_response(signal_event.id)
+
+            # Lock current symbol inventory rows for consistent risk/FIFO decisions under concurrency.
+            self.tranche_repo.lock_symbol_open_tranches(payload.symbol)
+
+            order_intent = self._build_intent(payload, for_update=True)
+            order, order_created = self.order_repo.create_or_get(
+                signal_event_id=signal_event.id,
+                idempotency_key=idempotency_key,
+                symbol=order_intent.symbol,
+                side=order_intent.side,
+                signal_code=order_intent.signal_code,
+                requested_lots=order_intent.requested_lots,
+                limit_price=order_intent.limit_price,
+                budget_tl=order_intent.budget_tl,
+                status=OrderStatus.RECEIVED,
+                broker_name=self.broker_client.name,
+                mode=self.cfg.execution_mode.value,
+                target_tranche_id=order_intent.target_tranche_id,
+            )
+            if not order_created and not bypass_idempotency:
+                return self._build_duplicate_response(signal_event.id)
+
             self.execution_repo.add(
                 order_id=order.id,
-                event_type="risk",
-                status=OrderStatus.REJECTED.value,
-                message=risk_reason,
-                payload={"symbol": payload.symbol, "signalCode": payload.signalCode},
+                event_type="lifecycle",
+                status=OrderStatus.RECEIVED.value,
+                message="order received",
+                payload={"event_hash": event_hash},
             )
-            self.session.commit()
-            return ProcessSignalResponse(
-                signal_event_id=signal_event.id,
+
+            risk_reason = self._run_risk(payload=payload, order_intent=order_intent)
+            if risk_reason:
+                self.order_repo.set_status(
+                    order, OrderStatus.REJECTED, rejection_reason=risk_reason
+                )
+                self.execution_repo.add(
+                    order_id=order.id,
+                    event_type="risk",
+                    status=OrderStatus.REJECTED.value,
+                    message=risk_reason,
+                    payload={"symbol": payload.symbol, "signalCode": payload.signalCode},
+                )
+                logger.warning(
+                    "signal rejected by risk",
+                    extra={
+                        "extra_fields": {
+                            "signal_event_id": signal_event.id,
+                            "order_id": order.id,
+                            "symbol": payload.symbol,
+                            "signal_code": payload.signalCode,
+                            "reason": risk_reason,
+                        }
+                    },
+                )
+                return ProcessSignalResponse(
+                    signal_event_id=signal_event.id,
+                    order_id=order.id,
+                    duplicate=False,
+                    status=OrderStatus.REJECTED,
+                    message="signal rejected by risk checks",
+                    risk_reason=risk_reason,
+                )
+
+            self.order_repo.set_status(order, OrderStatus.VALIDATED)
+            self.execution_repo.add(
                 order_id=order.id,
-                duplicate=False,
-                status=OrderStatus.REJECTED,
-                message="signal rejected by risk checks",
-                risk_reason=risk_reason,
+                event_type="lifecycle",
+                status=OrderStatus.VALIDATED.value,
+                message="risk checks passed",
             )
 
-        self.order_repo.set_status(order, OrderStatus.VALIDATED)
-        self.execution_repo.add(
-            order_id=order.id,
-            event_type="lifecycle",
-            status=OrderStatus.VALIDATED.value,
-            message="risk checks passed",
-        )
-
-        self.order_repo.set_status(order, OrderStatus.SUBMITTED)
-        self.execution_repo.add(
-            order_id=order.id,
-            event_type="lifecycle",
-            status=OrderStatus.SUBMITTED.value,
-            message="dispatching to broker adapter",
-        )
-
-        broker_result = self.broker_client.submit_limit_order(
-            BrokerOrderRequestPayload(
-                symbol=order.symbol,
-                side=Side(order.side),
-                lots=order.requested_lots,
-                limit_price=order.limit_price,
-                signal_code=order.signal_code,
-                idempotency_key=order.idempotency_key,
-                metadata={
-                    "signal_event_id": signal_event.id,
-                    "source": payload.source,
-                    "timeframe": payload.timeframe,
-                    "is_realtime": payload.isRealtime,
-                },
+            self.order_repo.set_status(order, OrderStatus.SUBMITTED)
+            self.execution_repo.add(
+                order_id=order.id,
+                event_type="lifecycle",
+                status=OrderStatus.SUBMITTED.value,
+                message="dispatching to broker adapter",
             )
-        )
 
-        if not broker_result.accepted:
-            final_status = broker_result.status if broker_result.status else OrderStatus.FAILED
-            self.order_repo.set_status(
+            broker_result = self.broker_client.submit_limit_order(
+                BrokerOrderRequestPayload(
+                    symbol=order.symbol,
+                    side=Side(order.side),
+                    lots=order.requested_lots,
+                    limit_price=order.limit_price,
+                    signal_code=order.signal_code,
+                    idempotency_key=order.idempotency_key,
+                    metadata={
+                        "signal_event_id": signal_event.id,
+                        "source": payload.source,
+                        "timeframe": payload.timeframe,
+                        "is_realtime": payload.isRealtime,
+                    },
+                )
+            )
+
+            if not broker_result.accepted:
+                final_status = broker_result.status if broker_result.status else OrderStatus.FAILED
+                self.order_repo.set_status(
+                    order,
+                    final_status,
+                    rejection_reason=broker_result.message or "broker rejected order",
+                )
+                order.broker_order_id = broker_result.broker_order_id
+                self.execution_repo.add(
+                    order_id=order.id,
+                    event_type="broker",
+                    status=final_status.value,
+                    message=broker_result.message,
+                    payload=broker_result.raw_payload,
+                )
+                logger.warning(
+                    "broker rejected order",
+                    extra={
+                        "extra_fields": {
+                            "signal_event_id": signal_event.id,
+                            "order_id": order.id,
+                            "symbol": payload.symbol,
+                            "signal_code": payload.signalCode,
+                            "broker": self.broker_client.name,
+                            "status": final_status.value,
+                        }
+                    },
+                )
+                return ProcessSignalResponse(
+                    signal_event_id=signal_event.id,
+                    order_id=order.id,
+                    duplicate=False,
+                    status=final_status,
+                    message="broker rejected order",
+                    risk_reason=order.rejection_reason,
+                    broker_order_id=broker_result.broker_order_id,
+                )
+
+            self.order_repo.apply_broker_ack(
                 order,
-                final_status,
-                rejection_reason=broker_result.message or "broker rejected order",
+                status=broker_result.status,
+                broker_order_id=broker_result.broker_order_id,
+                filled_lots=broker_result.filled_lots,
+                avg_fill_price=broker_result.avg_fill_price,
             )
-            order.broker_order_id = broker_result.broker_order_id
             self.execution_repo.add(
                 order_id=order.id,
                 event_type="broker",
-                status=final_status.value,
+                status=broker_result.status.value,
                 message=broker_result.message,
                 payload=broker_result.raw_payload,
             )
-            self.session.commit()
+
+            if broker_result.filled_lots > 0 and broker_result.avg_fill_price is not None:
+                self._apply_fill(
+                    order=order,
+                    fill_lots=broker_result.filled_lots,
+                    fill_price=broker_result.avg_fill_price,
+                )
+
+            logger.info(
+                "signal processed",
+                extra={
+                    "extra_fields": {
+                        "signal_event_id": signal_event.id,
+                        "order_id": order.id,
+                        "symbol": payload.symbol,
+                        "signal_code": payload.signalCode,
+                        "status": order.status,
+                        "broker": self.broker_client.name,
+                    }
+                },
+            )
+
             return ProcessSignalResponse(
                 signal_event_id=signal_event.id,
                 order_id=order.id,
                 duplicate=False,
-                status=final_status,
-                message="broker rejected order",
-                risk_reason=order.rejection_reason,
-                broker_order_id=broker_result.broker_order_id,
+                status=OrderStatus(order.status),
+                message="signal processed",
+                broker_order_id=order.broker_order_id,
             )
-
-        self.order_repo.apply_broker_ack(
-            order,
-            status=broker_result.status,
-            broker_order_id=broker_result.broker_order_id,
-            filled_lots=broker_result.filled_lots,
-            avg_fill_price=broker_result.avg_fill_price,
-        )
-        self.execution_repo.add(
-            order_id=order.id,
-            event_type="broker",
-            status=broker_result.status.value,
-            message=broker_result.message,
-            payload=broker_result.raw_payload,
-        )
-
-        if broker_result.filled_lots > 0 and broker_result.avg_fill_price is not None:
-            self._apply_fill(
-                order=order,
-                fill_lots=broker_result.filled_lots,
-                fill_price=broker_result.avg_fill_price,
-            )
-
-        self.session.commit()
-        return ProcessSignalResponse(
-            signal_event_id=signal_event.id,
-            order_id=order.id,
-            duplicate=False,
-            status=OrderStatus(order.status),
-            message="signal processed",
-            broker_order_id=order.broker_order_id,
-        )
 
     def replay_signal(
         self,
@@ -236,50 +300,50 @@ class TradingService:
         return self.process_webhook(payload, bypass_idempotency=bypass_idempotency)
 
     def simulate_fill(self, request: SimulateFillRequest) -> Order:
-        order = self.order_repo.get(request.order_id)
-        if order is None:
-            raise ValueError(f"order not found: {request.order_id}")
-        if order.broker_name != "MOCK":
-            raise ValueError("simulate-fill is allowed only for MOCK broker")
-        if order.status not in {
-            OrderStatus.SUBMITTED.value,
-            OrderStatus.ACKNOWLEDGED.value,
-            OrderStatus.PARTIALLY_FILLED.value,
-        }:
-            raise ValueError("order is not in fillable state")
+        with self.session.begin():
+            order = self.order_repo.get(request.order_id)
+            if order is None:
+                raise ValueError(f"order not found: {request.order_id}")
+            if order.broker_name != "MOCK":
+                raise ValueError("simulate-fill is allowed only for MOCK broker")
+            if order.status not in {
+                OrderStatus.SUBMITTED.value,
+                OrderStatus.ACKNOWLEDGED.value,
+                OrderStatus.PARTIALLY_FILLED.value,
+            }:
+                raise ValueError("order is not in fillable state")
 
-        remaining = max(0, int(order.requested_lots) - int(order.filled_lots))
-        if remaining <= 0:
-            raise ValueError("order has no remaining lots")
+            remaining = max(0, int(order.requested_lots) - int(order.filled_lots))
+            if remaining <= 0:
+                raise ValueError("order has no remaining lots")
 
-        requested_fill = request.filled_lots if request.filled_lots is not None else remaining
-        fill_lots = min(remaining, int(requested_fill))
-        fill_price = request.fill_price if request.fill_price is not None else order.limit_price
+            requested_fill = request.filled_lots if request.filled_lots is not None else remaining
+            fill_lots = min(remaining, int(requested_fill))
+            fill_price = request.fill_price if request.fill_price is not None else order.limit_price
 
-        total_after = int(order.filled_lots) + fill_lots
-        next_status = (
-            OrderStatus.FILLED
-            if total_after >= int(order.requested_lots)
-            else OrderStatus.PARTIALLY_FILLED
-        )
-        self.order_repo.apply_broker_ack(
-            order,
-            status=next_status,
-            broker_order_id=order.broker_order_id,
-            filled_lots=fill_lots,
-            avg_fill_price=fill_price,
-        )
-        self.execution_repo.add(
-            order_id=order.id,
-            event_type="simulate_fill",
-            status=next_status.value,
-            message="admin simulate fill",
-            payload={"fill_lots": fill_lots, "fill_price": str(fill_price)},
-        )
+            total_after = int(order.filled_lots) + fill_lots
+            next_status = (
+                OrderStatus.FILLED
+                if total_after >= int(order.requested_lots)
+                else OrderStatus.PARTIALLY_FILLED
+            )
+            self.order_repo.apply_broker_ack(
+                order,
+                status=next_status,
+                broker_order_id=order.broker_order_id,
+                filled_lots=fill_lots,
+                avg_fill_price=fill_price,
+            )
+            self.execution_repo.add(
+                order_id=order.id,
+                event_type="simulate_fill",
+                status=next_status.value,
+                message="admin simulate fill",
+                payload={"fill_lots": fill_lots, "fill_price": str(fill_price)},
+            )
 
-        self._apply_fill(order=order, fill_lots=fill_lots, fill_price=fill_price)
-        self.session.commit()
-        return order
+            self._apply_fill(order=order, fill_lots=fill_lots, fill_price=fill_price)
+            return order
 
     def list_positions(self, symbol: str | None = None) -> list[dict]:
         if symbol:
@@ -310,7 +374,9 @@ class TradingService:
     def list_signals(self, *, limit: int = 100, symbol: str | None = None):
         return self.signal_repo.list_signals(limit=limit, symbol=symbol)
 
-    def _build_intent(self, payload: TradingViewWebhookPayload) -> _OrderIntent:
+    def _build_intent(
+        self, payload: TradingViewWebhookPayload, *, for_update: bool
+    ) -> _OrderIntent:
         symbol = payload.symbol.upper()
         if payload.side == Side.BUY:
             multiplier = self.cfg.signal_multipliers[payload.signalCode]
@@ -327,7 +393,7 @@ class TradingService:
                 target_tranche_id=None,
             )
 
-        target = self.tranche_repo.oldest_open(symbol)
+        target = self.tranche_repo.oldest_open(symbol, for_update=for_update)
         limit_price = self.tick_policy.sell_limit_price(symbol, payload.price, self.cfg.sell_bps)
         lots = int(target.remaining_lots) if target else 0
         return _OrderIntent(
@@ -343,6 +409,10 @@ class TradingService:
     def _run_risk(
         self, *, payload: TradingViewWebhookPayload, order_intent: _OrderIntent
     ) -> str | None:
+        temporal_reason = self._run_temporal_guards(payload)
+        if temporal_reason:
+            return temporal_reason
+
         orders_today = self.order_repo.count_orders_today()
         realized_pnl_today = self.order_repo.get_realized_pnl_today()
         try:
@@ -376,6 +446,44 @@ class TradingService:
                 )
         except Exception as exc:
             return str(exc)
+        return None
+
+    def _build_duplicate_response(self, signal_event_id: int) -> ProcessSignalResponse:
+        existing_order = self.order_repo.get_by_signal_event_id(signal_event_id)
+        return ProcessSignalResponse(
+            signal_event_id=signal_event_id,
+            order_id=existing_order.id if existing_order else None,
+            duplicate=True,
+            status=(
+                OrderStatus(existing_order.status)
+                if existing_order and existing_order.status in OrderStatus._value2member_map_
+                else None
+            ),
+            message="duplicate signal ignored",
+            broker_order_id=existing_order.broker_order_id if existing_order else None,
+        )
+
+    def _run_temporal_guards(self, payload: TradingViewWebhookPayload) -> str | None:
+        if self.cfg.require_realtime_signals and not payload.isRealtime:
+            return "isRealtime must be true when MW_REQUIRE_REALTIME_SIGNALS=true"
+
+        now = datetime.now(UTC)
+        bar_time = datetime.fromtimestamp(payload.barTime / 1000, tz=UTC)
+
+        future_seconds = (bar_time - now).total_seconds()
+        if future_seconds > self.cfg.max_signal_future_skew_seconds:
+            return (
+                "barTime is too far in the future "
+                f"(>{self.cfg.max_signal_future_skew_seconds}s skew)"
+            )
+
+        if self.cfg.max_signal_age_seconds is not None:
+            age_seconds = (now - bar_time).total_seconds()
+            if age_seconds > self.cfg.max_signal_age_seconds:
+                return (
+                    "signal is older than allowed freshness window "
+                    f"({self.cfg.max_signal_age_seconds}s)"
+                )
         return None
 
     def _apply_fill(self, *, order: Order, fill_lots: int, fill_price: Decimal) -> None:

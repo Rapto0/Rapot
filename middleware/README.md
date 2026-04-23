@@ -34,7 +34,9 @@ sequenceDiagram
 
   TV->>API: POST /webhooks/tradingview (normalized signal)
   API->>API: strict payload validation
+  API->>API: transaction starts
   API->>DB: dedup check by event_hash
+  API->>DB: lock symbol open tranches (FIFO/risk consistency)
   API->>DB: persist signal_event + order(received)
   API->>RISK: sizing + tick rounding + guard rails
   alt rejected
@@ -47,6 +49,7 @@ sequenceDiagram
     BRK-->>API: ack/fill/fail
     API->>DB: order status + execution_report
     API->>DB: tranche update (buy/sell FIFO)
+    API->>API: transaction commit
     API-->>TV: processed response
   end
 ```
@@ -55,6 +58,7 @@ sequenceDiagram
 
 ```json
 {
+  "schemaVersion": 1,
   "source": "Combo+Hunter",
   "symbol": "THYAO",
   "ticker": "THYAO",
@@ -71,9 +75,15 @@ sequenceDiagram
 
 Rules:
 - Extra fields are rejected.
+- `schemaVersion` is fixed to `1`.
+- `source` must be `Combo+Hunter`.
 - `symbol` must equal `ticker`.
 - `signalCode` and `side` must match canonical mapping.
 - Duplicate payloads are deduplicated by deterministic `event_hash`.
+- Optional temporal guards:
+  - `MW_MAX_SIGNAL_FUTURE_SKEW_SECONDS`
+  - `MW_MAX_SIGNAL_AGE_SECONDS`
+  - `MW_REQUIRE_REALTIME_SIGNALS`
 
 ## TradingView Real Webhook Setup
 
@@ -118,17 +128,22 @@ Guards:
 - Optional `max_symbol_exposure_tl`.
 - Optional `max_daily_loss_tl`.
 - Optional `max_orders_per_day`.
+- Optional temporal freshness/future-skew guards.
 - Live mode requires `TRADING_ENABLED=true`.
 
 ## Broker Adapters
 
 - `MockBrokerClient`: fully working, deterministic, test/development default.
-- `OsmanliBrokerClient`: secure skeleton only; no undocumented auth/order flow assumptions.
+- `OsmanliBrokerClient`: secure skeleton + mapper envelope (`osmanli_mapper.py`) only; no undocumented auth/order flow assumptions.
 
 TODO for Osmanli live:
 - Implement official token/session bootstrap.
-- Implement official order schema and response mapping.
+- Replace mapper endpoint/field placeholders with official schema.
+- Implement response/callback reconciliation and status mapping with official codes.
 - Implement official cancel/status endpoints.
+- Follow:
+  - `middleware/docs/OSMANLI_SANDBOX_UAT_CHECKLIST.md`
+  - `middleware/docs/OSMANLI_EXECUTION_MAPPER_FLOW.md`
 
 ## Environment Variables
 
@@ -148,6 +163,16 @@ Most important:
 - `MW_MAX_OPEN_TRANCHES_PER_SYMBOL`
 - `MW_DEFAULT_TICK_SIZE`
 - `MW_SYMBOL_TICK_OVERRIDES_JSON`
+- `MW_MAX_SIGNAL_AGE_SECONDS`
+- `MW_MAX_SIGNAL_FUTURE_SKEW_SECONDS`
+- `MW_REQUIRE_REALTIME_SIGNALS`
+- `MW_OSMANLI_LIVE_ENABLED`
+- `MW_OSMANLI_BASE_URL`
+- `MW_OSMANLI_TOKEN_URL`
+- `MW_OSMANLI_ACCOUNT_ID`
+- `MW_OSMANLI_CLIENT_ID`
+- `MW_OSMANLI_CLIENT_SECRET`
+- `MW_OSMANLI_REQUEST_TIMEOUT_SECONDS`
 
 ## Local Setup
 

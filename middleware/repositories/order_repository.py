@@ -4,6 +4,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from middleware.domain.enums import OrderStatus, Side
@@ -53,12 +54,60 @@ class OrderRepository:
         self.session.flush()
         return entity
 
+    def create_or_get(
+        self,
+        *,
+        signal_event_id: int,
+        idempotency_key: str,
+        symbol: str,
+        side: Side,
+        signal_code: str,
+        requested_lots: int,
+        limit_price: Decimal,
+        budget_tl: Decimal | None,
+        status: OrderStatus,
+        broker_name: str,
+        mode: str,
+        target_tranche_id: int | None = None,
+        rejection_reason: str | None = None,
+    ) -> tuple[Order, bool]:
+        existing = self.get_by_idempotency_key(idempotency_key)
+        if existing is not None:
+            return existing, False
+        try:
+            with self.session.begin_nested():
+                order = self.create(
+                    signal_event_id=signal_event_id,
+                    idempotency_key=idempotency_key,
+                    symbol=symbol,
+                    side=side,
+                    signal_code=signal_code,
+                    requested_lots=requested_lots,
+                    limit_price=limit_price,
+                    budget_tl=budget_tl,
+                    status=status,
+                    broker_name=broker_name,
+                    mode=mode,
+                    target_tranche_id=target_tranche_id,
+                    rejection_reason=rejection_reason,
+                )
+            return order, True
+        except IntegrityError:
+            existing = self.get_by_idempotency_key(idempotency_key)
+            if existing is None:
+                raise
+            return existing, False
+
     def get(self, order_id: int) -> Order | None:
         stmt = select(Order).where(Order.id == order_id)
         return self.session.execute(stmt).scalar_one_or_none()
 
     def get_by_signal_event_id(self, signal_event_id: int) -> Order | None:
         stmt = select(Order).where(Order.signal_event_id == signal_event_id)
+        return self.session.execute(stmt).scalar_one_or_none()
+
+    def get_by_idempotency_key(self, idempotency_key: str) -> Order | None:
+        stmt = select(Order).where(Order.idempotency_key == idempotency_key)
         return self.session.execute(stmt).scalar_one_or_none()
 
     def list_orders(self, *, limit: int = 100, symbol: str | None = None) -> list[Order]:

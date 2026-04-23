@@ -47,8 +47,19 @@ class MiddlewareSettings(BaseSettings):
     max_daily_loss_tl: Decimal | None = None
     max_orders_per_day: int | None = None
     allowed_symbols_csv: str | None = None
+    max_signal_age_seconds: int | None = None
+    max_signal_future_skew_seconds: int = 120
+    require_realtime_signals: bool = False
 
     mock_auto_fill: bool = True
+
+    osmanli_live_enabled: bool = False
+    osmanli_base_url: str | None = None
+    osmanli_token_url: str | None = None
+    osmanli_account_id: str | None = None
+    osmanli_client_id: str | None = None
+    osmanli_client_secret: str | None = None
+    osmanli_request_timeout_seconds: int = 10
 
     @cached_property
     def signal_multipliers(self) -> dict[str, Decimal]:
@@ -78,6 +89,36 @@ class MiddlewareSettings(BaseSettings):
         return {
             item.strip().upper() for item in self.allowed_symbols_csv.split(",") if item.strip()
         }
+
+    def validate_runtime_configuration(self) -> None:
+        if self.require_webhook_auth and not (self.webhook_auth_token or "").strip():
+            raise ValueError("MW_WEBHOOK_AUTH_TOKEN is required when MW_REQUIRE_WEBHOOK_AUTH=true")
+
+        is_osmanli_live = (
+            self.broker_name == BrokerName.OSMANLI
+            and self.execution_mode == ExecutionMode.LIVE
+            and self.trading_enabled
+        )
+        if not is_osmanli_live:
+            return
+
+        if not self.osmanli_live_enabled:
+            raise ValueError(
+                "MW_OSMANLI_LIVE_ENABLED must be true before Osmanli LIVE execution is allowed"
+            )
+
+        required_fields = {
+            "MW_OSMANLI_BASE_URL": self.osmanli_base_url,
+            "MW_OSMANLI_TOKEN_URL": self.osmanli_token_url,
+            "MW_OSMANLI_ACCOUNT_ID": self.osmanli_account_id,
+            "MW_OSMANLI_CLIENT_ID": self.osmanli_client_id,
+            "MW_OSMANLI_CLIENT_SECRET": self.osmanli_client_secret,
+        }
+        missing = [key for key, value in required_fields.items() if not (value or "").strip()]
+        if missing:
+            raise ValueError(
+                "Missing required Osmanli LIVE configuration: " + ", ".join(sorted(missing))
+            )
 
 
 settings = MiddlewareSettings()

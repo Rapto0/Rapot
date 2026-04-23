@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from middleware.domain.enums import Side
 
+TRADINGVIEW_SCHEMA_VERSION = 1
+
+SUPPORTED_SIGNAL_SOURCES = {"Combo+Hunter"}
+
 BUY_SIGNAL_CODES = {"H_BLS", "H_UCZ", "C_BLS", "C_UCZ"}
 SELL_SIGNAL_CODES = {"H_PAH", "C_PAH"}
 SUPPORTED_SIGNAL_CODES = BUY_SIGNAL_CODES | SELL_SIGNAL_CODES

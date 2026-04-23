@@ -20,8 +20,7 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    if settings.require_webhook_auth and not (settings.webhook_auth_token or "").strip():
-        raise RuntimeError("MW_WEBHOOK_AUTH_TOKEN is required when MW_REQUIRE_WEBHOOK_AUTH=true")
+    settings.validate_runtime_configuration()
     init_db()
     logger.info(
         "middleware started",

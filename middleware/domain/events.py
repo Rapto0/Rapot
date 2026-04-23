@@ -2,17 +2,23 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from middleware.domain.constants import SIGNAL_SIDE_MAP, SUPPORTED_SIGNAL_CODES
+from middleware.domain.constants import (
+    SIGNAL_SIDE_MAP,
+    SUPPORTED_SIGNAL_CODES,
+    SUPPORTED_SIGNAL_SOURCES,
+    TRADINGVIEW_SCHEMA_VERSION,
+)
 from middleware.domain.enums import OrderStatus, Side, TrancheStatus
 
 
 class TradingViewWebhookPayload(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
+    schemaVersion: Literal[1] = TRADINGVIEW_SCHEMA_VERSION
     source: str = Field(min_length=1, max_length=120)
     symbol: str = Field(min_length=1, max_length=24)
     ticker: str = Field(min_length=1, max_length=24)
@@ -42,6 +48,18 @@ class TradingViewWebhookPayload(BaseModel):
         if normalized not in SUPPORTED_SIGNAL_CODES:
             raise ValueError(f"unsupported signalCode: {normalized}")
         return normalized
+
+    @field_validator("source")
+    @classmethod
+    def normalize_source(cls, value: str) -> str:
+        normalized = value.strip()
+        canonical = next(
+            (item for item in SUPPORTED_SIGNAL_SOURCES if item.lower() == normalized.lower()),
+            None,
+        )
+        if canonical is None:
+            raise ValueError(f"unsupported source: {normalized}")
+        return canonical
 
     @field_validator("timeframe")
     @classmethod
@@ -119,6 +137,7 @@ class OrderItem(BaseModel):
 class SignalItem(BaseModel):
     id: int
     event_hash: str
+    schema_version: int
     source: str
     symbol: str
     ticker: str

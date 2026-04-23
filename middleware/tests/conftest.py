@@ -37,10 +37,20 @@ def configure_test_environment():
     settings.max_symbol_exposure_tl = None
     settings.max_daily_loss_tl = None
     settings.max_orders_per_day = None
+    settings.max_signal_age_seconds = None
+    settings.max_signal_future_skew_seconds = 120
+    settings.require_realtime_signals = False
     settings.symbol_tick_overrides_json = "{}"
     settings.allowed_symbols_csv = None
     settings.require_webhook_auth = True
     settings.webhook_auth_token = "test-token"
+    settings.osmanli_live_enabled = False
+    settings.osmanli_base_url = None
+    settings.osmanli_token_url = None
+    settings.osmanli_account_id = None
+    settings.osmanli_client_id = None
+    settings.osmanli_client_secret = None
+    settings.osmanli_request_timeout_seconds = 10
     _clear_settings_cache()
 
     configure_engine(settings.database_url)

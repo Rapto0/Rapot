@@ -8,6 +8,7 @@ from sqlalchemy import (
     JSON,
     BigInteger,
     Boolean,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -49,6 +50,9 @@ class SignalEvent(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     event_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    schema_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
     source: Mapped[str] = mapped_column(String(120), nullable=False)
     symbol: Mapped[str] = mapped_column(String(24), nullable=False)
     ticker: Mapped[str] = mapped_column(String(24), nullable=False)
@@ -72,6 +76,11 @@ class Order(Base, TimestampMixin):
     __tablename__ = "mw_orders"
     __table_args__ = (
         UniqueConstraint("idempotency_key", name="uq_mw_orders_idempotency_key"),
+        CheckConstraint("requested_lots >= 0", name="ck_mw_orders_requested_lots_non_negative"),
+        CheckConstraint("filled_lots >= 0", name="ck_mw_orders_filled_lots_non_negative"),
+        CheckConstraint(
+            "filled_lots <= requested_lots", name="ck_mw_orders_filled_lots_lte_requested"
+        ),
         Index("ix_mw_orders_symbol", "symbol"),
         Index("ix_mw_orders_status", "status"),
         Index("ix_mw_orders_created_at", "created_at"),
@@ -111,7 +120,18 @@ class Order(Base, TimestampMixin):
 class Tranche(Base, TimestampMixin):
     __tablename__ = "mw_tranches"
     __table_args__ = (
+        UniqueConstraint("open_order_id", name="uq_mw_tranches_open_order_id"),
+        CheckConstraint("requested_lots >= 0", name="ck_mw_tranches_requested_lots_non_negative"),
+        CheckConstraint("filled_lots >= 0", name="ck_mw_tranches_filled_lots_non_negative"),
+        CheckConstraint("remaining_lots >= 0", name="ck_mw_tranches_remaining_lots_non_negative"),
+        CheckConstraint(
+            "filled_lots <= requested_lots", name="ck_mw_tranches_filled_lots_lte_requested"
+        ),
+        CheckConstraint(
+            "remaining_lots <= filled_lots", name="ck_mw_tranches_remaining_lots_lte_filled"
+        ),
         Index("ix_mw_tranches_symbol_status", "symbol", "status"),
+        Index("ix_mw_tranches_fifo_lookup", "symbol", "status", "entry_time", "id"),
         Index("ix_mw_tranches_entry_time", "entry_time"),
     )
 

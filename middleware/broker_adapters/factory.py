@@ -13,6 +13,6 @@ def build_broker_client(cfg: MiddlewareSettings) -> BrokerClient:
         return MockBrokerClient(auto_fill=cfg.mock_auto_fill)
 
     if cfg.broker_name == BrokerName.OSMANLI:
-        return OsmanliBrokerClient()
+        return OsmanliBrokerClient(cfg=cfg)
 
     raise UnsupportedBrokerError(f"unsupported broker: {cfg.broker_name}")

@@ -20,7 +20,9 @@ class SignalRepository:
     @staticmethod
     def build_event_hash(payload: TradingViewWebhookPayload) -> str:
         canonical = json.dumps(
-            payload.model_dump(mode="json"), sort_keys=True, separators=(",", ":")
+            payload.model_dump(mode="json", exclude_defaults=True),
+            sort_keys=True,
+            separators=(",", ":"),
         )
         return sha256(canonical.encode("utf-8")).hexdigest()
 
@@ -32,6 +34,7 @@ class SignalRepository:
         bar_time = datetime.fromtimestamp(payload.barTime / 1000, tz=UTC)
         entity = SignalEvent(
             event_hash=event_hash,
+            schema_version=payload.schemaVersion,
             source=payload.source,
             symbol=payload.symbol,
             ticker=payload.ticker,
@@ -46,16 +49,27 @@ class SignalRepository:
             payload_json=payload.model_dump(mode="json"),
             received_at=datetime.now(UTC),
         )
-        self.session.add(entity)
-        try:
+        with self.session.begin_nested():
+            self.session.add(entity)
             self.session.flush()
+        return entity
+
+    def create_or_get(
+        self,
+        payload: TradingViewWebhookPayload,
+        *,
+        event_hash: str,
+    ) -> tuple[SignalEvent, bool]:
+        existing = self.get_by_event_hash(event_hash)
+        if existing is not None:
+            return existing, False
+        try:
+            return self.create(payload, event_hash), True
         except IntegrityError:
-            self.session.rollback()
             existing = self.get_by_event_hash(event_hash)
             if existing is None:
                 raise
-            return existing
-        return entity
+            return existing, False
 
     def list_signals(self, *, limit: int = 100, symbol: str | None = None) -> list[SignalEvent]:
         stmt = select(SignalEvent)
