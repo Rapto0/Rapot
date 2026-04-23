@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 from uuid import uuid4
 
 from middleware.broker_adapters.base import BrokerClient, BrokerOrderResult
 from middleware.domain.enums import OrderStatus
 from middleware.domain.events import BrokerOrderRequestPayload
+from middleware.infra.time import UTC
 
 
 @dataclass(slots=True)

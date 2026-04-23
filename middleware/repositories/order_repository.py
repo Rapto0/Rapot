@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import func, select
@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from middleware.domain.enums import OrderStatus, Side
 from middleware.infra.models import Order
+from middleware.infra.time import UTC
 
 
 class OrderRepository:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import case, func, select
@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from middleware.domain.enums import TrancheStatus
 from middleware.infra.models import Tranche
+from middleware.infra.time import UTC
 
 
 @dataclass(slots=True)

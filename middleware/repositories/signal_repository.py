@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import datetime
 from hashlib import sha256
 
 from sqlalchemy import select
@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from middleware.domain.events import TradingViewWebhookPayload
 from middleware.infra.models import SignalEvent
+from middleware.infra.time import UTC
 
 
 class SignalRepository:

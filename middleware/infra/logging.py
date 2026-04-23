@@ -3,10 +3,11 @@ from __future__ import annotations
 import json
 import logging
 import sys
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 from middleware.infra.settings import settings
+from middleware.infra.time import UTC
 
 
 class JsonFormatter(logging.Formatter):

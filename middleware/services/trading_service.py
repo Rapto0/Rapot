@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy.orm import Session
@@ -18,6 +18,7 @@ from middleware.domain.events import (
 from middleware.infra.logging import get_logger
 from middleware.infra.models import Order
 from middleware.infra.settings import MiddlewareSettings
+from middleware.infra.time import UTC
 from middleware.repositories.execution_report_repository import ExecutionReportRepository
 from middleware.repositories.order_repository import OrderRepository
 from middleware.repositories.signal_repository import SignalRepository

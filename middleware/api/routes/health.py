@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 
 from fastapi import APIRouter
 
 from middleware.domain.events import HealthResponse
 from middleware.infra.settings import settings
+from middleware.infra.time import UTC
 
 router = APIRouter(tags=["system"])
 
