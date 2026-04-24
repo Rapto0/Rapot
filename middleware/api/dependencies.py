@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import secrets
 from typing import Annotated
 
 from fastapi import Depends, Header, HTTPException, Query, status
@@ -34,6 +35,9 @@ def verify_webhook_auth(
     x_webhook_token: Annotated[str | None, Header(alias="X-Webhook-Token")] = None,
     token: Annotated[str | None, Query(alias="token")] = None,
 ) -> None:
+    if not settings.require_webhook_auth:
+        return
+
     # TradingView cannot set arbitrary custom headers.
     # Allow query token fallback: /webhooks/tradingview?token=...
     provided = x_webhook_token or token
@@ -43,7 +47,7 @@ def verify_webhook_auth(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="server misconfigured: MW_WEBHOOK_AUTH_TOKEN is not set",
         )
-    if provided != expected:
+    if provided is None or not secrets.compare_digest(provided, expected):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid webhook token"
         )

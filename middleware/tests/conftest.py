@@ -24,6 +24,7 @@ def configure_test_environment():
     db_file = temp_dir / "middleware_test.sqlite3"
     if db_file.exists():
         db_file.unlink()
+    settings.app_env = "development"
     settings.database_url = f"sqlite+pysqlite:///{db_file}"
     settings.execution_mode = ExecutionMode.DRY_RUN
     settings.trading_enabled = False

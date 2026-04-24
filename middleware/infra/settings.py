@@ -61,6 +61,10 @@ class MiddlewareSettings(BaseSettings):
     osmanli_client_secret: str | None = None
     osmanli_request_timeout_seconds: int = 10
 
+    @property
+    def is_production(self) -> bool:
+        return self.app_env.strip().lower() in {"prod", "production"}
+
     @cached_property
     def signal_multipliers(self) -> dict[str, Decimal]:
         return {
@@ -91,6 +95,9 @@ class MiddlewareSettings(BaseSettings):
         }
 
     def validate_runtime_configuration(self) -> None:
+        if self.is_production and not self.require_webhook_auth:
+            raise ValueError("MW_REQUIRE_WEBHOOK_AUTH cannot be false in production")
+
         if self.require_webhook_auth and not (self.webhook_auth_token or "").strip():
             raise ValueError("MW_WEBHOOK_AUTH_TOKEN is required when MW_REQUIRE_WEBHOOK_AUTH=true")
 

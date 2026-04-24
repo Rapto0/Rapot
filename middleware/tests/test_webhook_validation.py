@@ -71,6 +71,19 @@ def test_webhook_allows_query_token(sample_buy_payload):
     assert response.status_code == 200
 
 
+def test_webhook_auth_can_be_disabled_for_controlled_local_runs(sample_buy_payload):
+    from fastapi.testclient import TestClient
+
+    from middleware.api.main import app
+
+    settings.require_webhook_auth = False
+    settings.webhook_auth_token = None
+
+    with TestClient(app) as local_client:
+        response = local_client.post("/webhooks/tradingview", json=sample_buy_payload)
+    assert response.status_code == 200
+
+
 def test_webhook_rejects_future_bar_time_by_temporal_guard(client, sample_buy_payload):
     settings.max_signal_future_skew_seconds = 5
     payload = dict(sample_buy_payload)
