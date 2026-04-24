@@ -7,18 +7,29 @@ from decimal import Decimal, InvalidOperation
 from hashlib import sha256
 from typing import Any
 
+import requests
+
 from middleware.domain.constants import SUPPORTED_SIGNAL_CODES
-from middleware.domain.enums import Side
+from middleware.domain.enums import OrderStatus, Side
 from middleware.domain.events import (
     OsmanliProxyResponse,
     ProcessSignalResponse,
     TradingViewWebhookPayload,
 )
+from middleware.infra.logging import get_logger
 from middleware.infra.settings import MiddlewareSettings
 from middleware.infra.time import UTC
 from middleware.services.trading_service import TradingService
 
+logger = get_logger(__name__)
+
 _SIGNAL_CODE_RE = re.compile(r"\b[HC]_(?:BLS|UCZ|PAH)\b", re.IGNORECASE)
+_FORWARDABLE_STATUSES = {
+    OrderStatus.SUBMITTED,
+    OrderStatus.ACKNOWLEDGED,
+    OrderStatus.PARTIALLY_FILLED,
+    OrderStatus.FILLED,
+}
 
 _SYMBOL_KEYS = {
     "symbol",
@@ -44,7 +55,7 @@ _PRICE_KEYS = {
     "limitfiyati",
     "fiyat",
 }
-_BAR_TIME_KEYS = {"bartime", "bar_time", "time"}
+_BAR_TIME_KEYS = {"bartime", "bar_time", "time", "timenow"}
 _BAR_INDEX_KEYS = {"barindex", "bar_index"}
 _TIMEFRAME_KEYS = {"timeframe", "interval", "periyot"}
 _REALTIME_KEYS = {"isrealtime", "realtime"}
@@ -69,10 +80,45 @@ class OsmanliProxyService:
     def process_shadow(self, raw_payload: dict[str, Any]) -> OsmanliProxyResponse:
         extracted_signal = self.extract_signal(raw_payload)
         process_result = self.trading_service.process_webhook(extracted_signal)
+        if not self.cfg.osmanli_forward_enabled:
+            return OsmanliProxyResponse(
+                forward_enabled=False,
+                forwarded=False,
+                message=self._build_shadow_message(process_result),
+                extracted_signal=extracted_signal,
+                process_result=process_result,
+            )
+
+        skip_reason = self._get_forward_skip_reason(process_result)
+        if skip_reason:
+            return OsmanliProxyResponse(
+                forward_enabled=True,
+                forwarded=False,
+                message=skip_reason,
+                extracted_signal=extracted_signal,
+                process_result=process_result,
+            )
+
+        forward_status_code, forward_error = self._forward_to_osmanli(
+            raw_payload,
+            extracted_signal=extracted_signal,
+            process_result=process_result,
+        )
+        if forward_error:
+            return OsmanliProxyResponse(
+                forward_enabled=True,
+                forwarded=False,
+                forward_status_code=forward_status_code,
+                forward_error=forward_error,
+                message="Osmanli forward failed",
+                extracted_signal=extracted_signal,
+                process_result=process_result,
+            )
         return OsmanliProxyResponse(
-            forward_enabled=self.cfg.osmanli_forward_enabled,
-            forwarded=False,
-            message=self._build_shadow_message(process_result),
+            forward_enabled=True,
+            forwarded=True,
+            forward_status_code=forward_status_code,
+            message="signal processed and forwarded to Osmanli",
             extracted_signal=extracted_signal,
             process_result=process_result,
         )
@@ -107,13 +153,81 @@ class OsmanliProxyService:
         )
 
     def _build_shadow_message(self, process_result: ProcessSignalResponse) -> str:
-        if self.cfg.osmanli_forward_enabled:
-            return "Osmanli proxy forward is configured but not implemented in shadow step"
         if process_result.duplicate:
             return "shadow processed: duplicate signal ignored"
         if process_result.risk_reason:
             return "shadow processed: signal rejected by risk checks"
         return "shadow processed: signal passed middleware checks; Osmanli forward disabled"
+
+    def _get_forward_skip_reason(self, process_result: ProcessSignalResponse) -> str | None:
+        if process_result.duplicate:
+            return "forward skipped: duplicate signal ignored"
+        if process_result.risk_reason:
+            return "forward skipped: signal rejected by risk checks"
+        if process_result.status not in _FORWARDABLE_STATUSES:
+            status = process_result.status.value if process_result.status else "unknown"
+            return f"forward skipped: order status is not forwardable ({status})"
+        return None
+
+    def _forward_to_osmanli(
+        self,
+        raw_payload: dict[str, Any],
+        *,
+        extracted_signal: TradingViewWebhookPayload,
+        process_result: ProcessSignalResponse,
+    ) -> tuple[int | None, str | None]:
+        forward_url = (self.cfg.osmanli_tv_webhook_url or "").strip()
+        if not forward_url:
+            return None, "MW_OSMANLI_TV_WEBHOOK_URL is not configured"
+
+        try:
+            response = requests.post(
+                forward_url,
+                json=raw_payload,
+                timeout=self.cfg.osmanli_forward_timeout_seconds,
+            )
+        except requests.RequestException:
+            logger.exception(
+                "Osmanli forward request failed",
+                extra={
+                    "extra_fields": {
+                        "signal_event_id": process_result.signal_event_id,
+                        "order_id": process_result.order_id,
+                        "symbol": extracted_signal.symbol,
+                        "signal_code": extracted_signal.signalCode,
+                    }
+                },
+            )
+            return None, "request failed"
+
+        if response.status_code < 200 or response.status_code >= 300:
+            logger.warning(
+                "Osmanli forward rejected",
+                extra={
+                    "extra_fields": {
+                        "signal_event_id": process_result.signal_event_id,
+                        "order_id": process_result.order_id,
+                        "symbol": extracted_signal.symbol,
+                        "signal_code": extracted_signal.signalCode,
+                        "status_code": response.status_code,
+                    }
+                },
+            )
+            return response.status_code, f"upstream returned HTTP {response.status_code}"
+
+        logger.info(
+            "Osmanli forward accepted",
+            extra={
+                "extra_fields": {
+                    "signal_event_id": process_result.signal_event_id,
+                    "order_id": process_result.order_id,
+                    "symbol": extracted_signal.symbol,
+                    "signal_code": extracted_signal.signalCode,
+                    "status_code": response.status_code,
+                }
+            },
+        )
+        return response.status_code, None
 
 
 def _normalize_key(value: str) -> str:

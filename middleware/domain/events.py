@@ -95,6 +95,8 @@ class ProcessSignalResponse(BaseModel):
 class OsmanliProxyResponse(BaseModel):
     forward_enabled: bool
     forwarded: bool
+    forward_status_code: int | None = None
+    forward_error: str | None = None
     message: str
     extracted_signal: TradingViewWebhookPayload
     process_result: ProcessSignalResponse

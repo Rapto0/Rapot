@@ -138,7 +138,8 @@ Guards:
 - `Osmanli TradingView JSON proxy`: `/webhooks/tradingview/osmanli-proxy` accepts
   Osmanli/AlgoDirekt TradingView JSON command payloads, extracts the signal intent,
   runs middleware auth/risk/idempotency checks, and keeps outbound forwarding disabled
-  by default.
+  by default. When `MW_OSMANLI_FORWARD_ENABLED=true`, only non-duplicate signals that
+  pass middleware risk checks are forwarded to `MW_OSMANLI_TV_WEBHOOK_URL`.
 
 TODO for Osmanli live:
 - Implement official token/session bootstrap.
@@ -196,7 +197,7 @@ Most important:
 ## API Endpoints
 
 - `POST /webhooks/tradingview`
-- `POST /webhooks/tradingview/osmanli-proxy` (shadow Model A proxy; forward disabled)
+- `POST /webhooks/tradingview/osmanli-proxy` (Model A proxy; forward disabled by default)
 - `GET /health`
 - `GET /positions`
 - `GET /positions/{symbol}`
@@ -259,6 +260,8 @@ curl -X POST "http://localhost:8010/webhooks/tradingview/osmanli-proxy?token=REP
 
 Notes:
 - The proxy does not forward to Osmanli while `MW_OSMANLI_FORWARD_ENABLED=false`.
+- If forwarding is enabled, both BUY and SELL are supported, but risk-rejected or
+  duplicate signals are not forwarded.
 - Wizard secrets are treated as pass-through payload values; do not paste real values
   into repository files or logs.
 - Keep `signalCode`, `barTime`, and `barIndex` in the TradingView message where possible
