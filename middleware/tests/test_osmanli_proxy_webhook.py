@@ -30,17 +30,64 @@ def test_osmanli_proxy_shadow_processes_supported_payload(client):
     assert body["process_result"]["status"] == "filled"
 
 
-def test_osmanli_proxy_rejects_payload_without_supported_signal_code(client):
+def test_osmanli_proxy_supports_osmanli_wizard_buy_payload(client):
+    raw_payload = {
+        "name": "test",
+        "symbol": "THYAO",
+        "orderSide": "buy",
+        "orderType": "lmt",
+        "price": "287.25",
+        "quantity": "1",
+        "timeInForce": "day",
+        "apiKey": "secret-like-value",
+        "timenow": "2026-04-24T11:00:00Z",
+        "token": "broker-token-like-value",
+    }
+
+    response = client.post("/webhooks/tradingview/osmanli-proxy", json=raw_payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["extracted_signal"]["symbol"] == "THYAO"
+    assert body["extracted_signal"]["side"] == "BUY"
+    assert body["extracted_signal"]["signalCode"] == "H_BLS"
+    assert body["process_result"]["status"] == "filled"
+
+
+def test_osmanli_proxy_supports_osmanli_wizard_sell_payload(client):
+    raw_payload = {
+        "name": "test C_PAH",
+        "symbol": "THYAO",
+        "orderSide": "sell",
+        "orderType": "lmt",
+        "price": "287.25",
+        "quantity": "1",
+        "timeInForce": "day",
+        "apiKey": "secret-like-value",
+        "timenow": "2026-04-24T11:00:00Z",
+        "token": "broker-token-like-value",
+    }
+
+    response = client.post("/webhooks/tradingview/osmanli-proxy", json=raw_payload)
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["extracted_signal"]["side"] == "SELL"
+    assert body["extracted_signal"]["signalCode"] == "C_PAH"
+    assert body["process_result"]["status"] == "rejected"
+    assert body["process_result"]["risk_reason"] == "sell lots < 1"
+
+
+def test_osmanli_proxy_rejects_payload_without_side(client):
     raw_payload = {
         "symbol": "THYAO",
-        "side": "BUY",
         "price": 287.25,
     }
 
     response = client.post("/webhooks/tradingview/osmanli-proxy", json=raw_payload)
 
     assert response.status_code == 422
-    assert "signalCode" in response.json()["detail"]
+    assert "side" in response.json()["detail"]
 
 
 def test_osmanli_proxy_runtime_config_requires_forward_url():

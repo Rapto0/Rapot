@@ -31,6 +31,7 @@ _SYMBOL_KEYS = {
 _SIDE_KEYS = {
     "side",
     "direction",
+    "orderside",
     "yon",
     "islemyonu",
     "emiryonu",
@@ -48,7 +49,7 @@ _BAR_INDEX_KEYS = {"barindex", "bar_index"}
 _TIMEFRAME_KEYS = {"timeframe", "interval", "periyot"}
 _REALTIME_KEYS = {"isrealtime", "realtime"}
 _SIGNAL_CODE_KEYS = {"signalcode", "sinyalkodu"}
-_SIGNAL_TEXT_KEYS = {"signaltext", "sinyalmetni", "komutadi", "commandname"}
+_SIGNAL_TEXT_KEYS = {"signaltext", "sinyalmetni", "komutadi", "commandname", "name"}
 
 
 class OsmanliProxyPayloadError(ValueError):
@@ -82,7 +83,7 @@ class OsmanliProxyService:
 
         symbol = _clean_symbol(_require_text(raw_payload, _SYMBOL_KEYS, "symbol"))
         side = _parse_side(_require_text(raw_payload, _SIDE_KEYS, "side"))
-        signal_code = _extract_signal_code(raw_payload)
+        signal_code = _extract_signal_code(raw_payload, side=side)
         signal_text = _find_text(raw_payload, _SIGNAL_TEXT_KEYS) or signal_code
         price = _parse_decimal(_require_value(raw_payload, _PRICE_KEYS, "price"), "price")
         timeframe = (_find_text(raw_payload, _TIMEFRAME_KEYS) or "1D").upper()
@@ -187,7 +188,7 @@ def _parse_side(value: str) -> Side:
     raise OsmanliProxyPayloadError(f"unsupported side value: {value}")
 
 
-def _extract_signal_code(raw_payload: dict[str, Any]) -> str:
+def _extract_signal_code(raw_payload: dict[str, Any], *, side: Side) -> str:
     direct = _find_text(raw_payload, _SIGNAL_CODE_KEYS)
     candidates = [direct] if direct else []
     signal_text_keys = {_normalize_key(item) for item in _SIGNAL_TEXT_KEYS}
@@ -201,7 +202,7 @@ def _extract_signal_code(raw_payload: dict[str, Any]) -> str:
         code = match.group(0).upper()
         if code in SUPPORTED_SIGNAL_CODES:
             return code
-    raise OsmanliProxyPayloadError("missing supported signalCode in Osmanli proxy payload")
+    return "H_BLS" if side == Side.BUY else "H_PAH"
 
 
 def _parse_decimal(value: Any, field_name: str) -> Decimal:
