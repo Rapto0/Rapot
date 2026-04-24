@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from middleware.broker_adapters.factory import build_broker_client
 from middleware.infra.db import get_db_session
 from middleware.infra.settings import settings
+from middleware.services.osmanli_proxy_service import OsmanliProxyService
 from middleware.services.trading_service import TradingService
 
 
@@ -22,6 +23,12 @@ def get_service(session: Annotated[Session, Depends(get_db_session)]) -> Trading
         cfg=settings,
         broker_client=build_broker_client(settings),
     )
+
+
+def get_osmanli_proxy_service(
+    service: Annotated[TradingService, Depends(get_service)],
+) -> OsmanliProxyService:
+    return OsmanliProxyService(cfg=settings, trading_service=service)
 
 
 def require_admin_enabled() -> None:

@@ -52,6 +52,9 @@ def configure_test_environment():
     settings.osmanli_client_id = None
     settings.osmanli_client_secret = None
     settings.osmanli_request_timeout_seconds = 10
+    settings.osmanli_tv_webhook_url = None
+    settings.osmanli_forward_enabled = False
+    settings.osmanli_forward_timeout_seconds = 5
     _clear_settings_cache()
 
     configure_engine(settings.database_url)

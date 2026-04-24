@@ -135,6 +135,10 @@ Guards:
 
 - `MockBrokerClient`: fully working, deterministic, test/development default.
 - `OsmanliBrokerClient`: secure skeleton + mapper envelope (`osmanli_mapper.py`) only; no undocumented auth/order flow assumptions.
+- `Osmanli TradingView JSON proxy`: `/webhooks/tradingview/osmanli-proxy` accepts
+  Osmanli/AlgoDirekt TradingView JSON command payloads, extracts the signal intent,
+  runs middleware auth/risk/idempotency checks, and keeps outbound forwarding disabled
+  by default.
 
 TODO for Osmanli live:
 - Implement official token/session bootstrap.
@@ -173,6 +177,9 @@ Most important:
 - `MW_OSMANLI_CLIENT_ID`
 - `MW_OSMANLI_CLIENT_SECRET`
 - `MW_OSMANLI_REQUEST_TIMEOUT_SECONDS`
+- `MW_OSMANLI_TV_WEBHOOK_URL`
+- `MW_OSMANLI_FORWARD_ENABLED`
+- `MW_OSMANLI_FORWARD_TIMEOUT_SECONDS`
 
 ## Local Setup
 
@@ -189,6 +196,7 @@ Most important:
 ## API Endpoints
 
 - `POST /webhooks/tradingview`
+- `POST /webhooks/tradingview/osmanli-proxy` (shadow Model A proxy; forward disabled)
 - `GET /health`
 - `GET /positions`
 - `GET /positions/{symbol}`
@@ -227,6 +235,34 @@ curl -X POST "http://localhost:8010/webhooks/tradingview" \
   -H "X-Webhook-Token: REPLACE_WITH_LONG_RANDOM_TOKEN" \
   -d '{ "...": "..." }'
 ```
+
+Osmanli/AlgoDirekt TradingView JSON command shadow proxy:
+
+```bash
+curl -X POST "http://localhost:8010/webhooks/tradingview/osmanli-proxy?token=REPLACE_WITH_LONG_RANDOM_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "symbol": "THYAO",
+    "ticker": "THYAO",
+    "signalCode": "H_BLS",
+    "signalText": "Hunter Beles",
+    "side": "BUY",
+    "price": 287.25,
+    "timeframe": "1D",
+    "barTime": 1713772800000,
+    "barIndex": 12345,
+    "isRealtime": true,
+    "apiKey": "OSMANLI_API_KEY_FROM_WIZARD",
+    "token": "OSMANLI_TOKEN_FROM_WIZARD"
+  }'
+```
+
+Notes:
+- The proxy does not forward to Osmanli while `MW_OSMANLI_FORWARD_ENABLED=false`.
+- Wizard secrets are treated as pass-through payload values; do not paste real values
+  into repository files or logs.
+- Keep `signalCode`, `barTime`, and `barIndex` in the TradingView message where possible
+  so middleware can apply canonical signal validation and idempotency.
 
 List positions:
 

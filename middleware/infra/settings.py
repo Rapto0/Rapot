@@ -60,6 +60,9 @@ class MiddlewareSettings(BaseSettings):
     osmanli_client_id: str | None = None
     osmanli_client_secret: str | None = None
     osmanli_request_timeout_seconds: int = 10
+    osmanli_tv_webhook_url: str | None = None
+    osmanli_forward_enabled: bool = False
+    osmanli_forward_timeout_seconds: int = 5
 
     @property
     def is_production(self) -> bool:
@@ -100,6 +103,11 @@ class MiddlewareSettings(BaseSettings):
 
         if self.require_webhook_auth and not (self.webhook_auth_token or "").strip():
             raise ValueError("MW_WEBHOOK_AUTH_TOKEN is required when MW_REQUIRE_WEBHOOK_AUTH=true")
+
+        if self.osmanli_forward_enabled and not (self.osmanli_tv_webhook_url or "").strip():
+            raise ValueError(
+                "MW_OSMANLI_TV_WEBHOOK_URL is required when MW_OSMANLI_FORWARD_ENABLED=true"
+            )
 
         is_osmanli_live = (
             self.broker_name == BrokerName.OSMANLI

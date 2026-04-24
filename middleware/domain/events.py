@@ -92,6 +92,14 @@ class ProcessSignalResponse(BaseModel):
     broker_order_id: str | None = None
 
 
+class OsmanliProxyResponse(BaseModel):
+    forward_enabled: bool
+    forwarded: bool
+    message: str
+    extracted_signal: TradingViewWebhookPayload
+    process_result: ProcessSignalResponse
+
+
 class PositionItem(BaseModel):
     symbol: str
     open_tranche_count: int
