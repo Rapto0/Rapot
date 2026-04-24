@@ -233,11 +233,8 @@ def test_osmanli_proxy_reports_forward_http_failure(client, monkeypatch):
 
     response = client.post("/webhooks/tradingview/osmanli-proxy", json=raw_payload)
 
-    assert response.status_code == 200
-    body = response.json()
-    assert body["forwarded"] is False
-    assert body["forward_status_code"] == 401
-    assert body["forward_error"] == "upstream returned HTTP 401"
+    assert response.status_code == 502
+    assert response.json()["detail"] == "Osmanli forward failed: upstream returned HTTP 401"
 
 
 def test_osmanli_proxy_rejects_payload_without_side(client):

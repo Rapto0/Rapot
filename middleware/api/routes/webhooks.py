@@ -15,6 +15,7 @@ from middleware.domain.events import (
     TradingViewWebhookPayload,
 )
 from middleware.services.osmanli_proxy_service import (
+    OsmanliForwardError,
     OsmanliProxyPayloadError,
     OsmanliProxyService,
 )
@@ -48,6 +49,11 @@ def ingest_osmanli_proxy_webhook(
         return proxy_service.process_shadow(payload)
     except OsmanliProxyPayloadError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except OsmanliForwardError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Osmanli forward failed: {exc}",
+        ) from exc
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

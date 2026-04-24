@@ -67,6 +67,10 @@ class OsmanliProxyPayloadError(ValueError):
     pass
 
 
+class OsmanliForwardError(RuntimeError):
+    pass
+
+
 class OsmanliProxyService:
     def __init__(
         self,
@@ -104,20 +108,11 @@ class OsmanliProxyService:
             extracted_signal=extracted_signal,
             process_result=process_result,
         )
-        if forward_error:
-            return OsmanliProxyResponse(
-                forward_enabled=True,
-                forwarded=False,
-                forward_status_code=forward_status_code,
-                forward_error=forward_error,
-                message="Osmanli forward failed",
-                extracted_signal=extracted_signal,
-                process_result=process_result,
-            )
         return OsmanliProxyResponse(
             forward_enabled=True,
             forwarded=True,
             forward_status_code=forward_status_code,
+            forward_error=forward_error,
             message="signal processed and forwarded to Osmanli",
             extracted_signal=extracted_signal,
             process_result=process_result,
@@ -178,7 +173,7 @@ class OsmanliProxyService:
     ) -> tuple[int | None, str | None]:
         forward_url = (self.cfg.osmanli_tv_webhook_url or "").strip()
         if not forward_url:
-            return None, "MW_OSMANLI_TV_WEBHOOK_URL is not configured"
+            raise OsmanliForwardError("MW_OSMANLI_TV_WEBHOOK_URL is not configured")
 
         try:
             response = requests.post(
@@ -198,7 +193,7 @@ class OsmanliProxyService:
                     }
                 },
             )
-            return None, "request failed"
+            raise OsmanliForwardError("request failed") from None
 
         if response.status_code < 200 or response.status_code >= 300:
             logger.warning(
@@ -213,7 +208,7 @@ class OsmanliProxyService:
                     }
                 },
             )
-            return response.status_code, f"upstream returned HTTP {response.status_code}"
+            raise OsmanliForwardError(f"upstream returned HTTP {response.status_code}")
 
         logger.info(
             "Osmanli forward accepted",

@@ -262,6 +262,8 @@ Notes:
 - The proxy does not forward to Osmanli while `MW_OSMANLI_FORWARD_ENABLED=false`.
 - If forwarding is enabled, both BUY and SELL are supported, but risk-rejected or
   duplicate signals are not forwarded.
+- If Osmanli upstream forwarding fails or returns non-2xx, the proxy returns `502`
+  so TradingView marks the webhook delivery as failed.
 - Wizard secrets are treated as pass-through payload values; do not paste real values
   into repository files or logs.
 - Keep `signalCode`, `barTime`, and `barIndex` in the TradingView message where possible
