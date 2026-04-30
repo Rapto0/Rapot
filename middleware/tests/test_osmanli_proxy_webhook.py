@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from middleware.infra.settings import settings
 
 
@@ -88,8 +90,8 @@ def test_osmanli_proxy_forwards_buy_and_eligible_sell_when_enabled(client, monke
     settings.osmanli_tv_webhook_url = "https://osmanli.example/webhook"
     calls = []
 
-    def fake_post(url, json, timeout):
-        calls.append({"url": url, "json": json, "timeout": timeout})
+    def fake_post(url, data, headers, timeout):
+        calls.append({"url": url, "data": data, "headers": headers, "timeout": timeout})
         return _FakeOsmanliResponse(200)
 
     monkeypatch.setattr(
@@ -129,8 +131,41 @@ def test_osmanli_proxy_forwards_buy_and_eligible_sell_when_enabled(client, monke
     assert sell_response.status_code == 200
     assert buy_response.json()["forwarded"] is True
     assert sell_response.json()["forwarded"] is True
-    assert [call["json"]["orderSide"] for call in calls] == ["buy", "sell"]
+    assert [json.loads(call["data"])["orderSide"] for call in calls] == ["buy", "sell"]
     assert {call["url"] for call in calls} == {"https://osmanli.example/webhook"}
+    assert {call["headers"]["Content-Type"] for call in calls} == {"application/json"}
+
+
+def test_osmanli_proxy_forwards_original_raw_body_when_enabled(client, monkeypatch):
+    settings.osmanli_forward_enabled = True
+    settings.osmanli_tv_webhook_url = "https://osmanli.example/webhook"
+    calls = []
+
+    def fake_post(url, data, headers, timeout):
+        calls.append({"url": url, "data": data, "headers": headers, "timeout": timeout})
+        return _FakeOsmanliResponse(200)
+
+    monkeypatch.setattr(
+        "middleware.services.osmanli_proxy_service.requests.post",
+        fake_post,
+    )
+
+    raw_body = (
+        '{"name":"H_BLS","symbol":"THYAO","orderSide":"buy","orderType":"lmt",'
+        '"price":"287.25","quantity":"1","timeInForce":"day",'
+        '"apiKey":"secret-like-value","timenow":"2026-04-24T11:00:00Z",'
+        '"token":"broker-token-like-value"}'
+    )
+
+    response = client.post(
+        "/webhooks/tradingview/osmanli-proxy",
+        content=raw_body,
+        headers={"Content-Type": "application/json"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["forwarded"] is True
+    assert calls[0]["data"] == raw_body.encode()
 
 
 def test_osmanli_proxy_skips_forward_when_risk_rejects(client, monkeypatch):
@@ -173,8 +208,8 @@ def test_osmanli_proxy_skips_forward_for_duplicate_signals(client, monkeypatch):
     settings.osmanli_tv_webhook_url = "https://osmanli.example/webhook"
     calls = []
 
-    def fake_post(url, json, timeout):
-        calls.append(json)
+    def fake_post(url, data, headers, timeout):
+        calls.append(data)
         return _FakeOsmanliResponse(200)
 
     monkeypatch.setattr(
@@ -210,7 +245,7 @@ def test_osmanli_proxy_reports_forward_http_failure(client, monkeypatch):
     settings.osmanli_forward_enabled = True
     settings.osmanli_tv_webhook_url = "https://osmanli.example/webhook"
 
-    def fake_post(url, json, timeout):
+    def fake_post(url, data, headers, timeout):
         return _FakeOsmanliResponse(401)
 
     monkeypatch.setattr(

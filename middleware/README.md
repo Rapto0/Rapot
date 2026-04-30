@@ -139,7 +139,9 @@ Guards:
   Osmanli/AlgoDirekt TradingView JSON command payloads, extracts the signal intent,
   runs middleware auth/risk/idempotency checks, and keeps outbound forwarding disabled
   by default. When `MW_OSMANLI_FORWARD_ENABLED=true`, only non-duplicate signals that
-  pass middleware risk checks are forwarded to `MW_OSMANLI_TV_WEBHOOK_URL`.
+  pass middleware risk checks are forwarded to `MW_OSMANLI_TV_WEBHOOK_URL`. Forwarding
+  preserves the original TradingView request body instead of re-serializing JSON, because
+  Osmanli Wizard tokens can be sensitive to the generated message command shape.
 
 TODO for Osmanli live:
 - Implement official token/session bootstrap.
@@ -262,6 +264,8 @@ Notes:
 - The proxy does not forward to Osmanli while `MW_OSMANLI_FORWARD_ENABLED=false`.
 - If forwarding is enabled, both BUY and SELL are supported, but risk-rejected or
   duplicate signals are not forwarded.
+- Forwarding sends the original TradingView JSON body to Osmanli unchanged. Keep the
+  Pine alert JSON aligned with the Wizard-generated command fields and token.
 - If Osmanli upstream forwarding fails or returns non-2xx, the proxy returns `502`
   so TradingView marks the webhook delivery as failed.
 - Wizard secrets are treated as pass-through payload values; do not paste real values

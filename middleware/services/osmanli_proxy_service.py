@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Iterator
 from datetime import datetime
@@ -81,7 +82,12 @@ class OsmanliProxyService:
         self.cfg = cfg
         self.trading_service = trading_service
 
-    def process_shadow(self, raw_payload: dict[str, Any]) -> OsmanliProxyResponse:
+    def process_shadow(
+        self,
+        raw_payload: dict[str, Any],
+        *,
+        raw_body: bytes | None = None,
+    ) -> OsmanliProxyResponse:
         extracted_signal = self.extract_signal(raw_payload)
         process_result = self.trading_service.process_webhook(extracted_signal)
         if not self.cfg.osmanli_forward_enabled:
@@ -105,6 +111,7 @@ class OsmanliProxyService:
 
         forward_status_code, forward_error = self._forward_to_osmanli(
             raw_payload,
+            raw_body=raw_body,
             extracted_signal=extracted_signal,
             process_result=process_result,
         )
@@ -168,6 +175,7 @@ class OsmanliProxyService:
         self,
         raw_payload: dict[str, Any],
         *,
+        raw_body: bytes | None,
         extracted_signal: TradingViewWebhookPayload,
         process_result: ProcessSignalResponse,
     ) -> tuple[int | None, str | None]:
@@ -175,10 +183,16 @@ class OsmanliProxyService:
         if not forward_url:
             raise OsmanliForwardError("MW_OSMANLI_TV_WEBHOOK_URL is not configured")
 
+        body = raw_body or json.dumps(
+            raw_payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
         try:
             response = requests.post(
                 forward_url,
-                json=raw_payload,
+                data=body,
+                headers={"Content-Type": "application/json"},
                 timeout=self.cfg.osmanli_forward_timeout_seconds,
             )
         except requests.RequestException:

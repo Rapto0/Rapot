@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from typing import Annotated, Any
+import json
+from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from middleware.api.dependencies import (
     get_osmanli_proxy_service,
@@ -40,13 +41,19 @@ def ingest_tradingview_webhook(
 
 
 @router.post("/tradingview/osmanli-proxy", response_model=OsmanliProxyResponse)
-def ingest_osmanli_proxy_webhook(
-    payload: dict[str, Any],
+async def ingest_osmanli_proxy_webhook(
+    request: Request,
     _: Annotated[None, Depends(verify_webhook_auth)],
     proxy_service: Annotated[OsmanliProxyService, Depends(get_osmanli_proxy_service)],
 ) -> OsmanliProxyResponse:
+    raw_body = await request.body()
     try:
-        return proxy_service.process_shadow(payload)
+        payload = json.loads(raw_body)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=422, detail="invalid JSON payload") from exc
+
+    try:
+        return proxy_service.process_shadow(payload, raw_body=raw_body)
     except OsmanliProxyPayloadError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except OsmanliForwardError as exc:
