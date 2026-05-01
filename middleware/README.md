@@ -3,7 +3,7 @@
 Production-oriented middleware for routing TradingView webhook signals to broker order execution with strict validation, idempotency, risk guards, FIFO tranche accounting, and audit trails.
 
 ## Scope
-- Market: Borsa Istanbul spot equities only.
+- Markets: Borsa Istanbul spot equities and Binance spot crypto.
 - Buy signals: `H_BLS`, `H_UCZ`, `C_BLS`, `C_UCZ`.
 - Sell signals: `H_PAH`, `C_PAH`.
 - Max open tranche per symbol: default `4`.
@@ -110,15 +110,22 @@ Security note:
 
 ## Risk and Sizing Rules
 
-Buy:
+Buy, BIST:
 - `signalBudgetTL = baseBudgetTL * multiplier(signalCode)`
 - `buyLimitPrice = round_up_to_tick(close * (1 + buyBps / 10000))`
 - `buyLots = floor(signalBudgetTL / buyLimitPrice)`
 - If `buyLots < 1`: reject.
 
+Buy, Binance Spot:
+- `quoteBudgetUSDT = binanceBuyQuoteAmountUSDT * multiplier(signalCode)`
+- `buyLimitPrice = round_up_to_PRICE_FILTER.tickSize(close * (1 + buyBps / 10000))`
+- `quantity = floor_to_LOT_SIZE.stepSize(quoteBudgetUSDT / buyLimitPrice)`
+- Binance `PRICE_FILTER`, `LOT_SIZE`, `MIN_NOTIONAL`/`NOTIONAL` are checked before submit.
+
 Sell:
 - `sellLimitPrice = round_down_to_tick(close * (1 - sellBps / 10000))`
-- Lot size = `remaining_lots` of oldest open tranche (FIFO).
+- BIST lot size = `remaining_lots` of oldest open tranche (FIFO).
+- Binance quantity = `remaining_quantity` of oldest open tranche (FIFO), floored to step size.
 - If no open tranche: reject.
 
 Guards:
@@ -134,6 +141,7 @@ Guards:
 ## Broker Adapters
 
 - `MockBrokerClient`: fully working, deterministic, test/development default.
+- `BinanceSpotBrokerClient`: Binance Spot adapter with fixed-quote USDT sizing, Decimal quantity accounting, official exchangeInfo filter checks, dry-run auto-fill, and signed LIVE submit support behind `MW_BINANCE_LIVE_ENABLED`.
 - `OsmanliBrokerClient`: secure skeleton + mapper envelope (`osmanli_mapper.py`) only; no undocumented auth/order flow assumptions.
 - `Osmanli TradingView JSON proxy`: `/webhooks/tradingview/osmanli-proxy` accepts
   Osmanli/AlgoDirekt TradingView JSON command payloads, extracts the signal intent,
@@ -183,6 +191,14 @@ Most important:
 - `MW_OSMANLI_TV_WEBHOOK_URL`
 - `MW_OSMANLI_FORWARD_ENABLED`
 - `MW_OSMANLI_FORWARD_TIMEOUT_SECONDS`
+- `MW_BINANCE_LIVE_ENABLED`
+- `MW_BINANCE_BASE_URL`
+- `MW_BINANCE_API_KEY`
+- `MW_BINANCE_SECRET_KEY`
+- `MW_BINANCE_BUY_QUOTE_AMOUNT_USDT`
+- `MW_BINANCE_QUOTE_ASSET`
+- `MW_BINANCE_DRY_RUN_AUTO_FILL`
+- `MW_BINANCE_CHECK_BALANCE`
 
 ## Local Setup
 
@@ -297,3 +313,15 @@ curl -X POST "http://localhost:8010/admin/simulate-fill" \
   - `MW_EXECUTION_MODE=LIVE`
   - `MW_TRADING_ENABLED=true`
   - Implement Osmanli official flow in `middleware/broker_adapters/osmanli.py`.
+- Binance Spot dry-run:
+  - `MW_BROKER_NAME=BINANCE_SPOT`
+  - `MW_EXECUTION_MODE=DRY_RUN`
+  - `MW_BINANCE_BUY_QUOTE_AMOUNT_USDT=25`
+- Binance Spot live:
+  - `MW_BROKER_NAME=BINANCE_SPOT`
+  - `MW_EXECUTION_MODE=LIVE`
+  - `MW_TRADING_ENABLED=true`
+  - `MW_BINANCE_LIVE_ENABLED=true`
+  - `MW_BINANCE_BASE_URL=https://api.binance.com`
+  - `MW_BINANCE_API_KEY=...`
+  - `MW_BINANCE_SECRET_KEY=...`

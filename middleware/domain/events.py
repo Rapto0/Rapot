@@ -106,6 +106,7 @@ class PositionItem(BaseModel):
     symbol: str
     open_tranche_count: int
     total_remaining_lots: int
+    total_remaining_quantity: Decimal = Decimal("0")
     weighted_avg_entry_price: Decimal | None = None
 
 
@@ -118,6 +119,9 @@ class TrancheItem(BaseModel):
     requested_lots: int
     filled_lots: int
     remaining_lots: int
+    requested_quantity: Decimal = Decimal("0")
+    filled_quantity: Decimal = Decimal("0")
+    remaining_quantity: Decimal = Decimal("0")
     status: TrancheStatus
     open_order_id: int | None = None
     close_order_id: int | None = None
@@ -132,12 +136,17 @@ class OrderItem(BaseModel):
     signal_code: str
     requested_lots: int
     filled_lots: int
+    requested_quantity: Decimal = Decimal("0")
+    filled_quantity: Decimal = Decimal("0")
     limit_price: Decimal
     budget_tl: Decimal | None = None
+    quote_budget: Decimal | None = None
     status: OrderStatus
     rejection_reason: str | None = None
     broker_name: str
     broker_order_id: str | None = None
+    base_asset: str | None = None
+    quote_asset: str | None = None
     target_tranche_id: int | None = None
     created_at: datetime
     updated_at: datetime
@@ -194,6 +203,7 @@ class BrokerOrderRequestPayload(BaseModel):
     symbol: str
     side: Side
     lots: int
+    quantity: Decimal | None = None
     limit_price: Decimal
     tif: str = "IOC"
     signal_code: str

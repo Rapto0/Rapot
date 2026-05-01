@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
 from middleware.domain.enums import TrancheStatus
@@ -15,8 +15,16 @@ from middleware.infra.time import UTC
 @dataclass(slots=True)
 class SellFillResult:
     applied_lots: int
+    applied_quantity: Decimal
     realized_pnl: Decimal
     tranche: Tranche
+
+
+def _open_quantity_expr():
+    return case(
+        (Tranche.remaining_quantity > 0, Tranche.remaining_quantity),
+        else_=Tranche.remaining_lots,
+    )
 
 
 class TrancheRepository:
@@ -33,17 +41,16 @@ class TrancheRepository:
         stmt = select(func.count(Tranche.id)).where(
             Tranche.symbol == symbol.upper(),
             Tranche.status == TrancheStatus.OPEN.value,
-            Tranche.remaining_lots > 0,
+            or_(Tranche.remaining_lots > 0, Tranche.remaining_quantity > 0),
         )
         return int(self.session.execute(stmt).scalar() or 0)
 
     def get_symbol_exposure_tl(self, symbol: str) -> Decimal:
-        stmt = select(
-            func.coalesce(func.sum(Tranche.entry_price * Tranche.remaining_lots), 0)
-        ).where(
+        quantity_expr = _open_quantity_expr()
+        stmt = select(func.coalesce(func.sum(Tranche.entry_price * quantity_expr), 0)).where(
             Tranche.symbol == symbol.upper(),
             Tranche.status == TrancheStatus.OPEN.value,
-            Tranche.remaining_lots > 0,
+            or_(Tranche.remaining_lots > 0, Tranche.remaining_quantity > 0),
         )
         value = self.session.execute(stmt).scalar()
         return Decimal(str(value or 0))
@@ -54,7 +61,7 @@ class TrancheRepository:
             .where(
                 Tranche.symbol == symbol.upper(),
                 Tranche.status == TrancheStatus.OPEN.value,
-                Tranche.remaining_lots > 0,
+                or_(Tranche.remaining_lots > 0, Tranche.remaining_quantity > 0),
             )
             .order_by(Tranche.entry_time.asc(), Tranche.id.asc())
             .limit(1)
@@ -69,7 +76,7 @@ class TrancheRepository:
             .where(
                 Tranche.symbol == symbol.upper(),
                 Tranche.status == TrancheStatus.OPEN.value,
-                Tranche.remaining_lots > 0,
+                or_(Tranche.remaining_lots > 0, Tranche.remaining_quantity > 0),
             )
             .with_for_update()
         )
@@ -83,6 +90,7 @@ class TrancheRepository:
         signal_code: str,
         entry_time: datetime,
         requested_lots: int,
+        requested_quantity: Decimal,
         initial_entry_price: Decimal,
     ) -> Tranche:
         stmt = select(Tranche).where(Tranche.open_order_id == open_order_id)
@@ -98,6 +106,9 @@ class TrancheRepository:
             requested_lots=requested_lots,
             filled_lots=0,
             remaining_lots=0,
+            requested_quantity=requested_quantity,
+            filled_quantity=Decimal("0"),
+            remaining_quantity=Decimal("0"),
             status=TrancheStatus.OPEN.value,
             open_order_id=open_order_id,
             close_order_id=None,
@@ -115,9 +126,11 @@ class TrancheRepository:
         symbol: str,
         signal_code: str,
         fill_lots: int,
+        fill_quantity: Decimal,
         fill_price: Decimal,
         fill_time: datetime,
         requested_lots: int,
+        requested_quantity: Decimal,
     ) -> Tranche:
         tranche = self.get_or_create_by_open_order(
             open_order_id=open_order_id,
@@ -125,22 +138,33 @@ class TrancheRepository:
             signal_code=signal_code,
             entry_time=fill_time,
             requested_lots=requested_lots,
+            requested_quantity=requested_quantity,
             initial_entry_price=fill_price,
         )
         fill_lots = int(max(0, fill_lots))
-        if fill_lots == 0:
+        fill_quantity = max(Decimal("0"), Decimal(fill_quantity))
+        if fill_lots == 0 and fill_quantity <= 0:
             return tranche
 
         previous_filled = int(tranche.filled_lots)
+        previous_quantity = Decimal(tranche.filled_quantity)
         new_total = previous_filled + fill_lots
-        if new_total > 0:
+        new_quantity = previous_quantity + fill_quantity
+        if new_quantity > 0:
+            weighted = (tranche.entry_price * previous_quantity) + (fill_price * fill_quantity)
+            tranche.entry_price = weighted / new_quantity
+        elif new_total > 0:
             weighted = (tranche.entry_price * previous_filled) + (fill_price * fill_lots)
             tranche.entry_price = weighted / Decimal(new_total)
 
         tranche.filled_lots = new_total
         tranche.remaining_lots = int(tranche.remaining_lots) + fill_lots
+        tranche.filled_quantity = new_quantity
+        tranche.remaining_quantity = Decimal(tranche.remaining_quantity) + fill_quantity
         tranche.status = (
-            TrancheStatus.OPEN.value if tranche.remaining_lots > 0 else TrancheStatus.CLOSED.value
+            TrancheStatus.OPEN.value
+            if tranche.remaining_lots > 0 or tranche.remaining_quantity > 0
+            else TrancheStatus.CLOSED.value
         )
         tranche.updated_at = datetime.now(UTC)
         self.session.add(tranche)
@@ -153,6 +177,7 @@ class TrancheRepository:
         close_order_id: int,
         target_tranche_id: int,
         fill_lots: int,
+        fill_quantity: Decimal,
         fill_price: Decimal,
     ) -> SellFillResult:
         tranche = self.get(target_tranche_id, for_update=True)
@@ -161,25 +186,41 @@ class TrancheRepository:
 
         fill_lots = int(max(0, fill_lots))
         fill_lots = min(fill_lots, int(tranche.remaining_lots))
-        if fill_lots <= 0:
-            return SellFillResult(applied_lots=0, realized_pnl=Decimal("0"), tranche=tranche)
+        fill_quantity = max(Decimal("0"), Decimal(fill_quantity))
+        fill_quantity = min(fill_quantity, Decimal(tranche.remaining_quantity))
+        if fill_lots <= 0 and fill_quantity <= 0:
+            return SellFillResult(
+                applied_lots=0,
+                applied_quantity=Decimal("0"),
+                realized_pnl=Decimal("0"),
+                tranche=tranche,
+            )
 
         tranche.remaining_lots = int(tranche.remaining_lots) - fill_lots
+        tranche.remaining_quantity = Decimal(tranche.remaining_quantity) - fill_quantity
         tranche.close_order_id = close_order_id
         tranche.status = (
-            TrancheStatus.OPEN.value if tranche.remaining_lots > 0 else TrancheStatus.CLOSED.value
+            TrancheStatus.OPEN.value
+            if tranche.remaining_lots > 0 or tranche.remaining_quantity > 0
+            else TrancheStatus.CLOSED.value
         )
         tranche.updated_at = datetime.now(UTC)
         self.session.add(tranche)
         self.session.flush()
 
-        realized = (fill_price - tranche.entry_price) * Decimal(fill_lots)
-        return SellFillResult(applied_lots=fill_lots, realized_pnl=realized, tranche=tranche)
+        realized_quantity = fill_quantity if fill_quantity > 0 else Decimal(fill_lots)
+        realized = (fill_price - tranche.entry_price) * realized_quantity
+        return SellFillResult(
+            applied_lots=fill_lots,
+            applied_quantity=fill_quantity,
+            realized_pnl=realized,
+            tranche=tranche,
+        )
 
     def list_open_tranches(self, symbol: str | None = None) -> list[Tranche]:
         stmt = select(Tranche).where(
             Tranche.status == TrancheStatus.OPEN.value,
-            Tranche.remaining_lots > 0,
+            or_(Tranche.remaining_lots > 0, Tranche.remaining_quantity > 0),
         )
         if symbol:
             stmt = stmt.where(Tranche.symbol == symbol.upper())
@@ -187,11 +228,12 @@ class TrancheRepository:
         return list(self.session.execute(stmt).scalars().all())
 
     def list_positions(self) -> list[dict[str, Decimal | int | str | None]]:
-        weighted_numerator = func.sum(Tranche.entry_price * Tranche.remaining_lots)
+        quantity_expr = _open_quantity_expr()
+        weighted_numerator = func.sum(Tranche.entry_price * quantity_expr)
         weighted_avg = case(
             (
-                func.sum(Tranche.remaining_lots) > 0,
-                weighted_numerator / func.sum(Tranche.remaining_lots),
+                func.sum(quantity_expr) > 0,
+                weighted_numerator / func.sum(quantity_expr),
             ),
             else_=None,
         )
@@ -200,9 +242,13 @@ class TrancheRepository:
                 Tranche.symbol.label("symbol"),
                 func.count(Tranche.id).label("open_tranche_count"),
                 func.sum(Tranche.remaining_lots).label("total_remaining_lots"),
+                func.sum(Tranche.remaining_quantity).label("total_remaining_quantity"),
                 weighted_avg.label("weighted_avg_entry_price"),
             )
-            .where(Tranche.status == TrancheStatus.OPEN.value, Tranche.remaining_lots > 0)
+            .where(
+                Tranche.status == TrancheStatus.OPEN.value,
+                or_(Tranche.remaining_lots > 0, Tranche.remaining_quantity > 0),
+            )
             .group_by(Tranche.symbol)
             .order_by(Tranche.symbol.asc())
         )
@@ -212,6 +258,7 @@ class TrancheRepository:
                 "symbol": str(row["symbol"]),
                 "open_tranche_count": int(row["open_tranche_count"] or 0),
                 "total_remaining_lots": int(row["total_remaining_lots"] or 0),
+                "total_remaining_quantity": Decimal(str(row["total_remaining_quantity"] or 0)),
                 "weighted_avg_entry_price": (
                     Decimal(str(row["weighted_avg_entry_price"]))
                     if row["weighted_avg_entry_price"] is not None

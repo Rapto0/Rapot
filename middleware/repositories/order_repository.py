@@ -25,14 +25,21 @@ class OrderRepository:
         side: Side,
         signal_code: str,
         requested_lots: int,
+        requested_quantity: Decimal | None,
         limit_price: Decimal,
         budget_tl: Decimal | None,
+        quote_budget: Decimal | None,
         status: OrderStatus,
         broker_name: str,
         mode: str,
+        base_asset: str | None = None,
+        quote_asset: str | None = None,
         target_tranche_id: int | None = None,
         rejection_reason: str | None = None,
     ) -> Order:
+        requested_quantity = (
+            requested_quantity if requested_quantity is not None else Decimal(requested_lots)
+        )
         entity = Order(
             signal_event_id=signal_event_id,
             idempotency_key=idempotency_key,
@@ -41,12 +48,17 @@ class OrderRepository:
             signal_code=signal_code,
             requested_lots=requested_lots,
             filled_lots=0,
+            requested_quantity=requested_quantity,
+            filled_quantity=Decimal("0"),
             limit_price=limit_price,
             budget_tl=budget_tl,
+            quote_budget=quote_budget,
             status=status.value,
             rejection_reason=rejection_reason,
             broker_name=broker_name,
             mode=mode,
+            base_asset=base_asset,
+            quote_asset=quote_asset,
             target_tranche_id=target_tranche_id,
             metadata_json={},
         )
@@ -63,11 +75,15 @@ class OrderRepository:
         side: Side,
         signal_code: str,
         requested_lots: int,
+        requested_quantity: Decimal | None,
         limit_price: Decimal,
         budget_tl: Decimal | None,
+        quote_budget: Decimal | None,
         status: OrderStatus,
         broker_name: str,
         mode: str,
+        base_asset: str | None = None,
+        quote_asset: str | None = None,
         target_tranche_id: int | None = None,
         rejection_reason: str | None = None,
     ) -> tuple[Order, bool]:
@@ -83,11 +99,15 @@ class OrderRepository:
                     side=side,
                     signal_code=signal_code,
                     requested_lots=requested_lots,
+                    requested_quantity=requested_quantity,
                     limit_price=limit_price,
                     budget_tl=budget_tl,
+                    quote_budget=quote_budget,
                     status=status,
                     broker_name=broker_name,
                     mode=mode,
+                    base_asset=base_asset,
+                    quote_asset=quote_asset,
                     target_tranche_id=target_tranche_id,
                     rejection_reason=rejection_reason,
                 )
@@ -139,10 +159,15 @@ class OrderRepository:
         broker_order_id: str | None,
         filled_lots: int,
         avg_fill_price: Decimal | None,
+        filled_quantity: Decimal | None = None,
     ) -> None:
         order.status = status.value
         order.broker_order_id = broker_order_id
         order.filled_lots = max(0, order.filled_lots + int(filled_lots))
+        quantity_delta = (
+            filled_quantity if filled_quantity is not None else Decimal(str(filled_lots))
+        )
+        order.filled_quantity = max(Decimal("0"), Decimal(order.filled_quantity) + quantity_delta)
         if avg_fill_price is not None:
             order.avg_fill_price = avg_fill_price
         order.updated_at = datetime.now(UTC)

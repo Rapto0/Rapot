@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 from uuid import uuid4
 
@@ -26,6 +27,7 @@ class MockBrokerClient(BrokerClient):
             "symbol": payload.symbol,
             "side": payload.side.value,
             "lots": payload.lots,
+            "quantity": str(payload.quantity) if payload.quantity is not None else None,
             "limit_price": str(payload.limit_price),
             "tif": payload.tif,
             "idempotency_key": payload.idempotency_key,
@@ -39,6 +41,7 @@ class MockBrokerClient(BrokerClient):
                 status=OrderStatus.FILLED,
                 broker_order_id=broker_order_id,
                 filled_lots=payload.lots,
+                filled_quantity=payload.quantity or Decimal(payload.lots),
                 avg_fill_price=payload.limit_price,
                 message="mock order filled instantly",
                 raw_payload=raw,

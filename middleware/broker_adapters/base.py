@@ -15,6 +15,7 @@ class BrokerOrderResult:
     status: OrderStatus
     broker_order_id: str | None = None
     filled_lots: int = 0
+    filled_quantity: Decimal = Decimal("0")
     avg_fill_price: Decimal | None = None
     message: str | None = None
     raw_payload: dict[str, Any] = field(default_factory=dict)

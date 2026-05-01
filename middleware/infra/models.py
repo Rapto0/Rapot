@@ -96,12 +96,21 @@ class Order(Base, TimestampMixin):
     signal_code: Mapped[str] = mapped_column(String(20), nullable=False)
     requested_lots: Mapped[int] = mapped_column(Integer, nullable=False)
     filled_lots: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    requested_quantity: Mapped[Decimal] = mapped_column(
+        Numeric(28, 12), nullable=False, default=Decimal("0"), server_default="0"
+    )
+    filled_quantity: Mapped[Decimal] = mapped_column(
+        Numeric(28, 12), nullable=False, default=Decimal("0"), server_default="0"
+    )
     limit_price: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
     budget_tl: Mapped[Decimal | None] = mapped_column(Numeric(18, 6), nullable=True)
+    quote_budget: Mapped[Decimal | None] = mapped_column(Numeric(28, 12), nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     rejection_reason: Mapped[str | None] = mapped_column(String(400), nullable=True)
     broker_name: Mapped[str] = mapped_column(String(40), nullable=False)
     broker_order_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    base_asset: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    quote_asset: Mapped[str | None] = mapped_column(String(20), nullable=True)
     target_tranche_id: Mapped[int | None] = mapped_column(
         ForeignKey("mw_tranches.id", ondelete="SET NULL"), nullable=True
     )
@@ -144,6 +153,15 @@ class Tranche(Base, TimestampMixin):
     filled_lots: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
     remaining_lots: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0, server_default="0"
+    )
+    requested_quantity: Mapped[Decimal] = mapped_column(
+        Numeric(28, 12), nullable=False, default=Decimal("0"), server_default="0"
+    )
+    filled_quantity: Mapped[Decimal] = mapped_column(
+        Numeric(28, 12), nullable=False, default=Decimal("0"), server_default="0"
+    )
+    remaining_quantity: Mapped[Decimal] = mapped_column(
+        Numeric(28, 12), nullable=False, default=Decimal("0"), server_default="0"
     )
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     open_order_id: Mapped[int | None] = mapped_column(

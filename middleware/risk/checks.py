@@ -23,6 +23,8 @@ class BuyRiskInput:
     symbol_exposure_tl: Decimal
     orders_today: int
     realized_pnl_today: Decimal
+    buy_quantity: Decimal | None = None
+    quote_budget: Decimal | None = None
 
 
 @dataclass(slots=True)
@@ -34,6 +36,7 @@ class SellRiskInput:
     open_tranche_exists: bool
     orders_today: int
     realized_pnl_today: Decimal
+    sell_quantity: Decimal | None = None
 
 
 class RiskEngine:
@@ -81,8 +84,10 @@ class RiskEngine:
             realized_pnl_today=payload.realized_pnl_today,
         )
 
-        if payload.buy_lots < 1:
-            raise RiskRejection("buy_lots < 1")
+        buy_quantity = payload.buy_quantity if payload.buy_quantity is not None else Decimal("0")
+        if payload.buy_lots < 1 and buy_quantity <= 0:
+            message = "buy size < minimum" if payload.buy_quantity is not None else "buy_lots < 1"
+            raise RiskRejection(message)
 
         if payload.open_tranche_count >= self.cfg.max_open_tranches_per_symbol:
             raise RiskRejection(
@@ -90,7 +95,12 @@ class RiskEngine:
             )
 
         if self.cfg.max_symbol_exposure_tl is not None:
-            incoming_exposure = Decimal(payload.buy_lots) * payload.buy_limit_price
+            if payload.quote_budget is not None:
+                incoming_exposure = payload.quote_budget
+            elif buy_quantity > 0:
+                incoming_exposure = buy_quantity * payload.buy_limit_price
+            else:
+                incoming_exposure = Decimal(payload.buy_lots) * payload.buy_limit_price
             if payload.symbol_exposure_tl + incoming_exposure > self.cfg.max_symbol_exposure_tl:
                 raise RiskRejection("max_symbol_exposure_tl guard triggered")
 
@@ -106,8 +116,12 @@ class RiskEngine:
             realized_pnl_today=payload.realized_pnl_today,
         )
 
-        if payload.sell_lots < 1:
-            raise RiskRejection("sell lots < 1")
+        sell_quantity = payload.sell_quantity if payload.sell_quantity is not None else Decimal("0")
+        if payload.sell_lots < 1 and sell_quantity <= 0:
+            message = (
+                "sell size < minimum" if payload.sell_quantity is not None else "sell lots < 1"
+            )
+            raise RiskRejection(message)
 
         if not payload.open_tranche_exists:
             raise RiskRejection("no open tranche to sell")

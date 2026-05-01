@@ -53,6 +53,17 @@ class MiddlewareSettings(BaseSettings):
 
     mock_auto_fill: bool = True
 
+    binance_live_enabled: bool = False
+    binance_base_url: str = "https://testnet.binance.vision"
+    binance_api_key: str | None = None
+    binance_secret_key: str | None = None
+    binance_request_timeout_seconds: int = 10
+    binance_recv_window_ms: int = 5000
+    binance_buy_quote_amount_usdt: Decimal = Decimal("25")
+    binance_quote_asset: str = "USDT"
+    binance_dry_run_auto_fill: bool = True
+    binance_check_balance: bool = True
+
     osmanli_live_enabled: bool = False
     osmanli_base_url: str | None = None
     osmanli_token_url: str | None = None
@@ -114,25 +125,48 @@ class MiddlewareSettings(BaseSettings):
             and self.execution_mode == ExecutionMode.LIVE
             and self.trading_enabled
         )
-        if not is_osmanli_live:
+        if is_osmanli_live:
+            if not self.osmanli_live_enabled:
+                raise ValueError(
+                    "MW_OSMANLI_LIVE_ENABLED must be true before Osmanli LIVE execution is allowed"
+                )
+
+            required_fields = {
+                "MW_OSMANLI_BASE_URL": self.osmanli_base_url,
+                "MW_OSMANLI_TOKEN_URL": self.osmanli_token_url,
+                "MW_OSMANLI_ACCOUNT_ID": self.osmanli_account_id,
+                "MW_OSMANLI_CLIENT_ID": self.osmanli_client_id,
+                "MW_OSMANLI_CLIENT_SECRET": self.osmanli_client_secret,
+            }
+            missing = [key for key, value in required_fields.items() if not (value or "").strip()]
+            if missing:
+                raise ValueError(
+                    "Missing required Osmanli LIVE configuration: " + ", ".join(sorted(missing))
+                )
+
+        is_binance_live = (
+            self.broker_name == BrokerName.BINANCE_SPOT
+            and self.execution_mode == ExecutionMode.LIVE
+            and self.trading_enabled
+        )
+        if not is_binance_live:
             return
 
-        if not self.osmanli_live_enabled:
+        if not self.binance_live_enabled:
             raise ValueError(
-                "MW_OSMANLI_LIVE_ENABLED must be true before Osmanli LIVE execution is allowed"
+                "MW_BINANCE_LIVE_ENABLED must be true before Binance LIVE execution is allowed"
             )
 
-        required_fields = {
-            "MW_OSMANLI_BASE_URL": self.osmanli_base_url,
-            "MW_OSMANLI_TOKEN_URL": self.osmanli_token_url,
-            "MW_OSMANLI_ACCOUNT_ID": self.osmanli_account_id,
-            "MW_OSMANLI_CLIENT_ID": self.osmanli_client_id,
-            "MW_OSMANLI_CLIENT_SECRET": self.osmanli_client_secret,
+        required_binance = {
+            "MW_BINANCE_API_KEY": self.binance_api_key,
+            "MW_BINANCE_SECRET_KEY": self.binance_secret_key,
         }
-        missing = [key for key, value in required_fields.items() if not (value or "").strip()]
-        if missing:
+        missing_binance = [
+            key for key, value in required_binance.items() if not (value or "").strip()
+        ]
+        if missing_binance:
             raise ValueError(
-                "Missing required Osmanli LIVE configuration: " + ", ".join(sorted(missing))
+                "Missing required Binance LIVE configuration: " + ", ".join(sorted(missing_binance))
             )
 
 

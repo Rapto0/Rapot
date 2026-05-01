@@ -30,6 +30,16 @@ def configure_test_environment():
     settings.trading_enabled = False
     settings.broker_name = BrokerName.MOCK
     settings.mock_auto_fill = True
+    settings.binance_live_enabled = False
+    settings.binance_base_url = "https://testnet.binance.vision"
+    settings.binance_api_key = None
+    settings.binance_secret_key = None
+    settings.binance_request_timeout_seconds = 10
+    settings.binance_recv_window_ms = 5000
+    settings.binance_buy_quote_amount_usdt = 25
+    settings.binance_quote_asset = "USDT"
+    settings.binance_dry_run_auto_fill = True
+    settings.binance_check_balance = True
     settings.allow_admin_endpoints = True
     settings.base_budget_tl = 10000
     settings.buy_bps = 20

@@ -2,7 +2,7 @@
 // © Rapto_o
 
 //@version=6
-indicator("Combo + Hunter Hybrid", shorttitle="C+H Hybrid", overlay=true, max_bars_back=500)
+indicator("Combo + Hunter Osmanlı", shorttitle="C+H Osmanlı", overlay=true, max_bars_back=500)
 
 // ══════════════════════════════════════════════════════════════
 // GENEL

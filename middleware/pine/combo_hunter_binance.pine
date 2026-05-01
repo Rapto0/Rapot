@@ -2,7 +2,7 @@
 // © Rapto_o
 
 //@version=6
-indicator("Combo + Hunter Hybrid - Middleware", shorttitle="C+H MW", overlay=true, max_bars_back=500)
+indicator("Combo + Hunter Binance", shorttitle="C+H Binance", overlay=true, max_bars_back=500)
 
 // ══════════════════════════════════════════════════════════════
 // GENEL
