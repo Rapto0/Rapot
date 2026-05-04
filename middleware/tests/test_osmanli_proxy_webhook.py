@@ -129,8 +129,10 @@ def test_osmanli_proxy_forwards_buy_and_eligible_sell_when_enabled(client, monke
 
     assert buy_response.status_code == 200
     assert sell_response.status_code == 200
-    assert buy_response.json()["forwarded"] is True
-    assert sell_response.json()["forwarded"] is True
+    assert buy_response.json()["forwarded"] is False
+    assert buy_response.json()["forward_queued"] is True
+    assert sell_response.json()["forwarded"] is False
+    assert sell_response.json()["forward_queued"] is True
     assert [json.loads(call["data"])["orderSide"] for call in calls] == ["buy", "sell"]
     assert {call["url"] for call in calls} == {"https://osmanli.example/webhook"}
     assert {call["headers"]["Content-Type"] for call in calls} == {"application/json"}
@@ -164,7 +166,8 @@ def test_osmanli_proxy_forwards_original_raw_body_when_enabled(client, monkeypat
     )
 
     assert response.status_code == 200
-    assert response.json()["forwarded"] is True
+    assert response.json()["forwarded"] is False
+    assert response.json()["forward_queued"] is True
     assert calls[0]["data"] == raw_body.encode()
 
 
@@ -235,7 +238,8 @@ def test_osmanli_proxy_skips_forward_for_duplicate_signals(client, monkeypatch):
 
     assert first_response.status_code == 200
     assert second_response.status_code == 200
-    assert first_response.json()["forwarded"] is True
+    assert first_response.json()["forwarded"] is False
+    assert first_response.json()["forward_queued"] is True
     assert second_response.json()["forwarded"] is False
     assert second_response.json()["message"] == "forward skipped: duplicate signal ignored"
     assert len(calls) == 1
@@ -243,6 +247,7 @@ def test_osmanli_proxy_skips_forward_for_duplicate_signals(client, monkeypatch):
 
 def test_osmanli_proxy_reports_forward_http_failure(client, monkeypatch):
     settings.osmanli_forward_enabled = True
+    settings.osmanli_forward_background = False
     settings.osmanli_tv_webhook_url = "https://osmanli.example/webhook"
 
     def fake_post(url, data, headers, timeout):

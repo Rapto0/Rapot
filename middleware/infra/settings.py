@@ -74,6 +74,7 @@ class MiddlewareSettings(BaseSettings):
     osmanli_tv_webhook_url: str | None = None
     osmanli_forward_enabled: bool = False
     osmanli_forward_timeout_seconds: int = 5
+    osmanli_forward_background: bool = True
 
     @property
     def is_production(self) -> bool:

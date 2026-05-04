@@ -95,6 +95,7 @@ class ProcessSignalResponse(BaseModel):
 class OsmanliProxyResponse(BaseModel):
     forward_enabled: bool
     forwarded: bool
+    forward_queued: bool = False
     forward_status_code: int | None = None
     forward_error: str | None = None
     message: str

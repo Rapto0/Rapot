@@ -191,6 +191,7 @@ Most important:
 - `MW_OSMANLI_TV_WEBHOOK_URL`
 - `MW_OSMANLI_FORWARD_ENABLED`
 - `MW_OSMANLI_FORWARD_TIMEOUT_SECONDS`
+- `MW_OSMANLI_FORWARD_BACKGROUND`
 - `MW_BINANCE_LIVE_ENABLED`
 - `MW_BINANCE_BASE_URL`
 - `MW_BINANCE_API_KEY`
@@ -282,8 +283,12 @@ Notes:
   duplicate signals are not forwarded.
 - Forwarding sends the original TradingView JSON body to Osmanli unchanged. Keep the
   Pine alert JSON aligned with the Wizard-generated command fields and token.
-- If Osmanli upstream forwarding fails or returns non-2xx, the proxy returns `502`
-  so TradingView marks the webhook delivery as failed.
+- By default `MW_OSMANLI_FORWARD_BACKGROUND=true`, so TradingView receives a fast
+  middleware response and Osmanli forwarding continues in the background. Check PM2
+  logs for `Osmanli forward accepted`, `Osmanli forward rejected`, or
+  `Osmanli forward request failed`.
+- If `MW_OSMANLI_FORWARD_BACKGROUND=false`, Osmanli forwarding is synchronous; upstream
+  failures return `502` to TradingView.
 - Wizard secrets are treated as pass-through payload values; do not paste real values
   into repository files or logs.
 - Keep `signalCode`, `barTime`, and `barIndex` in the TradingView message where possible

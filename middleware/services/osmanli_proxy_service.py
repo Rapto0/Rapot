@@ -87,6 +87,7 @@ class OsmanliProxyService:
         raw_payload: dict[str, Any],
         *,
         raw_body: bytes | None = None,
+        background_tasks: Any | None = None,
     ) -> OsmanliProxyResponse:
         extracted_signal = self.extract_signal(raw_payload)
         process_result = self.trading_service.process_webhook(extracted_signal)
@@ -105,6 +106,23 @@ class OsmanliProxyService:
                 forward_enabled=True,
                 forwarded=False,
                 message=skip_reason,
+                extracted_signal=extracted_signal,
+                process_result=process_result,
+            )
+
+        if self.cfg.osmanli_forward_background and background_tasks is not None:
+            body = self._build_forward_body(raw_payload, raw_body=raw_body)
+            background_tasks.add_task(
+                self._forward_to_osmanli_background,
+                body=body,
+                extracted_signal=extracted_signal,
+                process_result=process_result,
+            )
+            return OsmanliProxyResponse(
+                forward_enabled=True,
+                forwarded=False,
+                forward_queued=True,
+                message="signal processed; Osmanli forward queued",
                 extracted_signal=extracted_signal,
                 process_result=process_result,
             )
@@ -179,15 +197,57 @@ class OsmanliProxyService:
         extracted_signal: TradingViewWebhookPayload,
         process_result: ProcessSignalResponse,
     ) -> tuple[int | None, str | None]:
-        forward_url = (self.cfg.osmanli_tv_webhook_url or "").strip()
-        if not forward_url:
-            raise OsmanliForwardError("MW_OSMANLI_TV_WEBHOOK_URL is not configured")
+        body = self._build_forward_body(raw_payload, raw_body=raw_body)
+        return self._post_to_osmanli(
+            body=body,
+            extracted_signal=extracted_signal,
+            process_result=process_result,
+        )
 
-        body = raw_body or json.dumps(
+    def _build_forward_body(self, raw_payload: dict[str, Any], *, raw_body: bytes | None) -> bytes:
+        return raw_body or json.dumps(
             raw_payload,
             ensure_ascii=False,
             separators=(",", ":"),
         ).encode("utf-8")
+
+    def _forward_to_osmanli_background(
+        self,
+        *,
+        body: bytes,
+        extracted_signal: TradingViewWebhookPayload,
+        process_result: ProcessSignalResponse,
+    ) -> None:
+        try:
+            self._post_to_osmanli(
+                body=body,
+                extracted_signal=extracted_signal,
+                process_result=process_result,
+            )
+        except OsmanliForwardError:
+            return
+
+    def _post_to_osmanli(
+        self,
+        *,
+        body: bytes,
+        extracted_signal: TradingViewWebhookPayload,
+        process_result: ProcessSignalResponse,
+    ) -> tuple[int | None, str | None]:
+        forward_url = (self.cfg.osmanli_tv_webhook_url or "").strip()
+        if not forward_url:
+            logger.error(
+                "Osmanli forward URL is not configured",
+                extra={
+                    "extra_fields": {
+                        "signal_event_id": process_result.signal_event_id,
+                        "order_id": process_result.order_id,
+                        "symbol": extracted_signal.symbol,
+                        "signal_code": extracted_signal.signalCode,
+                    }
+                },
+            )
+            raise OsmanliForwardError("MW_OSMANLI_TV_WEBHOOK_URL is not configured")
         try:
             response = requests.post(
                 forward_url,
