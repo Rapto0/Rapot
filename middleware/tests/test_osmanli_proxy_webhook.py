@@ -6,8 +6,10 @@ from middleware.infra.settings import settings
 
 
 class _FakeOsmanliResponse:
-    def __init__(self, status_code: int):
+    def __init__(self, status_code: int, text: str = "", content_type: str = "application/json"):
         self.status_code = status_code
+        self.text = text
+        self.headers = {"Content-Type": content_type}
 
 
 def test_osmanli_proxy_shadow_processes_supported_payload(client):
@@ -275,6 +277,48 @@ def test_osmanli_proxy_reports_forward_http_failure(client, monkeypatch):
 
     assert response.status_code == 502
     assert response.json()["detail"] == "Osmanli forward failed: upstream returned HTTP 401"
+
+
+def test_osmanli_proxy_logs_response_body_preview_on_accept(client, monkeypatch, caplog):
+    """Osmanli upstream sometimes returns HTTP 200 even when the order is
+    rejected by business validation. The response body must be logged so
+    the real reject reason is visible in journalctl."""
+    settings.osmanli_forward_enabled = True
+    settings.osmanli_forward_background = False
+    settings.osmanli_tv_webhook_url = "https://osmanli.example/webhook"
+
+    reject_body = '{"status":"error","message":"Gecersiz token"}'
+
+    def fake_post(url, data, headers, timeout):
+        return _FakeOsmanliResponse(200, text=reject_body, content_type="application/json")
+
+    monkeypatch.setattr(
+        "middleware.services.osmanli_proxy_service.requests.post",
+        fake_post,
+    )
+
+    raw_payload = {
+        "name": "test H_BLS",
+        "symbol": "THYAO",
+        "orderSide": "buy",
+        "orderType": "lmt",
+        "price": "287.25",
+        "quantity": "1",
+        "timeInForce": "day",
+        "apiKey": "secret-like-value",
+        "timenow": "2026-04-24T11:00:00Z",
+        "token": "broker-token-like-value",
+    }
+
+    with caplog.at_level("INFO", logger="middleware.services.osmanli_proxy_service"):
+        response = client.post("/webhooks/tradingview/osmanli-proxy", json=raw_payload)
+
+    assert response.status_code == 200
+    accept_records = [r for r in caplog.records if r.message == "Osmanli forward accepted"]
+    assert len(accept_records) == 1
+    extra_fields = accept_records[0].extra_fields
+    assert extra_fields["response_body_preview"] == reject_body
+    assert extra_fields["response_content_type"] == "application/json"
 
 
 def test_osmanli_proxy_rejects_payload_without_side(client):
