@@ -73,7 +73,10 @@ class MiddlewareSettings(BaseSettings):
     osmanli_request_timeout_seconds: int = 10
     osmanli_tv_webhook_url: str | None = None
     osmanli_forward_enabled: bool = False
-    osmanli_forward_timeout_seconds: int = 5
+    # Forward to Osmanli runs in a background task (see osmanli_forward_background),
+    # but we still cap the outbound HTTP wait so a slow upstream cannot tie up
+    # worker threads. Keep this strictly under TradingView's ~3s webhook timeout.
+    osmanli_forward_timeout_seconds: int = 2
     osmanli_forward_background: bool = True
 
     @property

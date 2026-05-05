@@ -102,6 +102,23 @@ class OsmanliProxyService:
 
         skip_reason = self._get_forward_skip_reason(process_result)
         if skip_reason:
+            logger.warning(
+                "Osmanli forward skipped",
+                extra={
+                    "extra_fields": {
+                        "signal_event_id": process_result.signal_event_id,
+                        "order_id": process_result.order_id,
+                        "symbol": extracted_signal.symbol,
+                        "signal_code": extracted_signal.signalCode,
+                        "skip_reason": skip_reason,
+                        "risk_reason": process_result.risk_reason,
+                        "duplicate": process_result.duplicate,
+                        "order_status": (
+                            process_result.status.value if process_result.status else None
+                        ),
+                    }
+                },
+            )
             return OsmanliProxyResponse(
                 forward_enabled=True,
                 forwarded=False,
