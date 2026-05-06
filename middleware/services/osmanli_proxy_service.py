@@ -286,6 +286,9 @@ class OsmanliProxyService:
             )
             raise OsmanliForwardError("request failed") from None
 
+        response_body_preview = _truncate_text(response.text or "", 1024)
+        response_content_type = response.headers.get("Content-Type", "")
+
         if response.status_code < 200 or response.status_code >= 300:
             logger.warning(
                 "Osmanli forward rejected",
@@ -296,6 +299,8 @@ class OsmanliProxyService:
                         "symbol": extracted_signal.symbol,
                         "signal_code": extracted_signal.signalCode,
                         "status_code": response.status_code,
+                        "response_content_type": response_content_type,
+                        "response_body_preview": response_body_preview,
                     }
                 },
             )
@@ -310,10 +315,23 @@ class OsmanliProxyService:
                     "symbol": extracted_signal.symbol,
                     "signal_code": extracted_signal.signalCode,
                     "status_code": response.status_code,
+                    # Osmanli upstream may return HTTP 200 even when the order is
+                    # rejected by business validation (invalid token, off-hours,
+                    # unknown symbol, etc). Logging the body preview lets us see
+                    # the actual reject reason instead of a silent "accepted".
+                    "response_content_type": response_content_type,
+                    "response_body_preview": response_body_preview,
                 }
             },
         )
         return response.status_code, None
+
+
+def _truncate_text(value: str, max_len: int) -> str:
+    """Trim oversized response bodies before logging."""
+    if len(value) <= max_len:
+        return value
+    return value[:max_len] + f"...[+{len(value) - max_len} bytes]"
 
 
 def _normalize_key(value: str) -> str:
