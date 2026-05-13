@@ -81,14 +81,14 @@ def configure_test_environment(monkeypatch):
     settings.binance_secret_key = None
     settings.binance_request_timeout_seconds = 10
     settings.binance_recv_window_ms = 5000
-    settings.binance_buy_quote_amount_usdt = 25
+    settings.binance_buy_quote_amount_usdt = 10
     settings.binance_quote_asset = "USDT"
     settings.binance_dry_run_auto_fill = True
     settings.binance_check_balance = True
     settings.allow_admin_endpoints = True
     settings.buy_bps = 20
     settings.sell_bps = 20
-    settings.max_open_tranches_per_symbol = 4
+    settings.max_open_tranches_per_symbol = None
     settings.max_symbol_exposure_usdt = None
     settings.max_daily_loss_usdt = None
     settings.max_orders_per_day = None
@@ -98,6 +98,10 @@ def configure_test_environment(monkeypatch):
     settings.allowed_symbols_csv = None
     settings.require_webhook_auth = True
     settings.webhook_auth_token = "test-token"
+    settings.multiplier_h_bls = Decimal("1.00")
+    settings.multiplier_h_ucz = Decimal("1.00")
+    settings.multiplier_c_bls = Decimal("1.00")
+    settings.multiplier_c_ucz = Decimal("1.00")
     _clear_settings_cache()
     monkeypatch.setattr(
         "middleware.api.dependencies.build_broker_client",

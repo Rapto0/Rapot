@@ -8,8 +8,9 @@ TradingView webhook sinyallerini Binance Spot emirlerine çeviren kripto odaklı
 - Quote asset: default `USDT`.
 - Buy signals: `H_BLS`, `H_UCZ`, `C_BLS`, `C_UCZ`.
 - Sell signals: `H_PAH`, `C_PAH`.
-- Buy sizing: fixed quote budget, `MW_BINANCE_BUY_QUOTE_AMOUNT_USDT`.
+- Buy sizing: signal-based USDT quote budget, default `10 USDT`.
 - Sell sizing: FIFO, oldest open tranche `remaining_quantity`.
+- Position stacking: every distinct BUY signal opens a new tranche while Binance balance allows.
 - Default mode: `DRY_RUN` + `BINANCE_SPOT`.
 
 ## Flow
@@ -53,6 +54,7 @@ Rules:
 
 BUY:
 - `quoteBudget = MW_BINANCE_BUY_QUOTE_AMOUNT_USDT * multiplier(signalCode)`
+- Default `MW_BINANCE_BUY_QUOTE_AMOUNT_USDT=10`; default multipliers are `1.00`.
 - `buyLimitPrice = round_up_to_tick(price * (1 + MW_BUY_BPS / 10000))`
 - `quantity = floor_to_step(quoteBudget / buyLimitPrice)`
 
@@ -60,6 +62,7 @@ SELL:
 - Select oldest open tranche for symbol.
 - `sellLimitPrice = round_down_to_tick(price * (1 - MW_SELL_BPS / 10000))`
 - `quantity = floor_to_step(tranche.remaining_quantity)`
+- Each SELL closes one oldest tranche; repeated SELL signals continue through FIFO stack.
 
 Binance filters enforced:
 - `PRICE_FILTER`
@@ -82,9 +85,8 @@ Important variables:
 - `MW_BINANCE_SECRET_KEY`
 - `MW_BINANCE_BUY_QUOTE_AMOUNT_USDT`
 - `MW_ALLOWED_SYMBOLS_CSV`
-- `MW_MAX_SYMBOL_EXPOSURE_USDT`
-- `MW_MAX_DAILY_LOSS_USDT`
-- `MW_MAX_ORDERS_PER_DAY`
+- Optional guards: `MW_MAX_SYMBOL_EXPOSURE_USDT`, `MW_MAX_DAILY_LOSS_USDT`,
+  `MW_MAX_ORDERS_PER_DAY`, `MW_MAX_OPEN_TRANCHES_PER_SYMBOL`
 
 ## Local Commands
 
@@ -117,4 +119,4 @@ MW_BINANCE_API_KEY=...
 MW_BINANCE_SECRET_KEY=...
 ```
 
-Start live with a small quote budget, a narrow `MW_ALLOWED_SYMBOLS_CSV`, and low `MW_MAX_ORDERS_PER_DAY`.
+Start live with a small quote budget and a narrow `MW_ALLOWED_SYMBOLS_CSV`.

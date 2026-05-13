@@ -15,21 +15,24 @@ Middleware bundan sonra sadece Binance Spot kripto akışına odaklanır.
 
 BUY:
 - Quote budget: `MW_BINANCE_BUY_QUOTE_AMOUNT_USDT * signalMultiplier`
+- Default quote budget is `10 USDT`; default signal multipliers are `1.00`
 - Limit price: signal price plus `MW_BUY_BPS`, rounded up to tick size
 - Quantity: quote budget divided by limit price, floored to step size
+- Every distinct BUY alert opens a new tranche for the same symbol
 
 SELL:
 - Select oldest open tranche for the symbol
 - Limit price: signal price minus `MW_SELL_BPS`, rounded down to tick size
 - Quantity: tranche remaining quantity, floored to step size
+- Every SELL alert closes one oldest tranche, then the next SELL closes the next tranche
 
-## Required Guards
+## Guard Rails
 
 - `MW_ALLOWED_SYMBOLS_CSV` for live allowlist
-- `MW_MAX_OPEN_TRANCHES_PER_SYMBOL`
-- `MW_MAX_SYMBOL_EXPOSURE_USDT`
-- `MW_MAX_DAILY_LOSS_USDT`
-- `MW_MAX_ORDERS_PER_DAY`
+- `MW_MAX_OPEN_TRANCHES_PER_SYMBOL` optional; unset means no tranche count cap
+- `MW_MAX_SYMBOL_EXPOSURE_USDT` optional; unset means balance/filter checks decide
+- `MW_MAX_DAILY_LOSS_USDT` optional
+- `MW_MAX_ORDERS_PER_DAY` optional
 - `MW_REQUIRE_REALTIME_SIGNALS`
 - `MW_MAX_SIGNAL_AGE_SECONDS`
 
@@ -41,7 +44,7 @@ SELL:
 4. Webhook token rotated after test sharing.
 5. Production key has Spot trading only, no withdrawal permission.
 6. Production key is IP-whitelisted to the server where possible.
-7. First production run uses small quote budget and max 1-2 orders/day.
+7. First production run uses small quote budget and narrow symbol allowlist.
 
 ## Known Follow-Up Work
 

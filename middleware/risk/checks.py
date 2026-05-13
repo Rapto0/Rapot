@@ -89,7 +89,10 @@ class RiskEngine:
             message = "buy size < minimum" if payload.buy_quantity is not None else "buy_lots < 1"
             raise RiskRejection(message)
 
-        if payload.open_tranche_count >= self.cfg.max_open_tranches_per_symbol:
+        if (
+            self.cfg.max_open_tranches_per_symbol is not None
+            and payload.open_tranche_count >= self.cfg.max_open_tranches_per_symbol
+        ):
             raise RiskRejection(
                 f"max open tranches exceeded (max={self.cfg.max_open_tranches_per_symbol})"
             )

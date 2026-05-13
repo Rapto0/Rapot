@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from decimal import Decimal
 from functools import cached_property
+from typing import Any
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from middleware.domain.enums import BrokerName, ExecutionMode
@@ -31,12 +33,12 @@ class MiddlewareSettings(BaseSettings):
 
     buy_bps: int = 20
     sell_bps: int = 20
-    max_open_tranches_per_symbol: int = 4
+    max_open_tranches_per_symbol: int | None = None
 
     multiplier_h_bls: Decimal = Decimal("1.00")
-    multiplier_h_ucz: Decimal = Decimal("0.50")
+    multiplier_h_ucz: Decimal = Decimal("1.00")
     multiplier_c_bls: Decimal = Decimal("1.00")
-    multiplier_c_ucz: Decimal = Decimal("0.50")
+    multiplier_c_ucz: Decimal = Decimal("1.00")
 
     max_symbol_exposure_usdt: Decimal | None = None
     max_daily_loss_usdt: Decimal | None = None
@@ -52,10 +54,28 @@ class MiddlewareSettings(BaseSettings):
     binance_secret_key: str | None = None
     binance_request_timeout_seconds: int = 10
     binance_recv_window_ms: int = 5000
-    binance_buy_quote_amount_usdt: Decimal = Decimal("25")
+    binance_buy_quote_amount_usdt: Decimal = Decimal("10")
     binance_quote_asset: str = "USDT"
     binance_dry_run_auto_fill: bool = True
     binance_check_balance: bool = True
+
+    @field_validator(
+        "webhook_auth_token",
+        "max_open_tranches_per_symbol",
+        "max_symbol_exposure_usdt",
+        "max_daily_loss_usdt",
+        "max_orders_per_day",
+        "allowed_symbols_csv",
+        "max_signal_age_seconds",
+        "binance_api_key",
+        "binance_secret_key",
+        mode="before",
+    )
+    @classmethod
+    def _blank_string_to_none(cls, value: Any) -> Any:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
 
     @property
     def is_production(self) -> bool:
@@ -69,6 +89,9 @@ class MiddlewareSettings(BaseSettings):
             "C_BLS": self.multiplier_c_bls,
             "C_UCZ": self.multiplier_c_ucz,
         }
+
+    def quote_budget_for_signal(self, signal_code: str) -> Decimal:
+        return self.binance_buy_quote_amount_usdt * self.signal_multipliers[signal_code]
 
     @cached_property
     def allowed_symbols(self) -> set[str]:

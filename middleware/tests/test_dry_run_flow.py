@@ -15,7 +15,7 @@ def test_dry_run_binance_spot_flow(client, sample_buy_payload):
     assert orders[0]["broker_name"] == "BINANCE_SPOT"
     assert orders[0]["status"] == "filled"
     assert Decimal(orders[0]["requested_quantity"]) > 0
-    assert Decimal(orders[0]["quote_budget"]) == Decimal("25.000000000000")
+    assert Decimal(orders[0]["quote_budget"]) == Decimal("10.000000000000")
 
     position = client.get("/positions/BTCUSDT").json()["position"]
     assert position["open_tranche_count"] == 1

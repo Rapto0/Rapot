@@ -359,8 +359,7 @@ class TradingService:
     ) -> _OrderIntent:
         rules = self._get_binance_symbol_rules(symbol)
         if payload.side == Side.BUY:
-            multiplier = self.cfg.signal_multipliers[payload.signalCode]
-            quote_budget = self.cfg.binance_buy_quote_amount_usdt * multiplier
+            quote_budget = self.cfg.quote_budget_for_signal(payload.signalCode)
             limit_price = rules.round_buy_price(
                 payload.price * (Decimal("1") + (Decimal(self.cfg.buy_bps) / Decimal("10000")))
             )

@@ -25,7 +25,10 @@ perpetual contracts.
 
 ## Binance Fixed-USDT And FIFO Rule
 
-- `BUY`: middleware spends fixed USDT from `MW_BINANCE_BUY_QUOTE_AMOUNT_USDT`.
+- `BUY`: middleware spends signal-based USDT budget from
+  `MW_BINANCE_BUY_QUOTE_AMOUNT_USDT * multiplier(signalCode)`.
+- Default buy budget is `10 USDT` because default multipliers are `1.00`.
+- Every distinct `BUY` alert opens a new tranche for the same symbol.
 - `SELL`: middleware sells the oldest open tranche first.
 - Binance filters (`PRICE_FILTER`, `LOT_SIZE`, `MIN_NOTIONAL`/`NOTIONAL`) are
   applied in middleware before submit.
