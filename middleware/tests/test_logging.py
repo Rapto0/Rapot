@@ -6,10 +6,11 @@ from middleware.infra.logging import SensitiveQueryFilter, redact_sensitive_quer
 
 
 def test_redact_sensitive_query_values_masks_token_like_params():
-    url = "/webhooks/tradingview?token=secret-token&symbol=THYAO"
+    url = "/webhooks/tradingview?token=secret-token&symbol=BTCUSDT"
 
     assert (
-        redact_sensitive_query_values(url) == "/webhooks/tradingview?token=<redacted>&symbol=THYAO"
+        redact_sensitive_query_values(url)
+        == "/webhooks/tradingview?token=<redacted>&symbol=BTCUSDT"
     )
 
 

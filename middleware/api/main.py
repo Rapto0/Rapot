@@ -39,7 +39,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Rapot Trading Middleware",
     version="0.1.0",
-    description="TradingView -> middleware -> broker execution service for BIST and Binance spot.",
+    description="TradingView -> middleware -> Binance Spot crypto execution service.",
     lifespan=lifespan,
 )
 

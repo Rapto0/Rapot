@@ -45,7 +45,7 @@ class TrancheRepository:
         )
         return int(self.session.execute(stmt).scalar() or 0)
 
-    def get_symbol_exposure_tl(self, symbol: str) -> Decimal:
+    def get_symbol_exposure_usdt(self, symbol: str) -> Decimal:
         quantity_expr = _open_quantity_expr()
         stmt = select(func.coalesce(func.sum(Tranche.entry_price * quantity_expr), 0)).where(
             Tranche.symbol == symbol.upper(),

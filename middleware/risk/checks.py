@@ -9,7 +9,7 @@ from middleware.domain.enums import ExecutionMode, Side
 from middleware.domain.errors import RiskRejection
 from middleware.infra.settings import MiddlewareSettings
 
-_BIST_SYMBOL_RE = re.compile(r"^[A-Z0-9.-]{1,24}$")
+_CRYPTO_SYMBOL_RE = re.compile(r"^[A-Z0-9.-]{1,24}$")
 
 
 @dataclass(slots=True)
@@ -20,7 +20,7 @@ class BuyRiskInput:
     buy_lots: int
     buy_limit_price: Decimal
     open_tranche_count: int
-    symbol_exposure_tl: Decimal
+    symbol_exposure_usdt: Decimal
     orders_today: int
     realized_pnl_today: Decimal
     buy_quantity: Decimal | None = None
@@ -55,7 +55,7 @@ class RiskEngine:
         if signal_code not in SUPPORTED_SIGNAL_CODES:
             raise RiskRejection(f"unsupported signal code: {signal_code}")
 
-        if not _BIST_SYMBOL_RE.match(symbol):
+        if not _CRYPTO_SYMBOL_RE.match(symbol):
             raise RiskRejection("invalid symbol format")
 
         if self.cfg.allowed_symbols and symbol not in self.cfg.allowed_symbols:
@@ -70,10 +70,10 @@ class RiskEngine:
         if self.cfg.max_orders_per_day is not None and orders_today >= self.cfg.max_orders_per_day:
             raise RiskRejection("max_orders_per_day guard triggered")
 
-        if self.cfg.max_daily_loss_tl is not None and realized_pnl_today <= (
-            Decimal("0") - self.cfg.max_daily_loss_tl
+        if self.cfg.max_daily_loss_usdt is not None and realized_pnl_today <= (
+            Decimal("0") - self.cfg.max_daily_loss_usdt
         ):
-            raise RiskRejection("max_daily_loss_tl guard triggered")
+            raise RiskRejection("max_daily_loss_usdt guard triggered")
 
     def validate_buy(self, payload: BuyRiskInput) -> None:
         self._validate_common(
@@ -94,15 +94,15 @@ class RiskEngine:
                 f"max open tranches exceeded (max={self.cfg.max_open_tranches_per_symbol})"
             )
 
-        if self.cfg.max_symbol_exposure_tl is not None:
+        if self.cfg.max_symbol_exposure_usdt is not None:
             if payload.quote_budget is not None:
                 incoming_exposure = payload.quote_budget
             elif buy_quantity > 0:
                 incoming_exposure = buy_quantity * payload.buy_limit_price
             else:
                 incoming_exposure = Decimal(payload.buy_lots) * payload.buy_limit_price
-            if payload.symbol_exposure_tl + incoming_exposure > self.cfg.max_symbol_exposure_tl:
-                raise RiskRejection("max_symbol_exposure_tl guard triggered")
+            if payload.symbol_exposure_usdt + incoming_exposure > self.cfg.max_symbol_exposure_usdt:
+                raise RiskRejection("max_symbol_exposure_usdt guard triggered")
 
         if self.cfg.execution_mode == ExecutionMode.LIVE and not self.cfg.trading_enabled:
             raise RiskRejection("trading disabled: set MW_TRADING_ENABLED=true for live mode")

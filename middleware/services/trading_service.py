@@ -8,11 +8,10 @@ from sqlalchemy.orm import Session
 
 from middleware.broker_adapters.base import BrokerClient
 from middleware.domain.constants import BUY_SIGNAL_CODES
-from middleware.domain.enums import BrokerName, ExecutionMode, OrderStatus, Side
+from middleware.domain.enums import ExecutionMode, OrderStatus, Side
 from middleware.domain.events import (
     BrokerOrderRequestPayload,
     ProcessSignalResponse,
-    SimulateFillRequest,
     TradingViewWebhookPayload,
 )
 from middleware.infra.logging import get_logger
@@ -24,8 +23,6 @@ from middleware.repositories.order_repository import OrderRepository
 from middleware.repositories.signal_repository import SignalRepository
 from middleware.repositories.tranche_repository import TrancheRepository
 from middleware.risk.checks import BuyRiskInput, RiskEngine, SellRiskInput
-from middleware.risk.sizing import compute_buy_lots, compute_signal_budget
-from middleware.risk.tick import TickPolicy
 
 logger = get_logger(__name__)
 
@@ -61,10 +58,6 @@ class TradingService:
         self.tranche_repo = TrancheRepository(session)
         self.execution_repo = ExecutionReportRepository(session)
         self.risk = RiskEngine(cfg)
-        self.tick_policy = TickPolicy(
-            default_tick=cfg.default_tick_size,
-            symbol_overrides=cfg.symbol_tick_overrides,
-        )
 
     def process_webhook(
         self,
@@ -312,63 +305,6 @@ class TradingService:
     ) -> ProcessSignalResponse:
         return self.process_webhook(payload, bypass_idempotency=bypass_idempotency)
 
-    def simulate_fill(self, request: SimulateFillRequest) -> Order:
-        with self.session.begin():
-            order = self.order_repo.get(request.order_id)
-            if order is None:
-                raise ValueError(f"order not found: {request.order_id}")
-            if order.broker_name != "MOCK":
-                raise ValueError("simulate-fill is allowed only for MOCK broker")
-            if order.status not in {
-                OrderStatus.SUBMITTED.value,
-                OrderStatus.ACKNOWLEDGED.value,
-                OrderStatus.PARTIALLY_FILLED.value,
-            }:
-                raise ValueError("order is not in fillable state")
-
-            remaining = max(0, int(order.requested_lots) - int(order.filled_lots))
-            if remaining <= 0:
-                raise ValueError("order has no remaining lots")
-
-            requested_fill = request.filled_lots if request.filled_lots is not None else remaining
-            fill_lots = min(remaining, int(requested_fill))
-            fill_quantity = Decimal(fill_lots)
-            fill_price = request.fill_price if request.fill_price is not None else order.limit_price
-
-            total_after = int(order.filled_lots) + fill_lots
-            next_status = (
-                OrderStatus.FILLED
-                if total_after >= int(order.requested_lots)
-                else OrderStatus.PARTIALLY_FILLED
-            )
-            self.order_repo.apply_broker_ack(
-                order,
-                status=next_status,
-                broker_order_id=order.broker_order_id,
-                filled_lots=fill_lots,
-                filled_quantity=fill_quantity,
-                avg_fill_price=fill_price,
-            )
-            self.execution_repo.add(
-                order_id=order.id,
-                event_type="simulate_fill",
-                status=next_status.value,
-                message="admin simulate fill",
-                payload={
-                    "fill_lots": fill_lots,
-                    "fill_quantity": str(fill_quantity),
-                    "fill_price": str(fill_price),
-                },
-            )
-
-            self._apply_fill(
-                order=order,
-                fill_lots=fill_lots,
-                fill_quantity=fill_quantity,
-                fill_price=fill_price,
-            )
-            return order
-
     def list_positions(self, symbol: str | None = None) -> list[dict]:
         if symbol:
             tranches = self.tranche_repo.list_open_tranches(symbol=symbol)
@@ -416,44 +352,7 @@ class TradingService:
         self, payload: TradingViewWebhookPayload, *, for_update: bool
     ) -> _OrderIntent:
         symbol = payload.symbol.upper()
-        if self._is_binance_spot:
-            return self._build_binance_spot_intent(payload, symbol=symbol, for_update=for_update)
-
-        if payload.side == Side.BUY:
-            multiplier = self.cfg.signal_multipliers[payload.signalCode]
-            budget = compute_signal_budget(self.cfg.base_budget_tl, multiplier)
-            limit_price = self.tick_policy.buy_limit_price(symbol, payload.price, self.cfg.buy_bps)
-            lots = compute_buy_lots(budget, limit_price)
-            return _OrderIntent(
-                symbol=symbol,
-                side=payload.side,
-                signal_code=payload.signalCode,
-                requested_lots=lots,
-                requested_quantity=Decimal(lots),
-                limit_price=limit_price,
-                budget_tl=budget,
-                quote_budget=None,
-                base_asset=None,
-                quote_asset=None,
-                target_tranche_id=None,
-            )
-
-        target = self.tranche_repo.oldest_open(symbol, for_update=for_update)
-        limit_price = self.tick_policy.sell_limit_price(symbol, payload.price, self.cfg.sell_bps)
-        lots = int(target.remaining_lots) if target else 0
-        return _OrderIntent(
-            symbol=symbol,
-            side=payload.side,
-            signal_code=payload.signalCode,
-            requested_lots=lots,
-            requested_quantity=Decimal(lots),
-            limit_price=limit_price,
-            budget_tl=None,
-            quote_budget=None,
-            base_asset=None,
-            quote_asset=None,
-            target_tranche_id=target.id if target else None,
-        )
+        return self._build_binance_spot_intent(payload, symbol=symbol, for_update=for_update)
 
     def _build_binance_spot_intent(
         self, payload: TradingViewWebhookPayload, *, symbol: str, for_update: bool
@@ -519,20 +418,18 @@ class TradingService:
         try:
             if payload.side == Side.BUY:
                 open_count = self.tranche_repo.count_open(payload.symbol)
-                symbol_exposure = self.tranche_repo.get_symbol_exposure_tl(payload.symbol)
+                symbol_exposure = self.tranche_repo.get_symbol_exposure_usdt(payload.symbol)
                 self.risk.validate_buy(
                     BuyRiskInput(
                         symbol=payload.symbol,
                         signal_code=payload.signalCode,
                         side=payload.side,
                         buy_lots=order_intent.requested_lots,
-                        buy_quantity=(
-                            order_intent.requested_quantity if self._is_binance_spot else None
-                        ),
+                        buy_quantity=order_intent.requested_quantity,
                         buy_limit_price=order_intent.limit_price,
-                        quote_budget=order_intent.quote_budget if self._is_binance_spot else None,
+                        quote_budget=order_intent.quote_budget,
                         open_tranche_count=open_count,
-                        symbol_exposure_tl=symbol_exposure,
+                        symbol_exposure_usdt=symbol_exposure,
                         orders_today=orders_today,
                         realized_pnl_today=realized_pnl_today,
                     )
@@ -544,9 +441,7 @@ class TradingService:
                         signal_code=payload.signalCode,
                         side=payload.side,
                         sell_lots=order_intent.requested_lots,
-                        sell_quantity=(
-                            order_intent.requested_quantity if self._is_binance_spot else None
-                        ),
+                        sell_quantity=order_intent.requested_quantity,
                         open_tranche_exists=order_intent.target_tranche_id is not None,
                         orders_today=orders_today,
                         realized_pnl_today=realized_pnl_today,
@@ -554,9 +449,7 @@ class TradingService:
                 )
         except Exception as exc:
             return str(exc)
-        if self._is_binance_spot:
-            return self._run_binance_spot_guards(payload=payload, order_intent=order_intent)
-        return None
+        return self._run_binance_spot_guards(payload=payload, order_intent=order_intent)
 
     def _run_binance_spot_guards(
         self, *, payload: TradingViewWebhookPayload, order_intent: _OrderIntent
@@ -598,10 +491,6 @@ class TradingService:
                     f"free={free_quote}, required={required_quote}"
                 )
         return None
-
-    @property
-    def _is_binance_spot(self) -> bool:
-        return self.cfg.broker_name == BrokerName.BINANCE_SPOT
 
     def _get_binance_symbol_rules(self, symbol: str):
         get_rules = getattr(self.broker_client, "get_symbol_rules", None)

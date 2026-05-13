@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from decimal import Decimal
 from functools import cached_property
 
@@ -25,12 +24,11 @@ class MiddlewareSettings(BaseSettings):
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/rapot_middleware"
     trading_enabled: bool = False
     execution_mode: ExecutionMode = ExecutionMode.DRY_RUN
-    broker_name: BrokerName = BrokerName.MOCK
+    broker_name: BrokerName = BrokerName.BINANCE_SPOT
     webhook_auth_token: str | None = None
     require_webhook_auth: bool = True
     allow_admin_endpoints: bool = True
 
-    base_budget_tl: Decimal = Decimal("10000")
     buy_bps: int = 20
     sell_bps: int = 20
     max_open_tranches_per_symbol: int = 4
@@ -40,18 +38,13 @@ class MiddlewareSettings(BaseSettings):
     multiplier_c_bls: Decimal = Decimal("1.00")
     multiplier_c_ucz: Decimal = Decimal("0.50")
 
-    default_tick_size: Decimal = Decimal("0.01")
-    symbol_tick_overrides_json: str = "{}"
-
-    max_symbol_exposure_tl: Decimal | None = None
-    max_daily_loss_tl: Decimal | None = None
+    max_symbol_exposure_usdt: Decimal | None = None
+    max_daily_loss_usdt: Decimal | None = None
     max_orders_per_day: int | None = None
     allowed_symbols_csv: str | None = None
     max_signal_age_seconds: int | None = None
     max_signal_future_skew_seconds: int = 120
     require_realtime_signals: bool = False
-
-    mock_auto_fill: bool = True
 
     binance_live_enabled: bool = False
     binance_base_url: str = "https://testnet.binance.vision"
@@ -63,21 +56,6 @@ class MiddlewareSettings(BaseSettings):
     binance_quote_asset: str = "USDT"
     binance_dry_run_auto_fill: bool = True
     binance_check_balance: bool = True
-
-    osmanli_live_enabled: bool = False
-    osmanli_base_url: str | None = None
-    osmanli_token_url: str | None = None
-    osmanli_account_id: str | None = None
-    osmanli_client_id: str | None = None
-    osmanli_client_secret: str | None = None
-    osmanli_request_timeout_seconds: int = 10
-    osmanli_tv_webhook_url: str | None = None
-    osmanli_forward_enabled: bool = False
-    # Forward to Osmanli runs in a background task (see osmanli_forward_background),
-    # but we still cap the outbound HTTP wait so a slow upstream cannot tie up
-    # worker threads. Keep this strictly under TradingView's ~3s webhook timeout.
-    osmanli_forward_timeout_seconds: int = 2
-    osmanli_forward_background: bool = True
 
     @property
     def is_production(self) -> bool:
@@ -93,18 +71,6 @@ class MiddlewareSettings(BaseSettings):
         }
 
     @cached_property
-    def symbol_tick_overrides(self) -> dict[str, Decimal]:
-        try:
-            raw = json.loads(self.symbol_tick_overrides_json or "{}")
-        except json.JSONDecodeError as exc:
-            raise ValueError("MW_SYMBOL_TICK_OVERRIDES_JSON must be valid JSON") from exc
-        parsed: dict[str, Decimal] = {}
-        if isinstance(raw, dict):
-            for symbol, tick in raw.items():
-                parsed[str(symbol).upper()] = Decimal(str(tick))
-        return parsed
-
-    @cached_property
     def allowed_symbols(self) -> set[str]:
         if not self.allowed_symbols_csv:
             return set()
@@ -118,35 +84,6 @@ class MiddlewareSettings(BaseSettings):
 
         if self.require_webhook_auth and not (self.webhook_auth_token or "").strip():
             raise ValueError("MW_WEBHOOK_AUTH_TOKEN is required when MW_REQUIRE_WEBHOOK_AUTH=true")
-
-        if self.osmanli_forward_enabled and not (self.osmanli_tv_webhook_url or "").strip():
-            raise ValueError(
-                "MW_OSMANLI_TV_WEBHOOK_URL is required when MW_OSMANLI_FORWARD_ENABLED=true"
-            )
-
-        is_osmanli_live = (
-            self.broker_name == BrokerName.OSMANLI
-            and self.execution_mode == ExecutionMode.LIVE
-            and self.trading_enabled
-        )
-        if is_osmanli_live:
-            if not self.osmanli_live_enabled:
-                raise ValueError(
-                    "MW_OSMANLI_LIVE_ENABLED must be true before Osmanli LIVE execution is allowed"
-                )
-
-            required_fields = {
-                "MW_OSMANLI_BASE_URL": self.osmanli_base_url,
-                "MW_OSMANLI_TOKEN_URL": self.osmanli_token_url,
-                "MW_OSMANLI_ACCOUNT_ID": self.osmanli_account_id,
-                "MW_OSMANLI_CLIENT_ID": self.osmanli_client_id,
-                "MW_OSMANLI_CLIENT_SECRET": self.osmanli_client_secret,
-            }
-            missing = [key for key, value in required_fields.items() if not (value or "").strip()]
-            if missing:
-                raise ValueError(
-                    "Missing required Osmanli LIVE configuration: " + ", ".join(sorted(missing))
-                )
 
         is_binance_live = (
             self.broker_name == BrokerName.BINANCE_SPOT

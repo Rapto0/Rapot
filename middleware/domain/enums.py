@@ -14,8 +14,6 @@ class ExecutionMode(str, Enum):
 
 
 class BrokerName(str, Enum):
-    MOCK = "MOCK"
-    OSMANLI = "OSMANLI"
     BINANCE_SPOT = "BINANCE_SPOT"
 
 
@@ -37,5 +35,4 @@ class TrancheStatus(str, Enum):
 
 
 class MarketType(str, Enum):
-    EQUITY = "EQUITY"
     CRYPTO_SPOT = "CRYPTO_SPOT"

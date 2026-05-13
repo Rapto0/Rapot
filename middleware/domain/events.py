@@ -72,7 +72,7 @@ class TradingViewWebhookPayload(BaseModel):
     @model_validator(mode="after")
     def validate_cross_fields(self) -> TradingViewWebhookPayload:
         if self.symbol != self.ticker:
-            raise ValueError("symbol and ticker must match for BIST equity flow")
+            raise ValueError("symbol and ticker must match")
 
         expected_side = SIGNAL_SIDE_MAP[self.signalCode]
         if self.side != expected_side:
@@ -90,17 +90,6 @@ class ProcessSignalResponse(BaseModel):
     message: str
     risk_reason: str | None = None
     broker_order_id: str | None = None
-
-
-class OsmanliProxyResponse(BaseModel):
-    forward_enabled: bool
-    forwarded: bool
-    forward_queued: bool = False
-    forward_status_code: int | None = None
-    forward_error: str | None = None
-    message: str
-    extracted_signal: TradingViewWebhookPayload
-    process_result: ProcessSignalResponse
 
 
 class PositionItem(BaseModel):
@@ -177,14 +166,6 @@ class ReplaySignalRequest(BaseModel):
 
     payload: TradingViewWebhookPayload
     bypass_idempotency: bool = False
-
-
-class SimulateFillRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    order_id: int = Field(gt=0)
-    filled_lots: int | None = Field(default=None, ge=1)
-    fill_price: Decimal | None = Field(default=None, gt=0)
 
 
 class HealthResponse(BaseModel):

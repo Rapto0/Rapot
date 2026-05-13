@@ -23,7 +23,7 @@ def test_webhook_rejects_side_mismatch(client, sample_buy_payload):
 
 def test_webhook_rejects_symbol_ticker_mismatch(client, sample_buy_payload):
     payload = dict(sample_buy_payload)
-    payload["ticker"] = "GARAN"
+    payload["ticker"] = "ETHUSDT"
     response = client.post("/webhooks/tradingview", json=payload)
     assert response.status_code == 422
 
