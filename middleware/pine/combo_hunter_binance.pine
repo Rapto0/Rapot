@@ -1,25 +1,71 @@
-﻿// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// This Pine Script® code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
 // © Rapto_o
 
+// Combo + Hunter MTF — Developing HTF Hesaplama
+// Geliştirilmiş sürüm:
+// - HTF periyotları seçilebilir
+// - Her sinyalin TF kombinasyonu seçilebilir
+// - Hunter/Combo indikatörleri ağırlıklı skor üretir
+// - Ağırlık 0 ise ilgili indikatör pasif sayılır
+// - Sinyal tipleri ayrı ayrı açılıp kapatılabilir
+// - Seans filtresi, kaynak zaman dilimi kontrolü ve preset sistemi eklendi
+// - Tablo ve görselleştirme ayarları genişletildi
+
 //@version=6
-indicator("Combo + Hunter Binance", shorttitle="C+H Binance", overlay=true, max_bars_back=500)
+strategy("Combo + Hunter Binance Middleware RPT 2A", shorttitle="C+H Binance MW", overlay=true, max_bars_back=500, calc_on_every_tick=true, process_orders_on_close=false, pyramiding=1000, initial_capital=100000, commission_type=strategy.commission.percent, commission_value=0.0)
 
 // ══════════════════════════════════════════════════════════════
 // GENEL
 // ══════════════════════════════════════════════════════════════
 grpG = "⚙ Genel"
-confirmClose   = input.bool(false, "Sinyali yalnızca bar kapanışında doğrula", group=grpG)
-showTable      = input.bool(true,  "Bilgi tablosunu göster", group=grpG)
-MAX_BARS       = input.int(60,     "HTF geçmiş bar limiti", group=grpG, minval=30, maxval=200)
+confirmClose = input.bool(false, "Sinyali yalnızca bar kapanışında doğrula", group=grpG)
+MAX_BARS     = input.int(80, "HTF geçmiş bar limiti", group=grpG, minval=30, maxval=300)
+presetMode   = input.string("Manuel", "Preset", group=grpG, options=["Manuel", "Agresif Dip Avı", "Dengeli", "Katı Uzun Vade", "Sadece Hunter", "Sadece Combo", "BIST Algo", "Kripto 24/7"])
+
+// Kaynak zaman dilimi kontrolü
+requireDailyChart = input.bool(true, "Sadece 1D grafikte sinyal üret", group=grpG)
+isDailyChart      = timeframe.isdaily and timeframe.multiplier == 1
+timeframeOk       = not requireDailyChart or isDailyChart
 
 // ══════════════════════════════════════════════════════════════
-// WATCHLIST / DISPATCHER
+// MIDDLEWARE ALERT DISPATCHER
+// Middleware JSON payload script icinden alert() ile gonderilir.
+// TradingView alert condition: Any alert() function call
+// Webhook URL: https://YOUR_DOMAIN/webhooks/tradingview?token=MW_WEBHOOK_AUTH_TOKEN
+// Message field can be left empty; alert() sends the middleware JSON payload.
 // ══════════════════════════════════════════════════════════════
-grpA = "🔔 Watchlist Alarm"
-enableWatchlist = input.bool(true, "Watchlist dispatcher aktif", group=grpA)
-watchlistIntrabar = input.bool(true, "Watchlist alarmı gün içinde çalışsın", group=grpA, tooltip="Açık: realtime bar içinde koşul oluşunca alarm gönderir.\nKapalı: yalnızca kapanış iterasyonunda gönderir.")
-payloadMode = input.string("JSON", "Watchlist payload", options=["JSON", "Compact"], group=grpA)
-multiSignalMode = input.string("ALL", "Aynı barda çoklu sinyal", options=["ALL", "FIRST"], group=grpA, tooltip="ALL: aynı barda true olan tüm sinyaller ayrı ayrı gönderilir.\nFIRST: aynı barda yalnızca ilk sinyal gönderilir.")
+grpA = "Middleware Alert"
+enableStrategyOrders = input.bool(true, "Middleware alert aktif", group=grpA)
+realtimeOnly = input.bool(true, "Sadece canli/realtime barda alert uret", group=grpA, tooltip="Canli alarm icin acik kalmali. Gecmis test icin kapatilabilir.")
+watchlistIntrabar = input.bool(true, "Alert gun icinde olussun", group=grpA, tooltip="Acik: realtime bar icinde kosul olusunca alert() gonderir. Kapali: yalnizca kapanis iterasyonunda gonderir.")
+multiSignalMode = input.string("ALL", "Ayni barda coklu sinyal", options=["ALL", "FIRST"], group=grpA, tooltip="ALL: ayni barda true olan tum farkli sinyaller ayri ayri alert gonderir. FIRST: ayni barda yalnizca ilk sinyal alert gonderir.")
+
+// ══════════════════════════════════════════════════════════════
+// HTF PERİYOT SEÇİMİ
+// ══════════════════════════════════════════════════════════════
+grpTF = "🧭 HTF Periyot Seçimi"
+htf1Tf = input.timeframe("2W", "HTF1", group=grpTF, options=["W", "2W", "3W", "M", "2M", "3M", "6M"])
+htf2Tf = input.timeframe("3W", "HTF2", group=grpTF, options=["W", "2W", "3W", "M", "2M", "3M", "6M"])
+htf3Tf = input.timeframe("M",  "HTF3", group=grpTF, options=["W", "2W", "3W", "M", "2M", "3M", "6M"])
+htf4Tf = input.timeframe("2M", "HTF4", group=grpTF, options=["W", "2W", "3W", "M", "2M", "3M", "6M"])
+
+// ══════════════════════════════════════════════════════════════
+// ALERT SAAT FİLTRESİ — PRE_CLOSE_ACTIVE
+// Sinyal motorunu kapatmaz. Sadece middleware alert üretimini sınırlar.
+// Varsayılan: 17:45 - 17:57 arasında aktif olan sinyaller alert üretir.
+// ══════════════════════════════════════════════════════════════
+grpSess = "Alert Saat Filtresi"
+useOrderSessionFilterInput = input.bool(true, "Alert saat filtresi kullan", group=grpSess)
+orderStartHour   = input.int(17, "Başlangıç saat", group=grpSess, minval=0, maxval=23, inline="os1")
+orderStartMinute = input.int(45, "dk",             group=grpSess, minval=0, maxval=59, inline="os1")
+orderEndHour     = input.int(17, "Bitiş saat",     group=grpSess, minval=0, maxval=23, inline="os2")
+orderEndMinute   = input.int(57, "dk",             group=grpSess, minval=0, maxval=59, inline="os2")
+
+useOrderSessionFilter = presetMode == "BIST Algo" ? true : presetMode == "Kripto 24/7" ? false : useOrderSessionFilterInput
+nowTotalMin           = hour(timenow, syminfo.timezone) * 60 + minute(timenow, syminfo.timezone)
+orderStartTotalMin    = orderStartHour * 60 + orderStartMinute
+orderEndTotalMin      = orderEndHour * 60 + orderEndMinute
+orderSessionNowOk     = not useOrderSessionFilter or (orderStartTotalMin <= orderEndTotalMin ? (nowTotalMin >= orderStartTotalMin and nowTotalMin <= orderEndTotalMin) : (nowTotalMin >= orderStartTotalMin or nowTotalMin <= orderEndTotalMin))
 
 // ══════════════════════════════════════════════════════════════
 // HUNTER EŞİKLERİ
@@ -75,6 +121,29 @@ h_r2OB    = input.int(90,    "OB",           group=grpH, inline="h18")
 h_r2OS    = input.int(10,    "OS",           group=grpH, inline="h18")
 
 // ══════════════════════════════════════════════════════════════
+// HUNTER AĞIRLIKLARI
+// Ağırlık 0 = pasif / kapalı
+// ══════════════════════════════════════════════════════════════
+grpHW = "⚖ Hunter Ağırlıklar (0 = kapalı)"
+h_wRsi  = input.int(1, "RSI",       group=grpHW, minval=0, maxval=5, inline="hw1")
+h_wRsiF = input.int(1, "RSI Fast",  group=grpHW, minval=0, maxval=5, inline="hw1")
+h_wWpr  = input.int(1, "W%R",       group=grpHW, minval=0, maxval=5, inline="hw2")
+h_wCci  = input.int(1, "CCI",       group=grpHW, minval=0, maxval=5, inline="hw2")
+h_wCmo  = input.int(1, "CMO",       group=grpHW, minval=0, maxval=5, inline="hw3")
+h_wUlt  = input.int(1, "ULT",       group=grpHW, minval=0, maxval=5, inline="hw3")
+h_wBbp  = input.int(1, "BB %B",     group=grpHW, minval=0, maxval=5, inline="hw4")
+h_wRoc  = input.int(1, "ROC",       group=grpHW, minval=0, maxval=5, inline="hw4")
+h_wBop  = input.int(1, "BOP",       group=grpHW, minval=0, maxval=5, inline="hw5")
+h_wDeM  = input.int(1, "DeM",       group=grpHW, minval=0, maxval=5, inline="hw5")
+h_wPsy  = input.int(1, "PSY",       group=grpHW, minval=0, maxval=5, inline="hw6")
+h_wZ    = input.int(1, "Z-Score",   group=grpHW, minval=0, maxval=5, inline="hw6")
+h_wKpb  = input.int(1, "Kelt %B",   group=grpHW, minval=0, maxval=5, inline="hw7")
+h_wMacd = input.int(1, "MACD",      group=grpHW, minval=0, maxval=5, inline="hw7")
+h_wRsi2 = input.int(1, "RSI(2)",    group=grpHW, minval=0, maxval=5, inline="hw8")
+
+hMaxScore = h_wRsi + h_wRsiF + h_wWpr + h_wCci + h_wCmo + h_wUlt + h_wBbp + h_wRoc + h_wBop + h_wDeM + h_wPsy + h_wZ + h_wKpb + h_wMacd + h_wRsi2
+
+// ══════════════════════════════════════════════════════════════
 // COMBO EŞİKLERİ
 // ══════════════════════════════════════════════════════════════
 grpC = "🎯 Combo Eşikler"
@@ -89,6 +158,127 @@ c_wrOS   = input.float(-80,  "OS",        group=grpC, inline="c3")
 c_cciLen = input.int(20,     "CCI len",   group=grpC, inline="c4")
 c_cciOB  = input.float(200,  "OB",        group=grpC, inline="c4")
 c_cciOS  = input.float(-100, "OS",        group=grpC, inline="c4")
+
+// ══════════════════════════════════════════════════════════════
+// COMBO AĞIRLIKLARI
+// Ağırlık 0 = pasif / kapalı
+// ══════════════════════════════════════════════════════════════
+grpCW = "⚖ Combo Ağırlıklar (0 = kapalı)"
+c_wMacd = input.int(1, "MACD", group=grpCW, minval=0, maxval=5, inline="cw1")
+c_wRsi  = input.int(1, "RSI",  group=grpCW, minval=0, maxval=5, inline="cw1")
+c_wWr   = input.int(1, "W%R",  group=grpCW, minval=0, maxval=5, inline="cw2")
+c_wCci  = input.int(1, "CCI",  group=grpCW, minval=0, maxval=5, inline="cw2")
+
+cMaxScore = c_wMacd + c_wRsi + c_wWr + c_wCci
+
+// ══════════════════════════════════════════════════════════════
+// SİNYAL TİPİ AKTİF/PASİF
+// ══════════════════════════════════════════════════════════════
+grpUse = "✅ Al/Sat Sinyal Tipi Ayrımı"
+useHU = input.bool(true, "H.UCZ aktif", group=grpUse, inline="u1")
+useHB = input.bool(true, "H.BLS aktif", group=grpUse, inline="u1")
+useHP = input.bool(true, "H.PAH aktif", group=grpUse, inline="u1")
+useCU = input.bool(true, "C.UCZ aktif", group=grpUse, inline="u2")
+useCB = input.bool(true, "C.BLS aktif", group=grpUse, inline="u2")
+useCP = input.bool(true, "C.PAH aktif", group=grpUse, inline="u2")
+
+effUseHU = useHU and presetMode != "Sadece Combo"
+effUseHB = useHB and presetMode != "Sadece Combo"
+effUseHP = useHP and presetMode != "Sadece Combo"
+effUseCU = useCU and presetMode != "Sadece Hunter"
+effUseCB = useCB and presetMode != "Sadece Hunter"
+effUseCP = useCP and presetMode != "Sadece Hunter"
+
+// ══════════════════════════════════════════════════════════════
+// SİNYAL KOMBİNASYONLARI
+// Kaynak seçenekleri: 1D / HTF1 / HTF2 / HTF3 / HTF4 / Kapalı
+// Gereken koşul: seçili kaynaklardan kaç tanesinin eşiği geçmesi gerektiği
+// ══════════════════════════════════════════════════════════════
+grpSC = "🧩 Sinyal Kombinasyonları"
+
+hu_s1 = input.string("1D",   "H.UCZ K1", group=grpSC, options=["1D", "HTF1", "HTF2", "HTF3", "HTF4", "Kapalı"], inline="hu1")
+hu_t1 = input.int(5,         "Eşik",     group=grpSC, minval=1, maxval=100, inline="hu1")
+hu_s2 = input.string("HTF1", "K2",       group=grpSC, options=["1D", "HTF1", "HTF2", "HTF3", "HTF4", "Kapalı"], inline="hu2")
+hu_t2 = input.int(2,         "Eşik",     group=grpSC, minval=1, maxval=100, inline="hu2")
+hu_s3 = input.string("HTF3", "K3",       group=grpSC, options=["1D", "HTF1", "HTF2", "HTF3", "HTF4", "Kapalı"], inline="hu3")
+hu_t3 = input.int(5,         "Eşik",     group=grpSC, minval=1, maxval=100, inline="hu3")
+hu_req = input.int(3, "H.UCZ gereken koşul", group=grpSC, minval=1, maxval=3)
+
+hb_s1 = input.string("1D",   "H.BLS K1", group=grpSC, options=["1D", "HTF1", "HTF2", "HTF3", "HTF4", "Kapalı"], inline="hb1")
+hb_t1 = input.int(3,         "Eşik",     group=grpSC, minval=1, maxval=100, inline="hb1")
+hb_s2 = input.string("HTF2", "K2",       group=grpSC, options=["1D", "HTF1", "HTF2", "HTF3", "HTF4", "Kapalı"], inline="hb2")
+hb_t2 = input.int(6,         "Eşik",     group=grpSC, minval=1, maxval=100, inline="hb2")
+hb_s3 = input.string("HTF4", "K3",       group=grpSC, options=["1D", "HTF1", "HTF2", "HTF3", "HTF4", "Kapalı"], inline="hb3")
+hb_t3 = input.int(2,         "Eşik",     group=grpSC, minval=1, maxval=100, inline="hb3")
+hb_req = input.int(3, "H.BLS gereken koşul", group=grpSC, minval=1, maxval=3)
+
+hp_s1 = input.string("1D",     "H.PAH K1", group=grpSC, options=["1D", "HTF1", "HTF2", "HTF3", "HTF4", "Kapalı"], inline="hp1")
+hp_t1 = input.int(10,          "Eşik",     group=grpSC, minval=1, maxval=100, inline="hp1")
+hp_s2 = input.string("HTF1",   "K2",       group=grpSC, options=["1D", "HTF1", "HTF2", "HTF3", "HTF4", "Kapalı"], inline="hp2")
+hp_t2 = input.int(5,          "Eşik",     group=grpSC, minval=1, maxval=100, inline="hp2")
+hp_s3 = input.string("HTF2", "K3",       group=grpSC, options=["1D", "HTF1", "HTF2", "HTF3", "HTF4", "Kapalı"], inline="hp3")
+hp_t3 = input.int(2,          "Eşik",     group=grpSC, minval=1, maxval=100, inline="hp3")
+hp_req = input.int(3, "H.PAH gereken koşul", group=grpSC, minval=1, maxval=3)
+
+cu_s1 = input.string("1D",   "C.UCZ K1", group=grpSC, options=["1D", "HTF1", "HTF2", "HTF3", "HTF4", "Kapalı"], inline="cu1")
+cu_t1 = input.int(4,         "Eşik",     group=grpSC, minval=1, maxval=50, inline="cu1")
+cu_s2 = input.string("HTF1", "K2",       group=grpSC, options=["1D", "HTF1", "HTF2", "HTF3", "HTF4", "Kapalı"], inline="cu2")
+cu_t2 = input.int(3,         "Eşik",     group=grpSC, minval=1, maxval=50, inline="cu2")
+cu_s3 = input.string("HTF3", "K3",       group=grpSC, options=["1D", "HTF1", "HTF2", "HTF3", "HTF4", "Kapalı"], inline="cu3")
+cu_t3 = input.int(2,         "Eşik",     group=grpSC, minval=1, maxval=50, inline="cu3")
+cu_req = input.int(3, "C.UCZ gereken koşul", group=grpSC, minval=1, maxval=3)
+
+cb_s1 = input.string("1D",   "C.BLS K1", group=grpSC, options=["1D", "HTF1", "HTF2", "HTF3", "HTF4", "Kapalı"], inline="cb1")
+cb_t1 = input.int(4,         "Eşik",     group=grpSC, minval=1, maxval=50, inline="cb1")
+cb_s2 = input.string("HTF2", "K2",       group=grpSC, options=["1D", "HTF1", "HTF2", "HTF3", "HTF4", "Kapalı"], inline="cb2")
+cb_t2 = input.int(3,         "Eşik",     group=grpSC, minval=1, maxval=50, inline="cb2")
+cb_s3 = input.string("HTF4", "K3",       group=grpSC, options=["1D", "HTF1", "HTF2", "HTF3", "HTF4", "Kapalı"], inline="cb3")
+cb_t3 = input.int(1,         "Eşik",     group=grpSC, minval=1, maxval=50, inline="cb3")
+cb_req = input.int(3, "C.BLS gereken koşul", group=grpSC, minval=1, maxval=3)
+
+cp_s1 = input.string("1D",     "C.PAH K1", group=grpSC, options=["1D", "HTF1", "HTF2", "HTF3", "HTF4", "Kapalı"], inline="cp1")
+cp_t1 = input.int(3,           "Eşik",     group=grpSC, minval=1, maxval=50, inline="cp1")
+cp_s2 = input.string("HTF1",   "K2",       group=grpSC, options=["1D", "HTF1", "HTF2", "HTF3", "HTF4", "Kapalı"], inline="cp2")
+cp_t2 = input.int(3,           "Eşik",     group=grpSC, minval=1, maxval=50, inline="cp2")
+cp_s3 = input.string("HTF2", "K3",       group=grpSC, options=["1D", "HTF1", "HTF2", "HTF3", "HTF4", "Kapalı"], inline="cp3")
+cp_t3 = input.int(3,           "Eşik",     group=grpSC, minval=1, maxval=50, inline="cp3")
+cp_req = input.int(3, "C.PAH gereken koşul", group=grpSC, minval=1, maxval=3)
+
+// ══════════════════════════════════════════════════════════════
+// GÖRSELLEŞTİRME AYARLARI
+// ══════════════════════════════════════════════════════════════
+grpV = "🎨 Görselleştirme"
+showShapes     = input.bool(true, "Etiketleri göster", group=grpV, inline="v1")
+showBuyShapes  = input.bool(true, "Al etiketleri",     group=grpV, inline="v1")
+showSellShapes = input.bool(true, "Sat etiketleri",    group=grpV, inline="v1")
+showTable      = input.bool(true, "Bilgi tablosunu göster", group=grpV, inline="v2")
+tablePosOpt    = input.string("Sağ Üst", "Tablo konumu", group=grpV, options=["Sağ Üst", "Sağ Alt", "Sol Üst", "Sol Alt"])
+
+clrHU = input.color(color.new(#00C853, 0), "H.UCZ", group=grpV, inline="col1")
+clrHB = input.color(color.new(#CCFF00, 0), "H.BLS", group=grpV, inline="col1")
+clrCU = input.color(color.new(#00ACC1, 0), "C.UCZ", group=grpV, inline="col2")
+clrCB = input.color(color.new(#18FFFF, 0), "C.BLS", group=grpV, inline="col2")
+clrHP = input.color(color.new(#D50000, 0), "H.PAH", group=grpV, inline="col3")
+clrCP = input.color(color.new(#FF6D00, 0), "C.PAH", group=grpV, inline="col3")
+
+// ══════════════════════════════════════════════════════════════
+// PRESET YARDIMCI FONKSİYONU
+// Pine input değerlerini değiştirmez; sinyalde kullanılacak efektif eşiği üretir.
+// ══════════════════════════════════════════════════════════════
+f_effThr(int base, int maxScore) =>
+    int shifted = base
+    if presetMode == "Agresif Dip Avı"
+        shifted := base - 1
+    else if presetMode == "Katı Uzun Vade"
+        shifted := base + 1
+    else
+        shifted := base
+    maxScore <= 0 ? 999 : math.max(1, math.min(shifted, maxScore))
+
+f_tablePos(string p) =>
+    p == "Sağ Üst" ? position.top_right :
+     p == "Sağ Alt" ? position.bottom_right :
+     p == "Sol Üst" ? position.top_left : position.bottom_left
 
 // ══════════════════════════════════════════════════════════════
 // HTF DATA TYPE
@@ -129,7 +319,8 @@ method updateBar(HtfBar self, bool isNew, float bO, float bH, float bL, float bC
     self.dC := bC
 
 // ══════════════════════════════════════════════════════════════
-// YARDIMCI
+// YARDIMCI: dizi + developing erişimi
+// idx=0 → en eski, idx=size → developing bar
 // ══════════════════════════════════════════════════════════════
 method total(HtfBar self) => self.c.size() + 1
 
@@ -149,7 +340,7 @@ method getHlc3(HtfBar self, int idx) =>
     (self.getH(idx) + self.getL(idx) + self.getC(idx)) / 3.0
 
 // ══════════════════════════════════════════════════════════════
-// HESAP FONKSİYONLARI
+// İNDİKATÖR HESAPLAMA FONKSİYONLARI — dizi tabanlı
 // ══════════════════════════════════════════════════════════════
 calcRsi(HtfBar htf, int len) =>
     int n = htf.total()
@@ -346,15 +537,11 @@ calcAtr(HtfBar htf, int len) =>
     if n >= len + 1
         float s = 0.0
         for i = 1 to len
-            float tr_ = math.max(htf.getH(i) - htf.getL(i),
-                         math.max(math.abs(htf.getH(i) - htf.getC(i - 1)),
-                                  math.abs(htf.getL(i) - htf.getC(i - 1))))
+            float tr_ = math.max(htf.getH(i) - htf.getL(i), math.max(math.abs(htf.getH(i) - htf.getC(i - 1)), math.abs(htf.getL(i) - htf.getC(i - 1))))
             s += tr_
         result := s / len
         for i = len + 1 to n - 1
-            float tr_ = math.max(htf.getH(i) - htf.getL(i),
-                         math.max(math.abs(htf.getH(i) - htf.getC(i - 1)),
-                                  math.abs(htf.getL(i) - htf.getC(i - 1))))
+            float tr_ = math.max(htf.getH(i) - htf.getL(i), math.max(math.abs(htf.getH(i) - htf.getC(i - 1)), math.abs(htf.getL(i) - htf.getC(i - 1))))
             result := (result * (len - 1) + tr_) / len
     result
 
@@ -376,7 +563,7 @@ calcMacd(HtfBar htf, int fast, int slow) =>
     result
 
 // ══════════════════════════════════════════════════════════════
-// HUNTER / COMBO SAYICILAR
+// HUNTER SAYICI — ağırlıklı
 // ══════════════════════════════════════════════════════════════
 hunterDev(HtfBar htf) =>
     float _rsi  = calcRsi(htf, h_rsiLen)
@@ -398,53 +585,42 @@ hunterDev(HtfBar htf) =>
     int _ob = 0
     int _os = 0
 
-    if not na(_rsi)
-        _ob += _rsi  >= h_rsiOB ? 1 : 0
-        _os += _rsi  <= h_rsiOS ? 1 : 0
-    if not na(_rsiF)
-        _ob += _rsiF >= h_rfOB  ? 1 : 0
-        _os += _rsiF <= h_rfOS  ? 1 : 0
-    if not na(_wpr)
-        _ob += _wpr  >= h_wprOB ? 1 : 0
-        _os += _wpr  <= h_wprOS ? 1 : 0
-    if not na(_cci)
-        _ob += _cci  >= h_cciOB ? 1 : 0
-        _os += _cci  <= h_cciOS ? 1 : 0
-    if not na(_cmo)
-        _ob += _cmo  >= h_cmoOB ? 1 : 0
-        _os += _cmo  <= h_cmoOS ? 1 : 0
-    if not na(_ult)
-        _ob += _ult  >= h_ultOB ? 1 : 0
-        _os += _ult  <= h_ultOS ? 1 : 0
-    if not na(_bbp)
-        _ob += _bbp  >= h_bbpOB ? 1 : 0
-        _os += _bbp  <= h_bbpOS ? 1 : 0
-    if not na(_roc)
-        _ob += _roc  >= h_rocOB ? 1 : 0
-        _os += _roc  <= h_rocOS ? 1 : 0
-    _ob += _bop >= h_bopOB ? 1 : 0
-    _os += _bop <= h_bopOS ? 1 : 0
-    if not na(_deM)
-        _ob += _deM  >= h_deMOB ? 1 : 0
-        _os += _deM  <= h_deMOS ? 1 : 0
-    if not na(_psy)
-        _ob += _psy  >= h_psyOB ? 1 : 0
-        _os += _psy  <= h_psyOS ? 1 : 0
-    if not na(_z)
-        _ob += _z    >= h_zOB   ? 1 : 0
-        _os += _z    <= h_zOS   ? 1 : 0
-    if not na(_kpb)
-        _ob += _kpb  >= h_kpbOB ? 1 : 0
-        _os += _kpb  <= h_kpbOS ? 1 : 0
-    if not na(_ml)
-        _ob += _ml > 0 ? 1 : 0
-        _os += _ml < 0 ? 1 : 0
-    if not na(_r2)
-        _ob += _r2 >= h_r2OB ? 1 : 0
-        _os += _r2 <= h_r2OS ? 1 : 0
+    _ob += h_wRsi  > 0 and not na(_rsi)  and _rsi  >= h_rsiOB ? h_wRsi  : 0
+    _os += h_wRsi  > 0 and not na(_rsi)  and _rsi  <= h_rsiOS ? h_wRsi  : 0
+    _ob += h_wRsiF > 0 and not na(_rsiF) and _rsiF >= h_rfOB  ? h_wRsiF : 0
+    _os += h_wRsiF > 0 and not na(_rsiF) and _rsiF <= h_rfOS  ? h_wRsiF : 0
+    _ob += h_wWpr  > 0 and not na(_wpr)  and _wpr  >= h_wprOB ? h_wWpr  : 0
+    _os += h_wWpr  > 0 and not na(_wpr)  and _wpr  <= h_wprOS ? h_wWpr  : 0
+    _ob += h_wCci  > 0 and not na(_cci)  and _cci  >= h_cciOB ? h_wCci  : 0
+    _os += h_wCci  > 0 and not na(_cci)  and _cci  <= h_cciOS ? h_wCci  : 0
+    _ob += h_wCmo  > 0 and not na(_cmo)  and _cmo  >= h_cmoOB ? h_wCmo  : 0
+    _os += h_wCmo  > 0 and not na(_cmo)  and _cmo  <= h_cmoOS ? h_wCmo  : 0
+    _ob += h_wUlt  > 0 and not na(_ult)  and _ult  >= h_ultOB ? h_wUlt  : 0
+    _os += h_wUlt  > 0 and not na(_ult)  and _ult  <= h_ultOS ? h_wUlt  : 0
+    _ob += h_wBbp  > 0 and not na(_bbp)  and _bbp  >= h_bbpOB ? h_wBbp  : 0
+    _os += h_wBbp  > 0 and not na(_bbp)  and _bbp  <= h_bbpOS ? h_wBbp  : 0
+    _ob += h_wRoc  > 0 and not na(_roc)  and _roc  >= h_rocOB ? h_wRoc  : 0
+    _os += h_wRoc  > 0 and not na(_roc)  and _roc  <= h_rocOS ? h_wRoc  : 0
+    _ob += h_wBop  > 0 and not na(_bop)  and _bop  >= h_bopOB ? h_wBop  : 0
+    _os += h_wBop  > 0 and not na(_bop)  and _bop  <= h_bopOS ? h_wBop  : 0
+    _ob += h_wDeM  > 0 and not na(_deM)  and _deM  >= h_deMOB ? h_wDeM  : 0
+    _os += h_wDeM  > 0 and not na(_deM)  and _deM  <= h_deMOS ? h_wDeM  : 0
+    _ob += h_wPsy  > 0 and not na(_psy)  and _psy  >= h_psyOB ? h_wPsy  : 0
+    _os += h_wPsy  > 0 and not na(_psy)  and _psy  <= h_psyOS ? h_wPsy  : 0
+    _ob += h_wZ    > 0 and not na(_z)    and _z    >= h_zOB   ? h_wZ    : 0
+    _os += h_wZ    > 0 and not na(_z)    and _z    <= h_zOS   ? h_wZ    : 0
+    _ob += h_wKpb  > 0 and not na(_kpb)  and _kpb  >= h_kpbOB ? h_wKpb  : 0
+    _os += h_wKpb  > 0 and not na(_kpb)  and _kpb  <= h_kpbOS ? h_wKpb  : 0
+    _ob += h_wMacd > 0 and not na(_ml)   and _ml   >  0       ? h_wMacd : 0
+    _os += h_wMacd > 0 and not na(_ml)   and _ml   <  0       ? h_wMacd : 0
+    _ob += h_wRsi2 > 0 and not na(_r2)   and _r2   >= h_r2OB  ? h_wRsi2 : 0
+    _os += h_wRsi2 > 0 and not na(_r2)   and _r2   <= h_r2OS  ? h_wRsi2 : 0
 
     [_os, _ob]
 
+// ══════════════════════════════════════════════════════════════
+// COMBO SAYICI — ağırlıklı
+// ══════════════════════════════════════════════════════════════
 comboDev(HtfBar htf) =>
     float _ml  = calcMacd(htf, c_mFast, c_mSlow)
     float _rsi = calcRsi(htf, c_rsiLen)
@@ -454,177 +630,302 @@ comboDev(HtfBar htf) =>
     int _buy  = 0
     int _sell = 0
 
-    if not na(_ml)
-        _buy  += _ml < 0 ? 1 : 0
-        _sell += _ml > 0 ? 1 : 0
-    if not na(_rsi)
-        _buy  += _rsi < c_rsiOS ? 1 : 0
-        _sell += _rsi > c_rsiOB ? 1 : 0
-    if not na(_wr)
-        _buy  += _wr  < c_wrOS ? 1 : 0
-        _sell += _wr  > c_wrOB ? 1 : 0
-    if not na(_cci)
-        _buy  += _cci < c_cciOS ? 1 : 0
-        _sell += _cci > c_cciOB ? 1 : 0
+    _buy  += c_wMacd > 0 and not na(_ml)  and _ml  < 0       ? c_wMacd : 0
+    _sell += c_wMacd > 0 and not na(_ml)  and _ml  > 0       ? c_wMacd : 0
+    _buy  += c_wRsi  > 0 and not na(_rsi) and _rsi < c_rsiOS ? c_wRsi  : 0
+    _sell += c_wRsi  > 0 and not na(_rsi) and _rsi > c_rsiOB ? c_wRsi  : 0
+    _buy  += c_wWr   > 0 and not na(_wr)  and _wr  < c_wrOS  ? c_wWr   : 0
+    _sell += c_wWr   > 0 and not na(_wr)  and _wr  > c_wrOB  ? c_wWr   : 0
+    _buy  += c_wCci  > 0 and not na(_cci) and _cci < c_cciOS ? c_wCci  : 0
+    _sell += c_wCci  > 0 and not na(_cci) and _cci > c_cciOB ? c_wCci  : 0
 
     [_buy, _sell]
 
 // ══════════════════════════════════════════════════════════════
-// HTF BARLARI OLUŞTUR
+// HTF BARLARI OLUŞTUR — HTF1 / HTF2 / HTF3 / HTF4
 // ══════════════════════════════════════════════════════════════
-var HtfBar htf_w  = HtfBar.new(array.new<float>(), array.new<float>(), array.new<float>(), array.new<float>())
-var HtfBar htf_2w = HtfBar.new(array.new<float>(), array.new<float>(), array.new<float>(), array.new<float>())
-var HtfBar htf_3w = HtfBar.new(array.new<float>(), array.new<float>(), array.new<float>(), array.new<float>())
-var HtfBar htf_m  = HtfBar.new(array.new<float>(), array.new<float>(), array.new<float>(), array.new<float>())
+var HtfBar htf1 = HtfBar.new(array.new<float>(), array.new<float>(), array.new<float>(), array.new<float>())
+var HtfBar htf2 = HtfBar.new(array.new<float>(), array.new<float>(), array.new<float>(), array.new<float>())
+var HtfBar htf3 = HtfBar.new(array.new<float>(), array.new<float>(), array.new<float>(), array.new<float>())
+var HtfBar htf4 = HtfBar.new(array.new<float>(), array.new<float>(), array.new<float>(), array.new<float>())
 
-isNewW  = bool(ta.change(time("W")))
-isNew2W = bool(ta.change(time("2W")))
-isNew3W = bool(ta.change(time("3W")))
-isNewM  = bool(ta.change(time("M")))
+isNewHtf1 = bool(ta.change(time(htf1Tf)))
+isNewHtf2 = bool(ta.change(time(htf2Tf)))
+isNewHtf3 = bool(ta.change(time(htf3Tf)))
+isNewHtf4 = bool(ta.change(time(htf4Tf)))
 
-htf_w.updateBar(isNewW,   open, high, low, close)
-htf_2w.updateBar(isNew2W, open, high, low, close)
-htf_3w.updateBar(isNew3W, open, high, low, close)
-htf_m.updateBar(isNewM,   open, high, low, close)
+htf1.updateBar(isNewHtf1, open, high, low, close)
+htf2.updateBar(isNewHtf2, open, high, low, close)
+htf3.updateBar(isNewHtf3, open, high, low, close)
+htf4.updateBar(isNewHtf4, open, high, low, close)
 
 // ══════════════════════════════════════════════════════════════
-// 1D NATIVE
+// 1D HESAPLAMA — mevcut TF günlük kabul edilir
 // ══════════════════════════════════════════════════════════════
 h_rollsum(series float x, int n) =>
-    c = ta.cum(x)
+    float c = ta.cum(x)
     c - c[n]
 
 h_uoAvg(series float bp, series float tr, int len) =>
-    num = nz(h_rollsum(bp, len), 0.0)
-    den = nz(h_rollsum(tr, len), 0.0)
+    float num = nz(h_rollsum(bp, len), 0.0)
+    float den = nz(h_rollsum(tr, len), 0.0)
     den == 0.0 ? 0.0 : num / den
 
 hunterNative() =>
-    _rsi  = ta.rsi(close, h_rsiLen)
-    _rsiF = ta.rsi(close, h_rfLen)
-    _wpr  = ta.wpr(h_wprLen)
-    _cci  = ta.cci(hlc3, h_cciLen)
-    _cmo  = ta.cmo(close, h_cmoLen)
+    float _rsi  = ta.rsi(close, h_rsiLen)
+    float _rsiF = ta.rsi(close, h_rfLen)
+    float _wpr  = ta.wpr(h_wprLen)
+    float _cci  = ta.cci(hlc3, h_cciLen)
+    float _cmo  = ta.cmo(close, h_cmoLen)
 
-    _bp   = close - math.min(low, close[1])
-    _tr   = math.max(high, close[1]) - math.min(low, close[1])
-    _ult  = 100.0 * (4.0 * h_uoAvg(_bp, _tr, h_usShort) +
-                     2.0 * h_uoAvg(_bp, _tr, h_usMid)   +
-                            h_uoAvg(_bp, _tr, h_usLong)) / 7.0
+    float _bp   = close - math.min(low, close[1])
+    float _tr   = math.max(high, close[1]) - math.min(low, close[1])
+    float _ult  = 100.0 * (4.0 * h_uoAvg(_bp, _tr, h_usShort) + 2.0 * h_uoAvg(_bp, _tr, h_usMid) + h_uoAvg(_bp, _tr, h_usLong)) / 7.0
 
-    _bbStd = ta.stdev(close, h_bbLen)
-    _bbL   = ta.sma(close, h_bbLen) - h_bbMlt * _bbStd
-    _bbp   = (close - _bbL) / math.max(2.0 * h_bbMlt * _bbStd, 1e-10) * 100.0
+    float _bbStd = ta.stdev(close, h_bbLen)
+    float _bbL   = ta.sma(close, h_bbLen) - h_bbMlt * _bbStd
+    float _bbp   = (close - _bbL) / math.max(2.0 * h_bbMlt * _bbStd, 1e-10) * 100.0
 
-    _roc  = ta.roc(close, h_rocLen)
-    _bop  = high == low ? 0.0 : (close - open) / (high - low)
+    float _roc  = ta.roc(close, h_rocLen)
+    float _bop  = high == low ? 0.0 : (close - open) / (high - low)
 
-    _dU   = math.max(high - high[1], 0.0)
-    _dD   = math.max(low[1] - low,   0.0)
-    _dUS  = ta.sma(_dU, h_deMLen)
-    _dDS  = ta.sma(_dD, h_deMLen)
-    _deM  = 100.0 * (_dUS / math.max(_dUS + _dDS, 1e-10))
+    float _dU   = math.max(high - high[1], 0.0)
+    float _dD   = math.max(low[1] - low, 0.0)
+    float _dUS  = ta.sma(_dU, h_deMLen)
+    float _dDS  = ta.sma(_dD, h_deMLen)
+    float _deM  = 100.0 * (_dUS / math.max(_dUS + _dDS, 1e-10))
 
-    _psy  = 100.0 * ta.sma(close > close[1] ? 1.0 : 0.0, h_psyLen)
-    _z    = (close - ta.sma(close, h_zLen)) / math.max(ta.stdev(close, h_zLen), 1e-10)
+    float _psy  = 100.0 * ta.sma(close > close[1] ? 1.0 : 0.0, h_psyLen)
+    float _z    = (close - ta.sma(close, h_zLen)) / math.max(ta.stdev(close, h_zLen), 1e-10)
 
-    _keA  = ta.atr(h_keAtr)
-    _keL  = ta.ema(close, h_keLen) - h_keMlt * _keA
-    _kpb  = (close - _keL) / math.max(2.0 * h_keMlt * _keA, 1e-10) * 100.0
+    float _keA  = ta.atr(h_keAtr)
+    float _keL  = ta.ema(close, h_keLen) - h_keMlt * _keA
+    float _kpb  = (close - _keL) / math.max(2.0 * h_keMlt * _keA, 1e-10) * 100.0
 
-    _ml   = ta.ema(close, h_mFast) - ta.ema(close, h_mSlow)
-    _r2   = ta.rsi(close, h_r2Len)
+    float _ml   = ta.ema(close, h_mFast) - ta.ema(close, h_mSlow)
+    float _r2   = ta.rsi(close, h_r2Len)
 
-    _ob = ((_rsi >= h_rsiOB ? 1 : 0) + (_rsiF >= h_rfOB ? 1 : 0) +
-           (_wpr >= h_wprOB ? 1 : 0) + (_cci >= h_cciOB ? 1 : 0) +
-           (_cmo >= h_cmoOB ? 1 : 0) + (_ult >= h_ultOB ? 1 : 0) +
-           (_bbp >= h_bbpOB ? 1 : 0) + (_roc >= h_rocOB ? 1 : 0) +
-           (_bop >= h_bopOB ? 1 : 0) + (_deM >= h_deMOB ? 1 : 0) +
-           (_psy >= h_psyOB ? 1 : 0) + (_z   >= h_zOB   ? 1 : 0) +
-           (_kpb >= h_kpbOB ? 1 : 0) + (_ml  >  0       ? 1 : 0) +
-           (_r2  >= h_r2OB  ? 1 : 0))
+    int _ob = 0
+    int _os = 0
 
-    _os = ((_rsi <= h_rsiOS ? 1 : 0) + (_rsiF <= h_rfOS ? 1 : 0) +
-           (_wpr <= h_wprOS ? 1 : 0) + (_cci <= h_cciOS ? 1 : 0) +
-           (_cmo <= h_cmoOS ? 1 : 0) + (_ult <= h_ultOS ? 1 : 0) +
-           (_bbp <= h_bbpOS ? 1 : 0) + (_roc <= h_rocOS ? 1 : 0) +
-           (_bop <= h_bopOS ? 1 : 0) + (_deM <= h_deMOS ? 1 : 0) +
-           (_psy <= h_psyOS ? 1 : 0) + (_z   <= h_zOS   ? 1 : 0) +
-           (_kpb <= h_kpbOS ? 1 : 0) + (_ml  <  0       ? 1 : 0) +
-           (_r2  <= h_r2OS  ? 1 : 0))
+    _ob += h_wRsi  > 0 and not na(_rsi)  and _rsi  >= h_rsiOB ? h_wRsi  : 0
+    _os += h_wRsi  > 0 and not na(_rsi)  and _rsi  <= h_rsiOS ? h_wRsi  : 0
+    _ob += h_wRsiF > 0 and not na(_rsiF) and _rsiF >= h_rfOB  ? h_wRsiF : 0
+    _os += h_wRsiF > 0 and not na(_rsiF) and _rsiF <= h_rfOS  ? h_wRsiF : 0
+    _ob += h_wWpr  > 0 and not na(_wpr)  and _wpr  >= h_wprOB ? h_wWpr  : 0
+    _os += h_wWpr  > 0 and not na(_wpr)  and _wpr  <= h_wprOS ? h_wWpr  : 0
+    _ob += h_wCci  > 0 and not na(_cci)  and _cci  >= h_cciOB ? h_wCci  : 0
+    _os += h_wCci  > 0 and not na(_cci)  and _cci  <= h_cciOS ? h_wCci  : 0
+    _ob += h_wCmo  > 0 and not na(_cmo)  and _cmo  >= h_cmoOB ? h_wCmo  : 0
+    _os += h_wCmo  > 0 and not na(_cmo)  and _cmo  <= h_cmoOS ? h_wCmo  : 0
+    _ob += h_wUlt  > 0 and not na(_ult)  and _ult  >= h_ultOB ? h_wUlt  : 0
+    _os += h_wUlt  > 0 and not na(_ult)  and _ult  <= h_ultOS ? h_wUlt  : 0
+    _ob += h_wBbp  > 0 and not na(_bbp)  and _bbp  >= h_bbpOB ? h_wBbp  : 0
+    _os += h_wBbp  > 0 and not na(_bbp)  and _bbp  <= h_bbpOS ? h_wBbp  : 0
+    _ob += h_wRoc  > 0 and not na(_roc)  and _roc  >= h_rocOB ? h_wRoc  : 0
+    _os += h_wRoc  > 0 and not na(_roc)  and _roc  <= h_rocOS ? h_wRoc  : 0
+    _ob += h_wBop  > 0 and not na(_bop)  and _bop  >= h_bopOB ? h_wBop  : 0
+    _os += h_wBop  > 0 and not na(_bop)  and _bop  <= h_bopOS ? h_wBop  : 0
+    _ob += h_wDeM  > 0 and not na(_deM)  and _deM  >= h_deMOB ? h_wDeM  : 0
+    _os += h_wDeM  > 0 and not na(_deM)  and _deM  <= h_deMOS ? h_wDeM  : 0
+    _ob += h_wPsy  > 0 and not na(_psy)  and _psy  >= h_psyOB ? h_wPsy  : 0
+    _os += h_wPsy  > 0 and not na(_psy)  and _psy  <= h_psyOS ? h_wPsy  : 0
+    _ob += h_wZ    > 0 and not na(_z)    and _z    >= h_zOB   ? h_wZ    : 0
+    _os += h_wZ    > 0 and not na(_z)    and _z    <= h_zOS   ? h_wZ    : 0
+    _ob += h_wKpb  > 0 and not na(_kpb)  and _kpb  >= h_kpbOB ? h_wKpb  : 0
+    _os += h_wKpb  > 0 and not na(_kpb)  and _kpb  <= h_kpbOS ? h_wKpb  : 0
+    _ob += h_wMacd > 0 and not na(_ml)   and _ml   >  0       ? h_wMacd : 0
+    _os += h_wMacd > 0 and not na(_ml)   and _ml   <  0       ? h_wMacd : 0
+    _ob += h_wRsi2 > 0 and not na(_r2)   and _r2   >= h_r2OB  ? h_wRsi2 : 0
+    _os += h_wRsi2 > 0 and not na(_r2)   and _r2   <= h_r2OS  ? h_wRsi2 : 0
 
     [_os, _ob]
 
 comboNative() =>
-    _ml  = ta.ema(close, c_mFast) - ta.ema(close, c_mSlow)
-    _rsi = ta.rsi(close, c_rsiLen)
-    _wr  = ta.wpr(c_wrLen)
-    _cci = ta.cci(hlc3, c_cciLen)
+    float _ml  = ta.ema(close, c_mFast) - ta.ema(close, c_mSlow)
+    float _rsi = ta.rsi(close, c_rsiLen)
+    float _wr  = ta.wpr(c_wrLen)
+    float _cci = ta.cci(hlc3, c_cciLen)
 
-    _buy  = ((_ml < 0 ? 1 : 0) + (_rsi < c_rsiOS ? 1 : 0) +
-             (_wr < c_wrOS ? 1 : 0) + (_cci < c_cciOS ? 1 : 0))
-    _sell = ((_ml > 0 ? 1 : 0) + (_rsi > c_rsiOB ? 1 : 0) +
-             (_wr > c_wrOB ? 1 : 0) + (_cci > c_cciOB ? 1 : 0))
+    int _buy  = 0
+    int _sell = 0
+
+    _buy  += c_wMacd > 0 and not na(_ml)  and _ml  < 0       ? c_wMacd : 0
+    _sell += c_wMacd > 0 and not na(_ml)  and _ml  > 0       ? c_wMacd : 0
+    _buy  += c_wRsi  > 0 and not na(_rsi) and _rsi < c_rsiOS ? c_wRsi  : 0
+    _sell += c_wRsi  > 0 and not na(_rsi) and _rsi > c_rsiOB ? c_wRsi  : 0
+    _buy  += c_wWr   > 0 and not na(_wr)  and _wr  < c_wrOS  ? c_wWr   : 0
+    _sell += c_wWr   > 0 and not na(_wr)  and _wr  > c_wrOB  ? c_wWr   : 0
+    _buy  += c_wCci  > 0 and not na(_cci) and _cci < c_cciOS ? c_wCci  : 0
+    _sell += c_wCci  > 0 and not na(_cci) and _cci > c_cciOB ? c_wCci  : 0
 
     [_buy, _sell]
 
+// 1D sonuçlar
 [h_os_1d, h_ob_1d] = hunterNative()
 [c_b_1d,  c_s_1d]  = comboNative()
 
-[h_os_1w, h_ob_1w] = hunterDev(htf_w)
-[h_os_2w, h_ob_2w] = hunterDev(htf_2w)
-[h_os_3w, h_ob_3w] = hunterDev(htf_3w)
-[h_os_1m, h_ob_1m] = hunterDev(htf_m)
+// HTF sonuçlar
+[h_os_htf1, h_ob_htf1] = hunterDev(htf1)
+[h_os_htf2, h_ob_htf2] = hunterDev(htf2)
+[h_os_htf3, h_ob_htf3] = hunterDev(htf3)
+[h_os_htf4, h_ob_htf4] = hunterDev(htf4)
 
-[c_b_1w, c_s_1w] = comboDev(htf_w)
-[c_b_2w, c_s_2w] = comboDev(htf_2w)
-[c_b_3w, c_s_3w] = comboDev(htf_3w)
-[c_b_1m, c_s_1m] = comboDev(htf_m)
-
-// ══════════════════════════════════════════════════════════════
-// SİNYALLER
-// ══════════════════════════════════════════════════════════════
-canSignal = confirmClose ? barstate.isconfirmed : true
-
-h_ucuz   = canSignal and h_os_1d >= 7  and h_os_1w >= 7  and h_os_3w >= 5
-h_beles  = canSignal and h_os_1d >= 7  and h_os_2w >= 7  and h_os_1m >= 5
-h_pahali = canSignal and h_ob_1d >= 10 and h_ob_1w >= 10
-
-c_ucuz   = canSignal and c_b_1d >= 4 and c_b_1w >= 4 and c_b_3w >= 3
-c_beles  = canSignal and c_b_1d >= 4 and c_b_2w >= 3 and c_b_1m >= 3
-c_pahali = canSignal and c_s_1d >= 3 and c_s_1w >= 3
+[c_b_htf1, c_s_htf1] = comboDev(htf1)
+[c_b_htf2, c_s_htf2] = comboDev(htf2)
+[c_b_htf3, c_s_htf3] = comboDev(htf3)
+[c_b_htf4, c_s_htf4] = comboDev(htf4)
 
 // ══════════════════════════════════════════════════════════════
-// RENKLER
+// SİNYAL MOTORU YARDIMCILARI
 // ══════════════════════════════════════════════════════════════
-clrHU = color.new(#00C853, 0)
-clrHB = color.new(#CCFF00, 0)
-clrCU = color.new(#00ACC1, 0)
-clrCB = color.new(#18FFFF, 0)
-clrHP = color.new(#D50000, 0)
-clrCP = color.new(#FF6D00, 0)
+f_srcOn(string src) =>
+    src != "Kapalı"
+
+f_hOS(string src) =>
+    int r = na
+    if src == "1D"
+        r := h_os_1d
+    else if src == "HTF1"
+        r := h_os_htf1
+    else if src == "HTF2"
+        r := h_os_htf2
+    else if src == "HTF3"
+        r := h_os_htf3
+    else if src == "HTF4"
+        r := h_os_htf4
+    r
+
+f_hOB(string src) =>
+    int r = na
+    if src == "1D"
+        r := h_ob_1d
+    else if src == "HTF1"
+        r := h_ob_htf1
+    else if src == "HTF2"
+        r := h_ob_htf2
+    else if src == "HTF3"
+        r := h_ob_htf3
+    else if src == "HTF4"
+        r := h_ob_htf4
+    r
+
+f_cB(string src) =>
+    int r = na
+    if src == "1D"
+        r := c_b_1d
+    else if src == "HTF1"
+        r := c_b_htf1
+    else if src == "HTF2"
+        r := c_b_htf2
+    else if src == "HTF3"
+        r := c_b_htf3
+    else if src == "HTF4"
+        r := c_b_htf4
+    r
+
+f_cS(string src) =>
+    int r = na
+    if src == "1D"
+        r := c_s_1d
+    else if src == "HTF1"
+        r := c_s_htf1
+    else if src == "HTF2"
+        r := c_s_htf2
+    else if src == "HTF3"
+        r := c_s_htf3
+    else if src == "HTF4"
+        r := c_s_htf4
+    r
+
+f_pass(string src, int score, int thr) =>
+    f_srcOn(src) and not na(score) and score >= thr
+
+f_signal3(string s1, int sc1, int th1, string s2, int sc2, int th2, string s3, int sc3, int th3, int req) =>
+    int active = (f_srcOn(s1) ? 1 : 0) + (f_srcOn(s2) ? 1 : 0) + (f_srcOn(s3) ? 1 : 0)
+    int passed = (f_pass(s1, sc1, th1) ? 1 : 0) + (f_pass(s2, sc2, th2) ? 1 : 0) + (f_pass(s3, sc3, th3) ? 1 : 0)
+    active > 0 and req <= active and passed >= req
+
+f_scoreText(string src, int sc, int thr) =>
+    string scoreTxt = na(sc) ? "na" : str.tostring(sc)
+    src == "Kapalı" ? "Kapalı" : src + ":" + scoreTxt + "/" + str.tostring(thr)
+
+f_condBg(string src, int sc, int thr, color okColor, color failColor, color offColor) =>
+    src == "Kapalı" ? offColor : f_pass(src, sc, thr) ? okColor : failColor
+
+// Efektif eşikler — preset ve ağırlık üst limiti dikkate alınır
+hu_t1e = f_effThr(hu_t1, hMaxScore)
+hu_t2e = f_effThr(hu_t2, hMaxScore)
+hu_t3e = f_effThr(hu_t3, hMaxScore)
+hb_t1e = f_effThr(hb_t1, hMaxScore)
+hb_t2e = f_effThr(hb_t2, hMaxScore)
+hb_t3e = f_effThr(hb_t3, hMaxScore)
+hp_t1e = f_effThr(hp_t1, hMaxScore)
+hp_t2e = f_effThr(hp_t2, hMaxScore)
+hp_t3e = f_effThr(hp_t3, hMaxScore)
+
+cu_t1e = f_effThr(cu_t1, cMaxScore)
+cu_t2e = f_effThr(cu_t2, cMaxScore)
+cu_t3e = f_effThr(cu_t3, cMaxScore)
+cb_t1e = f_effThr(cb_t1, cMaxScore)
+cb_t2e = f_effThr(cb_t2, cMaxScore)
+cb_t3e = f_effThr(cb_t3, cMaxScore)
+cp_t1e = f_effThr(cp_t1, cMaxScore)
+cp_t2e = f_effThr(cp_t2, cMaxScore)
+cp_t3e = f_effThr(cp_t3, cMaxScore)
+
+// Seçilen kaynak skorları
+hu_sc1 = f_hOS(hu_s1)
+hu_sc2 = f_hOS(hu_s2)
+hu_sc3 = f_hOS(hu_s3)
+hb_sc1 = f_hOS(hb_s1)
+hb_sc2 = f_hOS(hb_s2)
+hb_sc3 = f_hOS(hb_s3)
+hp_sc1 = f_hOB(hp_s1)
+hp_sc2 = f_hOB(hp_s2)
+hp_sc3 = f_hOB(hp_s3)
+
+cu_sc1 = f_cB(cu_s1)
+cu_sc2 = f_cB(cu_s2)
+cu_sc3 = f_cB(cu_s3)
+cb_sc1 = f_cB(cb_s1)
+cb_sc2 = f_cB(cb_s2)
+cb_sc3 = f_cB(cb_s3)
+cp_sc1 = f_cS(cp_s1)
+cp_sc2 = f_cS(cp_s2)
+cp_sc3 = f_cS(cp_s3)
+
+canSignal = timeframeOk and (confirmClose ? barstate.isconfirmed : true)
+
+h_ucuz   = canSignal and effUseHU and f_signal3(hu_s1, hu_sc1, hu_t1e, hu_s2, hu_sc2, hu_t2e, hu_s3, hu_sc3, hu_t3e, hu_req)
+h_beles  = canSignal and effUseHB and f_signal3(hb_s1, hb_sc1, hb_t1e, hb_s2, hb_sc2, hb_t2e, hb_s3, hb_sc3, hb_t3e, hb_req)
+h_pahali = canSignal and effUseHP and f_signal3(hp_s1, hp_sc1, hp_t1e, hp_s2, hp_sc2, hp_t2e, hp_s3, hp_sc3, hp_t3e, hp_req)
+
+c_ucuz   = canSignal and effUseCU and f_signal3(cu_s1, cu_sc1, cu_t1e, cu_s2, cu_sc2, cu_t2e, cu_s3, cu_sc3, cu_t3e, cu_req)
+c_beles  = canSignal and effUseCB and f_signal3(cb_s1, cb_sc1, cb_t1e, cb_s2, cb_sc2, cb_t2e, cb_s3, cb_sc3, cb_t3e, cb_req)
+c_pahali = canSignal and effUseCP and f_signal3(cp_s1, cp_sc1, cp_t1e, cp_s2, cp_sc2, cp_t2e, cp_s3, cp_sc3, cp_t3e, cp_req)
 
 // ══════════════════════════════════════════════════════════════
 // GÖRSELLEŞTİRME
 // ══════════════════════════════════════════════════════════════
-plotshape(h_ucuz,   title="Hunter Ucuz",   text="H.UCZ", style=shape.triangleup,   location=location.belowbar, color=clrHU, textcolor=clrHU, size=size.small)
-plotshape(h_beles,  title="Hunter Beleş",  text="H.BLS", style=shape.triangleup,   location=location.belowbar, color=clrHB, textcolor=clrHB, size=size.normal)
-plotshape(c_ucuz,   title="Combo Ucuz",    text="C.UCZ", style=shape.triangleup,   location=location.belowbar, color=clrCU, textcolor=clrCU, size=size.small)
-plotshape(c_beles,  title="Combo Beleş",   text="C.BLS", style=shape.triangleup,   location=location.belowbar, color=clrCB, textcolor=clrCB, size=size.normal)
-plotshape(h_pahali, title="Hunter Pahalı", text="H.PAH", style=shape.triangledown, location=location.abovebar, color=clrHP, textcolor=clrHP, size=size.normal)
-plotshape(c_pahali, title="Combo Pahalı",  text="C.PAH", style=shape.triangledown, location=location.abovebar, color=clrCP, textcolor=clrCP, size=size.small)
+plotshape(showShapes and showBuyShapes  and h_ucuz,   title="Hunter Ucuz",   text="H.UCZ", style=shape.triangleup,   location=location.belowbar, color=clrHU, textcolor=clrHU, size=size.small)
+plotshape(showShapes and showBuyShapes  and h_beles,  title="Hunter Beleş",  text="H.BLS", style=shape.triangleup,   location=location.belowbar, color=clrHB, textcolor=clrHB, size=size.normal)
+plotshape(showShapes and showBuyShapes  and c_ucuz,   title="Combo Ucuz",    text="C.UCZ", style=shape.triangleup,   location=location.belowbar, color=clrCU, textcolor=clrCU, size=size.small)
+plotshape(showShapes and showBuyShapes  and c_beles,  title="Combo Beleş",   text="C.BLS", style=shape.triangleup,   location=location.belowbar, color=clrCB, textcolor=clrCB, size=size.normal)
+plotshape(showShapes and showSellShapes and h_pahali, title="Hunter Pahalı", text="H.PAH", style=shape.triangledown, location=location.abovebar, color=clrHP, textcolor=clrHP, size=size.normal)
+plotshape(showShapes and showSellShapes and c_pahali, title="Combo Pahalı",  text="C.PAH", style=shape.triangledown, location=location.abovebar, color=clrCP, textcolor=clrCP, size=size.small)
 
 // ══════════════════════════════════════════════════════════════
-// TABLO
+// BİLGİ TABLOSU
 // ══════════════════════════════════════════════════════════════
-var table tbl = table.new(position.top_right, 5, 7, border_width=1)
+var table tbl = table.new(f_tablePos(tablePosOpt), 5, 8, border_width=1)
 
 if barstate.islast and showTable
-    bk   = color.new(#111111, 0)
-    wt   = color.white
-    cOK  = color.new(color.green, 65)
-    cFAL = color.new(color.red,   75)
-    cNA  = color.new(color.gray,  80)
+    color bk   = color.new(#111111, 0)
+    color wt   = color.white
+    color cOK  = color.new(color.green, 65)
+    color cFAL = color.new(color.red, 75)
+    color cNA  = color.new(color.gray, 80)
 
     table.cell(tbl, 0, 0, "Sinyal",  bgcolor=bk, text_color=wt, text_size=size.small)
     table.cell(tbl, 1, 0, "Koşul 1", bgcolor=bk, text_color=wt, text_size=size.small)
@@ -632,75 +933,86 @@ if barstate.islast and showTable
     table.cell(tbl, 3, 0, "Koşul 3", bgcolor=bk, text_color=wt, text_size=size.small)
     table.cell(tbl, 4, 0, "Aktif",   bgcolor=bk, text_color=wt, text_size=size.small)
 
-    table.cell(tbl, 0, 1, "H.UCUZ",  bgcolor=h_ucuz ? color.new(clrHU, 50) : bk, text_color=wt, text_size=size.small)
-    table.cell(tbl, 1, 1, "1G:" + str.tostring(h_os_1d) + "/7", bgcolor=h_os_1d >= 7 ? cOK : cFAL, text_color=wt, text_size=size.small)
-    table.cell(tbl, 2, 1, "1H:" + str.tostring(h_os_1w) + "/7", bgcolor=h_os_1w >= 7 ? cOK : cFAL, text_color=wt, text_size=size.small)
-    table.cell(tbl, 3, 1, "3H:" + str.tostring(h_os_3w) + "/5", bgcolor=h_os_3w >= 5 ? cOK : cFAL, text_color=wt, text_size=size.small)
+    table.cell(tbl, 0, 1, "H.UCUZ", bgcolor=h_ucuz ? color.new(clrHU, 50) : bk, text_color=wt, text_size=size.small)
+    table.cell(tbl, 1, 1, f_scoreText(hu_s1, hu_sc1, hu_t1e), bgcolor=f_condBg(hu_s1, hu_sc1, hu_t1e, cOK, cFAL, cNA), text_color=wt, text_size=size.small)
+    table.cell(tbl, 2, 1, f_scoreText(hu_s2, hu_sc2, hu_t2e), bgcolor=f_condBg(hu_s2, hu_sc2, hu_t2e, cOK, cFAL, cNA), text_color=wt, text_size=size.small)
+    table.cell(tbl, 3, 1, f_scoreText(hu_s3, hu_sc3, hu_t3e), bgcolor=f_condBg(hu_s3, hu_sc3, hu_t3e, cOK, cFAL, cNA), text_color=wt, text_size=size.small)
     table.cell(tbl, 4, 1, h_ucuz ? "✓" : "–", bgcolor=h_ucuz ? color.new(clrHU, 50) : bk, text_color=wt, text_size=size.small)
 
     table.cell(tbl, 0, 2, "H.BELEŞ", bgcolor=h_beles ? color.new(clrHB, 50) : bk, text_color=wt, text_size=size.small)
-    table.cell(tbl, 1, 2, "1G:" + str.tostring(h_os_1d) + "/7", bgcolor=h_os_1d >= 7 ? cOK : cFAL, text_color=wt, text_size=size.small)
-    table.cell(tbl, 2, 2, "2H:" + str.tostring(h_os_2w) + "/7", bgcolor=h_os_2w >= 7 ? cOK : cFAL, text_color=wt, text_size=size.small)
-    table.cell(tbl, 3, 2, "1A:" + str.tostring(h_os_1m) + "/5", bgcolor=h_os_1m >= 5 ? cOK : cFAL, text_color=wt, text_size=size.small)
+    table.cell(tbl, 1, 2, f_scoreText(hb_s1, hb_sc1, hb_t1e), bgcolor=f_condBg(hb_s1, hb_sc1, hb_t1e, cOK, cFAL, cNA), text_color=wt, text_size=size.small)
+    table.cell(tbl, 2, 2, f_scoreText(hb_s2, hb_sc2, hb_t2e), bgcolor=f_condBg(hb_s2, hb_sc2, hb_t2e, cOK, cFAL, cNA), text_color=wt, text_size=size.small)
+    table.cell(tbl, 3, 2, f_scoreText(hb_s3, hb_sc3, hb_t3e), bgcolor=f_condBg(hb_s3, hb_sc3, hb_t3e, cOK, cFAL, cNA), text_color=wt, text_size=size.small)
     table.cell(tbl, 4, 2, h_beles ? "✓" : "–", bgcolor=h_beles ? color.new(clrHB, 50) : bk, text_color=wt, text_size=size.small)
 
     table.cell(tbl, 0, 3, "H.PAHALI", bgcolor=h_pahali ? color.new(clrHP, 50) : bk, text_color=wt, text_size=size.small)
-    table.cell(tbl, 1, 3, "1G:" + str.tostring(h_ob_1d) + "/10", bgcolor=h_ob_1d >= 10 ? color.new(color.red, 65) : cFAL, text_color=wt, text_size=size.small)
-    table.cell(tbl, 2, 3, "1H:" + str.tostring(h_ob_1w) + "/10", bgcolor=h_ob_1w >= 10 ? color.new(color.red, 65) : cFAL, text_color=wt, text_size=size.small)
-    table.cell(tbl, 3, 3, "—", bgcolor=cNA, text_color=wt, text_size=size.small)
+    table.cell(tbl, 1, 3, f_scoreText(hp_s1, hp_sc1, hp_t1e), bgcolor=f_condBg(hp_s1, hp_sc1, hp_t1e, color.new(color.red, 65), cFAL, cNA), text_color=wt, text_size=size.small)
+    table.cell(tbl, 2, 3, f_scoreText(hp_s2, hp_sc2, hp_t2e), bgcolor=f_condBg(hp_s2, hp_sc2, hp_t2e, color.new(color.red, 65), cFAL, cNA), text_color=wt, text_size=size.small)
+    table.cell(tbl, 3, 3, f_scoreText(hp_s3, hp_sc3, hp_t3e), bgcolor=f_condBg(hp_s3, hp_sc3, hp_t3e, color.new(color.red, 65), cFAL, cNA), text_color=wt, text_size=size.small)
     table.cell(tbl, 4, 3, h_pahali ? "✓" : "–", bgcolor=h_pahali ? color.new(clrHP, 50) : bk, text_color=wt, text_size=size.small)
 
-    table.cell(tbl, 0, 4, "C.UCUZ",  bgcolor=c_ucuz ? color.new(clrCU, 50) : bk, text_color=wt, text_size=size.small)
-    table.cell(tbl, 1, 4, "1G:" + str.tostring(c_b_1d) + "/4", bgcolor=c_b_1d >= 4 ? cOK : cFAL, text_color=wt, text_size=size.small)
-    table.cell(tbl, 2, 4, "1H:" + str.tostring(c_b_1w) + "/4", bgcolor=c_b_1w >= 4 ? cOK : cFAL, text_color=wt, text_size=size.small)
-    table.cell(tbl, 3, 4, "3H:" + str.tostring(c_b_3w) + "/3", bgcolor=c_b_3w >= 3 ? cOK : cFAL, text_color=wt, text_size=size.small)
+    table.cell(tbl, 0, 4, "C.UCUZ", bgcolor=c_ucuz ? color.new(clrCU, 50) : bk, text_color=wt, text_size=size.small)
+    table.cell(tbl, 1, 4, f_scoreText(cu_s1, cu_sc1, cu_t1e), bgcolor=f_condBg(cu_s1, cu_sc1, cu_t1e, cOK, cFAL, cNA), text_color=wt, text_size=size.small)
+    table.cell(tbl, 2, 4, f_scoreText(cu_s2, cu_sc2, cu_t2e), bgcolor=f_condBg(cu_s2, cu_sc2, cu_t2e, cOK, cFAL, cNA), text_color=wt, text_size=size.small)
+    table.cell(tbl, 3, 4, f_scoreText(cu_s3, cu_sc3, cu_t3e), bgcolor=f_condBg(cu_s3, cu_sc3, cu_t3e, cOK, cFAL, cNA), text_color=wt, text_size=size.small)
     table.cell(tbl, 4, 4, c_ucuz ? "✓" : "–", bgcolor=c_ucuz ? color.new(clrCU, 50) : bk, text_color=wt, text_size=size.small)
 
     table.cell(tbl, 0, 5, "C.BELEŞ", bgcolor=c_beles ? color.new(clrCB, 50) : bk, text_color=wt, text_size=size.small)
-    table.cell(tbl, 1, 5, "1G:" + str.tostring(c_b_1d) + "/4", bgcolor=c_b_1d >= 4 ? cOK : cFAL, text_color=wt, text_size=size.small)
-    table.cell(tbl, 2, 5, "2H:" + str.tostring(c_b_2w) + "/3", bgcolor=c_b_2w >= 3 ? cOK : cFAL, text_color=wt, text_size=size.small)
-    table.cell(tbl, 3, 5, "1A:" + str.tostring(c_b_1m) + "/3", bgcolor=c_b_1m >= 3 ? cOK : cFAL, text_color=wt, text_size=size.small)
+    table.cell(tbl, 1, 5, f_scoreText(cb_s1, cb_sc1, cb_t1e), bgcolor=f_condBg(cb_s1, cb_sc1, cb_t1e, cOK, cFAL, cNA), text_color=wt, text_size=size.small)
+    table.cell(tbl, 2, 5, f_scoreText(cb_s2, cb_sc2, cb_t2e), bgcolor=f_condBg(cb_s2, cb_sc2, cb_t2e, cOK, cFAL, cNA), text_color=wt, text_size=size.small)
+    table.cell(tbl, 3, 5, f_scoreText(cb_s3, cb_sc3, cb_t3e), bgcolor=f_condBg(cb_s3, cb_sc3, cb_t3e, cOK, cFAL, cNA), text_color=wt, text_size=size.small)
     table.cell(tbl, 4, 5, c_beles ? "✓" : "–", bgcolor=c_beles ? color.new(clrCB, 50) : bk, text_color=wt, text_size=size.small)
 
     table.cell(tbl, 0, 6, "C.PAHALI", bgcolor=c_pahali ? color.new(clrCP, 50) : bk, text_color=wt, text_size=size.small)
-    table.cell(tbl, 1, 6, "1G:" + str.tostring(c_s_1d) + "/3", bgcolor=c_s_1d >= 3 ? color.new(color.orange, 65) : cFAL, text_color=wt, text_size=size.small)
-    table.cell(tbl, 2, 6, "1H:" + str.tostring(c_s_1w) + "/3", bgcolor=c_s_1w >= 3 ? color.new(color.orange, 65) : cFAL, text_color=wt, text_size=size.small)
-    table.cell(tbl, 3, 6, "—", bgcolor=cNA, text_color=wt, text_size=size.small)
+    table.cell(tbl, 1, 6, f_scoreText(cp_s1, cp_sc1, cp_t1e), bgcolor=f_condBg(cp_s1, cp_sc1, cp_t1e, color.new(color.orange, 65), cFAL, cNA), text_color=wt, text_size=size.small)
+    table.cell(tbl, 2, 6, f_scoreText(cp_s2, cp_sc2, cp_t2e), bgcolor=f_condBg(cp_s2, cp_sc2, cp_t2e, color.new(color.orange, 65), cFAL, cNA), text_color=wt, text_size=size.small)
+    table.cell(tbl, 3, 6, f_scoreText(cp_s3, cp_sc3, cp_t3e), bgcolor=f_condBg(cp_s3, cp_sc3, cp_t3e, color.new(color.orange, 65), cFAL, cNA), text_color=wt, text_size=size.small)
     table.cell(tbl, 4, 6, c_pahali ? "✓" : "–", bgcolor=c_pahali ? color.new(clrCP, 50) : bk, text_color=wt, text_size=size.small)
 
-// ══════════════════════════════════════════════════════════════
-// KLASİK ALERTCONDITION'LAR
-// ══════════════════════════════════════════════════════════════
-alertcondition(h_ucuz,   title="Hunter Ucuz",   message="[Hunter Ucuz] 1G+1H+3H DİP sinyali tetiklendi")
-alertcondition(h_beles,  title="Hunter Beleş",  message="[Hunter Beleş] 1G+2H+1A DİP sinyali tetiklendi")
-alertcondition(h_pahali, title="Hunter Pahalı", message="[Hunter Pahalı] 1G+1H TEPE sinyali tetiklendi")
-alertcondition(c_ucuz,   title="Combo Ucuz",    message="[Combo Ucuz] 1G+1H+3H DİP sinyali tetiklendi")
-alertcondition(c_beles,  title="Combo Beleş",   message="[Combo Beleş] 1G+2H+1A DİP sinyali tetiklendi")
-alertcondition(c_pahali, title="Combo Pahalı",  message="[Combo Pahalı] 1G+1H TEPE sinyali tetiklendi")
+    string statusText = timeframeOk ? "TF OK | HTF1:" + htf1Tf + " HTF2:" + htf2Tf + " HTF3:" + htf3Tf + " HTF4:" + htf4Tf : "UYARI: 1D grafik değil. Sinyaller kapalı."
+    color statusBg = timeframeOk ? color.new(color.green, 80) : color.new(color.red, 60)
+    table.cell(tbl, 0, 7, "Durum", bgcolor=statusBg, text_color=wt, text_size=size.small)
+    table.cell(tbl, 1, 7, statusText, bgcolor=statusBg, text_color=wt, text_size=size.small)
+    table.cell(tbl, 2, 7, "HMax:" + str.tostring(hMaxScore), bgcolor=statusBg, text_color=wt, text_size=size.small)
+    table.cell(tbl, 3, 7, "CMax:" + str.tostring(cMaxScore), bgcolor=statusBg, text_color=wt, text_size=size.small)
+    table.cell(tbl, 4, 7, orderSessionNowOk ? "Alert Acik" : "Alert Kapali", bgcolor=orderSessionNowOk ? color.new(color.green, 75) : color.new(color.red, 70), text_color=wt, text_size=size.small)
 
 // ══════════════════════════════════════════════════════════════
-// WATCHLIST DISPATCHER
+// MIDDLEWARE ALERT BLOĞU
+// Sinyal motoruna dokunmaz; sadece oluşan 6 sinyali middleware JSON payload'a map eder.
+// H.UCZ / H.BLS / C.UCZ / C.BLS = BUY
+// H.PAH / C.PAH = SELL
 // ══════════════════════════════════════════════════════════════
+normalizeTicker(string rawTicker) =>
+    string result = str.upper(str.replace_all(rawTicker, " ", ""))
+    result := str.replace_all(result, "BINANCE:", "")
+    result := str.replace_all(result, "BINANCEUS:", "")
+    result := str.replace_all(result, ".P", "")
+    result
+
+jsonEscape(string value) =>
+    str.replace_all(str.replace_all(value, "\\", "\\\\"), "\"", "\\\"")
+
 buildPayload(string signalCode, string signalText, string side) =>
-    string p1  = "{"
-    string p2  = "\"schemaVersion\":1,"
-    string p3  = "\"source\":\"Combo+Hunter\","
-    string p4  = "\"symbol\":\"" + syminfo.ticker + "\","
-    string p5  = "\"ticker\":\"" + syminfo.ticker + "\","
-    string p6  = "\"signalCode\":\"" + signalCode + "\","
-    string p7  = "\"signalText\":\"" + signalText + "\","
-    string p8  = "\"side\":\"" + side + "\","
-    string p9  = "\"price\":" + str.tostring(close, format.mintick) + ","
-    string p10 = "\"timeframe\":\"" + timeframe.period + "\","
-    string p11 = "\"barTime\":" + str.tostring(time) + ","
-    string p12 = "\"barIndex\":" + str.tostring(bar_index) + ","
-    string p13 = "\"isRealtime\":" + (barstate.isrealtime ? "true" : "false")
-    string p14 = "}"
-    p1 + p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9 + p10 + p11 + p12 + p13 + p14
+    string symbol = normalizeTicker(syminfo.tickerid)
+    string payload = "{"
+    payload += "\"schemaVersion\":1,"
+    payload += "\"source\":\"Combo+Hunter\","
+    payload += "\"symbol\":\"" + jsonEscape(symbol) + "\","
+    payload += "\"ticker\":\"" + jsonEscape(symbol) + "\","
+    payload += "\"signalCode\":\"" + signalCode + "\","
+    payload += "\"signalText\":\"" + jsonEscape(signalText) + "\","
+    payload += "\"side\":\"" + side + "\","
+    payload += "\"price\":" + str.tostring(close, format.mintick) + ","
+    payload += "\"timeframe\":\"" + timeframe.period + "\","
+    payload += "\"barTime\":" + str.tostring(timenow) + ","
+    payload += "\"barIndex\":" + str.tostring(bar_index) + ","
+    payload += "\"isRealtime\":" + (barstate.isrealtime ? "true" : "false")
+    payload += "}"
+    payload
 
-
-
-
+sendMiddlewareAlert(string signalCode, string signalText, string side) =>
+    alert(buildPayload(signalCode, signalText, side), alert.freq_all)
 
 varip bool sent_h_ucuz   = false
 varip bool sent_h_beles  = false
@@ -719,58 +1031,59 @@ if barstate.isnew
     sent_c_pahali := false
     sent_any      := false
 
-allowAlertNow = enableWatchlist and barstate.isrealtime and (watchlistIntrabar ? true : barstate.isconfirmed)
+allowRealtime = realtimeOnly ? barstate.isrealtime : true
+allowOrderNow = enableStrategyOrders and allowRealtime and orderSessionNowOk and (watchlistIntrabar ? true : barstate.isconfirmed)
 allMode = multiSignalMode == "ALL"
 
-// ALL MODE: aynı barda tüm farklı sinyaller ayrı ayrı
+// ALL MODE: aynı barda tüm farklı sinyaller ayrı ayrı alert üretir.
 if allMode
-    if allowAlertNow and h_ucuz and not sent_h_ucuz
-        alert(buildPayload("H_UCZ", "Hunter Ucuz", "BUY"), alert.freq_all)
+    if allowOrderNow and h_ucuz and not sent_h_ucuz
+        sendMiddlewareAlert("H_UCZ", "Hunter Ucuz", "BUY")
         sent_h_ucuz := true
 
-    if allowAlertNow and h_beles and not sent_h_beles
-        alert(buildPayload("H_BLS", "Hunter Beleş", "BUY"), alert.freq_all)
+    if allowOrderNow and h_beles and not sent_h_beles
+        sendMiddlewareAlert("H_BLS", "Hunter Beles", "BUY")
         sent_h_beles := true
 
-    if allowAlertNow and c_ucuz and not sent_c_ucuz
-        alert(buildPayload("C_UCZ", "Combo Ucuz", "BUY"), alert.freq_all)
+    if allowOrderNow and c_ucuz and not sent_c_ucuz
+        sendMiddlewareAlert("C_UCZ", "Combo Ucuz", "BUY")
         sent_c_ucuz := true
 
-    if allowAlertNow and c_beles and not sent_c_beles
-        alert(buildPayload("C_BLS", "Combo Beleş", "BUY"), alert.freq_all)
+    if allowOrderNow and c_beles and not sent_c_beles
+        sendMiddlewareAlert("C_BLS", "Combo Beles", "BUY")
         sent_c_beles := true
 
-    if allowAlertNow and h_pahali and not sent_h_pahali
-        alert(buildPayload("H_PAH", "Hunter Pahalı", "SELL"), alert.freq_all)
+    if allowOrderNow and h_pahali and not sent_h_pahali
+        sendMiddlewareAlert("H_PAH", "Hunter Pahali", "SELL")
         sent_h_pahali := true
 
-    if allowAlertNow and c_pahali and not sent_c_pahali
-        alert(buildPayload("C_PAH", "Combo Pahalı", "SELL"), alert.freq_all)
+    if allowOrderNow and c_pahali and not sent_c_pahali
+        sendMiddlewareAlert("C_PAH", "Combo Pahali", "SELL")
         sent_c_pahali := true
 
-// FIRST MODE: aynı barda yalnızca ilk sinyal
-if not allMode and allowAlertNow and not sent_any
+// FIRST MODE: aynı barda yalnızca ilk sinyal alert üretir.
+if not allMode and allowOrderNow and not sent_any
     if h_ucuz and not sent_h_ucuz
-        alert(buildPayload("H_UCZ", "Hunter Ucuz", "BUY"), alert.freq_all)
+        sendMiddlewareAlert("H_UCZ", "Hunter Ucuz", "BUY")
         sent_h_ucuz := true
         sent_any := true
     else if h_beles and not sent_h_beles
-        alert(buildPayload("H_BLS", "Hunter Beleş", "BUY"), alert.freq_all)
+        sendMiddlewareAlert("H_BLS", "Hunter Beles", "BUY")
         sent_h_beles := true
         sent_any := true
     else if c_ucuz and not sent_c_ucuz
-        alert(buildPayload("C_UCZ", "Combo Ucuz", "BUY"), alert.freq_all)
+        sendMiddlewareAlert("C_UCZ", "Combo Ucuz", "BUY")
         sent_c_ucuz := true
         sent_any := true
     else if c_beles and not sent_c_beles
-        alert(buildPayload("C_BLS", "Combo Beleş", "BUY"), alert.freq_all)
+        sendMiddlewareAlert("C_BLS", "Combo Beles", "BUY")
         sent_c_beles := true
         sent_any := true
     else if h_pahali and not sent_h_pahali
-        alert(buildPayload("H_PAH", "Hunter Pahalı", "SELL"), alert.freq_all)
+        sendMiddlewareAlert("H_PAH", "Hunter Pahali", "SELL")
         sent_h_pahali := true
         sent_any := true
     else if c_pahali and not sent_c_pahali
-        alert(buildPayload("C_PAH", "Combo Pahalı", "SELL"), alert.freq_all)
+        sendMiddlewareAlert("C_PAH", "Combo Pahali", "SELL")
         sent_c_pahali := true
         sent_any := true
