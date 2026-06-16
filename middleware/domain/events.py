@@ -117,6 +117,23 @@ class TrancheItem(BaseModel):
     close_order_id: int | None = None
 
 
+class ReconciliationReport(BaseModel):
+    symbol: str
+    base_asset: str
+    quote_asset: str
+    status: Literal["OK", "MISMATCH", "LOCKED_BALANCE"]
+    tolerance_quantity: Decimal
+    middleware_open_tranche_count: int
+    middleware_remaining_quantity: Decimal
+    binance_free_quantity: Decimal
+    binance_locked_quantity: Decimal
+    binance_total_quantity: Decimal
+    total_delta_quantity: Decimal
+    free_delta_quantity: Decimal
+    sell_ready: bool
+    messages: list[str] = Field(default_factory=list)
+
+
 class OrderItem(BaseModel):
     id: int
     signal_event_id: int

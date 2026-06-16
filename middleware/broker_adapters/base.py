@@ -21,6 +21,17 @@ class BrokerOrderResult:
     raw_payload: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass(frozen=True, slots=True)
+class BrokerAssetBalance:
+    asset: str
+    free: Decimal
+    locked: Decimal
+
+    @property
+    def total(self) -> Decimal:
+        return self.free + self.locked
+
+
 class BrokerClient(ABC):
     name: str
 

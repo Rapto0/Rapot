@@ -5,7 +5,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from middleware.api.dependencies import get_service, require_admin_enabled
-from middleware.domain.events import ProcessSignalResponse, ReplaySignalRequest
+from middleware.domain.events import (
+    ProcessSignalResponse,
+    ReconciliationReport,
+    ReplaySignalRequest,
+)
 from middleware.services.trading_service import TradingService
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -26,4 +30,19 @@ def replay_signal(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"replay failed: {exc}",
+        ) from exc
+
+
+@router.get("/reconcile/{symbol}", response_model=ReconciliationReport)
+def reconcile_symbol(
+    symbol: str,
+    _: Annotated[None, Depends(require_admin_enabled)],
+    service: Annotated[TradingService, Depends(get_service)],
+) -> ReconciliationReport:
+    try:
+        return ReconciliationReport(**service.reconcile_symbol(symbol))
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"reconciliation failed: {exc}",
         ) from exc

@@ -11,7 +11,7 @@ from uuid import uuid4
 
 import requests
 
-from middleware.broker_adapters.base import BrokerClient, BrokerOrderResult
+from middleware.broker_adapters.base import BrokerAssetBalance, BrokerClient, BrokerOrderResult
 from middleware.domain.enums import ExecutionMode, OrderStatus
 from middleware.domain.events import BrokerOrderRequestPayload
 from middleware.infra.settings import MiddlewareSettings
@@ -59,12 +59,19 @@ class BinanceSpotBrokerClient(BrokerClient):
         return rules
 
     def get_asset_balance(self, asset: str) -> Decimal:
+        return self.get_asset_balances(asset).free
+
+    def get_asset_balances(self, asset: str) -> BrokerAssetBalance:
         payload = self._signed_request("GET", "/api/v3/account", {})
         normalized = asset.upper()
         for item in payload.get("balances", []):
             if str(item.get("asset", "")).upper() == normalized:
-                return _decimal(item.get("free"))
-        return Decimal("0")
+                return BrokerAssetBalance(
+                    asset=normalized,
+                    free=_decimal(item.get("free")),
+                    locked=_decimal(item.get("locked")),
+                )
+        return BrokerAssetBalance(asset=normalized, free=Decimal("0"), locked=Decimal("0"))
 
     def submit_limit_order(self, payload: BrokerOrderRequestPayload) -> BrokerOrderResult:
         quantity = payload.quantity if payload.quantity is not None else Decimal(payload.lots)

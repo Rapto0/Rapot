@@ -23,6 +23,7 @@ TradingView webhook sinyallerini Binance Spot emirlerine çeviren kripto odaklı
 6. Risk checks run before submit.
 7. Binance adapter submits `LIMIT IOC` orders in live mode.
 8. Filled BUY opens a tranche; filled SELL closes the oldest tranche FIFO.
+9. Admin reconciliation can compare open tranches with Binance account balances.
 
 ## TradingView Contract
 
@@ -105,6 +106,21 @@ uvicorn middleware.api.main:app --reload --port 8010
 - `GET /orders`
 - `GET /signals`
 - `POST /admin/replay-signal`
+- `GET /admin/reconcile/{symbol}`
+
+## Reconciliation
+
+`GET /admin/reconcile/BTCUSDT` checks whether middleware open tranche quantity
+matches the Binance account balance for the base asset.
+
+The response includes:
+- Middleware open tranche quantity.
+- Binance `free`, `locked`, and total base asset balance.
+- `total_delta_quantity` and `free_delta_quantity`.
+- `status`: `OK`, `MISMATCH`, or `LOCKED_BALANCE`.
+
+`OK` means Binance total base balance is within the symbol step-size tolerance
+and free balance is enough to sell the tracked open tranches.
 
 ## Live Gate
 

@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from middleware.api.main import app
-from middleware.broker_adapters.base import BrokerOrderResult
+from middleware.broker_adapters.base import BrokerAssetBalance, BrokerOrderResult
 from middleware.domain.enums import BrokerName, ExecutionMode, OrderStatus
 from middleware.domain.events import BrokerOrderRequestPayload
 from middleware.infra.db import configure_engine, get_engine
@@ -43,6 +43,9 @@ class FakeBinanceSpotBroker:
 
     def get_asset_balance(self, asset: str) -> Decimal:
         return Decimal("1000")
+
+    def get_asset_balances(self, asset: str) -> BrokerAssetBalance:
+        return BrokerAssetBalance(asset=asset.upper(), free=Decimal("0"), locked=Decimal("0"))
 
     def submit_limit_order(self, payload: BrokerOrderRequestPayload) -> BrokerOrderResult:
         quantity = payload.quantity or Decimal("0")

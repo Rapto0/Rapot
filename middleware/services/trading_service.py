@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
-from middleware.broker_adapters.base import BrokerClient
+from middleware.broker_adapters.base import BrokerAssetBalance, BrokerClient
 from middleware.domain.constants import BUY_SIGNAL_CODES
 from middleware.domain.enums import ExecutionMode, OrderStatus, Side
 from middleware.domain.events import (
@@ -342,6 +342,62 @@ class TradingService:
     def list_tranches(self, symbol: str | None = None):
         return self.tranche_repo.list_open_tranches(symbol=symbol)
 
+    def reconcile_symbol(self, symbol: str) -> dict:
+        normalized = symbol.upper()
+        rules = self._get_binance_symbol_rules(normalized)
+        tranches = self.tranche_repo.list_open_tranches(symbol=normalized)
+        open_quantities = [
+            (
+                Decimal(tranche.remaining_quantity)
+                if Decimal(tranche.remaining_quantity) > 0
+                else Decimal(int(tranche.remaining_lots))
+            )
+            for tranche in tranches
+        ]
+        middleware_quantity = sum(open_quantities, Decimal("0"))
+        balance = self._get_broker_asset_balances(rules.base_asset)
+
+        tolerance = rules.step_size
+        total_delta = balance.total - middleware_quantity
+        free_delta = balance.free - middleware_quantity
+        total_matches = abs(total_delta) <= tolerance
+        sell_ready = balance.free + tolerance >= middleware_quantity
+
+        messages: list[str] = []
+        if total_matches:
+            messages.append("Binance total base balance matches middleware open tranches")
+        elif total_delta < 0:
+            messages.append("Binance total base balance is lower than middleware open tranches")
+        else:
+            messages.append("Binance total base balance is higher than middleware open tranches")
+
+        if not sell_ready:
+            messages.append("Binance free base balance is lower than middleware sellable quantity")
+
+        if total_matches and sell_ready:
+            status = "OK"
+        elif total_matches:
+            status = "LOCKED_BALANCE"
+        else:
+            status = "MISMATCH"
+
+        return {
+            "symbol": normalized,
+            "base_asset": rules.base_asset,
+            "quote_asset": rules.quote_asset,
+            "status": status,
+            "tolerance_quantity": tolerance,
+            "middleware_open_tranche_count": len(tranches),
+            "middleware_remaining_quantity": middleware_quantity,
+            "binance_free_quantity": balance.free,
+            "binance_locked_quantity": balance.locked,
+            "binance_total_quantity": balance.total,
+            "total_delta_quantity": total_delta,
+            "free_delta_quantity": free_delta,
+            "sell_ready": sell_ready,
+            "messages": messages,
+        }
+
     def list_orders(self, *, limit: int = 100, symbol: str | None = None):
         return self.order_repo.list_orders(limit=limit, symbol=symbol)
 
@@ -496,6 +552,21 @@ class TradingService:
         if get_rules is None:
             raise RuntimeError("Binance broker adapter does not expose symbol rules")
         return get_rules(symbol)
+
+    def _get_broker_asset_balances(self, asset: str) -> BrokerAssetBalance:
+        get_balances = getattr(self.broker_client, "get_asset_balances", None)
+        if get_balances is not None:
+            return get_balances(asset)
+
+        get_free_balance = getattr(self.broker_client, "get_asset_balance", None)
+        if get_free_balance is not None:
+            return BrokerAssetBalance(
+                asset=asset.upper(),
+                free=get_free_balance(asset),
+                locked=Decimal("0"),
+            )
+
+        raise RuntimeError("broker adapter does not expose account balances")
 
     def _build_duplicate_response(self, signal_event_id: int) -> ProcessSignalResponse:
         existing_order = self.order_repo.get_by_signal_event_id(signal_event_id)
