@@ -27,6 +27,9 @@ wheels/
 
 # Virtual Environment
 venv/
+.venv/
+.claude/
+.tmp_pytest/
 .env
 
 # Database (Mount edilmeli)

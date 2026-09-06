@@ -13,11 +13,12 @@ from typing import Any
 import pandas as pd
 
 from logger import get_logger
+from settings import settings
 
 logger = get_logger(__name__)
 
 # Cache veritabanı
-CACHE_DB_PATH = Path(__file__).parent / "price_cache.db"
+CACHE_DB_PATH = Path(settings.cache_database_path)
 
 # Cache süreleri (saniye)
 CACHE_TTL = {

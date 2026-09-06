@@ -46,19 +46,9 @@ skip-magic-trailing-comma = false
 [tool.ruff.lint.isort]
 known-first-party = ["config", "settings", "database", "signals", "signal_repository"]
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = ["test_*.py"]
-python_functions = ["test_*"]
-addopts = "-v --tb=short -ra"
-filterwarnings = [
-    "ignore::DeprecationWarning",
-    "ignore::FutureWarning",
-]
-
 [tool.coverage.run]
 source = ["."]
-omit = ["tests/*", "venv/*", ".venv/*"]
+omit = ["conftest.py", "tests/*", "middleware/tests/*", "venv/*", ".venv/*", ".claude/*"]
 
 [tool.coverage.report]
 exclude_lines = [

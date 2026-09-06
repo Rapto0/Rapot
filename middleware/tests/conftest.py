@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
@@ -7,19 +8,11 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from middleware.api.main import app
 from middleware.broker_adapters.base import BrokerAssetBalance, BrokerOrderResult
-from middleware.domain.enums import BrokerName, ExecutionMode, OrderStatus
+from middleware.domain.enums import ExecutionMode, OrderStatus
 from middleware.domain.events import BrokerOrderRequestPayload
-from middleware.infra.db import configure_engine, get_engine
 from middleware.infra.models import Base
-from middleware.infra.settings import settings
 from middleware.risk.binance_filters import BinanceSymbolRules
-
-
-def _clear_settings_cache() -> None:
-    for key in ("signal_multipliers", "allowed_symbols"):
-        settings.__dict__.pop(key, None)
 
 
 @dataclass(slots=True)
@@ -67,60 +60,53 @@ class FakeBinanceSpotBroker:
 
 
 @pytest.fixture(autouse=True)
-def configure_test_environment(monkeypatch):
-    temp_dir = Path("middleware/tests/.tmp_db")
-    temp_dir.mkdir(parents=True, exist_ok=True)
-    db_file = temp_dir / "middleware_test.sqlite3"
-    if db_file.exists():
-        db_file.unlink()
-    settings.app_env = "development"
-    settings.database_url = f"sqlite+pysqlite:///{db_file}"
-    settings.execution_mode = ExecutionMode.DRY_RUN
-    settings.trading_enabled = False
-    settings.broker_name = BrokerName.BINANCE_SPOT
-    settings.binance_live_enabled = False
-    settings.binance_base_url = "https://testnet.binance.vision"
-    settings.binance_api_key = None
-    settings.binance_secret_key = None
-    settings.binance_request_timeout_seconds = 10
-    settings.binance_recv_window_ms = 5000
-    settings.binance_buy_quote_amount_usdt = 10
-    settings.binance_quote_asset = "USDT"
-    settings.binance_dry_run_auto_fill = True
-    settings.binance_check_balance = True
-    settings.allow_admin_endpoints = True
-    settings.buy_bps = 20
-    settings.sell_bps = 20
-    settings.max_open_tranches_per_symbol = None
-    settings.max_symbol_exposure_usdt = None
-    settings.max_daily_loss_usdt = None
-    settings.max_orders_per_day = None
-    settings.max_signal_age_seconds = None
-    settings.max_signal_future_skew_seconds = 120
-    settings.require_realtime_signals = False
-    settings.allowed_symbols_csv = None
-    settings.require_webhook_auth = True
-    settings.webhook_auth_token = "test-token"
-    settings.multiplier_h_bls = Decimal("1.00")
-    settings.multiplier_h_ucz = Decimal("1.00")
-    settings.multiplier_c_bls = Decimal("1.00")
-    settings.multiplier_c_ucz = Decimal("1.00")
-    _clear_settings_cache()
-    monkeypatch.setattr(
-        "middleware.api.dependencies.build_broker_client",
-        lambda cfg: FakeBinanceSpotBroker(),
+def configure_test_environment(
+    monkeypatch: pytest.MonkeyPatch, test_sandbox: Path
+) -> Iterator[None]:
+    # Keep application/config imports after the root offline bootstrap (pytest_configure).
+    from middleware.infra import db
+    from middleware.infra.settings import MiddlewareSettings, settings
+
+    db_file = test_sandbox / "middleware.sqlite3"
+    # Use model defaults directly: neither .env nor inherited MW_* values belong in tests.
+    test_settings = MiddlewareSettings.model_construct(
+        database_url=f"sqlite+pysqlite:///{db_file.as_posix()}",
+        webhook_auth_token="test-token",
+        app_env="development",
+        execution_mode=ExecutionMode.DRY_RUN,
+        trading_enabled=False,
+        binance_live_enabled=False,
+        binance_api_key=None,
+        binance_secret_key=None,
     )
 
-    configure_engine(settings.database_url)
-    Base.metadata.create_all(bind=get_engine())
-    yield
-    configure_engine(settings.database_url)
-    if db_file.exists():
-        db_file.unlink()
+    with monkeypatch.context() as middleware_patch:
+        # Preserve singleton identity for existing imports and restore all fields/caches afterwards.
+        middleware_patch.setattr(settings, "__dict__", test_settings.__dict__.copy())
+        middleware_patch.setattr(
+            settings, "__pydantic_fields_set__", test_settings.model_fields_set.copy()
+        )
+        middleware_patch.setattr(db, "_engine", None)
+        middleware_patch.setattr(db, "_session_local", None)
+        middleware_patch.setattr(
+            "middleware.api.dependencies.build_broker_client",
+            lambda cfg: FakeBinanceSpotBroker(),
+        )
+
+        try:
+            db.configure_engine(settings.database_url)
+            Base.metadata.create_all(bind=db.get_engine())
+            yield
+        finally:
+            # Release SQLite handles before pytest cleans its temporary directory (also on Windows).
+            if db._engine is not None:
+                db._engine.dispose()
 
 
 @pytest.fixture
-def client() -> TestClient:
+def client() -> Iterator[TestClient]:
+    from middleware.api.main import app
+
     with TestClient(app, headers={"X-Webhook-Token": "test-token"}) as test_client:
         yield test_client
 

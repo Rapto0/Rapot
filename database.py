@@ -12,11 +12,12 @@ from pathlib import Path
 from typing import Any
 
 from logger import get_logger
+from settings import settings
 
 logger = get_logger(__name__)
 
 # Veritabanı dosyası
-DB_PATH = Path(__file__).parent / "trading_bot.db"
+DB_PATH = Path(settings.database_path)
 
 SPECIAL_TAG_RULES: tuple[dict[str, Any], ...] = (
     {

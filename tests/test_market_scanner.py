@@ -347,6 +347,10 @@ class TestTelegramSignalFiltering:
     @pytest.mark.unit
     def test_special_signals_still_send_ai_messages(self, monkeypatch):
         df = pd.DataFrame({"Close": [1.0] * 30})
+        df.attrs["fetched_at_ts"] = pd.Timestamp.now().timestamp()
+        monkeypatch.setattr(
+            "market_scanner.get_bist_data_secondary", lambda *_args, **_kwargs: df.copy()
+        )
         sent_messages = []
         saved_signals = []
         tagged_signals = []
@@ -424,6 +428,9 @@ class TestTelegramSignalFiltering:
     @pytest.mark.unit
     def test_special_signal_ai_uses_multitimeframe_payload(self, monkeypatch):
         df = pd.DataFrame({"Close": [1.0] * 30})
+        monkeypatch.setattr(
+            "market_scanner.get_bist_data_secondary", lambda *_args, **_kwargs: df.copy()
+        )
         sent_messages = []
         builder_calls = []
         ai_calls = []

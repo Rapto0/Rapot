@@ -4,23 +4,20 @@ Rapot finansal analiz botu için geliştirilmiş, TradingView kalitesinde profes
 
 ## 🚀 Başlangıç
 
-Geliştirme sunucusunu başlatmak için:
+Node 20.20.2 ve npm 10.9.9 kullanılır. Kurulum ve doğrulama adımları
+[devam planında](../docs/RAPOT_DEVAM_PLANI.md#geliştirme-ortamı-ve-komutlar) kayıtlıdır.
+Bu klasörde geliştirme sunucusunu başlatmak için:
 
 ```bash
+npm ci
 npm run dev
-# veya
-yarn dev
-# veya
-pnpm dev
-# veya
-bun dev
 ```
 
 Tarayıcınızda [http://localhost:3000](http://localhost:3000) adresine gidin.
 
 ## 🛠️ Teknolojiler
 
-- **Framework:** Next.js 14 (App Router)
+- **Framework:** Next.js 16.2.1 (App Router)
 - **Dil:** TypeScript
 - **Stil:** Tailwind CSS v4
 - **UI:** Shadcn/UI

@@ -2,11 +2,59 @@
 Test fixtures ve paylaşılan test yardımcıları.
 """
 
+import sys
+import threading
+from collections.abc import Iterator
+from copy import deepcopy
 from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def isolated_core_databases(test_sandbox: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Reset core DB/cache singletons so tests never share persisted application state."""
+    import database
+    import db_session
+    import price_cache
+    from settings import get_settings, settings
+
+    db_path = test_sandbox / "trading_bot.sqlite3"
+    cache_path = test_sandbox / "price_cache.sqlite3"
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+    monkeypatch.setenv("DATABASE_URL", "")
+    monkeypatch.setenv("CACHE_DATABASE_PATH", str(cache_path))
+    monkeypatch.setattr(settings, "database_path", str(db_path))
+    monkeypatch.setattr(settings, "database_url", None)
+    monkeypatch.setattr(settings, "cache_database_path", str(cache_path))
+    monkeypatch.setattr(db_session, "_engine", None)
+    monkeypatch.setattr(db_session, "_SessionFactory", None)
+    monkeypatch.setattr(db_session, "_ScopedSession", None)
+    monkeypatch.setattr(database, "DB_PATH", db_path)
+    monkeypatch.setattr(database.db, "_local", threading.local())
+    monkeypatch.setattr(price_cache, "CACHE_DB_PATH", cache_path)
+    monkeypatch.setattr(price_cache.price_cache, "_stats", {"hits": 0, "misses": 0})
+    api_module = sys.modules.get("api.main")
+    if api_module is not None:
+        monkeypatch.setattr(api_module, "_market_data_provider", None)
+        monkeypatch.setattr(api_module, "_market_overview_cache", None)
+        monkeypatch.setattr(api_module, "_market_ticker_cache", None)
+        monkeypatch.setattr(api_module, "_market_index_cache", {})
+        monkeypatch.setattr(api_module, "_RUNTIME_STATE", deepcopy(api_module._RUNTIME_STATE))
+    db_session.init_db()
+    database.db._init_database()
+    price_cache.price_cache._init_database()
+    try:
+        yield
+    finally:
+        if db_session._ScopedSession is not None:
+            db_session._ScopedSession.remove()
+        if db_session._engine is not None:
+            db_session._engine.dispose()
+        get_settings.cache_clear()
 
 
 @pytest.fixture

@@ -6,9 +6,6 @@ on:
   pull_request:
     branches: [main]
 
-env:
-  PYTHON_VERSION: "3.10"
-
 jobs:
   # ==================== LINT & FORMAT ====================
   lint:
@@ -16,16 +13,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version-file: .python-version
           cache: 'pip'
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+            requirements-dev.lock
 
       - name: Install linting tools
-        run: |
-          pip install ruff black isort
+        run: python -m pip install -r requirements-dev.lock
 
       - name: Ensure SQLite artifacts are not tracked
         run: |
@@ -36,125 +38,111 @@ jobs:
             exit 1
           fi
 
-      - name: Detect changed Python files
-        id: changed_py
+      # Keep the changed-file lint policy until the existing P2-3 lint debt is resolved.
+      # Test selection below is always the complete backend and middleware suite.
+      - name: Run Ruff lint and format checks on changed Python files
         shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
         run: |
-          set -euo pipefail
+          python - <<'PY'
+          import os
+          import subprocess
+          import sys
 
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git fetch --no-tags --prune --depth=1 origin "${{ github.base_ref }}"
-            FILES="$(git diff --name-only --diff-filter=ACMRT "origin/${{ github.base_ref }}...HEAD" | grep -E '\.pyi?$' || true)"
-          else
-            BEFORE_SHA="${{ github.event.before }}"
-            if [ -z "${BEFORE_SHA}" ] || [ "${BEFORE_SHA}" = "0000000000000000000000000000000000000000" ]; then
-              FILES="$(git ls-files '*.py' '*.pyi')"
-            else
-              FILES="$(git diff --name-only --diff-filter=ACMRT "${BEFORE_SHA}...HEAD" | grep -E '\.pyi?$' || true)"
-            fi
-          fi
-
-          {
-            echo "files<<EOF"
-            echo "${FILES}"
-            echo "EOF"
-          } >> "${GITHUB_OUTPUT}"
-
-      - name: Run Ruff (linting)
-        if: ${{ steps.changed_py.outputs.files != '' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          mapfile -t PY_FILES < <(printf '%s\n' "${{ steps.changed_py.outputs.files }}" | sed '/^[[:space:]]*$/d')
-          ruff check --output-format=github "${PY_FILES[@]}"
-
-      - name: Check Black formatting
-        if: ${{ steps.changed_py.outputs.files != '' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          mapfile -t PY_FILES < <(printf '%s\n' "${{ steps.changed_py.outputs.files }}" | sed '/^[[:space:]]*$/d')
-          black --check --diff "${PY_FILES[@]}"
-
-      - name: Check import sorting
-        if: ${{ steps.changed_py.outputs.files != '' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          mapfile -t PY_FILES < <(printf '%s\n' "${{ steps.changed_py.outputs.files }}" | sed '/^[[:space:]]*$/d')
-          isort --check-only --diff "${PY_FILES[@]}"
-
-      - name: Skip lint (no changed Python files)
-        if: ${{ steps.changed_py.outputs.files == '' }}
-        run: echo "No changed Python files detected; lint skipped."
+          base = os.environ["BASE_SHA"]
+          head = os.environ["HEAD_SHA"]
+          has_base = bool(base and set(base) != {"0"}) and subprocess.run(
+              ["git", "cat-file", "-e", f"{base}^{{commit}}"],
+              stdout=subprocess.DEVNULL,
+              stderr=subprocess.DEVNULL,
+          ).returncode == 0
+          if has_base:
+              revisions = (
+                  [f"{base}...{head}"]
+                  if os.environ["EVENT_NAME"] == "pull_request"
+                  else [base, head]
+              )
+              command = ["git", "diff", "--name-only", "--diff-filter=ACMRT", "-z", *revisions]
+          else:
+              print("No previous commit available; checking all tracked Python files.")
+              command = ["git", "ls-files", "-z"]
+          paths = subprocess.check_output(command).decode().split("\0")
+          files = [path for path in paths if path.endswith((".py", ".pyi"))]
+          if not files:
+              print("No changed Python files detected; lint skipped.")
+              sys.exit(0)
+          subprocess.run(
+              [sys.executable, "-m", "ruff", "check", "--output-format=github", "--", *files],
+              check=True,
+          )
+          subprocess.run(
+              [sys.executable, "-m", "ruff", "format", "--check", "--diff", "--", *files],
+              check=True,
+          )
+          PY
 
   # ==================== TEST ====================
   test:
-    name: Run Tests
+    name: Python 3.12 tests
     runs-on: ubuntu-latest
-    needs: lint
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version-file: .python-version
           cache: 'pip'
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+            requirements-dev.lock
 
       - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
-          pip install pytest pytest-cov
+        run: python -m pip install -r requirements-dev.lock
 
-      - name: Create dummy .env for tests
-        run: |
-          echo "TELEGRAM_TOKEN=test_token" >> .env
-          echo "TELEGRAM_CHAT_ID=test_chat_id" >> .env
-          echo "JWT_SECRET_KEY=test-secret-key" >> .env
-          echo "ADMIN_PASSWORD=test123" >> .env
-          echo "USER_PASSWORD=test123" >> .env
+      - name: Check dependency consistency
+        run: python -m pip check
 
-      - name: Run architecture boundary gate
-        run: |
-          pytest -q tests/test_architecture_boundaries.py tests/test_frontend_contracts.py tests/test_frontend_backend_contract_sync.py
+      - name: Run all backend and middleware tests
+        run: python -m pytest tests middleware/tests -v --cov=. --cov-report=xml
 
-      - name: Detect changed test files
-        id: changed_tests
-        shell: bash
-        run: |
-          set -euo pipefail
+  # ==================== FRONTEND ====================
+  frontend:
+    name: Frontend lint, types and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
 
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git fetch --no-tags --prune --depth=1 origin "${{ github.base_ref }}"
-            TEST_FILES="$(git diff --name-only --diff-filter=ACMRT "origin/${{ github.base_ref }}...HEAD" | grep -E '^tests/test_.*\.py$' || true)"
-          else
-            BEFORE_SHA="${{ github.event.before }}"
-            if [ -z "${BEFORE_SHA}" ] || [ "${BEFORE_SHA}" = "0000000000000000000000000000000000000000" ]; then
-              TEST_FILES="$(git ls-files 'tests/test_*.py')"
-            else
-              TEST_FILES="$(git diff --name-only --diff-filter=ACMRT "${BEFORE_SHA}...HEAD" | grep -E '^tests/test_.*\.py$' || true)"
-            fi
-          fi
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
-          {
-            echo "files<<EOF"
-            echo "${TEST_FILES}"
-            echo "EOF"
-          } >> "${GITHUB_OUTPUT}"
+      - name: Use the supported npm major
+        run: npm install --global "$(node -p 'require("./package.json").packageManager')"
 
-      - name: Run changed tests
-        if: ${{ steps.changed_tests.outputs.files != '' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          mapfile -t TEST_FILES < <(printf '%s\n' "${{ steps.changed_tests.outputs.files }}" | sed '/^[[:space:]]*$/d')
-          pytest -v --cov=. --cov-report=xml "${TEST_FILES[@]}"
+      - name: Install locked dependencies
+        run: npm ci
 
-      - name: Run smoke tests (no changed test files)
-        if: ${{ steps.changed_tests.outputs.files == '' }}
-        run: |
-          pytest tests/test_api_route_aliases.py tests/test_frontend_contracts.py -v --cov=. --cov-report=xml
+      - name: Run ESLint
+        run: npm run lint -- --no-cache
+
+      - name: Check TypeScript
+        run: npm run typecheck -- --incremental false
+
+      - name: Build frontend
+        run: npm run build
 
   # ==================== SECURITY SCAN ====================
   security:
@@ -166,7 +154,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version-file: .python-version
 
       - name: Install security tools
         run: pip install bandit safety
@@ -181,7 +169,7 @@ jobs:
   docker:
     name: Docker Build
     runs-on: ubuntu-latest
-    needs: [lint, test]
+    needs: [lint, test, frontend]
     steps:
       - uses: actions/checkout@v4
 
