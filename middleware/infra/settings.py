@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import re
 from decimal import Decimal
 from functools import cached_property
 from typing import Any
+from urllib.parse import urlparse
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -27,6 +29,7 @@ class MiddlewareSettings(BaseSettings):
     trading_enabled: bool = False
     execution_mode: ExecutionMode = ExecutionMode.DRY_RUN
     broker_name: BrokerName = BrokerName.BINANCE_SPOT
+    inventory_account_id: str | None = None
     webhook_auth_token: str | None = None
     require_webhook_auth: bool = True
     allow_admin_endpoints: bool = True
@@ -63,6 +66,7 @@ class MiddlewareSettings(BaseSettings):
     @field_validator(
         "webhook_auth_token",
         "admin_auth_token",
+        "inventory_account_id",
         "max_open_tranches_per_symbol",
         "max_symbol_exposure_usdt",
         "max_daily_loss_usdt",
@@ -82,6 +86,36 @@ class MiddlewareSettings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.app_env.strip().lower() in {"prod", "production"}
+
+    @staticmethod
+    def _scope_part(value: str, *, setting: str) -> str:
+        normalized = value.strip().lower()
+        if not re.fullmatch(r"[a-z0-9][a-z0-9._-]{0,63}", normalized):
+            raise ValueError(f"{setting} must use 1-64 letters, numbers, '.', '_' or '-'")
+        return normalized
+
+    @property
+    def inventory_scope(self) -> str:
+        """Stable non-secret boundary for orders, risk totals, and open inventory."""
+        mode = self.execution_mode.value
+        broker = self.broker_name.value
+        if self.execution_mode == ExecutionMode.DRY_RUN:
+            environment = self._scope_part(self.app_env, setting="MW_APP_ENV")
+            account = self._scope_part(
+                self.inventory_account_id or "simulation-default",
+                setting="MW_INVENTORY_ACCOUNT_ID",
+            )
+            return f"{mode}|{broker}|{environment}|{account}"
+
+        account_id = self.inventory_account_id
+        if not account_id:
+            raise ValueError("MW_INVENTORY_ACCOUNT_ID is required in LIVE mode")
+        hostname = (urlparse(self.binance_base_url).hostname or "").strip().lower()
+        if not hostname:
+            raise ValueError("MW_BINANCE_BASE_URL must include a hostname in LIVE mode")
+        venue = self._scope_part(hostname, setting="MW_BINANCE_BASE_URL hostname")
+        account = self._scope_part(account_id, setting="MW_INVENTORY_ACCOUNT_ID")
+        return f"{mode}|{broker}|{venue}|{account}"
 
     @cached_property
     def signal_multipliers(self) -> dict[str, Decimal]:
@@ -109,6 +143,9 @@ class MiddlewareSettings(BaseSettings):
 
         if self.require_webhook_auth and not (self.webhook_auth_token or "").strip():
             raise ValueError("MW_WEBHOOK_AUTH_TOKEN is required when MW_REQUIRE_WEBHOOK_AUTH=true")
+
+        # Resolve on every startup so LIVE can never operate in an implicit account scope.
+        _ = self.inventory_scope
 
         is_binance_live = (
             self.broker_name == BrokerName.BINANCE_SPOT

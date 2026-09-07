@@ -84,6 +84,7 @@ class Order(Base, TimestampMixin):
         Index("ix_mw_orders_symbol", "symbol"),
         Index("ix_mw_orders_status", "status"),
         Index("ix_mw_orders_created_at", "created_at"),
+        Index("ix_mw_orders_inventory_scope_created_at", "inventory_scope", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -117,6 +118,7 @@ class Order(Base, TimestampMixin):
     avg_fill_price: Mapped[Decimal | None] = mapped_column(Numeric(18, 6), nullable=True)
     realized_pnl: Mapped[Decimal | None] = mapped_column(Numeric(18, 6), nullable=True)
     mode: Mapped[str] = mapped_column(String(16), nullable=False)
+    inventory_scope: Mapped[str] = mapped_column(String(220), nullable=False)
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
 
     signal_event: Mapped[SignalEvent] = relationship(back_populates="order")
@@ -139,8 +141,15 @@ class Tranche(Base, TimestampMixin):
         CheckConstraint(
             "remaining_lots <= filled_lots", name="ck_mw_tranches_remaining_lots_lte_filled"
         ),
-        Index("ix_mw_tranches_symbol_status", "symbol", "status"),
-        Index("ix_mw_tranches_fifo_lookup", "symbol", "status", "entry_time", "id"),
+        Index("ix_mw_tranches_symbol_status", "inventory_scope", "symbol", "status"),
+        Index(
+            "ix_mw_tranches_fifo_lookup",
+            "inventory_scope",
+            "symbol",
+            "status",
+            "entry_time",
+            "id",
+        ),
         Index("ix_mw_tranches_entry_time", "entry_time"),
     )
 
@@ -164,6 +173,8 @@ class Tranche(Base, TimestampMixin):
         Numeric(28, 12), nullable=False, default=Decimal("0"), server_default="0"
     )
     status: Mapped[str] = mapped_column(String(20), nullable=False)
+    mode: Mapped[str] = mapped_column(String(16), nullable=False)
+    inventory_scope: Mapped[str] = mapped_column(String(220), nullable=False)
     open_order_id: Mapped[int | None] = mapped_column(
         ForeignKey("mw_orders.id", ondelete="SET NULL"), nullable=True
     )

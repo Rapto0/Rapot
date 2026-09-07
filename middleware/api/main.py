@@ -29,6 +29,7 @@ async def lifespan(app: FastAPI):
                 "app": settings.app_name,
                 "mode": settings.execution_mode.value,
                 "broker": settings.broker_name.value,
+                "inventory_scope": settings.inventory_scope,
                 "trading_enabled": settings.trading_enabled,
             }
         },

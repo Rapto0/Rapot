@@ -94,6 +94,8 @@ class ProcessSignalResponse(BaseModel):
 
 class PositionItem(BaseModel):
     symbol: str
+    mode: str
+    inventory_scope: str
     open_tranche_count: int
     total_remaining_lots: int
     total_remaining_quantity: Decimal = Decimal("0")
@@ -103,6 +105,8 @@ class PositionItem(BaseModel):
 class TrancheItem(BaseModel):
     id: int
     symbol: str
+    mode: str
+    inventory_scope: str
     signal_code: str
     entry_price: Decimal
     entry_time: datetime
@@ -119,6 +123,8 @@ class TrancheItem(BaseModel):
 
 class ReconciliationReport(BaseModel):
     symbol: str
+    mode: str
+    inventory_scope: str
     base_asset: str
     quote_asset: str
     status: Literal["OK", "MISMATCH", "LOCKED_BALANCE"]
@@ -139,6 +145,8 @@ class OrderItem(BaseModel):
     signal_event_id: int
     idempotency_key: str
     symbol: str
+    mode: str
+    inventory_scope: str
     side: Side
     signal_code: str
     requested_lots: int

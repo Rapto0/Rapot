@@ -25,6 +25,8 @@ def list_orders(
             signal_event_id=row.signal_event_id,
             idempotency_key=row.idempotency_key,
             symbol=row.symbol,
+            mode=row.mode,
+            inventory_scope=row.inventory_scope,
             side=Side(row.side),
             signal_code=row.signal_code,
             requested_lots=row.requested_lots,

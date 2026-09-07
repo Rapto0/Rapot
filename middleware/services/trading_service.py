@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -53,9 +54,14 @@ class TradingService:
         self.session = session
         self.cfg = cfg
         self.broker_client = broker_client
+        self.inventory_scope = cfg.inventory_scope
         self.signal_repo = SignalRepository(session)
-        self.order_repo = OrderRepository(session)
-        self.tranche_repo = TrancheRepository(session)
+        self.order_repo = OrderRepository(session, inventory_scope=self.inventory_scope)
+        self.tranche_repo = TrancheRepository(
+            session,
+            inventory_scope=self.inventory_scope,
+            mode=cfg.execution_mode.value,
+        )
         self.execution_repo = ExecutionReportRepository(session)
         self.risk = RiskEngine(cfg)
 
@@ -66,10 +72,13 @@ class TradingService:
         bypass_idempotency: bool = False,
     ) -> ProcessSignalResponse:
         event_hash = self.signal_repo.build_event_hash(payload)
+        scoped_event_hash = hashlib.sha256(
+            f"{self.inventory_scope}:{event_hash}".encode()
+        ).hexdigest()
         idempotency_key = (
-            event_hash
+            scoped_event_hash
             if not bypass_idempotency
-            else f"{event_hash}:replay:{int(datetime.now(UTC).timestamp() * 1000)}"
+            else f"{scoped_event_hash}:replay:{int(datetime.now(UTC).timestamp() * 1000)}"
         )
         with self.session.begin():
             if not bypass_idempotency:
@@ -128,6 +137,7 @@ class TradingService:
                 status=OrderStatus.RECEIVED,
                 broker_name=self.broker_client.name,
                 mode=self.cfg.execution_mode.value,
+                inventory_scope=self.inventory_scope,
                 base_asset=order_intent.base_asset,
                 quote_asset=order_intent.quote_asset,
                 target_tranche_id=order_intent.target_tranche_id,
@@ -331,6 +341,8 @@ class TradingService:
             return [
                 {
                     "symbol": symbol.upper(),
+                    "mode": self.cfg.execution_mode.value,
+                    "inventory_scope": self.inventory_scope,
                     "open_tranche_count": len(tranches),
                     "total_remaining_lots": total_lots,
                     "total_remaining_quantity": total_quantity,
@@ -383,6 +395,8 @@ class TradingService:
 
         return {
             "symbol": normalized,
+            "mode": self.cfg.execution_mode.value,
+            "inventory_scope": self.inventory_scope,
             "base_asset": rules.base_asset,
             "quote_asset": rules.quote_asset,
             "status": status,

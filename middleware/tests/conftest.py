@@ -75,6 +75,7 @@ def configure_test_environment(
         admin_auth_token="test-admin-token",
         app_env="development",
         execution_mode=ExecutionMode.DRY_RUN,
+        inventory_account_id="pytest",
         trading_enabled=False,
         binance_live_enabled=False,
         binance_api_key=None,

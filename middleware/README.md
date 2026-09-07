@@ -23,7 +23,8 @@ TradingView webhook sinyallerini Binance Spot emirlerine çeviren kripto odaklı
 6. Risk checks run before submit.
 7. Binance adapter submits `LIMIT IOC` orders in live mode.
 8. Filled BUY opens a tranche; filled SELL closes the oldest tranche FIFO.
-9. Admin reconciliation can compare open tranches with Binance account balances.
+9. Inventory, risk totals, and FIFO are restricted to the active execution/account scope.
+10. Admin reconciliation compares only that scope with its Binance account balance.
 
 ## TradingView Contract
 
@@ -78,6 +79,7 @@ See `middleware/.env.example`.
 Important variables:
 - `MW_DATABASE_URL`
 - `MW_EXECUTION_MODE` (`DRY_RUN` or `LIVE`)
+- `MW_INVENTORY_ACCOUNT_ID` (non-secret stable account label; required in `LIVE`)
 - `MW_TRADING_ENABLED`
 - `MW_BROKER_NAME=BINANCE_SPOT`
 - `MW_WEBHOOK_AUTH_TOKEN`
@@ -145,6 +147,37 @@ The response includes:
 `OK` means Binance total base balance is within the symbol step-size tolerance
 and free balance is enough to sell the tracked open tranches.
 
+## Inventory Scope and Migration
+
+Every order and tranche carries an `inventory_scope` built from execution mode,
+broker, environment/venue, and a stable account label:
+
+- DRY run: `DRY_RUN|BINANCE_SPOT|<MW_APP_ENV>|<account-or-simulation-default>`
+- Live: `LIVE|BINANCE_SPOT|<MW_BINANCE_BASE_URL-host>|<MW_INVENTORY_ACCOUNT_ID>`
+
+`MW_INVENTORY_ACCOUNT_ID` is a label such as `testnet-primary` or `prod-primary`,
+not an API key or Binance secret. It must remain stable for one account and differ
+between accounts. Testnet and production also remain separate because their API hosts
+are part of the scope. Changing any scope component intentionally presents an empty,
+independent inventory until returning to the original values.
+
+FIFO selection, open-position/exposure limits, daily order/loss totals, order and
+position listings, and reconciliation all use the same scope. Signal history remains
+a global webhook audit; signal idempotency is evaluated independently per scope.
+
+Before running code with this schema against an existing middleware database:
+
+```bash
+alembic -c middleware/infra/alembic.ini upgrade head
+```
+
+Migration `20260907_0004` cannot prove the account and venue of historical rows, so it
+marks them `LEGACY_UNCLASSIFIED`. These rows remain stored but are excluded from every
+active scope. Classify them only after matching orders and tranches to verified broker
+history; update both tables to the exact scope shown by the management responses.
+The downgrade removes the new columns and indexes while retaining the historical rows.
+The migration has not been applied to the real database in this local change.
+
 ## Live Gate
 
 Live Binance execution requires:
@@ -153,6 +186,7 @@ Live Binance execution requires:
 MW_EXECUTION_MODE=LIVE
 MW_TRADING_ENABLED=true
 MW_BINANCE_LIVE_ENABLED=true
+MW_INVENTORY_ACCOUNT_ID=prod-primary
 MW_BINANCE_BASE_URL=https://api.binance.com
 MW_BINANCE_API_KEY=...
 MW_BINANCE_SECRET_KEY=...

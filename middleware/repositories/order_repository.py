@@ -13,8 +13,9 @@ from middleware.infra.time import UTC
 
 
 class OrderRepository:
-    def __init__(self, session: Session):
+    def __init__(self, session: Session, *, inventory_scope: str):
         self.session = session
+        self.inventory_scope = inventory_scope
 
     def create(
         self,
@@ -32,6 +33,7 @@ class OrderRepository:
         status: OrderStatus,
         broker_name: str,
         mode: str,
+        inventory_scope: str,
         base_asset: str | None = None,
         quote_asset: str | None = None,
         target_tranche_id: int | None = None,
@@ -57,6 +59,7 @@ class OrderRepository:
             rejection_reason=rejection_reason,
             broker_name=broker_name,
             mode=mode,
+            inventory_scope=inventory_scope,
             base_asset=base_asset,
             quote_asset=quote_asset,
             target_tranche_id=target_tranche_id,
@@ -82,6 +85,7 @@ class OrderRepository:
         status: OrderStatus,
         broker_name: str,
         mode: str,
+        inventory_scope: str,
         base_asset: str | None = None,
         quote_asset: str | None = None,
         target_tranche_id: int | None = None,
@@ -106,6 +110,7 @@ class OrderRepository:
                     status=status,
                     broker_name=broker_name,
                     mode=mode,
+                    inventory_scope=inventory_scope,
                     base_asset=base_asset,
                     quote_asset=quote_asset,
                     target_tranche_id=target_tranche_id,
@@ -123,15 +128,21 @@ class OrderRepository:
         return self.session.execute(stmt).scalar_one_or_none()
 
     def get_by_signal_event_id(self, signal_event_id: int) -> Order | None:
-        stmt = select(Order).where(Order.signal_event_id == signal_event_id)
+        stmt = select(Order).where(
+            Order.signal_event_id == signal_event_id,
+            Order.inventory_scope == self.inventory_scope,
+        )
         return self.session.execute(stmt).scalar_one_or_none()
 
     def get_by_idempotency_key(self, idempotency_key: str) -> Order | None:
-        stmt = select(Order).where(Order.idempotency_key == idempotency_key)
+        stmt = select(Order).where(
+            Order.idempotency_key == idempotency_key,
+            Order.inventory_scope == self.inventory_scope,
+        )
         return self.session.execute(stmt).scalar_one_or_none()
 
     def list_orders(self, *, limit: int = 100, symbol: str | None = None) -> list[Order]:
-        stmt = select(Order)
+        stmt = select(Order).where(Order.inventory_scope == self.inventory_scope)
         if symbol:
             stmt = stmt.where(Order.symbol == symbol.upper())
         stmt = stmt.order_by(Order.id.desc()).limit(limit)
@@ -182,13 +193,17 @@ class OrderRepository:
 
     def count_orders_today(self) -> int:
         start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
-        stmt = select(func.count(Order.id)).where(Order.created_at >= start)
+        stmt = select(func.count(Order.id)).where(
+            Order.created_at >= start,
+            Order.inventory_scope == self.inventory_scope,
+        )
         return int(self.session.execute(stmt).scalar() or 0)
 
     def get_realized_pnl_today(self) -> Decimal:
         start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
         stmt = select(func.coalesce(func.sum(Order.realized_pnl), 0)).where(
             Order.created_at >= start,
+            Order.inventory_scope == self.inventory_scope,
             Order.side == Side.SELL.value,
             Order.realized_pnl.is_not(None),
         )

@@ -4,11 +4,11 @@ Bu belge, 6 Eylül 2026 tarihli salt okunur proje incelemesinden çıkan işleri
 
 ## Kaldığımız nokta
 
-- **Son tamamlanan çalışma:** P0-2 — admin ve kritik API yetkilendirmesi, dashboard oturumu ve ilgili testler doğrulandı (2026-09-07).
-- **Uygulama durumu:** 243 Python testi; 239 geçti, önceki 4 HUNTER/ATR hatası açık (P1-7). Frontend 9/9 oturum testi, lint/typecheck/build ve sahte API ile tarayıcı kontrolü geçti. Bu sonuç tüm projenin hatasız olduğu anlamına gelmez.
-- **Aktif iş:** P0-2 kapanışı; sonraki uygulama maddesi P0-3.
-- **Sıradaki somut adım:** P0-3 için `middleware/services/trading_service.py` ve tranche/emir repository sorgularında DRY_RUN/LIVE ile hesap/ortam kapsamını incele; eski verinin sınıflandırma ve migration davranışını örnek veri üzerinde tasarla.
-- **İşlevsel düzeltme odağı:** P0-3 envanter ayrımı; ardından P0-4 emir sonucu tutarlılığı.
+- **Son tamamlanan çalışma:** P0-3 — DRY_RUN/LIVE, testnet/üretim ve hesap bazlı envanter ayrımı doğrulandı (2026-09-07).
+- **Uygulama durumu:** 249 Python testi; 245 geçti, önceki 4 HUNTER/ATR hatası açık (P1-7). Middleware 50/50 ve Ruff geçti. Frontend için son doğrulanmış P0-2 sonucu 9/9 oturum testi + lint/typecheck/build. Bu sonuç tüm projenin hatasız olduğu anlamına gelmez.
+- **Aktif iş:** P0-3 kapanışı; sonraki uygulama maddesi P0-4.
+- **Sıradaki somut adım:** P0-4 için Binance adapter sonucundaki `accepted`, durum ve gerçekleşen miktar ilişkisini incele; kısmi gerçekleşen IOC/EXPIRED/CANCELED emirleri ve timeout sonrası client order ID sorgusunu tek sefer uygulama garantisiyle tasarla.
+- **İşlevsel düzeltme odağı:** P0-4 emir sonucu ve pozisyon tutarlılığı; ardından P1-1 doğruluk sınırları.
 - **Başlangıç kaydı:** Bu belge ilk oluşturulduğunda yalnız belge değişmişti; sonraki uygulama değişiklikleri aşağıda ayrı kaydedildi.
 - **Seçilen geliştirme ortamı:** `.venv` / Python 3.12; Node 20.20.2 / npm 10.9.9. Yerelde Python 3.12.8 ile doğrulandı.
 - **Commit / yayın düzeni:** Her tamamlanan P maddesi ayrı yerel commit; push ve sunucu deploy'u doğrulanmış gruplar halinde. İlk yayın eşiği P0 işleri + P1-7 test hatası + P1-2 dağıtım uyumu.
@@ -140,7 +140,7 @@ Kapsam tahminleri süre taahhüdü değildir: küçük birkaç dosya; orta bir �
 |---|---|---|---|---|
 | P0-1 | Tek ortam ve izole test tabanı | Doğrulandı | Orta | Yok |
 | P0-2 | Admin ve kritik API yetkilendirmesi | Doğrulandı | Orta | P0-1 |
-| P0-3 | DRY_RUN/LIVE envanter ayrımı | Bekliyor | Büyük | P0-1; mevcut veri sınıflandırması |
+| P0-3 | DRY_RUN/LIVE envanter ayrımı | Doğrulandı | Büyük | P0-1; mevcut veri sınıflandırması |
 | P0-4 | Emir sonucu ve pozisyon tutarlılığı | Bekliyor | Büyük | P0-1, P0-3 |
 | P1-1 | Komisyon, hassasiyet, limit ve replay doğruluğu | Bekliyor | Orta/büyük | P0-3, P0-4 |
 | P1-2 | Çalıştırma ve dağıtım topolojisi | Bekliyor | Orta | P0-1; topoloji seçimi |
@@ -292,17 +292,33 @@ Dashboard `/login` → `/auth/token` → `/auth/me` akışı kullanır. Token ya
 
 ### P0-3 — DRY_RUN/LIVE envanter ayrımı
 
-**Neden:** Emir mod bilgisi tutuluyor; FIFO ve açık tranche sorguları simülasyon/canlı ayrımı yapmıyor. Aynı DB ile mod değişimi gerçek satışa sanal tranche seçebilir.
+**İncelemede doğrulanan sorun:** Emirlerde `mode` vardı fakat tranche'larda ve repository sorgularında kapsam yoktu. FIFO, açık pozisyon/exposure, günlük emir/PnL sayımı, listeleme ve reconciliation aynı DB'deki bütün modları okuyordu. Ayrıca global sinyal/order idempotency anahtarı aynı alarmın ayrı ortamda işlenmesini engelleyebilirdi.
 
-**Dosyalar:** [middleware modelleri](../middleware/infra/models.py), [tranche repository](../middleware/repositories/tranche_repository.py), [order repository](../middleware/repositories/order_repository.py), [TradingService](../middleware/services/trading_service.py), [migration dizini](../middleware/infra/alembic/versions).
+**Değişen dosyalar:** [middleware modelleri](../middleware/infra/models.py), [ayarlar](../middleware/infra/settings.py), [tranche repository](../middleware/repositories/tranche_repository.py), [order repository](../middleware/repositories/order_repository.py), [TradingService](../middleware/services/trading_service.py), [20260907_0004 migration](../middleware/infra/alembic/versions/20260907_0004_scope_inventory.py), middleware API ana giriş/yanıt modelleri/order-position route'ları, `.env.example`, README, Binance yürütme planı, test fixture'ı, [kapsam testleri](../middleware/tests/test_inventory_scope.py), [migration testi](../middleware/tests/test_inventory_migration.py), ayar testleri ve bu belge.
 
 **Kabul kriterleri:**
 
-- [ ] Envanter kapsamı mod ve gerekli hesap/ortam kimliğiyle tanımlandı; testnet ile gerçek hesap kayıtlarının da karışmaması sağlandı.
-- [ ] FIFO, exposure, günlük risk sayımı, listeleme ve reconciliation aynı kapsamı kullanıyor.
-- [ ] DRY_RUN alış → LIVE satış geçişinde sanal pozisyonun seçilmediği izole testle gösterildi.
-- [ ] Eski kayıtların sınıflandırılması, belirsiz kayıtların davranışı ve migration/geri dönüş yolu örnek veri üzerinde doğrulandı.
-- [ ] Gerçek DB'ye uygulanmamış migration, uygulanmış olarak raporlanmadı.
+- [x] Envanter kapsamı mod ve gerekli hesap/ortam kimliğiyle tanımlandı; testnet ile gerçek hesap kayıtlarının da karışmaması sağlandı.
+- [x] FIFO, exposure, günlük risk sayımı, listeleme ve reconciliation aynı kapsamı kullanıyor.
+- [x] DRY_RUN alış → LIVE satış geçişinde sanal pozisyonun seçilmediği izole testle gösterildi.
+- [x] Eski kayıtların sınıflandırılması, belirsiz kayıtların davranışı ve migration/geri dönüş yolu örnek veri üzerinde doğrulandı.
+- [x] Gerçek DB'ye uygulanmamış migration, uygulanmış olarak raporlanmadı.
+
+**Düzeltme ve kapsam sözleşmesi:** Her yeni order ve tranche aynı `inventory_scope` değerini taşır. DRY_RUN kapsamı `DRY_RUN|broker|MW_APP_ENV|hesap-etiketi`, LIVE kapsamı `LIVE|broker|MW_BINANCE_BASE_URL-host|MW_INVENTORY_ACCOUNT_ID` biçimindedir. Hesap etiketi gizli anahtar değildir; LIVE için zorunlu, 1–64 güvenli karakterle sınırlı ve aynı hesap için kararlı olmalıdır. Testnet/üretim hostları ve farklı hesap etiketleri doğal olarak farklı kapsam üretir. DRY_RUN'da boş etiket `simulation-default` olur.
+
+Aktif kapsam; FIFO seçimi/kilidi, cross-scope tranche güncelleme engeli, açık tranche sayısı, sembol exposure'ı, günlük order/PnL toplamı, order/position/tranche listeleri ve reconciliation için repository seviyesinde uygulanır. Order/pozisyon/reconciliation yanıtları mod ve kapsamı açıkça gösterir. Webhook signal tablosu global denetim geçmişi olarak kalır; order idempotency anahtarı kapsamla hash'lendiği için aynı alarm her kapsamda bir kez işlenebilir ve aynı kapsamda duplicate kalır.
+
+Migration `20260907_0004`, geçmiş order'larda hesap/venue kimliği kanıtlanamadığı için hepsini `LEGACY_UNCLASSIFIED` kapsamına alır; tranche `mode` bilgisini ilişkili açılış order'ından taşır, ilişkisiz satırı `LEGACY` yapar. Bu kayıtlar silinmez ve hiçbir aktif kapsamda görünmez/seçilmez. Broker geçmişiyle doğrulanmadan otomatik olarak güncel hesaba atanmaz. Downgrade yeni kolon/indeksleri kaldırır ve satırları korur.
+
+**Doğrulama (2026-09-07, Python 3.12.8):**
+
+- Tam komut: `.venv/Scripts/python.exe -X utf8 -B -m pytest --cov=. --cov-report=xml -q --tb=line`. 249 testin 245'i geçti; yalnız önceden P1-7'ye kaydedilen dört HUNTER/ATR hatası ve bir `datetime.utcnow()` uyarısı devam ediyor. Yeni regresyon yok.
+- Middleware paketi 50/50 geçti. Üç entegrasyon testi DRY_RUN alış→LIVE satış izolasyonunu; aynı sinyalin kapsam bazlı idempotency'sini; açık tranche, exposure ve günlük order risk toplamlarını; testnet/üretim ve iki hesap ayrımını; kapsamlı order/position listesi ile reconciliation'ı sahte broker ve geçici SQLite üzerinde doğruladı. Hiçbir borsa isteği/emri yapılmadı.
+- Migration testi geçici eski şema ve üç örnek tranche üzerinde upgrade/downgrade yaptı: DRY_RUN/LIVE mode bilgisi taşındı, bilinmeyen hesap/venue `LEGACY_UNCLASSIFIED` kaldı, kolonlar NOT NULL oldu ve downgrade sonrası üç satır korundu.
+- Alembic PostgreSQL offline `upgrade head --sql` ve `20260907_0004:20260501_0003` downgrade SQL üretimi geçti. Bu yalnız SQL derleme kontrolüdür; PostgreSQL sunucusuna bağlanılmadı ve gerçek DB'ye migration uygulanmadı.
+- `ruff check middleware`, değişen dosya hook'ları ve `git diff --check` geçti. Üç mevcut DB'nin SHA-256 değerleri P0-1/P0-2 kayıtlarıyla aynı kaldı.
+
+**Operasyon sınırı:** Yeni kod mevcut bir middleware DB üzerinde migration çalışmadan başlatılmamalıdır; `Base.metadata.create_all()` mevcut tablolara yeni kolon eklemez. Deploy akışı P1-2'de migration-before-start adımını güvenceye almalıdır. P0-3 yerel commit'i `fix(middleware): isolate inventory by execution scope` başlığıyla tutulur; push/deploy P0 grubu ve kayıtlı yayın koşullarını bekler. Sonraki iş **P0-4**.
 
 ### P0-4 — Emir sonucu ve pozisyon tutarlılığı
 
@@ -513,6 +529,8 @@ Dashboard `/login` → `/auth/token` → `/auth/me` akışı kullanır. Token ya
 | 2026-09-06 | Commit araçları da tek geliştirme ortamına dahil | `.venv` içindeki mevcut hook için pre-commit 4.5.1 eklendi; Ruff hook'u 0.14.13 ile yerel/CI sürümüne eşitlendi; bağımlılık kontrolü 128 paket için geçti |
 | 2026-09-07 | Middleware yönetimi webhook'tan ayrı anahtarla korunacak | `MW_ADMIN_AUTH_TOKEN`; header-only; eksik/aynı anahtar kapalı davranır; replay bypass yalnız doğrulanmış admin için |
 | 2026-09-07 | Ana API kritik işlemleri rol ve rate-limit ile korunacak | Dashboard giriş akışı eklendi; token sekme belleğinde; mevcut public okumalar korunuyor; dağıtım/proxy doğrulaması P1-2 |
+| 2026-09-07 | Envanter mod, broker, venue/ortam ve hesap etiketiyle ayrılacak | DRY_RUN/LIVE, testnet/üretim ve farklı hesaplar aynı DB'de birbirinin FIFO/risk/list/reconciliation durumunu göremez |
+| 2026-09-07 | Kanıtlanamayan eski middleware satırları karantinada kalacak | Migration geçmiş account/venue bilgisini varsaymaz; `LEGACY_UNCLASSIFIED` satırları saklanır fakat aktif işlem kapsamına girmez |
 
 ## İlerleme günlüğü
 
@@ -528,6 +546,10 @@ Dashboard `/login` → `/auth/token` → `/auth/me` akışı kullanır. Token ya
 | 2026-09-07 | P0-2 | Düzelt | Ayrı middleware yönetim anahtarı, ana API rol/limit kontrolleri, generic işlem hataları, bellek oturumu ve login/logout UI eklendi; OpenAPI/CI/README güncellendi |
 | 2026-09-07 | P0-2 | Doğrula | 239/243 Python testi geçti; yalnız önceki dört P1-7 hatası açık. Yeni yetki testleri 54/54, middleware 44/44; frontend 9/9, lint/typecheck/build ve sahte API ile tarayıcı akışı geçti; gerçek DB özetleri değişmedi |
 | 2026-09-07 | P0-2 | Belgeyi güncelle — Doğrulandı | Erişim/limit matrisi, yeni anahtar kurulumu, replay bypass, komut/kanıt ve yayın sınırı kaydedildi. Yerel commit başlığı: `fix(auth): protect admin and analysis operations`; push/deploy yok. Sonraki iş P0-3 |
+| 2026-09-07 | P0-3 | İncele | Order mode bilgisinin tranche/FIFO/risk/list/reconciliation sorgularına uygulanmadığı ve global idempotency'nin ortam geçişini karıştırdığı doğrulandı |
+| 2026-09-07 | P0-3 | Düzelt | Kapsam anahtarı ve LIVE hesap etiketi zorunluluğu, order/tranche kolonları, repository filtreleri, kapsamlı idempotency, API alanları ve karantina migration'ı eklendi |
+| 2026-09-07 | P0-3 | Doğrula | Tam paket 245/249; yalnız önceki dört P1-7 hatası. Middleware 50/50 ve Ruff geçti; izolasyon ile SQLite migration round-trip ve PostgreSQL offline upgrade/downgrade SQL doğrulandı; gerçek DB/emir yok |
+| 2026-09-07 | P0-3 | Belgeyi güncelle — Doğrulandı | Kapsam sözleşmesi, eski veri davranışı, migration-before-start şartı ve test kanıtı kaydedildi. Yerel commit başlığı: `fix(middleware): isolate inventory by execution scope`; push/deploy yok. Sonraki iş P0-4 |
 
 Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 
@@ -547,4 +569,4 @@ Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 4. Aktif işin bulgusunu ve bağımlılıklarını güncel kodda kontrol et. İncelemeyi baştan tekrarlamak yerine ilgili kanıttan devam et.
 5. İşin dört adımını tamamla veya engeli somutlaştır; ardından durum tablosu, günlük ve Kaldığımız nokta bölümünü güncelle.
 
-**P0-1 ve P0-2 tamamlandı. Sıradaki ana uygulama işi P0-3; tam test tabanında açık dört hata P1-7'de takip ediliyor.**
+**P0-1, P0-2 ve P0-3 tamamlandı. Sıradaki ana uygulama işi P0-4; tam test tabanında açık dört hata P1-7'de takip ediliyor.**

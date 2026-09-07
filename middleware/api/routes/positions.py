@@ -37,6 +37,8 @@ def get_position(
             TrancheItem(
                 id=t.id,
                 symbol=t.symbol,
+                mode=t.mode,
+                inventory_scope=t.inventory_scope,
                 signal_code=t.signal_code,
                 entry_price=t.entry_price,
                 entry_time=t.entry_time,

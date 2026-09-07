@@ -28,11 +28,16 @@ def _open_quantity_expr():
 
 
 class TrancheRepository:
-    def __init__(self, session: Session):
+    def __init__(self, session: Session, *, inventory_scope: str, mode: str):
         self.session = session
+        self.inventory_scope = inventory_scope
+        self.mode = mode
 
     def get(self, tranche_id: int, *, for_update: bool = False) -> Tranche | None:
-        stmt = select(Tranche).where(Tranche.id == tranche_id)
+        stmt = select(Tranche).where(
+            Tranche.id == tranche_id,
+            Tranche.inventory_scope == self.inventory_scope,
+        )
         if for_update:
             stmt = stmt.with_for_update()
         return self.session.execute(stmt).scalar_one_or_none()
@@ -40,6 +45,7 @@ class TrancheRepository:
     def count_open(self, symbol: str) -> int:
         stmt = select(func.count(Tranche.id)).where(
             Tranche.symbol == symbol.upper(),
+            Tranche.inventory_scope == self.inventory_scope,
             Tranche.status == TrancheStatus.OPEN.value,
             or_(Tranche.remaining_lots > 0, Tranche.remaining_quantity > 0),
         )
@@ -49,6 +55,7 @@ class TrancheRepository:
         quantity_expr = _open_quantity_expr()
         stmt = select(func.coalesce(func.sum(Tranche.entry_price * quantity_expr), 0)).where(
             Tranche.symbol == symbol.upper(),
+            Tranche.inventory_scope == self.inventory_scope,
             Tranche.status == TrancheStatus.OPEN.value,
             or_(Tranche.remaining_lots > 0, Tranche.remaining_quantity > 0),
         )
@@ -60,6 +67,7 @@ class TrancheRepository:
             select(Tranche)
             .where(
                 Tranche.symbol == symbol.upper(),
+                Tranche.inventory_scope == self.inventory_scope,
                 Tranche.status == TrancheStatus.OPEN.value,
                 or_(Tranche.remaining_lots > 0, Tranche.remaining_quantity > 0),
             )
@@ -75,6 +83,7 @@ class TrancheRepository:
             select(Tranche.id)
             .where(
                 Tranche.symbol == symbol.upper(),
+                Tranche.inventory_scope == self.inventory_scope,
                 Tranche.status == TrancheStatus.OPEN.value,
                 or_(Tranche.remaining_lots > 0, Tranche.remaining_quantity > 0),
             )
@@ -110,6 +119,8 @@ class TrancheRepository:
             filled_quantity=Decimal("0"),
             remaining_quantity=Decimal("0"),
             status=TrancheStatus.OPEN.value,
+            mode=self.mode,
+            inventory_scope=self.inventory_scope,
             open_order_id=open_order_id,
             close_order_id=None,
             created_at=datetime.now(UTC),
@@ -219,6 +230,7 @@ class TrancheRepository:
 
     def list_open_tranches(self, symbol: str | None = None) -> list[Tranche]:
         stmt = select(Tranche).where(
+            Tranche.inventory_scope == self.inventory_scope,
             Tranche.status == TrancheStatus.OPEN.value,
             or_(Tranche.remaining_lots > 0, Tranche.remaining_quantity > 0),
         )
@@ -246,6 +258,7 @@ class TrancheRepository:
                 weighted_avg.label("weighted_avg_entry_price"),
             )
             .where(
+                Tranche.inventory_scope == self.inventory_scope,
                 Tranche.status == TrancheStatus.OPEN.value,
                 or_(Tranche.remaining_lots > 0, Tranche.remaining_quantity > 0),
             )
@@ -256,6 +269,8 @@ class TrancheRepository:
         return [
             {
                 "symbol": str(row["symbol"]),
+                "mode": self.mode,
+                "inventory_scope": self.inventory_scope,
                 "open_tranche_count": int(row["open_tranche_count"] or 0),
                 "total_remaining_lots": int(row["total_remaining_lots"] or 0),
                 "total_remaining_quantity": Decimal(str(row["total_remaining_quantity"] or 0)),
