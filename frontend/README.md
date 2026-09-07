@@ -15,6 +15,27 @@ npm run dev
 
 Tarayıcınızda [http://localhost:3000](http://localhost:3000) adresine gidin.
 
+## Oturum ve doğrulama
+
+Üst çubuktaki **Giriş yap** bağlantısı `/login` ekranını açar. Ana API'de tanımlı
+`admin` veya `user` hesabını kullanın; parolalar backend ortamından yönetilir.
+AI analizi ve strateji inceleme giriş, loglar ve manuel tarama admin yetkisi ister.
+
+Token yalnız sekme belleğinde tutulur; sayfa yenileme, süre dolumu veya çıkış oturumu
+sonlandırır. Oturum değişince sorgu önbelleği ve önceki kullanıcıya ait bileşen durumu
+temizlenir. Token yalnız yapılandırılmış ana API adresine eklenir; health API'ye
+ve başka servislere gönderilmez. `MW_ADMIN_AUTH_TOKEN` frontend'e verilmez.
+
+```bash
+npm test
+npm run lint
+npx tsc --noEmit --incremental false
+npm run build
+```
+
+`npm test`, gerçek TypeScript oturum/API modüllerini bellekte derleyip sahte HTTP
+yanıtlarıyla sınar; backend, dış ağ veya gerçek kullanıcı hesabı gerekmez.
+
 ## 🛠️ Teknolojiler
 
 - **Framework:** Next.js 16.2.1 (App Router)

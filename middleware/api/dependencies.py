@@ -31,6 +31,22 @@ def require_admin_enabled() -> None:
         )
 
 
+def verify_admin_auth(
+    x_admin_token: Annotated[str | None, Header(alias="X-Admin-Token")] = None,
+) -> None:
+    """Management credentials are separate from TradingView's webhook secret."""
+    expected = settings.admin_auth_token
+    if not expected or expected == settings.webhook_auth_token:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="admin authentication is not configured",
+        )
+    if x_admin_token is None or not secrets.compare_digest(
+        x_admin_token.encode("utf-8"), expected.encode("utf-8")
+    ):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid admin token")
+
+
 def verify_webhook_auth(
     x_webhook_token: Annotated[str | None, Header(alias="X-Webhook-Token")] = None,
     token: Annotated[str | None, Query(alias="token")] = None,
@@ -47,7 +63,9 @@ def verify_webhook_auth(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="server misconfigured: MW_WEBHOOK_AUTH_TOKEN is not set",
         )
-    if provided is None or not secrets.compare_digest(provided, expected):
+    if provided is None or not secrets.compare_digest(
+        provided.encode("utf-8"), expected.encode("utf-8")
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid webhook token"
         )

@@ -20,7 +20,10 @@ def isolated_core_databases(test_sandbox: Path, monkeypatch: pytest.MonkeyPatch)
     import database
     import db_session
     import price_cache
+    from api.rate_limit import limiter
     from settings import get_settings, settings
+
+    limiter.reset()
 
     db_path = test_sandbox / "trading_bot.sqlite3"
     cache_path = test_sandbox / "price_cache.sqlite3"
@@ -55,6 +58,40 @@ def isolated_core_databases(test_sandbox: Path, monkeypatch: pytest.MonkeyPatch)
         if db_session._engine is not None:
             db_session._engine.dispose()
         get_settings.cache_clear()
+
+
+@pytest.fixture
+def api_auth_users(monkeypatch: pytest.MonkeyPatch):
+    """Use the auth module captured by the routes, even after auth reload tests."""
+    import hashlib
+
+    from api.routes import auth_routes
+
+    users = {
+        name: {
+            "username": name,
+            "hashed_password": hashlib.sha256(b"test-password").hexdigest(),
+            "is_admin": name == "admin",
+            "disabled": name == "disabled",
+        }
+        for name in ("admin", "user", "disabled")
+    }
+    monkeypatch.setitem(auth_routes.authenticate_user.__globals__, "USERS_DB", users)
+    return auth_routes
+
+
+@pytest.fixture
+def authenticated_api_client(api_auth_users) -> Iterator:
+    from fastapi.testclient import TestClient
+
+    import api.main as api_main
+
+    token = api_auth_users.create_access_token({"sub": "user"})
+    client = TestClient(api_main.app, headers={"Authorization": f"Bearer {token}"})
+    try:
+        yield client
+    finally:
+        client.close()
 
 
 @pytest.fixture

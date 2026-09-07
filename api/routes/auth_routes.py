@@ -20,7 +20,7 @@ router = APIRouter(tags=["Authentication"])
 @limiter.limit("5/minute")
 async def login(request: Request, user_login: UserLogin):
     user = authenticate_user(user_login.username, user_login.password)
-    if not user:
+    if not user or user.get("disabled"):
         raise HTTPException(
             status_code=401,
             detail="Kullanici adi veya sifre hatali",

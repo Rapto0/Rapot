@@ -4,12 +4,12 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from middleware.api.dependencies import get_service
+from middleware.api.dependencies import get_service, verify_admin_auth
 from middleware.domain.enums import TrancheStatus
 from middleware.domain.events import PositionItem, TrancheItem
 from middleware.services.trading_service import TradingService
 
-router = APIRouter(tags=["positions"])
+router = APIRouter(tags=["positions"], dependencies=[Depends(verify_admin_auth)])
 
 
 @router.get("/positions", response_model=list[PositionItem])

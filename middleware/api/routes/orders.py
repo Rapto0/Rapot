@@ -4,12 +4,12 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
-from middleware.api.dependencies import get_service
+from middleware.api.dependencies import get_service, verify_admin_auth
 from middleware.domain.enums import OrderStatus, Side
 from middleware.domain.events import OrderItem
 from middleware.services.trading_service import TradingService
 
-router = APIRouter(tags=["orders"])
+router = APIRouter(tags=["orders"], dependencies=[Depends(verify_admin_auth)])
 
 
 @router.get("/orders", response_model=list[OrderItem])

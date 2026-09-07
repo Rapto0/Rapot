@@ -1,7 +1,5 @@
 import json
 
-from fastapi.testclient import TestClient
-
 import api.main as api_main
 
 
@@ -81,7 +79,9 @@ def _analysis_json() -> str:
     )
 
 
-def test_market_analysis_endpoint_uses_selected_timeframe_and_no_db_save(monkeypatch):
+def test_market_analysis_endpoint_uses_selected_timeframe_and_no_db_save(
+    monkeypatch, authenticated_api_client
+):
     captured: dict = {}
 
     def fake_inspect_strategy(symbol: str, strategy: str, market_type: str | None = None):
@@ -99,7 +99,7 @@ def test_market_analysis_endpoint_uses_selected_timeframe_and_no_db_save(monkeyp
     monkeypatch.setattr(api_main, "inspect_strategy", fake_inspect_strategy)
     monkeypatch.setattr("ai_analyst.analyze_with_gemini", fake_analyze_with_gemini)
 
-    client = TestClient(api_main.app)
+    client = authenticated_api_client
     response = client.get(
         "/api/market/analysis",
         params={"symbol": "THYAO", "strategy": "HUNTER", "timeframe": "1D"},
@@ -120,7 +120,9 @@ def test_market_analysis_endpoint_uses_selected_timeframe_and_no_db_save(monkeyp
     assert payload["structured_analysis"]["sentiment_label"] == "AL"
 
 
-def test_market_analysis_endpoint_returns_all_timeframes_for_default_mode(monkeypatch):
+def test_market_analysis_endpoint_returns_all_timeframes_for_default_mode(
+    monkeypatch, authenticated_api_client
+):
     def fake_inspect_strategy(symbol: str, strategy: str, market_type: str | None = None):
         return _build_report()
 
@@ -130,7 +132,7 @@ def test_market_analysis_endpoint_returns_all_timeframes_for_default_mode(monkey
     monkeypatch.setattr(api_main, "inspect_strategy", fake_inspect_strategy)
     monkeypatch.setattr("ai_analyst.analyze_with_gemini", fake_analyze_with_gemini)
 
-    client = TestClient(api_main.app)
+    client = authenticated_api_client
     response = client.get(
         "/api/market/analysis",
         params={"symbol": "THYAO", "strategy": "HUNTER", "market_type": "BIST"},

@@ -1922,6 +1922,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Analyze Symbol",
         "tags": [
           "Analysis"
@@ -2070,6 +2075,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Get Market Analysis",
         "tags": [
           "AI Analysis"
@@ -2308,6 +2318,8 @@
             "required": false,
             "schema": {
               "default": 50,
+              "maximum": 500,
+              "minimum": 1,
               "title": "Limit",
               "type": "integer"
             }
@@ -2333,6 +2345,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Get System Logs",
         "tags": [
           "System"
@@ -2426,6 +2443,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Get Market Analysis",
         "tags": [
           "AI Analysis"
@@ -2862,6 +2884,11 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Get Strategy Inspector",
         "tags": [
           "Operations"

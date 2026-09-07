@@ -81,6 +81,8 @@ Important variables:
 - `MW_TRADING_ENABLED`
 - `MW_BROKER_NAME=BINANCE_SPOT`
 - `MW_WEBHOOK_AUTH_TOKEN`
+- `MW_ADMIN_AUTH_TOKEN` (separate management secret, required for private reads/admin operations)
+- `MW_ALLOW_ADMIN_ENDPOINTS` (enables replay/reconciliation, not authentication)
 - `MW_BINANCE_BASE_URL`
 - `MW_BINANCE_API_KEY`
 - `MW_BINANCE_SECRET_KEY`
@@ -107,6 +109,27 @@ uvicorn middleware.api.main:app --reload --port 8010
 - `GET /signals`
 - `POST /admin/replay-signal`
 - `GET /admin/reconcile/{symbol}`
+
+## Management Authentication
+
+Send `X-Admin-Token: <MW_ADMIN_AUTH_TOKEN>` on `/orders`, `/positions`,
+`/positions/{symbol}`, `/signals`, and every `/admin/*` request. Query-string tokens
+and `X-Webhook-Token` do not grant management access. Configure a strong independent
+secret on the server; never put it in Pine alerts or dashboard public variables.
+
+Missing/incorrect request credentials return `401`. An unset admin secret, or one
+equal to `MW_WEBHOOK_AUTH_TOKEN`, returns `503` and prevents service/broker creation.
+`MW_ALLOW_ADMIN_ENDPOINTS=false` returns `403` on replay/reconciliation even with a
+valid key. Private reads require the key regardless of that feature flag.
+Disabling webhook authentication does not disable management authentication.
+
+Replay requires both the enabled flag and the admin key. Its default
+`bypass_idempotency=false` preserves duplicate suppression. An authenticated admin
+can explicitly set `bypass_idempotency=true` to process the payload again; this can
+create another order under the configured execution mode and trading gates.
+
+`GET /health` remains public. TradingView keeps its separate webhook credential
+(`X-Webhook-Token` or the existing `?token=` fallback).
 
 ## Reconciliation
 

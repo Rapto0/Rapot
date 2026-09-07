@@ -4,12 +4,12 @@ Bu belge, 6 Eylül 2026 tarihli salt okunur proje incelemesinden çıkan işleri
 
 ## Kaldığımız nokta
 
-- **Son tamamlanan çalışma:** P0-1 — geliştirme ortamı ve izole test tabanı doğrulandı.
-- **Uygulama durumu:** 189 test toplandı; 185 geçti, 4 HUNTER/ATR davranış hatası açık (P1-7). Frontend lint/typecheck/build geçti. Bu sonuç tüm projenin hatasız olduğu anlamına gelmez.
-- **Aktif iş:** Yok; P0-1'in incele → düzelt → doğrula → belgeyi güncelle döngüsü tamamlandı.
-- **Sıradaki somut adım:** P0-2 için middleware admin replay ve ana API yetki sınırlarını incele. Tam CI'nin yeşile dönmesi için P1-7 de kapatılmalı.
-- **İlk işlevsel düzeltme odağı:** P0-2 yetkilendirme; ardından P0-3 envanter ayrımı ve P0-4 emir sonucu tutarlılığı.
-- **Bu belge hazırlanırken değişen dosya:** Yalnız bu belge.
+- **Son tamamlanan çalışma:** P0-2 — admin ve kritik API yetkilendirmesi, dashboard oturumu ve ilgili testler doğrulandı (2026-09-07).
+- **Uygulama durumu:** 243 Python testi; 239 geçti, önceki 4 HUNTER/ATR hatası açık (P1-7). Frontend 9/9 oturum testi, lint/typecheck/build ve sahte API ile tarayıcı kontrolü geçti. Bu sonuç tüm projenin hatasız olduğu anlamına gelmez.
+- **Aktif iş:** P0-2 kapanışı; sonraki uygulama maddesi P0-3.
+- **Sıradaki somut adım:** P0-3 için `middleware/services/trading_service.py` ve tranche/emir repository sorgularında DRY_RUN/LIVE ile hesap/ortam kapsamını incele; eski verinin sınıflandırma ve migration davranışını örnek veri üzerinde tasarla.
+- **İşlevsel düzeltme odağı:** P0-3 envanter ayrımı; ardından P0-4 emir sonucu tutarlılığı.
+- **Başlangıç kaydı:** Bu belge ilk oluşturulduğunda yalnız belge değişmişti; sonraki uygulama değişiklikleri aşağıda ayrı kaydedildi.
 - **Seçilen geliştirme ortamı:** `.venv` / Python 3.12; Node 20.20.2 / npm 10.9.9. Yerelde Python 3.12.8 ile doğrulandı.
 - **Commit / yayın düzeni:** Her tamamlanan P maddesi ayrı yerel commit; push ve sunucu deploy'u doğrulanmış gruplar halinde. İlk yayın eşiği P0 işleri + P1-7 test hatası + P1-2 dağıtım uyumu.
 - **Açık kararlar:** Hedef çalıştırma topolojisi ve Docker Python sürümü, testnet hesabı/veritabanı ayrımı ve ileride middleware'in dashboard'a bağlanıp bağlanmayacağı.
@@ -18,7 +18,8 @@ Bu belge, 6 Eylül 2026 tarihli salt okunur proje incelemesinden çıkan işleri
 
 Kullanıcının ilk isteği yalnız inceleme ve raporlamaydı; dosya değişikliği, kod yazma ve commit açıkça yasaktı. Sonraki isteği bu takip belgesinin tutulmasını ve uygulamada yukarıdaki dört adımın izlenmesini belirledi.
 
-- Kullanıcının P0-1 isteğiyle bu madde için gerekli yerel kod/test/konfigürasyon değişiklikleri, geliştirme bağımlılıklarının kurulması ve izole doğrulama kapsam dahilindedir. Diğer uygulama maddeleri henüz başlatılmadı.
+- Kullanıcının P0-1 isteğiyle bu madde için gerekli yerel kod/test/konfigürasyon değişiklikleri, geliştirme bağımlılıklarının kurulması ve izole doğrulama kapsam dahilindedir. P0-1 tamamlandı; sonraki uygulama yetkisi aşağıda kaydedildi.
+- Kullanıcının "Devam et" talimatıyla sıradaki P0-2 başlatıldı; backend yetki kontrolleri, bunları kullanan frontend giriş akışı, test ve belge değişiklikleri kapsam dahilindedir.
 - Kullanıcının sonraki talimatı, yapılan geliştirmelerin otomatik commit/push ve sunucu deploy'una izin verdi; zamanlamayı asistana bıraktı. Seçilen düzen: her tamamlanan iş için yerel commit; P0/P1 gibi gruplar tamamlanınca kontrollerin geçtiği commitleri push et ve sunucuda doğrulanmış deploy yap. Aynı kapsam için yeniden onay sorulmaz.
 - Belgenin varlığı; bağımlılık kurulumu, kod/konfigürasyon değişikliği, migration, commit/push, deploy, servis başlatma, testnet emri veya gerçek emir için kendi başına yetki oluşturmaz.
 - Sonraki kullanıcı talimatıyla kapsam değişirse bu kayıt güncellenir. Daha önce açıkça verilmiş yetki tekrar sorulmaz.
@@ -138,7 +139,7 @@ Kapsam tahminleri süre taahhüdü değildir: küçük birkaç dosya; orta bir �
 | ID | İş | Durum | Kapsam | Bağımlılık |
 |---|---|---|---|---|
 | P0-1 | Tek ortam ve izole test tabanı | Doğrulandı | Orta | Yok |
-| P0-2 | Admin ve kritik API yetkilendirmesi | Bekliyor | Orta | P0-1 |
+| P0-2 | Admin ve kritik API yetkilendirmesi | Doğrulandı | Orta | P0-1 |
 | P0-3 | DRY_RUN/LIVE envanter ayrımı | Bekliyor | Büyük | P0-1; mevcut veri sınıflandırması |
 | P0-4 | Emir sonucu ve pozisyon tutarlılığı | Bekliyor | Büyük | P0-1, P0-3 |
 | P1-1 | Komisyon, hassasiyet, limit ve replay doğruluğu | Bekliyor | Orta/büyük | P0-3, P0-4 |
@@ -248,16 +249,46 @@ Bağımlılık güncellemesi gerektiğinde lock'u `uv pip compile requirements-d
 
 ### P0-2 — Admin ve kritik API yetkilendirmesi
 
-**Neden:** Admin replay yalnız özellik bayrağı kontrol ediyor; webhook token doğrulaması bu yolda yok. Ana API'de auth altyapısı kritik endpointlere genel olarak uygulanmamış.
+**İncelemede doğrulanan sorun:** Admin replay yalnız özellik bayrağı kontrol ediyordu; kimlik doğrulaması yoktu. Ana API'nin log, manuel tarama, strateji inceleme ve AI üretim yollarında mevcut JWT altyapısı uygulanmamıştı. Dashboard'da bu korumaları kullanabilecek giriş akışı bulunmuyordu.
 
-**Dosyalar:** [middleware dependencies](../middleware/api/dependencies.py), [admin routes](../middleware/api/routes/admin.py), [middleware settings](../middleware/infra/settings.py), [api/auth.py](../api/auth.py), [api/main.py](../api/main.py), [system routes](../api/routes/system_routes.py).
+**Değişen dosyalar:** [middleware dependencies](../middleware/api/dependencies.py), [middleware routes](../middleware/api/routes), [middleware settings](../middleware/infra/settings.py), [middleware env örneği](../middleware/.env.example), [api/auth.py](../api/auth.py), [api/main.py](../api/main.py), [auth routes](../api/routes/auth_routes.py), [system routes](../api/routes/system_routes.py), [OpenAPI snapshot](contracts/openapi.snapshot.json), [giriş ekranı](../frontend/src/app/login/page.tsx), [oturum modülü](../frontend/src/lib/auth/session.ts), [oturum hook'u](../frontend/src/lib/hooks/use-session.ts), [auth API istemcisi](../frontend/src/lib/api/auth-api.ts), [ortak API istemcisi](../frontend/src/lib/api/core.ts), [providers](../frontend/src/components/providers.tsx), [oturum kontrolleri](../frontend/src/components/auth/session-controls.tsx), desktop/mobile header, iki test fixture'ı, ana API yetki/analiz/sözleşme testleri, middleware yetki testleri, frontend oturum testleri, frontend package.json, CI, üç README ve bu belge.
 
 **Kabul kriterleri:**
 
-- [ ] Tokensız/geçersiz yetkili admin replay isteği emir niyeti veya broker çağrısı oluşturmadan reddediliyor.
-- [ ] Geçerli yetki ve admin kapalı senaryoları ayrı test edildi; replay idempotency bypass yetkisi açıkça tanımlandı.
-- [ ] Ana API'deki log, analiz ve yönetim işlemleri için erişim ve rate-limit politikası uygulandı; meşru istemci akışı korunuyor.
-- [ ] Hata/log çıktılarında gizli değer sızıntısı olmadığı doğrulandı; gerçek sunucu maruziyeti bilinmiyorsa açık kaldı.
+- [x] Tokensız/geçersiz yetkili admin replay isteği emir niyeti veya broker çağrısı oluşturmadan reddediliyor.
+- [x] Geçerli yetki ve admin kapalı senaryoları ayrı test edildi; replay idempotency bypass yetkisi açıkça tanımlandı.
+- [x] Ana API'deki log, analiz ve yönetim işlemleri için erişim ve rate-limit politikası uygulandı; meşru istemci akışı korunuyor.
+- [x] Değişen işlem yollarına enjekte edilen gizli hata metinlerinin HTTP yanıtı/loglara taşınmadığı test edildi. Bu, tüm uygulama ve geçmiş loglar için genel sızıntı denetimi değildir; gerçek sunucu maruziyeti doğrulanmadı.
+
+**Düzeltme ve erişim politikası:**
+
+| Yol / işlem | Gereken yetki | Limit / davranış |
+|---|---|---|
+| Ana API `POST /auth/token` | Kullanıcı adı/parola | 5/dakika; yanlış parola veya devre dışı kullanıcı 401 |
+| Ana API `/logs` | Admin JWT | 30/dakika; satır sınırı 1–500 |
+| Ana API `POST /analyze/{symbol}` | Admin JWT | 2/dakika |
+| Ana API `/ops/strategy-inspector` | Kullanıcı/admin JWT | 30/dakika |
+| Ana API `/market/analysis` ve `/api/market/analysis` | Kullanıcı/admin JWT | İki alias için ortak 2/dakika |
+| Middleware `/admin/replay-signal`, `/admin/reconcile/{symbol}` | Admin bayrağı açık + ayrı `X-Admin-Token` | Bayrak kapalı 403; eksik/yanlış istek token'ı 401; eksik veya webhook ile aynı sunucu anahtarı 503 |
+| Middleware `/orders`, `/positions`, `/positions/{symbol}`, `/signals` | Ayrı `X-Admin-Token` | Webhook token'ı ve URL token'ı kabul edilmez; admin bayrağından bağımsız kimlik doğrulama |
+
+Ana API limitleri mevcut SlowAPI yapısında istemci IP'sine ve süreç içi belleğe bağlıdır; çoklu worker/ortak proxy sınırı merkezi değildir. Bu dağıtım kısıtı P1-2'de dikkate alınacak. JWT `exp` alanı zorunlu; süresi geçmiş/geçersiz JWT 401, geçerli JWT'ye sahip devre dışı kullanıcı 403, normal kullanıcının admin işlemi 403 döner.
+
+Middleware yönetim anahtarı `MW_ADMIN_AUTH_TOKEN` ile sunucuda ayrıca tanımlanmalıdır. Örnek dosyada boş bırakıldı; gerçek `.env` değiştirilmedi. Anahtar Pine'a veya frontend'e verilmez. Webhook kendi anahtarını kullanmaya devam eder. Replay'de varsayılan `bypass_idempotency=false`; yalnız yetkili admin açıkça `true` gönderirse aynı sinyal yeniden işlenebilir ve yürütme modu/trading kontrollerine göre yeni emir oluşturabilir.
+
+Dashboard `/login` → `/auth/token` → `/auth/me` akışı kullanır. Token yalnız sekme belleğinde yaşar. Yenileme, süre dolumu ve çıkış oturumu kapatır; oturum değişikliği sorgu önbelleğini ve bileşenlerdeki özel veriyi temizler. Token yalnız yapılandırılmış ana API origin/path sınırına eklenir. Geç gelen eski token 401'i yeni oturumu kapatmaz; 403 oturumu korur. Mevcut ana dashboard okumaları ve kayıtlı analizler herkese açık kalır; tüm dashboard'un özel hale geldiği iddia edilmez.
+
+**Doğrulama (2026-09-07, Python 3.12.8 / Node 20.20.2 / npm 10.9.9):**
+
+- Tam komut: `.venv/Scripts/python.exe -X utf8 -B -m pytest --cov=. --cov-report=xml -q --tb=line`. 243 testin 239'u geçti; önceki dört `tests/test_strategy_inspector.py` HUNTER/ATR hatası ve bir `datetime.utcnow()` uyarısı devam ediyor. Yeni regresyon yok; testler atlanmadı, başarısız çıkış kodu korunuyor.
+- [Ana API yetki testleri](../tests/test_api_authorization.py): 36/36; eksik/geçersiz/süresi geçmiş/son kullanma tarihi olmayan JWT, devre dışı kullanıcı, roller, gerçek login→me akışı, giriş/AI alias/manuel tarama limitleri ve hata metni sızıntısı.
+- [Middleware yetki testleri](../middleware/tests/test_admin_auth.py): 18/18; tüm middleware paketi 44/44. Yetkisiz istekte broker fabrikası çağrılmadığı ve emir/sinyal kaydı yazılmadığı kontrol edildi; tüm emir işlemleri sahte broker/izole DB üzerinde.
+- `npm test`: 9/9; oturum oluşturma, hatalı login/me, API origin/path sınırı, header override, 401/403 ayrımı, geç gelen yanıt ve süre dolumu. `npm run lint`, `tsc --noEmit --incremental false` ve `npm run build` geçti; build 15 statik sayfa üretti.
+- Tarayıcıda üretim frontend build'i ile yerel sahte HTTP servisleri kullanıldı: yanlış parola mesajı, admin login→sağlık ekranı dönüşü, özel test logunun görünmesi, çıkışta temizlenmesi, normal kullanıcı 403 mesajı ve yenilemede oturum kaybı doğrulandı. Backend/bot veya gerçek hesap bu kontrolde çalıştırılmadı. Geçici servisler ve tarayıcı sekmesi kapandı; 8000/5000/3012 portlarında dinleyici kalmadığı kontrol edildi.
+- OpenAPI snapshot test izolasyonu içinde üretildi; snapshot ve frontend auth endpoint sözleşmeleri tam pakette geçti. Frontend oturum testleri CI'ye eklendi. Değişen dosyalar için pre-commit/Ruff kontrolleri uygulandı.
+- Üç mevcut DB'nin SHA-256 değerleri P0-1 kaydıyla aynı: gerçek DB değişikliği yok. Gerçek/testnet emir, migration, push ve deploy yapılmadı.
+
+**Yayın sınırı:** P0-2 yerel commit'i `fix(auth): protect admin and analysis operations` başlığıyla tutulur; kimliği Git geçmişinden okunur. Push/deploy ilk grup eşiğini bekler. VPS erişimi, HTTPS/proxy davranışı ve sunucu anahtarlarının kurulumu bu yerel doğrulamayla tamamlanmış sayılmaz. Sonraki iş **P0-3**.
 
 ### P0-3 — DRY_RUN/LIVE envanter ayrımı
 
@@ -480,6 +511,8 @@ Bağımlılık güncellemesi gerektiğinde lock'u `uv pip compile requirements-d
 | 2026-09-06 | Tam test başarısızlıkları açık iş olarak kaydedilecek | 4 HUNTER/ATR hatası P1-7; CI tüm testleri çalıştırıyor ve başarısız çıkış kodunu koruyor |
 | 2026-09-06 | Her iş yerel commit; push+deploy doğrulanmış gruplarda | Kullanıcı otomatik commit/push/deploy yetkisi ve zamanlama tercihini verdi; ilk yayın P0 + P1-7 + P1-2 koşullarına bağlı |
 | 2026-09-06 | Commit araçları da tek geliştirme ortamına dahil | `.venv` içindeki mevcut hook için pre-commit 4.5.1 eklendi; Ruff hook'u 0.14.13 ile yerel/CI sürümüne eşitlendi; bağımlılık kontrolü 128 paket için geçti |
+| 2026-09-07 | Middleware yönetimi webhook'tan ayrı anahtarla korunacak | `MW_ADMIN_AUTH_TOKEN`; header-only; eksik/aynı anahtar kapalı davranır; replay bypass yalnız doğrulanmış admin için |
+| 2026-09-07 | Ana API kritik işlemleri rol ve rate-limit ile korunacak | Dashboard giriş akışı eklendi; token sekme belleğinde; mevcut public okumalar korunuyor; dağıtım/proxy doğrulaması P1-2 |
 
 ## İlerleme günlüğü
 
@@ -491,6 +524,10 @@ Bağımlılık güncellemesi gerektiğinde lock'u `uv pip compile requirements-d
 | 2026-09-06 | P0-1 | Doğrula | Tam pytest + coverage: 185 geçti / 4 HUNTER hatası / 1 warning; middleware 26/26. Frontend lint/typecheck/build ve değişen Python dosyaları Ruff kontrolleri geçti. CI YAML/gömülü Python sözdizimi ve git diff --check kontrol edildi; üç mevcut DB'nin SHA-256 değerleri değişmedi |
 | 2026-09-06 | P0-1 | Belgeyi güncelle — Doğrulandı | Ortam/komutlar ve sonuçlar bu belgeye işlendi. Davranış hatası P1-7, Docker sürüm uyumu P1-2, warning P2-3. Sonraki ana iş P0-2; commit/push/deploy yok |
 | 2026-09-06 | P0-1 / yayın düzeni | Yerel checkpoint commit kapsamı | `chore(dev): establish isolated P0-1 test baseline` başlıklı commit; bu plan ve P0-1 dosyaları, pre-commit bağımlılığı/sürüm uyumu dahil. Push/deploy ilk grup doğrulamasını bekliyor. Commit kimliği Git geçmişinden okunur |
+| 2026-09-07 | P0-2 | İncele | Admin replay özellik bayrağıyla açıktı; ana API kritik yollarında JWT koruması ve dashboard'da login akışı eksikti |
+| 2026-09-07 | P0-2 | Düzelt | Ayrı middleware yönetim anahtarı, ana API rol/limit kontrolleri, generic işlem hataları, bellek oturumu ve login/logout UI eklendi; OpenAPI/CI/README güncellendi |
+| 2026-09-07 | P0-2 | Doğrula | 239/243 Python testi geçti; yalnız önceki dört P1-7 hatası açık. Yeni yetki testleri 54/54, middleware 44/44; frontend 9/9, lint/typecheck/build ve sahte API ile tarayıcı akışı geçti; gerçek DB özetleri değişmedi |
+| 2026-09-07 | P0-2 | Belgeyi güncelle — Doğrulandı | Erişim/limit matrisi, yeni anahtar kurulumu, replay bypass, komut/kanıt ve yayın sınırı kaydedildi. Yerel commit başlığı: `fix(auth): protect admin and analysis operations`; push/deploy yok. Sonraki iş P0-3 |
 
 Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 
@@ -510,4 +547,4 @@ Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 4. Aktif işin bulgusunu ve bağımlılıklarını güncel kodda kontrol et. İncelemeyi baştan tekrarlamak yerine ilgili kanıttan devam et.
 5. İşin dört adımını tamamla veya engeli somutlaştır; ardından durum tablosu, günlük ve Kaldığımız nokta bölümünü güncelle.
 
-**P0-1 tamamlandı. Sıradaki ana uygulama işi P0-2; tam test tabanında açık dört hata P1-7'de takip ediliyor.**
+**P0-1 ve P0-2 tamamlandı. Sıradaki ana uygulama işi P0-3; tam test tabanında açık dört hata P1-7'de takip ediliyor.**

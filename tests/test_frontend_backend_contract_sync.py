@@ -5,6 +5,8 @@ def test_frontend_http_contracts_exist_in_openapi():
     openapi_paths: dict[str, dict] = api_main.app.openapi().get("paths", {})
 
     expected_contracts = {
+        ("post", "/auth/token"),
+        ("get", "/auth/me"),
         ("get", "/signals"),
         ("get", "/signals/{signal_id}"),
         ("get", "/trades"),

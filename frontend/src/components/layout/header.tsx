@@ -6,6 +6,7 @@ import { Bell, Check, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useSpecialNotificationSignals } from "@/lib/hooks/use-signals"
 import { useBotHealth } from "@/lib/hooks/use-health"
+import { SessionControls } from "@/components/auth/session-controls"
 
 const READ_SIGNALS_KEY = "rapot_read_signal_ids"
 
@@ -88,6 +89,7 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-4">
+          <SessionControls />
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <span
               className={cn(

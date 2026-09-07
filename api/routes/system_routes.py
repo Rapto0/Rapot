@@ -1,8 +1,9 @@
 import os
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
 
+from api.auth import get_current_admin_user
 from api.rate_limit import limiter
 from logger import get_logger
 
@@ -95,9 +96,9 @@ async def get_scanner_activity_read_model(request: Request, limit: int = 100):
     return [ScannerActivityItemResponse(**row) for row in rows]
 
 
-@router.get("/logs")
+@router.get("/logs", dependencies=[Depends(get_current_admin_user)])
 @limiter.limit("30/minute")
-async def get_system_logs(request: Request, limit: int = 50):
+async def get_system_logs(request: Request, limit: int = Query(50, ge=1, le=500)):
     try:
         log_path = "logs/trading_bot.log"
         if not os.path.exists(log_path):

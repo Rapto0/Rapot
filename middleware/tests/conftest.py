@@ -72,6 +72,7 @@ def configure_test_environment(
     test_settings = MiddlewareSettings.model_construct(
         database_url=f"sqlite+pysqlite:///{db_file.as_posix()}",
         webhook_auth_token="test-token",
+        admin_auth_token="test-admin-token",
         app_env="development",
         execution_mode=ExecutionMode.DRY_RUN,
         trading_enabled=False,
@@ -107,7 +108,9 @@ def configure_test_environment(
 def client() -> Iterator[TestClient]:
     from middleware.api.main import app
 
-    with TestClient(app, headers={"X-Webhook-Token": "test-token"}) as test_client:
+    with TestClient(
+        app, headers={"X-Webhook-Token": "test-token", "X-Admin-Token": "test-admin-token"}
+    ) as test_client:
         yield test_client
 
 

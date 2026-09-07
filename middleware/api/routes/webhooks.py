@@ -25,5 +25,5 @@ def ingest_tradingview_webhook(
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"failed to process signal: {exc}",
+            detail="failed to process signal",
         ) from exc

@@ -11,12 +11,13 @@ import unicodedata
 from datetime import datetime, timedelta
 
 import yfinance as yf  # noqa: E402
-from fastapi import FastAPI, HTTPException, Query, Request, Response  # noqa: E402
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, Response  # noqa: E402
 from fastapi.middleware.cors import CORSMiddleware  # noqa: E402
 from pydantic import BaseModel, ConfigDict  # noqa: E402
 from slowapi import _rate_limit_exceeded_handler  # noqa: E402
 from slowapi.errors import RateLimitExceeded  # noqa: E402
 
+from api.auth import get_current_admin_user, get_current_user
 from api.contracts.health_contract import build_health_payload  # noqa: E402
 from api.rate_limit import limiter  # noqa: E402
 from api.realtime import router as realtime_router  # noqa: E402
@@ -640,6 +641,7 @@ async def get_special_tag_health(
     "/ops/strategy-inspector",
     response_model=StrategyInspectorResponse,
     tags=["Operations"],
+    dependencies=[Depends(get_current_user)],
 )
 @limiter.limit("30/minute")
 async def get_strategy_inspector(
@@ -770,7 +772,7 @@ async def get_stats(request: Request):
     return StatsResponse(**stats)
 
 
-@app.post("/analyze/{symbol}", tags=["Analysis"])
+@app.post("/analyze/{symbol}", tags=["Analysis"], dependencies=[Depends(get_current_admin_user)])
 @limiter.limit("2/minute")
 async def analyze_symbol(
     request: Request,
@@ -786,7 +788,8 @@ async def analyze_symbol(
         analyze_manual(symbol.upper())
         return {"message": f"{symbol.upper()} analizi başlatıldı", "status": "started"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.error("Manual analysis failed (%s)", type(e).__name__)
+        raise HTTPException(status_code=500, detail="Analiz baslatilamadi.") from e
 
 
 # ==================== AI ANALYSIS ENDPOINTS ====================
@@ -1137,9 +1140,21 @@ def _build_strategy_inspector_response(report: dict) -> StrategyInspectorRespons
     )
 
 
-@app.get("/market/analysis", response_model=MarketAnalysisResponse, tags=["AI Analysis"])
-@app.get("/api/market/analysis", response_model=MarketAnalysisResponse, tags=["AI Analysis"])
+@app.get(
+    "/market/analysis",
+    response_model=MarketAnalysisResponse,
+    tags=["AI Analysis"],
+    dependencies=[Depends(get_current_user)],
+)
+@app.get(
+    "/api/market/analysis",
+    response_model=MarketAnalysisResponse,
+    tags=["AI Analysis"],
+    dependencies=[Depends(get_current_user)],
+)
+@limiter.shared_limit("2/minute", scope="manual-ai-analysis")
 def get_market_analysis(
+    request: Request,
     market_type: str | None = Query(
         None,
         description="Piyasa tipi: BIST, Kripto veya AUTO",
@@ -1213,8 +1228,8 @@ def get_market_analysis(
     except StrategyInspectorError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as e:
-        logger.exception("Analiz hatasi.")
-        raise HTTPException(status_code=500, detail=str(e)) from e
+        logger.error("Market analysis failed (%s)", type(e).__name__)
+        raise HTTPException(status_code=500, detail="AI analizi tamamlanamadi.") from e
 
 
 @app.get("/candles/{symbol}", response_model=CandlesResponse, tags=["Market Data"])

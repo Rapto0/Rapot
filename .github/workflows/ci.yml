@@ -141,6 +141,9 @@ jobs:
       - name: Check TypeScript
         run: npm run typecheck -- --incremental false
 
+      - name: Test frontend authentication client
+        run: npm test
+
       - name: Build frontend
         run: npm run build
 

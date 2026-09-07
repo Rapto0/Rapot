@@ -41,6 +41,28 @@ Frontend uses `/api` as public base path, and Next.js rewrites proxy requests to
 
 ## Security Notes
 
+- Dashboard sign-in is available at `/login`. The `admin` and `user` accounts use the
+  configured `ADMIN_PASSWORD` / `USER_PASSWORD` (or their `_HASH` equivalents).
+  An account without a configured password is unavailable.
+- Main API clients obtain a token from `POST /auth/token` and send
+  `Authorization: Bearer <token>`. Tokens must have an expiry; disabled users are rejected.
+- Access policy (limits are per client IP in the current process):
+
+  | Operation | Access | Limit |
+  |---|---|---|
+  | `POST /auth/token` | Login credentials | 5/minute |
+  | `GET /logs` | Admin JWT; 1–500 rows | 30/minute |
+  | `POST /analyze/{symbol}` | Admin JWT | 2/minute |
+  | `GET /ops/strategy-inspector` | User/admin JWT | 30/minute |
+  | `GET /market/analysis`, `GET /api/market/analysis` | User/admin JWT | Shared 2/minute |
+
+- Existing dashboard reads and stored analyses remain public. This change does not make
+  the entire dashboard private. Server exposure and proxy configuration still need verification.
+- The dashboard stores tokens only in tab memory. Reload, expiry, or logout ends the session;
+  account changes clear query caches and private component state. No middleware admin key
+  belongs in a frontend environment variable.
+- Middleware management uses a separate `MW_ADMIN_AUTH_TOKEN` through `X-Admin-Token`;
+  see its [access policy](middleware/README.md#management-authentication).
 - `JWT_SECRET_KEY` is required by default.
 - Only for local development, insecure fallback can be enabled with:
   - `ALLOW_INSECURE_JWT_SECRET=1`

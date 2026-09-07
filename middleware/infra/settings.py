@@ -30,6 +30,7 @@ class MiddlewareSettings(BaseSettings):
     webhook_auth_token: str | None = None
     require_webhook_auth: bool = True
     allow_admin_endpoints: bool = True
+    admin_auth_token: str | None = None
 
     buy_bps: int = 20
     sell_bps: int = 20
@@ -61,6 +62,7 @@ class MiddlewareSettings(BaseSettings):
 
     @field_validator(
         "webhook_auth_token",
+        "admin_auth_token",
         "max_open_tranches_per_symbol",
         "max_symbol_exposure_usdt",
         "max_daily_loss_usdt",

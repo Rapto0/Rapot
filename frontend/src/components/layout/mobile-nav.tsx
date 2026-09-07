@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
+import { SessionControls } from "@/components/auth/session-controls"
 import {
   Search,
   Bell,
@@ -74,6 +75,7 @@ export function MobileHeader() {
       </Link>
 
       <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+        <SessionControls />
         <History className="h-3.5 w-3.5" />
         <span className="label-uppercase">
           {labelMap[pathname] || (pathname === "/" ? "Ana" : pathname.replace("/", ""))}
