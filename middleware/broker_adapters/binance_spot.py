@@ -14,6 +14,7 @@ import requests
 from middleware.broker_adapters.base import BrokerAssetBalance, BrokerClient, BrokerOrderResult
 from middleware.domain.enums import ExecutionMode, OrderStatus
 from middleware.domain.events import BrokerOrderRequestPayload
+from middleware.domain.idempotency import build_client_order_id
 from middleware.infra.settings import MiddlewareSettings
 from middleware.risk.binance_filters import BinanceSymbolRules
 
@@ -29,6 +30,22 @@ def _decimal(value: Any) -> Decimal:
     if value is None or value == "":
         return Decimal("0")
     return Decimal(str(value))
+
+
+class BinanceAPIError(RuntimeError):
+    def __init__(self, *, status_code: int, code: Any, message: str) -> None:
+        super().__init__(f"Binance API error {status_code} ({code}): {message}")
+        self.status_code = status_code
+        self.code = code
+        self.api_message = message
+
+    @property
+    def may_represent_an_existing_order(self) -> bool:
+        return self.status_code >= 500 or "duplicate order" in self.api_message.lower()
+
+
+class BinanceResponseError(RuntimeError):
+    """A response that cannot prove whether an order was accepted."""
 
 
 @dataclass(slots=True)
@@ -100,18 +117,15 @@ class BinanceSpotBrokerClient(BrokerClient):
                     "timeInForce": payload.tif,
                     "quantity": _format_decimal(quantity),
                     "price": _format_decimal(payload.limit_price),
-                    "newClientOrderId": self._client_order_id(payload.idempotency_key),
+                    "newClientOrderId": payload.client_order_id,
                     "newOrderRespType": "FULL",
                 },
             )
-        except requests.RequestException as exc:
-            return BrokerOrderResult(
-                accepted=False,
-                status=OrderStatus.FAILED,
-                message=f"Binance request failed: {exc}",
-                raw_payload=self._request_preview(payload=payload, quantity=quantity),
-            )
-        except RuntimeError as exc:
+        except (requests.RequestException, BinanceResponseError):
+            return self.get_order_by_client_id(payload.symbol, payload.client_order_id)
+        except BinanceAPIError as exc:
+            if exc.may_represent_an_existing_order:
+                return self.get_order_by_client_id(payload.symbol, payload.client_order_id)
             return BrokerOrderResult(
                 accepted=False,
                 status=OrderStatus.FAILED,
@@ -119,7 +133,28 @@ class BinanceSpotBrokerClient(BrokerClient):
                 raw_payload=self._request_preview(payload=payload, quantity=quantity),
             )
 
-        return self._map_order_response(response_payload)
+        return self._map_order_response(response_payload, client_order_id=payload.client_order_id)
+
+    def get_order_by_client_id(self, symbol: str, client_order_id: str) -> BrokerOrderResult:
+        try:
+            response_payload = self._signed_request(
+                "GET",
+                "/api/v3/order",
+                {
+                    "symbol": symbol.upper(),
+                    "origClientOrderId": client_order_id,
+                },
+            )
+        except (requests.RequestException, RuntimeError):
+            return BrokerOrderResult(
+                accepted=False,
+                status=OrderStatus.UNKNOWN,
+                client_order_id=client_order_id,
+                message="Binance order result is uncertain; recovery lookup did not complete",
+                raw_payload={"symbol": symbol.upper(), "client_order_id": client_order_id},
+                execution_uncertain=True,
+            )
+        return self._map_order_response(response_payload, client_order_id=client_order_id)
 
     def _dry_run_result(
         self, *, payload: BrokerOrderRequestPayload, quantity: Decimal
@@ -134,6 +169,7 @@ class BinanceSpotBrokerClient(BrokerClient):
                 accepted=True,
                 status=OrderStatus.FILLED,
                 broker_order_id=broker_order_id,
+                client_order_id=payload.client_order_id,
                 filled_lots=0,
                 filled_quantity=quantity,
                 avg_fill_price=payload.limit_price,
@@ -145,6 +181,7 @@ class BinanceSpotBrokerClient(BrokerClient):
             accepted=True,
             status=OrderStatus.ACKNOWLEDGED,
             broker_order_id=broker_order_id,
+            client_order_id=payload.client_order_id,
             filled_lots=0,
             filled_quantity=Decimal("0"),
             avg_fill_price=None,
@@ -164,6 +201,7 @@ class BinanceSpotBrokerClient(BrokerClient):
             "quantity": _format_decimal(quantity),
             "price": _format_decimal(payload.limit_price),
             "idempotency_key": payload.idempotency_key,
+            "client_order_id": payload.client_order_id,
         }
 
     def _signed_request(self, method: str, path: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -197,18 +235,26 @@ class BinanceSpotBrokerClient(BrokerClient):
 
         return self._json_response(response)
 
-    def _map_order_response(self, payload: dict[str, Any]) -> BrokerOrderResult:
+    def _map_order_response(
+        self, payload: dict[str, Any], *, client_order_id: str | None = None
+    ) -> BrokerOrderResult:
         status_raw = str(payload.get("status", "")).upper()
         status = {
             "NEW": OrderStatus.ACKNOWLEDGED,
+            "PENDING_CANCEL": OrderStatus.ACKNOWLEDGED,
             "PARTIALLY_FILLED": OrderStatus.PARTIALLY_FILLED,
             "FILLED": OrderStatus.FILLED,
             "CANCELED": OrderStatus.CANCELLED,
             "REJECTED": OrderStatus.FAILED,
-            "EXPIRED": OrderStatus.FAILED,
-            "EXPIRED_IN_MATCH": OrderStatus.FAILED,
-        }.get(status_raw, OrderStatus.ACKNOWLEDGED)
-        accepted = status not in {OrderStatus.FAILED, OrderStatus.CANCELLED}
+            "EXPIRED": OrderStatus.EXPIRED,
+            "EXPIRED_IN_MATCH": OrderStatus.EXPIRED,
+        }.get(status_raw, OrderStatus.UNKNOWN)
+        accepted = status not in {
+            OrderStatus.FAILED,
+            OrderStatus.CANCELLED,
+            OrderStatus.EXPIRED,
+            OrderStatus.UNKNOWN,
+        }
         filled_quantity = _decimal(payload.get("executedQty"))
         avg_fill_price = self._avg_fill_price(payload, filled_quantity)
 
@@ -216,11 +262,15 @@ class BinanceSpotBrokerClient(BrokerClient):
             accepted=accepted,
             status=status,
             broker_order_id=str(payload.get("orderId")) if payload.get("orderId") else None,
+            client_order_id=client_order_id
+            or str(payload.get("clientOrderId") or payload.get("origClientOrderId") or "")
+            or None,
             filled_lots=0,
             filled_quantity=filled_quantity,
             avg_fill_price=avg_fill_price,
             message=f"Binance order status: {status_raw or status.value}",
             raw_payload=payload,
+            execution_uncertain=status == OrderStatus.UNKNOWN,
         )
 
     def _avg_fill_price(self, payload: dict[str, Any], filled_quantity: Decimal) -> Decimal | None:
@@ -244,21 +294,24 @@ class BinanceSpotBrokerClient(BrokerClient):
         try:
             payload = response.json()
         except ValueError as exc:
-            raise RuntimeError("Binance returned a non-JSON response") from exc
+            raise BinanceResponseError("Binance returned a non-JSON response") from exc
+        if not isinstance(payload, dict):
+            raise BinanceResponseError("Binance returned an unexpected JSON payload")
         if response.status_code >= 400:
             code = payload.get("code")
             msg = payload.get("msg") or response.text
-            raise RuntimeError(f"Binance API error {response.status_code} ({code}): {msg}")
-        if not isinstance(payload, dict):
-            raise RuntimeError("Binance returned an unexpected JSON payload")
+            raise BinanceAPIError(
+                status_code=response.status_code,
+                code=code,
+                message=str(msg),
+            )
         return payload
 
     def _url(self, path: str) -> str:
         return f"{self.cfg.binance_base_url.rstrip('/')}{path}"
 
     def _client_order_id(self, idempotency_key: str) -> str:
-        safe = "".join(ch for ch in idempotency_key.upper() if ch.isalnum() or ch in "_-")
-        return f"RAPOT-{safe}"[:36]
+        return build_client_order_id(idempotency_key)
 
     def _format_param(self, value: Any) -> str:
         if isinstance(value, Decimal):

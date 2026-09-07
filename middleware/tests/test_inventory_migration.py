@@ -97,6 +97,26 @@ def test_inventory_migration_quarantines_legacy_rows_and_downgrades(test_sandbox
         assert columns["mode"]["nullable"] is False
         assert columns["inventory_scope"]["nullable"] is False
 
+        recovery_migration = importlib.import_module(
+            "middleware.infra.alembic.versions.20260907_0005_add_order_recovery_id"
+        )
+        monkeypatch.setattr(
+            recovery_migration,
+            "op",
+            Operations(MigrationContext.configure(connection)),
+        )
+        recovery_migration.upgrade()
+        order_columns = {
+            item["name"]: item for item in sa.inspect(connection).get_columns("mw_orders")
+        }
+        order_constraints = {
+            item["name"] for item in sa.inspect(connection).get_unique_constraints("mw_orders")
+        }
+        assert order_columns["client_order_id"]["nullable"] is True
+        assert "uq_mw_orders_scope_client_order_id" in order_constraints
+        assert connection.scalar(sa.text("SELECT COUNT(*) FROM mw_orders")) == 2
+
+        recovery_migration.downgrade()
         migration.downgrade()
         assert {item["name"] for item in sa.inspect(connection).get_columns("mw_orders")} == {
             "id",

@@ -90,6 +90,7 @@ class ProcessSignalResponse(BaseModel):
     message: str
     risk_reason: str | None = None
     broker_order_id: str | None = None
+    client_order_id: str | None = None
 
 
 class PositionItem(BaseModel):
@@ -160,6 +161,7 @@ class OrderItem(BaseModel):
     rejection_reason: str | None = None
     broker_name: str
     broker_order_id: str | None = None
+    client_order_id: str | None = None
     base_asset: str | None = None
     quote_asset: str | None = None
     target_tranche_id: int | None = None
@@ -215,4 +217,5 @@ class BrokerOrderRequestPayload(BaseModel):
     tif: str = "IOC"
     signal_code: str
     idempotency_key: str
+    client_order_id: str
     metadata: dict[str, Any] = Field(default_factory=dict)

@@ -42,6 +42,18 @@ def test_replay_rejects_before_broker_or_database_work(
     _assert_no_orders_or_signals()
 
 
+def test_recovery_rejects_before_broker_or_database_work(monkeypatch):
+    broker_factory = Mock(side_effect=AssertionError("unauthorized broker creation"))
+    monkeypatch.setattr("middleware.api.dependencies.build_broker_client", broker_factory)
+
+    with TestClient(app) as client:
+        response = client.post("/admin/recover-order/1")
+
+    assert response.status_code == 401
+    broker_factory.assert_not_called()
+    _assert_no_orders_or_signals()
+
+
 @pytest.mark.parametrize("configured", [None, "test-token"])
 def test_admin_auth_fails_closed_when_unconfigured_or_reusing_webhook_key(
     configured, client, sample_buy_payload, monkeypatch
@@ -63,6 +75,7 @@ def test_disabled_admin_rejects_valid_key(client, sample_buy_payload, monkeypatc
         client.post("/admin/replay-signal", json={"payload": sample_buy_payload}).status_code == 403
     )
     assert client.get("/admin/reconcile/BTCUSDT").status_code == 403
+    assert client.post("/admin/recover-order/1").status_code == 403
     broker_factory.assert_not_called()
     _assert_no_orders_or_signals()
 
@@ -99,7 +112,13 @@ def test_authorized_replay_requires_explicit_idempotency_bypass(client, sample_b
 
 
 @pytest.mark.parametrize(
-    "path", ["/admin/replay-signal", "/admin/reconcile/BTCUSDT", "/webhooks/tradingview"]
+    "path",
+    [
+        "/admin/replay-signal",
+        "/admin/recover-order/1",
+        "/admin/reconcile/BTCUSDT",
+        "/webhooks/tradingview",
+    ],
 )
 def test_operation_failure_does_not_leak_exception(
     path, client, sample_buy_payload, monkeypatch, caplog
@@ -107,11 +126,14 @@ def test_operation_failure_does_not_leak_exception(
     secret = "private-broker-token-in-error"
     service = Mock()
     service.replay_signal.side_effect = RuntimeError(secret)
+    service.recover_order.side_effect = RuntimeError(secret)
     service.reconcile_symbol.side_effect = RuntimeError(secret)
     service.process_webhook.side_effect = RuntimeError(secret)
     monkeypatch.setattr("middleware.api.dependencies.TradingService", Mock(return_value=service))
     if "reconcile" in path:
         response = client.get(path)
+    elif "recover-order" in path:
+        response = client.post(path)
     else:
         payload = {"payload": sample_buy_payload} if "replay" in path else sample_buy_payload
         response = client.post(path, json=payload)

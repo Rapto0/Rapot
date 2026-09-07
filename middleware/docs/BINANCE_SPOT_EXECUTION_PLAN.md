@@ -11,6 +11,7 @@ Middleware bundan sonra sadece Binance Spot kripto akışına odaklanır.
 - State: Decimal base quantity, FIFO tranches
 - Inventory scope: execution mode + broker + venue/environment + stable account label
 - Filters: Binance `exchangeInfo` rules before submit
+- Recovery: deterministic client order ID + cumulative fill snapshots
 
 ## Order Rules
 
@@ -27,6 +28,13 @@ SELL:
 - Quantity: tranche remaining quantity, floored to step size
 - Every SELL alert closes one oldest tranche, then the next SELL closes the next tranche
 
+BROKER RESULT:
+- Store the deterministic client order ID before submitting the order
+- Treat `executedQty` as cumulative and apply only the quantity above the stored total
+- Apply partial fills even when the final status is `CANCELED` or `EXPIRED`
+- On an ambiguous submit result, query by client order ID and keep unresolved orders `unknown`
+- Repeat recovery through authenticated `POST /admin/recover-order/{order_id}`
+
 ## Guard Rails
 
 - `MW_ALLOWED_SYMBOLS_CSV` for live allowlist
@@ -39,20 +47,21 @@ SELL:
 
 ## Live Readiness Checklist
 
-1. Database migration `20260907_0004` is applied before the new application starts.
+1. Database migration head, currently `20260907_0005`, is applied before the new application starts.
 2. A stable, non-secret `MW_INVENTORY_ACCOUNT_ID` identifies this exact account.
 3. Testnet API key passes signed account check.
 4. Testnet BUY with marketable limit fills.
 5. Testnet FIFO SELL fills and closes the tranche.
-6. `GET /admin/reconcile/{symbol}` reports the expected testnet scope and `OK`.
-7. Production uses a different account label and production API host.
-8. Webhook token is rotated after test sharing.
-9. Production key has Spot trading only, no withdrawal permission.
-10. Production key is IP-whitelisted to the server where possible.
-11. First production run uses small quote budget and narrow symbol allowlist.
+6. A deliberately ambiguous testnet response is found by client order ID without resubmitting.
+7. `GET /admin/reconcile/{symbol}` reports the expected testnet scope and `OK`.
+8. Production uses a different account label and production API host.
+9. Webhook token is rotated after test sharing.
+10. Production key has Spot trading only, no withdrawal permission.
+11. Production key is IP-whitelisted to the server where possible.
+12. First production run uses small quote budget and narrow symbol allowlist.
 
 ## Known Follow-Up Work
 
 - Commission-aware automatic state repair.
-- Partial-fill polling/reconciliation for IOC expirations.
+- Automated polling for orders that remain `unknown` or non-terminal.
 - Optional status endpoint that separates live Binance orders from dry-run history.

@@ -76,6 +76,11 @@ class Order(Base, TimestampMixin):
     __tablename__ = "mw_orders"
     __table_args__ = (
         UniqueConstraint("idempotency_key", name="uq_mw_orders_idempotency_key"),
+        UniqueConstraint(
+            "inventory_scope",
+            "client_order_id",
+            name="uq_mw_orders_scope_client_order_id",
+        ),
         CheckConstraint("requested_lots >= 0", name="ck_mw_orders_requested_lots_non_negative"),
         CheckConstraint("filled_lots >= 0", name="ck_mw_orders_filled_lots_non_negative"),
         CheckConstraint(
@@ -110,6 +115,7 @@ class Order(Base, TimestampMixin):
     rejection_reason: Mapped[str | None] = mapped_column(String(400), nullable=True)
     broker_name: Mapped[str] = mapped_column(String(40), nullable=False)
     broker_order_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    client_order_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     base_asset: Mapped[str | None] = mapped_column(String(20), nullable=True)
     quote_asset: Mapped[str | None] = mapped_column(String(20), nullable=True)
     target_tranche_id: Mapped[int | None] = mapped_column(

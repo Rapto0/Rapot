@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
@@ -10,6 +11,13 @@ from sqlalchemy.orm import Session
 from middleware.domain.enums import OrderStatus, Side
 from middleware.infra.models import Order
 from middleware.infra.time import UTC
+
+
+@dataclass(frozen=True, slots=True)
+class BrokerFillDelta:
+    lots: int
+    quantity: Decimal
+    price: Decimal | None
 
 
 class OrderRepository:
@@ -34,6 +42,7 @@ class OrderRepository:
         broker_name: str,
         mode: str,
         inventory_scope: str,
+        client_order_id: str,
         base_asset: str | None = None,
         quote_asset: str | None = None,
         target_tranche_id: int | None = None,
@@ -60,6 +69,7 @@ class OrderRepository:
             broker_name=broker_name,
             mode=mode,
             inventory_scope=inventory_scope,
+            client_order_id=client_order_id,
             base_asset=base_asset,
             quote_asset=quote_asset,
             target_tranche_id=target_tranche_id,
@@ -86,6 +96,7 @@ class OrderRepository:
         broker_name: str,
         mode: str,
         inventory_scope: str,
+        client_order_id: str,
         base_asset: str | None = None,
         quote_asset: str | None = None,
         target_tranche_id: int | None = None,
@@ -111,6 +122,7 @@ class OrderRepository:
                     broker_name=broker_name,
                     mode=mode,
                     inventory_scope=inventory_scope,
+                    client_order_id=client_order_id,
                     base_asset=base_asset,
                     quote_asset=quote_asset,
                     target_tranche_id=target_tranche_id,
@@ -123,8 +135,13 @@ class OrderRepository:
                 raise
             return existing, False
 
-    def get(self, order_id: int) -> Order | None:
-        stmt = select(Order).where(Order.id == order_id)
+    def get(self, order_id: int, *, for_update: bool = False) -> Order | None:
+        stmt = select(Order).where(
+            Order.id == order_id,
+            Order.inventory_scope == self.inventory_scope,
+        )
+        if for_update:
+            stmt = stmt.with_for_update()
         return self.session.execute(stmt).scalar_one_or_none()
 
     def get_by_signal_event_id(self, signal_event_id: int) -> Order | None:
@@ -162,7 +179,7 @@ class OrderRepository:
         self.session.add(order)
         self.session.flush()
 
-    def apply_broker_ack(
+    def apply_broker_snapshot(
         self,
         order: Order,
         *,
@@ -171,19 +188,56 @@ class OrderRepository:
         filled_lots: int,
         avg_fill_price: Decimal | None,
         filled_quantity: Decimal | None = None,
-    ) -> None:
-        order.status = status.value
-        order.broker_order_id = broker_order_id
-        order.filled_lots = max(0, order.filled_lots + int(filled_lots))
-        quantity_delta = (
-            filled_quantity if filled_quantity is not None else Decimal(str(filled_lots))
+    ) -> BrokerFillDelta:
+        previous_lots = int(order.filled_lots)
+        previous_quantity = Decimal(order.filled_quantity)
+        previous_avg_price = (
+            Decimal(order.avg_fill_price) if order.avg_fill_price is not None else None
         )
-        order.filled_quantity = max(Decimal("0"), Decimal(order.filled_quantity) + quantity_delta)
-        if avg_fill_price is not None:
+        reported_lots = min(max(0, int(filled_lots)), int(order.requested_lots))
+        reported_quantity = min(
+            max(Decimal("0"), Decimal(filled_quantity or 0)),
+            Decimal(order.requested_quantity),
+        )
+        cumulative_lots = max(previous_lots, reported_lots)
+        cumulative_quantity = max(previous_quantity, reported_quantity)
+        delta_lots = cumulative_lots - previous_lots
+        delta_quantity = cumulative_quantity - previous_quantity
+
+        delta_price = avg_fill_price
+        if delta_quantity > 0 and avg_fill_price is not None and previous_quantity > 0:
+            previous_notional = previous_quantity * (previous_avg_price or avg_fill_price)
+            cumulative_notional = cumulative_quantity * avg_fill_price
+            delta_price = (cumulative_notional - previous_notional) / delta_quantity
+
+        current_status = OrderStatus(order.status)
+        known_terminal = {
+            OrderStatus.FILLED,
+            OrderStatus.CANCELLED,
+            OrderStatus.EXPIRED,
+            OrderStatus.FAILED,
+            OrderStatus.REJECTED,
+        }
+        if current_status == OrderStatus.FILLED or (
+            current_status in known_terminal and status != OrderStatus.FILLED
+        ):
+            resolved_status = current_status
+        else:
+            resolved_status = status
+
+        order.status = resolved_status.value
+        if broker_order_id:
+            order.broker_order_id = broker_order_id
+        order.filled_lots = cumulative_lots
+        order.filled_quantity = cumulative_quantity
+        if avg_fill_price is not None and (
+            delta_lots > 0 or delta_quantity > 0 or previous_avg_price is None
+        ):
             order.avg_fill_price = avg_fill_price
         order.updated_at = datetime.now(UTC)
         self.session.add(order)
         self.session.flush()
+        return BrokerFillDelta(lots=delta_lots, quantity=delta_quantity, price=delta_price)
 
     def set_realized_pnl(self, order: Order, realized_pnl: Decimal) -> None:
         order.realized_pnl = realized_pnl

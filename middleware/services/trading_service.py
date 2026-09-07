@@ -4,10 +4,11 @@ import hashlib
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
+from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from middleware.broker_adapters.base import BrokerAssetBalance, BrokerClient
+from middleware.broker_adapters.base import BrokerAssetBalance, BrokerClient, BrokerOrderResult
 from middleware.domain.constants import BUY_SIGNAL_CODES
 from middleware.domain.enums import ExecutionMode, OrderStatus, Side
 from middleware.domain.events import (
@@ -15,6 +16,7 @@ from middleware.domain.events import (
     ProcessSignalResponse,
     TradingViewWebhookPayload,
 )
+from middleware.domain.idempotency import build_client_order_id
 from middleware.infra.logging import get_logger
 from middleware.infra.models import Order
 from middleware.infra.settings import MiddlewareSettings
@@ -78,8 +80,9 @@ class TradingService:
         idempotency_key = (
             scoped_event_hash
             if not bypass_idempotency
-            else f"{scoped_event_hash}:replay:{int(datetime.now(UTC).timestamp() * 1000)}"
+            else f"{scoped_event_hash}:replay:{uuid4().hex[:16]}"
         )
+        client_order_id = build_client_order_id(idempotency_key)
         with self.session.begin():
             if not bypass_idempotency:
                 existing = self.signal_repo.get_by_event_hash(event_hash)
@@ -138,6 +141,7 @@ class TradingService:
                 broker_name=self.broker_client.name,
                 mode=self.cfg.execution_mode.value,
                 inventory_scope=self.inventory_scope,
+                client_order_id=client_order_id,
                 base_asset=order_intent.base_asset,
                 quote_asset=order_intent.quote_asset,
                 target_tranche_id=order_intent.target_tranche_id,
@@ -184,6 +188,7 @@ class TradingService:
                     status=OrderStatus.REJECTED,
                     message="signal rejected by risk checks",
                     risk_reason=risk_reason,
+                    client_order_id=order.client_order_id,
                 )
 
             self.order_repo.set_status(order, OrderStatus.VALIDATED)
@@ -211,6 +216,7 @@ class TradingService:
                     limit_price=order.limit_price,
                     signal_code=order.signal_code,
                     idempotency_key=order.idempotency_key,
+                    client_order_id=order.client_order_id or client_order_id,
                     metadata={
                         "signal_event_id": signal_event.id,
                         "source": payload.source,
@@ -220,69 +226,7 @@ class TradingService:
                 )
             )
 
-            if not broker_result.accepted:
-                final_status = broker_result.status if broker_result.status else OrderStatus.FAILED
-                self.order_repo.set_status(
-                    order,
-                    final_status,
-                    rejection_reason=broker_result.message or "broker rejected order",
-                )
-                order.broker_order_id = broker_result.broker_order_id
-                self.execution_repo.add(
-                    order_id=order.id,
-                    event_type="broker",
-                    status=final_status.value,
-                    message=broker_result.message,
-                    payload=broker_result.raw_payload,
-                )
-                logger.warning(
-                    "broker rejected order",
-                    extra={
-                        "extra_fields": {
-                            "signal_event_id": signal_event.id,
-                            "order_id": order.id,
-                            "symbol": payload.symbol,
-                            "signal_code": payload.signalCode,
-                            "broker": self.broker_client.name,
-                            "status": final_status.value,
-                        }
-                    },
-                )
-                return ProcessSignalResponse(
-                    signal_event_id=signal_event.id,
-                    order_id=order.id,
-                    duplicate=False,
-                    status=final_status,
-                    message="broker rejected order",
-                    risk_reason=order.rejection_reason,
-                    broker_order_id=broker_result.broker_order_id,
-                )
-
-            self.order_repo.apply_broker_ack(
-                order,
-                status=broker_result.status,
-                broker_order_id=broker_result.broker_order_id,
-                filled_lots=broker_result.filled_lots,
-                filled_quantity=broker_result.filled_quantity,
-                avg_fill_price=broker_result.avg_fill_price,
-            )
-            self.execution_repo.add(
-                order_id=order.id,
-                event_type="broker",
-                status=broker_result.status.value,
-                message=broker_result.message,
-                payload=broker_result.raw_payload,
-            )
-
-            if (
-                broker_result.filled_lots > 0 or broker_result.filled_quantity > 0
-            ) and broker_result.avg_fill_price is not None:
-                self._apply_fill(
-                    order=order,
-                    fill_lots=broker_result.filled_lots,
-                    fill_quantity=broker_result.filled_quantity,
-                    fill_price=broker_result.avg_fill_price,
-                )
+            self._record_broker_result(order, broker_result, event_type="broker")
 
             logger.info(
                 "signal processed",
@@ -303,8 +247,10 @@ class TradingService:
                 order_id=order.id,
                 duplicate=False,
                 status=OrderStatus(order.status),
-                message="signal processed",
+                message=self._result_message(order),
+                risk_reason=order.rejection_reason,
                 broker_order_id=order.broker_order_id,
+                client_order_id=order.client_order_id,
             )
 
     def replay_signal(
@@ -314,6 +260,31 @@ class TradingService:
         bypass_idempotency: bool,
     ) -> ProcessSignalResponse:
         return self.process_webhook(payload, bypass_idempotency=bypass_idempotency)
+
+    def recover_order(self, order_id: int) -> ProcessSignalResponse:
+        with self.session.begin():
+            order = self.order_repo.get(order_id, for_update=True)
+            if order is None:
+                raise LookupError("order not found")
+            if not order.client_order_id:
+                raise ValueError("legacy order has no client order id")
+
+            broker_result = self.broker_client.get_order_by_client_id(
+                order.symbol,
+                order.client_order_id,
+            )
+            self._record_broker_result(order, broker_result, event_type="recovery")
+
+            return ProcessSignalResponse(
+                signal_event_id=order.signal_event_id,
+                order_id=order.id,
+                duplicate=False,
+                status=OrderStatus(order.status),
+                message=self._result_message(order),
+                risk_reason=order.rejection_reason,
+                broker_order_id=order.broker_order_id,
+                client_order_id=order.client_order_id,
+            )
 
     def list_positions(self, symbol: str | None = None) -> list[dict]:
         if symbol:
@@ -595,6 +566,117 @@ class TradingService:
             ),
             message="duplicate signal ignored",
             broker_order_id=existing_order.broker_order_id if existing_order else None,
+            client_order_id=existing_order.client_order_id if existing_order else None,
+        )
+
+    @staticmethod
+    def _result_message(order: Order) -> str:
+        if order.status == OrderStatus.UNKNOWN.value:
+            return "broker result is uncertain; use admin recovery"
+        if order.status in {
+            OrderStatus.CANCELLED.value,
+            OrderStatus.EXPIRED.value,
+            OrderStatus.FAILED.value,
+        }:
+            return "broker order finalized"
+        return "signal processed"
+
+    def _record_broker_result(
+        self,
+        order: Order,
+        broker_result: BrokerOrderResult,
+        *,
+        event_type: str,
+    ) -> None:
+        invalid_fill = (
+            broker_result.filled_lots < 0
+            or broker_result.filled_quantity < 0
+            or broker_result.filled_lots > order.requested_lots
+            or broker_result.filled_quantity > order.requested_quantity
+        )
+        if invalid_fill:
+            self._record_uncertain_snapshot(
+                order,
+                broker_result,
+                event_type=event_type,
+                reason="broker reported fill outside the requested amount",
+            )
+            return
+
+        has_fill = broker_result.filled_lots > 0 or broker_result.filled_quantity > 0
+        if has_fill and broker_result.avg_fill_price is None:
+            self._record_uncertain_snapshot(
+                order,
+                broker_result,
+                event_type=event_type,
+                reason="broker reported a fill without an average fill price",
+            )
+            return
+
+        fill_delta = self.order_repo.apply_broker_snapshot(
+            order,
+            status=broker_result.status,
+            broker_order_id=broker_result.broker_order_id,
+            filled_lots=broker_result.filled_lots,
+            filled_quantity=broker_result.filled_quantity,
+            avg_fill_price=broker_result.avg_fill_price,
+        )
+        unresolved_terminal = order.status in {
+            OrderStatus.CANCELLED.value,
+            OrderStatus.EXPIRED.value,
+            OrderStatus.FAILED.value,
+        }
+        if not broker_result.accepted or broker_result.execution_uncertain:
+            order.rejection_reason = broker_result.message or "broker did not accept order"
+        elif not unresolved_terminal:
+            order.rejection_reason = None
+
+        self.execution_repo.add(
+            order_id=order.id,
+            event_type=event_type,
+            status=broker_result.status.value,
+            message=broker_result.message,
+            payload={
+                **broker_result.raw_payload,
+                "cumulative_filled_lots": broker_result.filled_lots,
+                "cumulative_filled_quantity": str(broker_result.filled_quantity),
+                "applied_delta_lots": fill_delta.lots,
+                "applied_delta_quantity": str(fill_delta.quantity),
+            },
+        )
+
+        if (fill_delta.lots > 0 or fill_delta.quantity > 0) and fill_delta.price is not None:
+            self._apply_fill(
+                order=order,
+                fill_lots=fill_delta.lots,
+                fill_quantity=fill_delta.quantity,
+                fill_price=fill_delta.price,
+            )
+
+    def _record_uncertain_snapshot(
+        self,
+        order: Order,
+        broker_result: BrokerOrderResult,
+        *,
+        event_type: str,
+        reason: str,
+    ) -> None:
+        known_terminal = {
+            OrderStatus.FILLED.value,
+            OrderStatus.CANCELLED.value,
+            OrderStatus.EXPIRED.value,
+            OrderStatus.FAILED.value,
+        }
+        if order.status not in known_terminal:
+            self.order_repo.set_status(order, OrderStatus.UNKNOWN, rejection_reason=reason)
+        if broker_result.broker_order_id:
+            order.broker_order_id = broker_result.broker_order_id
+        self.execution_repo.add(
+            order_id=order.id,
+            event_type=event_type,
+            status=OrderStatus.UNKNOWN.value,
+            message=reason,
+            payload=broker_result.raw_payload,
         )
 
     def _run_temporal_guards(self, payload: TradingViewWebhookPayload) -> str | None:

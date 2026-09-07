@@ -21,10 +21,11 @@ TradingView webhook sinyallerini Binance Spot emirlerine çeviren kripto odaklı
 4. BUY quantity is floored to `LOT_SIZE.stepSize`.
 5. Limit price is rounded to `PRICE_FILTER.tickSize`.
 6. Risk checks run before submit.
-7. Binance adapter submits `LIMIT IOC` orders in live mode.
-8. Filled BUY opens a tranche; filled SELL closes the oldest tranche FIFO.
-9. Inventory, risk totals, and FIFO are restricted to the active execution/account scope.
-10. Admin reconciliation compares only that scope with its Binance account balance.
+7. A deterministic Binance client order ID is stored before a live `LIMIT IOC` submit.
+8. Broker snapshots are treated as cumulative; only the newly filled delta changes inventory.
+9. Filled BUY opens a tranche; filled SELL closes the oldest tranche FIFO.
+10. Inventory, risk totals, and FIFO are restricted to the active execution/account scope.
+11. Admin reconciliation compares only that scope with its Binance account balance.
 
 ## TradingView Contract
 
@@ -84,7 +85,7 @@ Important variables:
 - `MW_BROKER_NAME=BINANCE_SPOT`
 - `MW_WEBHOOK_AUTH_TOKEN`
 - `MW_ADMIN_AUTH_TOKEN` (separate management secret, required for private reads/admin operations)
-- `MW_ALLOW_ADMIN_ENDPOINTS` (enables replay/reconciliation, not authentication)
+- `MW_ALLOW_ADMIN_ENDPOINTS` (enables replay/recovery/reconciliation, not authentication)
 - `MW_BINANCE_BASE_URL`
 - `MW_BINANCE_API_KEY`
 - `MW_BINANCE_SECRET_KEY`
@@ -110,6 +111,7 @@ uvicorn middleware.api.main:app --reload --port 8010
 - `GET /orders`
 - `GET /signals`
 - `POST /admin/replay-signal`
+- `POST /admin/recover-order/{order_id}`
 - `GET /admin/reconcile/{symbol}`
 
 ## Management Authentication
@@ -121,7 +123,7 @@ secret on the server; never put it in Pine alerts or dashboard public variables.
 
 Missing/incorrect request credentials return `401`. An unset admin secret, or one
 equal to `MW_WEBHOOK_AUTH_TOKEN`, returns `503` and prevents service/broker creation.
-`MW_ALLOW_ADMIN_ENDPOINTS=false` returns `403` on replay/reconciliation even with a
+`MW_ALLOW_ADMIN_ENDPOINTS=false` returns `403` on replay/recovery/reconciliation even with a
 valid key. Private reads require the key regardless of that feature flag.
 Disabling webhook authentication does not disable management authentication.
 
@@ -129,6 +131,24 @@ Replay requires both the enabled flag and the admin key. Its default
 `bypass_idempotency=false` preserves duplicate suppression. An authenticated admin
 can explicitly set `bypass_idempotency=true` to process the payload again; this can
 create another order under the configured execution mode and trading gates.
+
+## Order Result Recovery
+
+Each new order stores a 36-character `client_order_id` derived from the complete local
+idempotency key. If the submit request times out, the adapter immediately queries Binance
+with that identifier. An inconclusive lookup leaves the order in `unknown`; it is not treated
+as a definite failure and the middleware does not submit a replacement order blindly.
+
+Use authenticated `POST /admin/recover-order/{order_id}` to query the same order again.
+Recovery applies only the difference between the broker's cumulative fill and the quantity
+already stored locally. Repeating the call therefore records another audit snapshot without
+applying the same fill twice. PostgreSQL recovery locks the order row while applying the
+snapshot. `cancelled` and `expired` orders may still contain a partial fill, and that fill is
+applied before the terminal status is stored.
+
+Historical rows created before migration `20260907_0005` have no client order ID and cannot
+use this recovery endpoint. Match such rows to verified broker history before any manual
+classification or repair.
 
 `GET /health` remains public. TradingView keeps its separate webhook credential
 (`X-Webhook-Token` or the existing `?token=` fallback).
@@ -175,7 +195,9 @@ Migration `20260907_0004` cannot prove the account and venue of historical rows,
 marks them `LEGACY_UNCLASSIFIED`. These rows remain stored but are excluded from every
 active scope. Classify them only after matching orders and tranches to verified broker
 history; update both tables to the exact scope shown by the management responses.
-The downgrade removes the new columns and indexes while retaining the historical rows.
+Migration `20260907_0005` adds the nullable client order ID and enforces uniqueness within
+an inventory scope. The downgrades remove the new columns and indexes while retaining the
+historical rows.
 The migration has not been applied to the real database in this local change.
 
 ## Live Gate

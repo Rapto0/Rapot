@@ -39,6 +39,31 @@ def replay_signal(
         ) from exc
 
 
+@router.post("/recover-order/{order_id}", response_model=ProcessSignalResponse)
+def recover_order(
+    order_id: int,
+    service: Annotated[TradingService, Depends(get_service)],
+) -> ProcessSignalResponse:
+    try:
+        return service.recover_order(order_id)
+    except LookupError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="order not found",
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="order cannot be recovered",
+        ) from exc
+    except Exception as exc:
+        logger.error("Admin order recovery failed (%s)", type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="order recovery failed",
+        ) from exc
+
+
 @router.get("/reconcile/{symbol}", response_model=ReconciliationReport)
 def reconcile_symbol(
     symbol: str,

@@ -26,6 +26,8 @@ class OrderStatus(str, Enum):
     PARTIALLY_FILLED = "partially_filled"
     FILLED = "filled"
     CANCELLED = "cancelled"
+    EXPIRED = "expired"
+    UNKNOWN = "unknown"
     FAILED = "failed"
 
 

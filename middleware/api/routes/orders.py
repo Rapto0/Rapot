@@ -40,6 +40,7 @@ def list_orders(
             rejection_reason=row.rejection_reason,
             broker_name=row.broker_name,
             broker_order_id=row.broker_order_id,
+            client_order_id=row.client_order_id,
             base_asset=row.base_asset,
             quote_asset=row.quote_asset,
             target_tranche_id=row.target_tranche_id,
