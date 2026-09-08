@@ -12,6 +12,7 @@ Middleware bundan sonra sadece Binance Spot kripto akışına odaklanır.
 - Inventory scope: execution mode + broker + venue/environment + stable account label
 - Filters: Binance `exchangeInfo` rules before submit
 - Recovery: deterministic client order ID + cumulative fill snapshots
+- Accounting: gross broker fill + cumulative per-asset commissions + net base inventory
 
 ## Order Rules
 
@@ -23,17 +24,21 @@ BUY:
 - Every distinct BUY alert opens a new tranche for the same symbol
 
 SELL:
-- Select oldest open tranche for the symbol
+- Select the oldest open tranche whose rounded quantity passes current symbol filters
 - Limit price: signal price minus `MW_SELL_BPS`, rounded down to tick size
 - Quantity: tranche remaining quantity, floored to step size
-- Every SELL alert closes one oldest tranche, then the next SELL closes the next tranche
+- Every SELL alert targets one sellable tranche; unsellable dust remains in tracked inventory
 
 BROKER RESULT:
-- Store the deterministic client order ID before submitting the order
+- Commit the local dispatch intent and deterministic client order ID before submitting the order
+- After a crash, normal replay never resubmits the persisted intent; recover by query only
+- Reserve the symbol/scope while an order is submitted, open, partially filled, or unknown
 - Treat `executedQty` as cumulative and apply only the quantity above the stored total
 - Apply partial fills even when the final status is `CANCELED` or `EXPIRED`
 - On an ambiguous submit result, query by client order ID and keep unresolved orders `unknown`
 - Repeat recovery through authenticated `POST /admin/recover-order/{order_id}`
+- Page `/api/v3/myTrades` from the first trade during recovery; require the complete executed
+  quantity and valid commissions before applying a nonzero fill (maximum ten 1,000-trade pages)
 
 ## Guard Rails
 
@@ -47,7 +52,7 @@ BROKER RESULT:
 
 ## Live Readiness Checklist
 
-1. Database migration head, currently `20260907_0005`, is applied before the new application starts.
+1. Database migration head, currently `20260907_0006`, is applied before the new application starts.
 2. A stable, non-secret `MW_INVENTORY_ACCOUNT_ID` identifies this exact account.
 3. Testnet API key passes signed account check.
 4. Testnet BUY with marketable limit fills.
@@ -62,6 +67,6 @@ BROKER RESULT:
 
 ## Known Follow-Up Work
 
-- Commission-aware automatic state repair.
+- Valuation of BNB/third-asset commission in quote-currency economic PnL.
 - Automated polling for orders that remain `unknown` or non-terminal.
 - Optional status endpoint that separates live Binance orders from dry-run history.

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from decimal import Decimal
 from unittest.mock import Mock
 
+import pytest
 import requests
 from sqlalchemy import select
 from sqlalchemy.dialects import postgresql
@@ -283,7 +284,8 @@ def test_cumulative_partial_snapshots_apply_only_increment_and_preserve_average(
     assert Decimal(position["tranches"][0]["entry_price"]) == Decimal("50000")
 
 
-def test_binance_timeout_queries_by_client_order_id(monkeypatch):
+@pytest.mark.parametrize("error_code", [None, -1006, -1007])
+def test_binance_timeout_queries_by_client_order_id(monkeypatch, error_code):
     settings.execution_mode = ExecutionMode.LIVE
     settings.binance_live_enabled = True
     settings.binance_api_key = "test-api-key"
@@ -294,7 +296,21 @@ def test_binance_timeout_queries_by_client_order_id(monkeypatch):
     def fake_signed_request(self, method: str, path: str, params: dict):
         calls.append((method, path, params))
         if method == "POST":
+            if error_code is not None:
+                raise BinanceAPIError(status_code=400, code=error_code, message="status unknown")
             raise requests.Timeout("ambiguous timeout")
+        if path == "/api/v3/myTrades":
+            return [
+                {
+                    "id": 420,
+                    "symbol": "BTCUSDT",
+                    "orderId": 42,
+                    "qty": "0.001",
+                    "price": "50000",
+                    "commission": "0.000001",
+                    "commissionAsset": "BTC",
+                }
+            ]
         return {
             "symbol": "BTCUSDT",
             "orderId": 42,
@@ -321,8 +337,12 @@ def test_binance_timeout_queries_by_client_order_id(monkeypatch):
     assert result.status == OrderStatus.CANCELLED
     assert result.filled_quantity == Decimal("0.001")
     assert result.avg_fill_price == Decimal("50000")
+    assert result.commission_complete is True
+    assert result.commission_by_asset == {"BTC": Decimal("0.000001")}
     assert calls[1][0:2] == ("GET", "/api/v3/order")
     assert calls[1][2]["origClientOrderId"] == payload.client_order_id
+    assert calls[2][0:2] == ("GET", "/api/v3/myTrades")
+    assert calls[2][2]["orderId"] == "42"
 
 
 def test_binance_inconclusive_timeout_stays_unknown(monkeypatch):
@@ -364,6 +384,18 @@ def test_binance_duplicate_client_id_recovers_order_after_restart(monkeypatch):
     def duplicate_then_lookup(self, method: str, path: str, params: dict):
         if method == "POST":
             raise BinanceAPIError(status_code=400, code=-2010, message="Duplicate order sent.")
+        if path == "/api/v3/myTrades":
+            return [
+                {
+                    "id": 840,
+                    "symbol": "BTCUSDT",
+                    "orderId": 84,
+                    "qty": "0.002",
+                    "price": "50000",
+                    "commission": "0",
+                    "commissionAsset": "BTC",
+                }
+            ]
         return {
             "symbol": "BTCUSDT",
             "orderId": 84,

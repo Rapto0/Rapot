@@ -6,7 +6,7 @@ from functools import cached_property
 from typing import Any
 from urllib.parse import urlparse
 
-from pydantic import field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from middleware.domain.enums import BrokerName, ExecutionMode
@@ -46,7 +46,7 @@ class MiddlewareSettings(BaseSettings):
 
     max_symbol_exposure_usdt: Decimal | None = None
     max_daily_loss_usdt: Decimal | None = None
-    max_orders_per_day: int | None = None
+    max_orders_per_day: int | None = Field(default=None, ge=0)
     allowed_symbols_csv: str | None = None
     max_signal_age_seconds: int | None = None
     max_signal_future_skew_seconds: int = 120

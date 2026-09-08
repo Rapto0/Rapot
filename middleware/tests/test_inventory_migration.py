@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 from datetime import datetime
+from decimal import Decimal
 
 import sqlalchemy as sa
 from alembic.migration import MigrationContext
@@ -124,3 +125,68 @@ def test_inventory_migration_quarantines_legacy_rows_and_downgrades(test_sandbox
             "created_at",
         }
         assert connection.scalar(sa.text("SELECT COUNT(*) FROM mw_tranches")) == 3
+
+
+def test_accounting_precision_migration_preserves_rows_and_downgrades(test_sandbox, monkeypatch):
+    engine = sa.create_engine(
+        f"sqlite+pysqlite:///{(test_sandbox / 'accounting-legacy.sqlite3').as_posix()}"
+    )
+    metadata = sa.MetaData()
+    signal_events = sa.Table(
+        "mw_signal_events",
+        metadata,
+        sa.Column("id", sa.Integer, primary_key=True),
+        sa.Column("price", sa.Numeric(18, 6), nullable=False),
+    )
+    orders = sa.Table(
+        "mw_orders",
+        metadata,
+        sa.Column("id", sa.Integer, primary_key=True),
+        sa.Column("limit_price", sa.Numeric(18, 6), nullable=False),
+        sa.Column("budget_tl", sa.Numeric(18, 6)),
+        sa.Column("avg_fill_price", sa.Numeric(18, 6)),
+        sa.Column("realized_pnl", sa.Numeric(18, 6)),
+    )
+    tranches = sa.Table(
+        "mw_tranches",
+        metadata,
+        sa.Column("id", sa.Integer, primary_key=True),
+        sa.Column("entry_price", sa.Numeric(18, 6), nullable=False),
+    )
+    metadata.create_all(engine)
+
+    with engine.begin() as connection:
+        connection.execute(signal_events.insert(), {"id": 1, "price": Decimal("1.123456")})
+        connection.execute(
+            orders.insert(),
+            {
+                "id": 1,
+                "limit_price": Decimal("1.123456"),
+                "budget_tl": Decimal("10"),
+                "avg_fill_price": Decimal("1.123456"),
+                "realized_pnl": Decimal("0.5"),
+            },
+        )
+        connection.execute(tranches.insert(), {"id": 1, "entry_price": Decimal("1.123456")})
+
+        migration = importlib.import_module(
+            "middleware.infra.alembic.versions.20260907_0006_order_accounting_precision"
+        )
+        monkeypatch.setattr(migration, "op", Operations(MigrationContext.configure(connection)))
+        migration.upgrade()
+
+        inspector = sa.inspect(connection)
+        order_columns = {item["name"]: item for item in inspector.get_columns("mw_orders")}
+        assert order_columns["limit_price"]["type"].scale == 12
+        assert order_columns["commission_json"]["nullable"] is False
+        assert order_columns["commission_complete"]["nullable"] is False
+        assert connection.scalar(sa.text("SELECT commission_json FROM mw_orders")) == "{}"
+        assert connection.scalar(sa.text("SELECT COUNT(*) FROM mw_orders")) == 1
+
+        migration.downgrade()
+        downgraded = {
+            item["name"]: item for item in sa.inspect(connection).get_columns("mw_orders")
+        }
+        assert downgraded["limit_price"]["type"].scale == 6
+        assert "commission_json" not in downgraded
+        assert connection.scalar(sa.text("SELECT COUNT(*) FROM mw_orders")) == 1

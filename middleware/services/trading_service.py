@@ -22,7 +22,7 @@ from middleware.infra.models import Order
 from middleware.infra.settings import MiddlewareSettings
 from middleware.infra.time import UTC
 from middleware.repositories.execution_report_repository import ExecutionReportRepository
-from middleware.repositories.order_repository import OrderRepository
+from middleware.repositories.order_repository import BrokerFillDelta, OrderRepository
 from middleware.repositories.signal_repository import SignalRepository
 from middleware.repositories.tranche_repository import TrancheRepository
 from middleware.risk.checks import BuyRiskInput, RiskEngine, SellRiskInput
@@ -84,6 +84,8 @@ class TradingService:
         )
         client_order_id = build_client_order_id(idempotency_key)
         with self.session.begin():
+            # Serialize risk and inventory decisions, including symbols without any tranche yet.
+            self.order_repo.lock_daily_risk_scope()
             if not bypass_idempotency:
                 existing = self.signal_repo.get_by_event_hash(event_hash)
                 if existing:
@@ -157,7 +159,11 @@ class TradingService:
                 payload={"event_hash": event_hash},
             )
 
-            risk_reason = self._run_risk(payload=payload, order_intent=order_intent)
+            risk_reason = self._run_risk(
+                payload=payload,
+                order_intent=order_intent,
+                current_order_id=order.id,
+            )
             if risk_reason:
                 self.order_repo.set_status(
                     order, OrderStatus.REJECTED, rejection_reason=risk_reason
@@ -204,35 +210,45 @@ class TradingService:
                 order_id=order.id,
                 event_type="lifecycle",
                 status=OrderStatus.SUBMITTED.value,
-                message="dispatching to broker adapter",
+                message="durable dispatch intent saved; broker outcome may require recovery",
             )
 
-            broker_result = self.broker_client.submit_limit_order(
-                BrokerOrderRequestPayload(
-                    symbol=order.symbol,
-                    side=Side(order.side),
-                    lots=order.requested_lots,
-                    quantity=order.requested_quantity,
-                    limit_price=order.limit_price,
-                    signal_code=order.signal_code,
-                    idempotency_key=order.idempotency_key,
-                    client_order_id=order.client_order_id or client_order_id,
-                    metadata={
-                        "signal_event_id": signal_event.id,
-                        "source": payload.source,
-                        "timeframe": payload.timeframe,
-                        "is_realtime": payload.isRealtime,
-                    },
-                )
+            order_id = order.id
+            broker_request = BrokerOrderRequestPayload(
+                symbol=order.symbol,
+                side=Side(order.side),
+                lots=order.requested_lots,
+                quantity=order.requested_quantity,
+                limit_price=order.limit_price,
+                signal_code=order.signal_code,
+                idempotency_key=order.idempotency_key,
+                client_order_id=order.client_order_id or client_order_id,
+                metadata={
+                    "signal_event_id": signal_event.id,
+                    "source": payload.source,
+                    "timeframe": payload.timeframe,
+                    "is_realtime": payload.isRealtime,
+                },
             )
 
+        # A broker may reuse an already-filled clientOrderId. Commit the local intent before
+        # any remote write so a crash/replay can only query this order, never submit it again.
+        broker_result = self.broker_client.submit_limit_order(broker_request)
+
+        with self.session.begin():
+            self.order_repo.lock_daily_risk_scope()
+            self.session.expire_all()
+            order = self.order_repo.get(order_id, for_update=True)
+            if order is None:
+                raise LookupError("persisted dispatch order not found")
+            self.tranche_repo.lock_symbol_open_tranches(order.symbol)
             self._record_broker_result(order, broker_result, event_type="broker")
 
             logger.info(
                 "signal processed",
                 extra={
                     "extra_fields": {
-                        "signal_event_id": signal_event.id,
+                        "signal_event_id": order.signal_event_id,
                         "order_id": order.id,
                         "symbol": payload.symbol,
                         "signal_code": payload.signalCode,
@@ -243,7 +259,7 @@ class TradingService:
             )
 
             return ProcessSignalResponse(
-                signal_event_id=signal_event.id,
+                signal_event_id=order.signal_event_id,
                 order_id=order.id,
                 duplicate=False,
                 status=OrderStatus(order.status),
@@ -263,16 +279,23 @@ class TradingService:
 
     def recover_order(self, order_id: int) -> ProcessSignalResponse:
         with self.session.begin():
-            order = self.order_repo.get(order_id, for_update=True)
+            order = self.order_repo.get(order_id)
             if order is None:
                 raise LookupError("order not found")
             if not order.client_order_id:
                 raise ValueError("legacy order has no client order id")
+            symbol = order.symbol
+            client_order_id = order.client_order_id
 
-            broker_result = self.broker_client.get_order_by_client_id(
-                order.symbol,
-                order.client_order_id,
-            )
+        broker_result = self.broker_client.get_order_by_client_id(symbol, client_order_id)
+
+        with self.session.begin():
+            self.order_repo.lock_daily_risk_scope()
+            self.session.expire_all()
+            order = self.order_repo.get(order_id, for_update=True)
+            if order is None:
+                raise LookupError("order not found")
+            self.tranche_repo.lock_symbol_open_tranches(order.symbol)
             self._record_broker_result(order, broker_result, event_type="recovery")
 
             return ProcessSignalResponse(
@@ -359,10 +382,16 @@ class TradingService:
 
         if total_matches and sell_ready:
             status = "OK"
+            recommended_action = "No inventory repair is required"
         elif total_matches:
             status = "LOCKED_BALANCE"
+            recommended_action = "Inspect open Binance orders before attempting another sell"
         else:
             status = "MISMATCH"
+            recommended_action = (
+                "Compare verified Binance trades, deposits, withdrawals, and all inventory "
+                "scopes before making a manual correction"
+            )
 
         return {
             "symbol": normalized,
@@ -380,6 +409,9 @@ class TradingService:
             "total_delta_quantity": total_delta,
             "free_delta_quantity": free_delta,
             "sell_ready": sell_ready,
+            "repair_policy": "REPORT_ONLY",
+            "automatic_repair_supported": False,
+            "recommended_action": recommended_action,
             "messages": messages,
         }
 
@@ -419,18 +451,28 @@ class TradingService:
                 target_tranche_id=None,
             )
 
-        target = self.tranche_repo.oldest_open(symbol, for_update=for_update)
         limit_price = rules.round_sell_price(
             payload.price * (Decimal("1") - (Decimal(self.cfg.sell_bps) / Decimal("10000")))
         )
+        target = None
         quantity = Decimal("0")
-        if target is not None:
-            quantity = (
-                Decimal(target.remaining_quantity)
-                if Decimal(target.remaining_quantity) > 0
-                else Decimal(int(target.remaining_lots))
+        for candidate in self.tranche_repo.list_open_tranches(symbol=symbol):
+            if for_update:
+                candidate = self.tranche_repo.get(candidate.id, for_update=True)
+                if candidate is None:
+                    continue
+            remaining = (
+                Decimal(candidate.remaining_quantity)
+                if Decimal(candidate.remaining_quantity) > 0
+                else Decimal(int(candidate.remaining_lots))
             )
-            quantity = rules.floor_quantity(quantity)
+            candidate_quantity = rules.floor_quantity(remaining)
+            # Retain dust in inventory, but let the next sellable tranche progress in FIFO order.
+            if target is None:
+                target, quantity = candidate, candidate_quantity
+            if rules.validate_limit_order(price=limit_price, quantity=candidate_quantity) is None:
+                target, quantity = candidate, candidate_quantity
+                break
 
         return _OrderIntent(
             symbol=symbol,
@@ -447,13 +489,24 @@ class TradingService:
         )
 
     def _run_risk(
-        self, *, payload: TradingViewWebhookPayload, order_intent: _OrderIntent
+        self,
+        *,
+        payload: TradingViewWebhookPayload,
+        order_intent: _OrderIntent,
+        current_order_id: int,
     ) -> str | None:
         temporal_reason = self._run_temporal_guards(payload)
         if temporal_reason:
             return temporal_reason
 
-        orders_today = self.order_repo.count_orders_today()
+        pending_order = self.order_repo.get_pending_for_symbol(
+            order_intent.symbol, exclude_order_id=current_order_id
+        )
+        if pending_order is not None:
+            return f"pending order {pending_order.id} must be recovered before another symbol order"
+        orders_today = self.order_repo.count_submitted_orders_today(
+            exclude_order_id=current_order_id
+        )
         realized_pnl_today = self.order_repo.get_realized_pnl_today()
         try:
             if payload.side == Side.BUY:
@@ -588,11 +641,54 @@ class TradingService:
         *,
         event_type: str,
     ) -> None:
+        try:
+            reported_lots = Decimal(broker_result.filled_lots)
+            reported_quantity = Decimal(broker_result.filled_quantity)
+            reported_price = (
+                Decimal(broker_result.avg_fill_price)
+                if broker_result.avg_fill_price is not None
+                else None
+            )
+            commissions = {
+                asset.upper(): Decimal(amount)
+                for asset, amount in broker_result.commission_by_asset.items()
+            }
+        except (ArithmeticError, AttributeError, TypeError, ValueError):
+            self._record_uncertain_snapshot(
+                order,
+                broker_result,
+                event_type=event_type,
+                reason="broker reported invalid accounting values",
+            )
+            return
+        reported_numbers = [reported_lots, reported_quantity, *commissions.values()]
+        if reported_price is not None:
+            reported_numbers.append(reported_price)
+        if any(not value.is_finite() for value in reported_numbers):
+            self._record_uncertain_snapshot(
+                order,
+                broker_result,
+                event_type=event_type,
+                reason="broker reported non-finite accounting values",
+            )
+            return
+        broker_result.filled_quantity = reported_quantity
+        broker_result.avg_fill_price = reported_price
+        previous_commissions = {
+            asset.upper(): Decimal(amount) for asset, amount in order.commission_json.items()
+        }
         invalid_fill = (
-            broker_result.filled_lots < 0
+            reported_lots != reported_lots.to_integral_value()
+            or reported_lots < 0
             or broker_result.filled_quantity < 0
-            or broker_result.filled_lots > order.requested_lots
+            or reported_lots > order.requested_lots
             or broker_result.filled_quantity > order.requested_quantity
+            or (reported_price is not None and reported_price <= 0)
+            or any(not asset or amount < 0 for asset, amount in commissions.items())
+            or any(
+                commissions.get(asset, Decimal("0")) < amount
+                for asset, amount in previous_commissions.items()
+            )
         )
         if invalid_fill:
             self._record_uncertain_snapshot(
@@ -602,8 +698,31 @@ class TradingService:
                 reason="broker reported fill outside the requested amount",
             )
             return
+        broker_result.filled_lots = int(reported_lots)
 
         has_fill = broker_result.filled_lots > 0 or broker_result.filled_quantity > 0
+        if has_fill and not broker_result.commission_complete:
+            self._record_uncertain_snapshot(
+                order,
+                broker_result,
+                event_type=event_type,
+                reason="broker fill commissions could not be verified",
+            )
+            return
+        accounting_reason = self._validate_commission_delta(
+            order,
+            broker_result,
+            commissions=commissions,
+            previous_commissions=previous_commissions,
+        )
+        if accounting_reason:
+            self._record_uncertain_snapshot(
+                order,
+                broker_result,
+                event_type=event_type,
+                reason=accounting_reason,
+            )
+            return
         if has_fill and broker_result.avg_fill_price is None:
             self._record_uncertain_snapshot(
                 order,
@@ -620,6 +739,8 @@ class TradingService:
             filled_lots=broker_result.filled_lots,
             filled_quantity=broker_result.filled_quantity,
             avg_fill_price=broker_result.avg_fill_price,
+            commission_by_asset=commissions,
+            commission_complete=broker_result.commission_complete,
         )
         unresolved_terminal = order.status in {
             OrderStatus.CANCELLED.value,
@@ -642,16 +763,93 @@ class TradingService:
                 "cumulative_filled_quantity": str(broker_result.filled_quantity),
                 "applied_delta_lots": fill_delta.lots,
                 "applied_delta_quantity": str(fill_delta.quantity),
+                "cumulative_commission_by_asset": {
+                    asset: str(amount) for asset, amount in commissions.items()
+                },
+                "applied_commission_delta_by_asset": {
+                    asset: str(amount) for asset, amount in fill_delta.commission_by_asset.items()
+                },
+                "commission_complete": broker_result.commission_complete,
             },
         )
 
         if (fill_delta.lots > 0 or fill_delta.quantity > 0) and fill_delta.price is not None:
-            self._apply_fill(
-                order=order,
-                fill_lots=fill_delta.lots,
-                fill_quantity=fill_delta.quantity,
-                fill_price=fill_delta.price,
+            self._apply_accounted_fill(order=order, fill_delta=fill_delta)
+
+    def _validate_commission_delta(
+        self,
+        order: Order,
+        broker_result: BrokerOrderResult,
+        *,
+        commissions: dict[str, Decimal],
+        previous_commissions: dict[str, Decimal],
+    ) -> str | None:
+        gross_delta = max(
+            Decimal("0"),
+            broker_result.filled_quantity - Decimal(order.filled_quantity),
+        )
+        commission_delta = {
+            asset: amount - previous_commissions.get(asset, Decimal("0"))
+            for asset, amount in commissions.items()
+            if amount > previous_commissions.get(asset, Decimal("0"))
+        }
+        if gross_delta <= 0 and commission_delta:
+            return "commission changed without a new fill; manual reconciliation is required"
+
+        base_asset = (order.base_asset or "").upper()
+        quote_asset = (order.quote_asset or "").upper()
+        base_fee = commission_delta.get(base_asset, Decimal("0"))
+        quote_fee = commission_delta.get(quote_asset, Decimal("0"))
+        gross_quote = Decimal("0")
+        if gross_delta > 0 and broker_result.avg_fill_price is not None:
+            previous_quantity = Decimal(order.filled_quantity)
+            if previous_quantity > 0 and order.avg_fill_price is None:
+                return "previous fill has no average price; manual reconciliation is required"
+            previous_quote = previous_quantity * Decimal(order.avg_fill_price or 0)
+            gross_quote = (
+                broker_result.filled_quantity * broker_result.avg_fill_price - previous_quote
             )
+            if not gross_quote.is_finite() or gross_quote <= 0:
+                return "cumulative fill value does not increase with the new fill"
+        if order.signal_code in BUY_SIGNAL_CODES and base_fee >= gross_delta > 0:
+            return "base-asset commission consumes the complete buy fill"
+
+        if order.signal_code not in BUY_SIGNAL_CODES and gross_delta > 0:
+            if broker_result.avg_fill_price is not None and quote_fee > gross_quote:
+                return "quote-asset commission exceeds the sell proceeds"
+            if base_fee > 0 and order.target_tranche_id is not None:
+                target = self.tranche_repo.get(order.target_tranche_id, for_update=True)
+                available = (
+                    Decimal(target.remaining_quantity) if target is not None else Decimal("0")
+                )
+                if gross_delta + base_fee > available:
+                    return "base-asset sell commission exceeds tracked inventory"
+        return None
+
+    def _apply_accounted_fill(self, *, order: Order, fill_delta: BrokerFillDelta) -> None:
+        base_asset = (order.base_asset or "").upper()
+        quote_asset = (order.quote_asset or "").upper()
+        base_commission = fill_delta.commission_by_asset.get(base_asset, Decimal("0"))
+        quote_commission = fill_delta.commission_by_asset.get(quote_asset, Decimal("0"))
+        gross_quantity = fill_delta.quantity
+        gross_notional = gross_quantity * fill_delta.price
+
+        if order.signal_code in BUY_SIGNAL_CODES:
+            inventory_quantity = gross_quantity - base_commission
+            quote_value = gross_notional + quote_commission
+        else:
+            inventory_quantity = gross_quantity + base_commission
+            quote_value = gross_notional - quote_commission
+
+        if inventory_quantity <= 0 or quote_value < 0:
+            raise ValueError("commission-adjusted fill is invalid")
+        effective_price = quote_value / inventory_quantity
+        self._apply_fill(
+            order=order,
+            fill_lots=fill_delta.lots,
+            fill_quantity=inventory_quantity,
+            fill_price=effective_price,
+        )
 
     def _record_uncertain_snapshot(
         self,

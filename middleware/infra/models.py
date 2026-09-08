@@ -59,7 +59,7 @@ class SignalEvent(Base):
     signal_code: Mapped[str] = mapped_column(String(20), nullable=False)
     signal_text: Mapped[str] = mapped_column(String(200), nullable=False)
     side: Mapped[str] = mapped_column(String(8), nullable=False)
-    price: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    price: Mapped[Decimal] = mapped_column(Numeric(28, 12), nullable=False)
     timeframe: Mapped[str] = mapped_column(String(24), nullable=False)
     bar_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     bar_index: Mapped[int] = mapped_column(BigInteger, nullable=False)
@@ -69,7 +69,7 @@ class SignalEvent(Base):
         DateTime(timezone=True), default=lambda: datetime.now(UTC), server_default=func.now()
     )
 
-    order: Mapped[Order] = relationship(back_populates="signal_event", uselist=False)
+    orders: Mapped[list[Order]] = relationship(back_populates="signal_event")
 
 
 class Order(Base, TimestampMixin):
@@ -108,8 +108,8 @@ class Order(Base, TimestampMixin):
     filled_quantity: Mapped[Decimal] = mapped_column(
         Numeric(28, 12), nullable=False, default=Decimal("0"), server_default="0"
     )
-    limit_price: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
-    budget_tl: Mapped[Decimal | None] = mapped_column(Numeric(18, 6), nullable=True)
+    limit_price: Mapped[Decimal] = mapped_column(Numeric(28, 12), nullable=False)
+    budget_tl: Mapped[Decimal | None] = mapped_column(Numeric(28, 12), nullable=True)
     quote_budget: Mapped[Decimal | None] = mapped_column(Numeric(28, 12), nullable=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
     rejection_reason: Mapped[str | None] = mapped_column(String(400), nullable=True)
@@ -121,13 +121,19 @@ class Order(Base, TimestampMixin):
     target_tranche_id: Mapped[int | None] = mapped_column(
         ForeignKey("mw_tranches.id", ondelete="SET NULL"), nullable=True
     )
-    avg_fill_price: Mapped[Decimal | None] = mapped_column(Numeric(18, 6), nullable=True)
-    realized_pnl: Mapped[Decimal | None] = mapped_column(Numeric(18, 6), nullable=True)
+    avg_fill_price: Mapped[Decimal | None] = mapped_column(Numeric(28, 12), nullable=True)
+    realized_pnl: Mapped[Decimal | None] = mapped_column(Numeric(28, 12), nullable=True)
+    commission_json: Mapped[dict[str, str]] = mapped_column(
+        JSON, nullable=False, default=dict, server_default="{}"
+    )
+    commission_complete: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
     mode: Mapped[str] = mapped_column(String(16), nullable=False)
     inventory_scope: Mapped[str] = mapped_column(String(220), nullable=False)
     metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
 
-    signal_event: Mapped[SignalEvent] = relationship(back_populates="order")
+    signal_event: Mapped[SignalEvent] = relationship(back_populates="orders")
     target_tranche: Mapped[Tranche] = relationship(foreign_keys=[target_tranche_id])
     execution_reports: Mapped[list[ExecutionReport]] = relationship(
         back_populates="order", cascade="all, delete-orphan"
@@ -162,7 +168,7 @@ class Tranche(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     symbol: Mapped[str] = mapped_column(String(24), nullable=False)
     signal_code: Mapped[str] = mapped_column(String(20), nullable=False)
-    entry_price: Mapped[Decimal] = mapped_column(Numeric(18, 6), nullable=False)
+    entry_price: Mapped[Decimal] = mapped_column(Numeric(28, 12), nullable=False)
     entry_time: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     requested_lots: Mapped[int] = mapped_column(Integer, nullable=False)
     filled_lots: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")

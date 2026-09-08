@@ -21,6 +21,8 @@ class BrokerOrderResult:
     message: str | None = None
     raw_payload: dict[str, Any] = field(default_factory=dict)
     execution_uncertain: bool = False
+    commission_by_asset: dict[str, Decimal] = field(default_factory=dict)
+    commission_complete: bool = True
 
 
 @dataclass(frozen=True, slots=True)

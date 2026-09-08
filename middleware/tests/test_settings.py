@@ -59,3 +59,8 @@ def test_inventory_scope_rejects_unstable_identifiers():
     )
     with pytest.raises(ValueError, match="MW_APP_ENV"):
         _ = cfg.inventory_scope
+
+
+def test_max_orders_per_day_rejects_negative_values():
+    with pytest.raises(ValueError, match="greater than or equal to 0"):
+        MiddlewareSettings(_env_file=None, max_orders_per_day=-1)

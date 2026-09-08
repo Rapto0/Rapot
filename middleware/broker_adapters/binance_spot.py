@@ -4,7 +4,7 @@ import hashlib
 import hmac
 import time
 from dataclasses import dataclass, field
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from typing import Any
 from urllib.parse import urlencode
 from uuid import uuid4
@@ -41,7 +41,11 @@ class BinanceAPIError(RuntimeError):
 
     @property
     def may_represent_an_existing_order(self) -> bool:
-        return self.status_code >= 500 or "duplicate order" in self.api_message.lower()
+        return (
+            self.status_code >= 500
+            or self.code in {-1006, -1007}
+            or "duplicate order" in self.api_message.lower()
+        )
 
 
 class BinanceResponseError(RuntimeError):
@@ -133,6 +137,8 @@ class BinanceSpotBrokerClient(BrokerClient):
                 raw_payload=self._request_preview(payload=payload, quantity=quantity),
             )
 
+        if not isinstance(response_payload, dict):
+            return self.get_order_by_client_id(payload.symbol, payload.client_order_id)
         return self._map_order_response(response_payload, client_order_id=payload.client_order_id)
 
     def get_order_by_client_id(self, symbol: str, client_order_id: str) -> BrokerOrderResult:
@@ -146,15 +152,72 @@ class BinanceSpotBrokerClient(BrokerClient):
                 },
             )
         except (requests.RequestException, RuntimeError):
-            return BrokerOrderResult(
-                accepted=False,
-                status=OrderStatus.UNKNOWN,
-                client_order_id=client_order_id,
-                message="Binance order result is uncertain; recovery lookup did not complete",
-                raw_payload={"symbol": symbol.upper(), "client_order_id": client_order_id},
-                execution_uncertain=True,
+            return self._unknown_recovery_result(symbol, client_order_id)
+        if not isinstance(response_payload, dict):
+            return self._unknown_recovery_result(symbol, client_order_id)
+
+        result = self._map_order_response(response_payload, client_order_id=client_order_id)
+        if result.filled_quantity <= 0 or not result.broker_order_id:
+            return result
+        try:
+            trades = self._get_order_trades(symbol, result.broker_order_id)
+            commissions = self._verified_commissions(trades, filled_quantity=result.filled_quantity)
+        except (requests.RequestException, RuntimeError):
+            result.commission_complete = False
+            result.execution_uncertain = True
+            result.message = "Binance order found but fill commissions could not be verified"
+            return result
+        if commissions is None:
+            result.commission_complete = False
+            result.execution_uncertain = True
+            result.message = "Binance trades do not yet cover the complete order fill"
+            return result
+        result.commission_by_asset = commissions
+        result.commission_complete = True
+        result.raw_payload = {"order": response_payload, "trades": trades}
+        return result
+
+    def _get_order_trades(self, symbol: str, order_id: str) -> list[dict[str, Any]]:
+        trades: list[dict[str, Any]] = []
+        seen: set[int] = set()
+        cursor = 0
+        # Bound recovery work; an incomplete history must never become zero commission.
+        for _ in range(10):
+            page = self._signed_request(
+                "GET",
+                "/api/v3/myTrades",
+                {"symbol": symbol.upper(), "orderId": order_id, "fromId": cursor, "limit": 1000},
             )
-        return self._map_order_response(response_payload, client_order_id=client_order_id)
+            if not isinstance(page, list):
+                raise BinanceResponseError("Binance returned an invalid trade history")
+            for item in page:
+                if (
+                    not isinstance(item, dict)
+                    or str(item.get("orderId")) != order_id
+                    or item.get("symbol") != symbol.upper()
+                    or not isinstance(item.get("id"), int)
+                    or item["id"] < cursor
+                    or item["id"] in seen
+                ):
+                    raise BinanceResponseError("Binance returned mismatched or duplicate trades")
+                seen.add(item["id"])
+                trades.append(item)
+            if len(page) < 1000:
+                return trades
+            cursor = max(seen) + 1
+        raise BinanceResponseError("Binance trade history exceeded the recovery page limit")
+
+    @staticmethod
+    def _unknown_recovery_result(symbol: str, client_order_id: str) -> BrokerOrderResult:
+        return BrokerOrderResult(
+            accepted=False,
+            status=OrderStatus.UNKNOWN,
+            client_order_id=client_order_id,
+            message="Binance order result is uncertain; recovery lookup did not complete",
+            raw_payload={"symbol": symbol.upper(), "client_order_id": client_order_id},
+            execution_uncertain=True,
+            commission_complete=False,
+        )
 
     def _dry_run_result(
         self, *, payload: BrokerOrderRequestPayload, quantity: Decimal
@@ -204,7 +267,7 @@ class BinanceSpotBrokerClient(BrokerClient):
             "client_order_id": payload.client_order_id,
         }
 
-    def _signed_request(self, method: str, path: str, params: dict[str, Any]) -> dict[str, Any]:
+    def _signed_request(self, method: str, path: str, params: dict[str, Any]) -> Any:
         if not self.cfg.binance_api_key or not self.cfg.binance_secret_key:
             raise RuntimeError("Binance API key/secret are required for signed requests")
 
@@ -255,8 +318,22 @@ class BinanceSpotBrokerClient(BrokerClient):
             OrderStatus.EXPIRED,
             OrderStatus.UNKNOWN,
         }
-        filled_quantity = _decimal(payload.get("executedQty"))
-        avg_fill_price = self._avg_fill_price(payload, filled_quantity)
+        try:
+            filled_quantity = _decimal(payload.get("executedQty"))
+            avg_fill_price = self._avg_fill_price(payload, filled_quantity)
+            if not filled_quantity.is_finite() or filled_quantity < 0:
+                raise ValueError("invalid fill quantity")
+            if avg_fill_price is not None and (
+                not avg_fill_price.is_finite() or avg_fill_price <= 0
+            ):
+                raise ValueError("invalid fill price")
+        except (InvalidOperation, ValueError, TypeError, AttributeError):
+            return self._unknown_recovery_result(
+                str(payload.get("symbol") or ""), client_order_id or ""
+            )
+        fills = payload.get("fills")
+        commissions = self._verified_commissions(fills, filled_quantity=filled_quantity)
+        commission_complete = commissions is not None
 
         return BrokerOrderResult(
             accepted=accepted,
@@ -271,9 +348,43 @@ class BinanceSpotBrokerClient(BrokerClient):
             message=f"Binance order status: {status_raw or status.value}",
             raw_payload=payload,
             execution_uncertain=status == OrderStatus.UNKNOWN,
+            commission_by_asset=commissions or {},
+            commission_complete=commission_complete,
         )
 
+    @staticmethod
+    def _verified_commissions(items: Any, *, filled_quantity: Decimal) -> dict[str, Decimal] | None:
+        if filled_quantity == 0:
+            return {}
+        if not isinstance(items, list) or not items:
+            return None
+        totals: dict[str, Decimal] = {}
+        quantity = Decimal("0")
+        try:
+            for item in items:
+                asset = item["commissionAsset"]
+                fee = Decimal(str(item["commission"]))
+                fill_quantity = Decimal(str(item["qty"]))
+                if (
+                    not isinstance(asset, str)
+                    or not asset.strip()
+                    or not fee.is_finite()
+                    or fee < 0
+                    or not fill_quantity.is_finite()
+                    or fill_quantity <= 0
+                ):
+                    return None
+                asset = asset.upper()
+                totals[asset] = totals.get(asset, Decimal("0")) + fee
+                quantity += fill_quantity
+        except (InvalidOperation, KeyError, TypeError, ValueError):
+            return None
+        return totals if quantity == filled_quantity else None
+
     def _avg_fill_price(self, payload: dict[str, Any], filled_quantity: Decimal) -> Decimal | None:
+        cumulative_quote = _decimal(payload.get("cummulativeQuoteQty"))
+        if filled_quantity > 0 and cumulative_quote > 0:
+            return cumulative_quote / filled_quantity
         fills = payload.get("fills") or []
         fill_quantity = Decimal("0")
         fill_notional = Decimal("0")
@@ -285,19 +396,18 @@ class BinanceSpotBrokerClient(BrokerClient):
         if fill_quantity > 0:
             return fill_notional / fill_quantity
 
-        cumulative_quote = _decimal(payload.get("cummulativeQuoteQty"))
-        if filled_quantity > 0 and cumulative_quote > 0:
-            return cumulative_quote / filled_quantity
         return None
 
-    def _json_response(self, response: requests.Response) -> dict[str, Any]:
+    def _json_response(self, response: requests.Response) -> dict[str, Any] | list[dict[str, Any]]:
         try:
             payload = response.json()
         except ValueError as exc:
             raise BinanceResponseError("Binance returned a non-JSON response") from exc
-        if not isinstance(payload, dict):
+        if not isinstance(payload, (dict, list)):
             raise BinanceResponseError("Binance returned an unexpected JSON payload")
         if response.status_code >= 400:
+            if not isinstance(payload, dict):
+                raise BinanceResponseError("Binance returned an unexpected error payload")
             code = payload.get("code")
             msg = payload.get("msg") or response.text
             raise BinanceAPIError(

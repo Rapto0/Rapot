@@ -84,6 +84,9 @@ def test_reconciliation_ok_when_binance_balance_matches_middleware(
     assert body["sell_ready"] is True
     assert Decimal(body["middleware_remaining_quantity"]) == remaining_quantity
     assert Decimal(body["total_delta_quantity"]) == Decimal("0")
+    assert body["repair_policy"] == "REPORT_ONLY"
+    assert body["automatic_repair_supported"] is False
+    assert body["recommended_action"] == "No inventory repair is required"
 
 
 def test_reconciliation_detects_missing_binance_balance(client, sample_buy_payload, monkeypatch):
@@ -103,6 +106,7 @@ def test_reconciliation_detects_missing_binance_balance(client, sample_buy_paylo
     assert body["sell_ready"] is False
     assert Decimal(body["middleware_remaining_quantity"]) == remaining_quantity
     assert Decimal(body["total_delta_quantity"]) < 0
+    assert "Compare verified Binance trades" in body["recommended_action"]
 
 
 def test_reconciliation_flags_locked_balance(client, sample_buy_payload, monkeypatch):

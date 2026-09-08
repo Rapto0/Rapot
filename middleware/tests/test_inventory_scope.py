@@ -91,7 +91,7 @@ def test_signal_idempotency_and_risk_totals_are_isolated_per_scope(
     broker = RecordingBroker()
     monkeypatch.setattr("middleware.api.dependencies.build_broker_client", lambda cfg: broker)
     settings.max_open_tranches_per_symbol = 1
-    settings.max_orders_per_day = 2
+    settings.max_orders_per_day = 1
     settings.max_symbol_exposure_usdt = 15
 
     first = client.post("/webhooks/tradingview", json=sample_buy_payload)

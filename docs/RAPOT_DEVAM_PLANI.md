@@ -4,11 +4,11 @@ Bu belge, 6 Eylül 2026 tarihli salt okunur proje incelemesinden çıkan işleri
 
 ## Kaldığımız nokta
 
-- **Son tamamlanan çalışma:** P0-4 — kümülatif broker sonucu, kısmi terminal fill ve client order ID ile kurtarma akışı doğrulandı (2026-09-07).
-- **Uygulama durumu:** 260 Python testi; 256 geçti, önceki 4 HUNTER/ATR hatası açık (P1-7). Middleware 61/61 ve Ruff geçti. Frontend için son doğrulanmış P0-2 sonucu 9/9 oturum testi + lint/typecheck/build. Bu sonuç tüm projenin hatasız olduğu anlamına gelmez.
-- **Aktif iş:** P0-4 kapanışı; sonraki uygulama maddesi P1-1.
-- **Sıradaki somut adım:** P1-1 için komisyonun net miktar/maliyete etkisini, DB hassasiyet sınırlarını ve günlük emir limitinin aday/reddedilen emirleri sayma davranışını incele; reconciliation onarım sınırını belirle.
-- **İşlevsel düzeltme odağı:** P1-1 komisyon, hassasiyet, limit ve reconciliation doğruluğu; ardından P1-2 dağıtım topolojisi.
+- **Son tamamlanan çalışma:** P1-1 — komisyon, hassasiyet, günlük emir kotası, kalıcı dispatch ve report-only reconciliation doğrulandı (2026-09-08).
+- **Uygulama durumu:** 309 Python testi; 305 geçti, önceki 4 HUNTER/ATR hatası açık (P1-7). Middleware testlerinin tamamı (110/110) geçti; Ruff lint/format temiz. Frontend için son doğrulanmış P0-2 sonucu 9/9 oturum testi + lint/typecheck/build. Bu sonuç tüm projenin hatasız olduğu anlamına gelmez.
+- **Aktif iş:** P1-1 commit kapanışı; ardından P1-2 çalıştırma ve dağıtım topolojisi.
+- **Sıradaki somut adım:** P1-2 için hedef VPS topolojisini mevcut Compose, PM2, Dockerfile, Next standalone ayarı, health yönlendirmeleri ve deploy scripti üzerinden netleştir; migration-before-start ve tek bot süreci güvencesini uygula.
+- **İşlevsel düzeltme odağı:** P1-2 çalıştırma ve dağıtım topolojisi; ardından P1-3 Pine/testnet kabul akışı.
 - **Başlangıç kaydı:** Bu belge ilk oluşturulduğunda yalnız belge değişmişti; sonraki uygulama değişiklikleri aşağıda ayrı kaydedildi.
 - **Seçilen geliştirme ortamı:** `.venv` / Python 3.12; Node 20.20.2 / npm 10.9.9. Yerelde Python 3.12.8 ile doğrulandı.
 - **Commit / yayın düzeni:** Her tamamlanan P maddesi ayrı yerel commit; push ve sunucu deploy'u doğrulanmış gruplar halinde. İlk yayın eşiği P0 işleri + P1-7 test hatası + P1-2 dağıtım uyumu.
@@ -142,7 +142,7 @@ Kapsam tahminleri süre taahhüdü değildir: küçük birkaç dosya; orta bir �
 | P0-2 | Admin ve kritik API yetkilendirmesi | Doğrulandı | Orta | P0-1 |
 | P0-3 | DRY_RUN/LIVE envanter ayrımı | Doğrulandı | Büyük | P0-1; mevcut veri sınıflandırması |
 | P0-4 | Emir sonucu ve pozisyon tutarlılığı | Doğrulandı | Büyük | P0-1, P0-3 |
-| P1-1 | Komisyon, hassasiyet, limit ve replay doğruluğu | Bekliyor | Orta/büyük | P0-3, P0-4 |
+| P1-1 | Komisyon, hassasiyet, limit ve replay doğruluğu | Doğrulandı | Orta/büyük | P0-3, P0-4 |
 | P1-2 | Çalıştırma ve dağıtım topolojisi | Bekliyor | Orta | P0-1; topoloji seçimi |
 | P1-3 | Pine sözleşmesi ve testnet kabul akışı | Bekliyor | Orta | Tüm P0 işleri, P1-1, P1-2 |
 | P1-4 | AI ilişkileri ve scan history | Bekliyor | Orta | P0-1 |
@@ -350,11 +350,25 @@ Migration `20260907_0004`, geçmiş order'larda hesap/venue kimliği kanıtlanam
 
 **Kabul kriterleri:**
 
-- [ ] Base/quote/başka varlıkla komisyon senaryolarında net miktar, maliyet ve PnL tutarlı.
-- [ ] Desteklenen fiyat/miktar hassasiyeti DB round-trip ve filtre sınırlarında test edildi.
-- [ ] Günlük limitin aday, reddedilen, simülasyon ve canlı emirleri nasıl saydığı tanımlı; 0/1/N sınır testleri var.
+- [x] Base/quote/başka varlıkla komisyon senaryolarında net miktar, maliyet ve PnL tutarlı.
+- [x] Desteklenen fiyat/miktar hassasiyeti DB round-trip ve filtre sınırlarında test edildi.
+- [x] Günlük limitin aday, reddedilen, simülasyon ve canlı emirleri nasıl saydığı tanımlı; 0/1/N sınır testleri var.
 - [x] Replay için broker client ID davranışı açık; farklı işlem niyetleri yanlışlıkla aynı kimliğe kesilmiyor.
-- [ ] Reconciliation farkları sınıflandırılıyor; otomatik onarımın güvenli sınırı ve kaynağı tanımlı. Onarım uygulanırsa tekrar çalıştırılması çift etki üretmiyor; rapor-only bırakılırsa gerekçe ve takip işi kaydediliyor.
+- [x] Reconciliation farkları sınıflandırılıyor; otomatik onarımın güvenli sınırı ve kaynağı tanımlı. Onarım uygulanırsa tekrar çalıştırılması çift etki üretmiyor; rapor-only bırakılırsa gerekçe ve takip işi kaydediliyor.
+
+**Uygulanan davranış:** Binance `FULL` cevabındaki fill komisyonları varlık bazında kümülatif saklanıyor. Recovery, order sorgusuna ek olarak order ID ile `/api/v3/myTrades` okuyor; komisyon doğrulanamazsa nonzero fill `unknown` kalıyor. BUY base ücreti net envanterden düşüyor, BUY quote ücreti maliyete ekleniyor, SELL quote ücreti gelir/PnL'den düşüyor. Üçüncü varlık ücreti ayrı saklanıyor; güvenilir işlem-anı dönüşüm fiyatı olmadığı için quote PnL'ye uydurma değer eklenmiyor. SELL base ücreti takip edilen miktarı aşarsa otomatik uygulama yapılmıyor.
+
+Fiyat/maliyet alanları `NUMERIC(28,12)` oldu; sekiz ondalıklı fiyat izole SQLite/API turunda birebir korundu ve modelin 12 ondalık şeması doğrulandı. `MW_MAX_ORDERS_PER_DAY=0` tüm gönderimleri durduruyor; pozitif kota yalnız broker submission aşamasına ulaşan önceki order'ları sayıyor. Mevcut aday ve riskte reddedilen order kotayı tüketmiyor; açık broker reddi/unknown sonuç tüketiyor. PostgreSQL'de scope bazlı transaction advisory lock eşzamanlı sayımı seri hale getiriyor.
+
+Reconciliation `REPORT_ONLY` olarak sabitlendi. Bakiye farkı; manuel işlemler, transferler, başka scope'lar ve üçüncü varlık ücretlerinden kaynaklanabileceği için tek başına otomatik DB mutasyonu için yeterli kanıt sayılmıyor. API onarım politikasını ve duruma göre önerilen eylemi döndürüyor.
+
+**Son incelemenin ek bulguları ve düzeltmeleri:** Binance client ID yalnız açık emirlerde benzersiz; önceki emir FILLED ise aynı kimlikle yeni emir kabul edilebiliyor. Bu nedenle P0-4'teki hash tek başına crash güvenliği kanıtı değildi. Artık riskten geçmiş `submitted` niyet broker POST'undan önce commit ediliyor, sonuç ayrı transaction'da işleniyor. Çökme sonrası normal tekrar ikinci emir göndermiyor. Aynı symbol/scope'taki açık veya belirsiz emir çözülmeden yeni emir reddediliyor. Henüz gönderilmemiş olabilecek crash niyeti de körlemesine yeniden gönderilmiyor; doğrulanamıyorsa yönetici incelemesi gerekiyor.
+
+Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyor (en fazla 10 sayfa); emir/sembol, benzersiz trade ID, komisyon alanları ve kümülatif miktar eşleşmeli. Eksik geçmiş, NaN/sonsuz değer, kaybolan önceki komisyon varlığı ve geçersiz artan notional muhasebeyi değiştirmiyor. Küçük bakiye/dust açık envanterde korunuyor; SELL filtreleri karşılayan en eski tranche'ı seçiyor. Yetkili bypass replay'den sonraki normal tekrarın çoklu order nedeniyle hata vermesi de giderildi.
+
+**Doğrulama:** Tam paket **305/309**, yalnız P1-7'deki aynı dört HUNTER/ATR hatası ve önceki bir deprecation warning açık. Middleware **110/110**; yeni muhasebe/limit 11, muhasebe sınırları 15, eksiksiz komisyon recovery 13 ve kalıcı dispatch 6 test geçti. Ruff lint/format ve diff kontrolleri geçti. `20260907_0006` SQLite upgrade/downgrade testi satırları korudu; PostgreSQL offline ileri/geri SQL doğrulandı. Üç mevcut DB'nin SHA-256 değerleri başlangıçla aynı. Gerçek PostgreSQL/Binance hesabı ve üçüncü varlık kur dönüşümü çalıştırılmadı.
+
+**Migration ve sınır:** `20260907_0006`, eski order komisyonlarını tahmin etmez; bunları boş toplam ve `commission_complete=false` ile işaretler. Üçüncü varlık ücretinin quote para karşılığı ileride güvenilir fiyat kaynağıyla ayrıca ele alınmalıdır. Yerel commit başlığı: `fix(middleware): account for commissions and order limits`; push/deploy P1-2 ve P1-7 yayın eşiğini bekler. Sonraki iş **P1-2**.
 
 ### P1-2 — Çalıştırma ve dağıtım topolojisi
 
@@ -539,6 +553,8 @@ Migration `20260907_0004`, geçmiş order'larda hesap/venue kimliği kanıtlanam
 | 2026-09-07 | Kanıtlanamayan eski middleware satırları karantinada kalacak | Migration geçmiş account/venue bilgisini varsaymaz; `LEGACY_UNCLASSIFIED` satırları saklanır fakat aktif işlem kapsamına girmez |
 | 2026-09-07 | Broker gerçekleşmeleri kümülatif görüntü olarak uygulanacak | Terminal CANCELED/EXPIRED kısmi fill'leri kaybolmaz; tekrar sorgu yalnız yeni farkı uygular; belirsiz sonuç `unknown` kalır |
 | 2026-09-07 | Binance client order ID tam yerel niyetin hash'inden üretilecek | 36 karakter sınırı korunurken replay son eki ve kapsam bilgisi kimliğe katılır; yeniden başlatma sonrası broker kaydı aynı kimlikle bulunabilir |
+| 2026-09-07 | Emir komisyonu doğrulanmadan envanter değiştirilmeyecek | Query Order komisyon döndürmez; recovery `myTrades` ile doğrular. Eksik bilgi `unknown`, base/quote ücretleri net envanter ve quote PnL'ye uygulanır |
+| 2026-09-07 | Reconciliation report-only kalacak | Toplam hesap bakiyesi tek bir middleware scope'unun kaynağını kanıtlamaz; otomatik düzeltme yanlış envanter üretebilir |
 
 ## İlerleme günlüğü
 
@@ -562,6 +578,11 @@ Migration `20260907_0004`, geçmiş order'larda hesap/venue kimliği kanıtlanam
 | 2026-09-07 | P0-4 | Düzelt | Kalıcı hash tabanlı client order ID, kümülatif fill-delta uygulaması, terminal durum koruması, `unknown` durumu, timeout/duplicate sorgusu, yetkili recovery endpoint'i ve `20260907_0005` migration'ı eklendi |
 | 2026-09-07 | P0-4 | Doğrula | Middleware 61/61; yeni recovery testleri 9/9; tam paket 256/260 ve yalnız önceki dört P1-7 hatası. Ruff, SQLite migration round-trip ve PostgreSQL offline ileri/geri SQL geçti; gerçek DB/borsa emri yok |
 | 2026-09-07 | P0-4 | Belgeyi güncelle — Doğrulandı | Kısmi terminal fill, exact-once delta, timeout/restart recovery, yönetim sınırı ve migration davranışı kaydedildi. Yerel commit başlığı: `fix(middleware): reconcile cumulative broker fills`; push/deploy yok. Sonraki iş P1-1 |
+| 2026-09-07 | P1-1 | İncele | Binance FULL fill komisyonu ile Query Order sınırı resmi dokümanda doğrulandı; komisyonun kaybolduğu, fiyatın 6 ondalık olduğu ve gün limitinin mevcut adayı saydığı kodda yeniden üretildi |
+| 2026-09-07 | P1-1 | Düzelt | Varlık bazlı kümülatif komisyon, myTrades recovery, net base/maliyet/PnL hesabı, 12 ondalık fiyat migration'ı, gönderilmiş-order kotası ve PostgreSQL scope kilidi eklendi; reconciliation report-only sözleşmesi açıklaştırıldı |
+| 2026-09-08 | P1-1 | Doğrula | Tam paket 305/309; middleware 110/110; yalnız önceki dört P1-7 hatası ve bir warning. Kalıcı dispatch/crash, bypass tekrar, komisyon sayfalama, dust ve hatalı muhasebe regresyonları geçti. Ruff, SQLite migration round-trip ve PostgreSQL offline ileri/geri SQL geçti; üç gerçek DB hash'i aynı |
+| 2026-09-07 | P1-1 | Belgeyi güncelle — Doğrulandı | Komisyon varlığı semantiği, üçüncü varlık PnL sınırı, 0/1/N kota politikası, hassasiyet ve report-only gerekçesi kaydedildi. Commit başlığı `fix(middleware): account for commissions and order limits`; sonraki iş P1-2 |
+| 2026-09-08 | P1-1 | Son inceleme ve belge kapanışı | Client ID'nin açık emir sınırı resmi Binance sözleşmesiyle doğrulandı; P0-4 crash garantisi kalıcı dispatch ile tamamlandı. Recovery geçmişinin eksiksizliği, dust/FIFO, bilinmeyen sonuç rezervasyonu ve manuel inceleme sınırı belgelendi |
 
 Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 
@@ -581,4 +602,4 @@ Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 4. Aktif işin bulgusunu ve bağımlılıklarını güncel kodda kontrol et. İncelemeyi baştan tekrarlamak yerine ilgili kanıttan devam et.
 5. İşin dört adımını tamamla veya engeli somutlaştır; ardından durum tablosu, günlük ve Kaldığımız nokta bölümünü güncelle.
 
-**P0-1, P0-2, P0-3 ve P0-4 tamamlandı. Sıradaki ana uygulama işi P1-1; tam test tabanında açık dört hata P1-7'de takip ediliyor.**
+**P0-1–P0-4 ve P1-1 tamamlandı. Sıradaki ana uygulama işi P1-2; tam test tabanında açık dört hata P1-7'de takip ediliyor.**

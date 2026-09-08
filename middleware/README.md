@@ -23,9 +23,10 @@ TradingView webhook sinyallerini Binance Spot emirlerine çeviren kripto odaklı
 6. Risk checks run before submit.
 7. A deterministic Binance client order ID is stored before a live `LIMIT IOC` submit.
 8. Broker snapshots are treated as cumulative; only the newly filled delta changes inventory.
-9. Filled BUY opens a tranche; filled SELL closes the oldest tranche FIFO.
-10. Inventory, risk totals, and FIFO are restricted to the active execution/account scope.
-11. Admin reconciliation compares only that scope with its Binance account balance.
+9. Base/quote commissions adjust net inventory, cost basis, and quote-asset realized PnL.
+10. Filled BUY opens a tranche; filled SELL closes the oldest tranche FIFO.
+11. Inventory, risk totals, and FIFO are restricted to the active execution/account scope.
+12. Admin reconciliation compares only that scope with its Binance account balance.
 
 ## TradingView Contract
 
@@ -139,6 +140,16 @@ idempotency key. If the submit request times out, the adapter immediately querie
 with that identifier. An inconclusive lookup leaves the order in `unknown`; it is not treated
 as a definite failure and the middleware does not submit a replacement order blindly.
 
+The validated intent and `submitted` audit record are committed before the broker POST.
+The result is applied in a separate transaction. A process crash before or after the POST
+therefore leaves a durable order for recovery; duplicate webhooks never resubmit it. Even a
+crash before acceptance requires investigation if lookup remains inconclusive. Binance's
+client ID uniqueness applies only to open orders, so it is not a durable idempotency guarantee.
+An unresolved `submitted`, `acknowledged`, `partially_filled`, or `unknown` order reserves its
+symbol within the inventory scope until recovery reaches a final outcome. Other symbols and
+scopes can continue. Explicit admin bypass creates a new intent; ordinary retries still refer
+to the original order after a bypass replay.
+
 Use authenticated `POST /admin/recover-order/{order_id}` to query the same order again.
 Recovery applies only the difference between the broker's cumulative fill and the quantity
 already stored locally. Repeating the call therefore records another audit snapshot without
@@ -146,9 +157,51 @@ applying the same fill twice. PostgreSQL recovery locks the order row while appl
 snapshot. `cancelled` and `expired` orders may still contain a partial fill, and that fill is
 applied before the terminal status is stored.
 
+The initial Binance `FULL` response supplies fill commissions. Recovery also queries
+`GET /api/v3/myTrades` with the broker order ID because `GET /api/v3/order` does not include
+commission details. A nonzero fill remains `unknown` until its commissions can be verified.
+Recovery reads from trade ID zero in pages of 1,000, up to ten pages. It requires unique trade
+IDs, matching order/symbol, valid fee fields, and total trade quantity equal to `executedQty`.
+Partial or inconsistent history stays unresolved. Binance error codes `-1006` and `-1007`
+also trigger recovery, even when returned as HTTP 4xx.
+
 Historical rows created before migration `20260907_0005` have no client order ID and cannot
 use this recovery endpoint. Match such rows to verified broker history before any manual
 classification or repair.
+
+## Commission and PnL Accounting
+
+`mw_orders.filled_quantity` stores Binance's gross cumulative executed base quantity.
+`mw_orders.commission_json` stores cumulative commission totals by asset. Tranche quantity
+tracks net base inventory:
+
+- BUY/base fee: subtract the fee from acquired base quantity.
+- BUY/quote fee: add the fee to quote cost and the tranche entry price.
+- SELL/quote fee: subtract the fee from proceeds and realized PnL.
+- SELL/base fee: include the fee in base inventory reduction only when the tracked tranche
+  has enough quantity; otherwise leave the result `unknown` for manual reconciliation.
+- Third-asset fee such as BNB: retain it separately in `commission_json`. Quote PnL excludes
+  its conversion value because the middleware has no authoritative fee-time FX price.
+
+The order API exposes `commission_by_asset` and `commission_complete`. Values from repeated
+broker snapshots are cumulative and only the positive commission delta is considered.
+Non-finite values, missing previously accounted fees, and non-increasing fill notional are
+quarantined before inventory changes. Fees on incremental sells are checked against the
+incremental proceeds, not the cumulative average price.
+
+Fees and partial fills may leave a tranche below the exchange's quantity or notional minimum.
+Such dust remains open and visible in inventory/reconciliation. SELL selects the oldest
+tranche whose rounded quantity passes current exchange filters; it does not erase or merge
+the dust. If no tranche is sellable, the normal risk rejection applies.
+
+`MW_MAX_ORDERS_PER_DAY=0` blocks all new submissions. A positive limit counts orders that
+reserved a durable dispatch intent, including broker failures and unresolved results. The current
+candidate and risk-rejected orders do not consume the quota. PostgreSQL serializes the
+scope-wide daily count with a transaction advisory lock.
+
+Binance contract references: [order submission](https://developers.binance.com/en/docs/catalog/core-trading-spot-trading/api/rest-api/trade),
+[account trade history](https://developers.binance.com/en/docs/catalog/core-trading-spot-trading/api/rest-api/account),
+and [execution-unknown errors](https://developers.binance.com/en/docs/products/spot/errors).
 
 `GET /health` remains public. TradingView keeps its separate webhook credential
 (`X-Webhook-Token` or the existing `?token=` fallback).
@@ -166,6 +219,11 @@ The response includes:
 
 `OK` means Binance total base balance is within the symbol step-size tolerance
 and free balance is enough to sell the tracked open tranches.
+
+Reconciliation is deliberately `REPORT_ONLY`; responses include `repair_policy`,
+`automatic_repair_supported=false`, and a recommended next action. Account balances may also
+contain manual trades, transfers, deposits, withdrawals, other scopes, and third-asset fees,
+so a balance difference alone is not enough evidence for an automatic inventory mutation.
 
 ## Inventory Scope and Migration
 
@@ -196,8 +254,10 @@ marks them `LEGACY_UNCLASSIFIED`. These rows remain stored but are excluded from
 active scope. Classify them only after matching orders and tranches to verified broker
 history; update both tables to the exact scope shown by the management responses.
 Migration `20260907_0005` adds the nullable client order ID and enforces uniqueness within
-an inventory scope. The downgrades remove the new columns and indexes while retaining the
-historical rows.
+an inventory scope. Migration `20260907_0006` records commission completeness/totals and
+widens price and quote accounting fields from six to twelve decimal places. Historical orders
+start with `commission_complete=false`; their fees are not guessed. The downgrades remove the
+new columns and indexes while retaining the historical rows.
 The migration has not been applied to the real database in this local change.
 
 ## Live Gate

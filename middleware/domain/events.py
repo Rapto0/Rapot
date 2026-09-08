@@ -138,6 +138,9 @@ class ReconciliationReport(BaseModel):
     total_delta_quantity: Decimal
     free_delta_quantity: Decimal
     sell_ready: bool
+    repair_policy: Literal["REPORT_ONLY"] = "REPORT_ONLY"
+    automatic_repair_supported: bool = False
+    recommended_action: str
     messages: list[str] = Field(default_factory=list)
 
 
@@ -168,6 +171,8 @@ class OrderItem(BaseModel):
     created_at: datetime
     updated_at: datetime
     realized_pnl: Decimal | None = None
+    commission_by_asset: dict[str, Decimal] = Field(default_factory=dict)
+    commission_complete: bool = False
 
 
 class SignalItem(BaseModel):

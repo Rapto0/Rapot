@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
@@ -47,6 +48,10 @@ def list_orders(
             created_at=row.created_at,
             updated_at=row.updated_at,
             realized_pnl=row.realized_pnl,
+            commission_by_asset={
+                asset: Decimal(amount) for asset, amount in row.commission_json.items()
+            },
+            commission_complete=row.commission_complete,
         )
         for row in rows
     ]

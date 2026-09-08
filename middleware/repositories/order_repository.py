@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -18,6 +19,7 @@ class BrokerFillDelta:
     lots: int
     quantity: Decimal
     price: Decimal | None
+    commission_by_asset: dict[str, Decimal]
 
 
 class OrderRepository:
@@ -145,9 +147,14 @@ class OrderRepository:
         return self.session.execute(stmt).scalar_one_or_none()
 
     def get_by_signal_event_id(self, signal_event_id: int) -> Order | None:
-        stmt = select(Order).where(
-            Order.signal_event_id == signal_event_id,
-            Order.inventory_scope == self.inventory_scope,
+        stmt = (
+            select(Order)
+            .where(
+                Order.signal_event_id == signal_event_id,
+                Order.inventory_scope == self.inventory_scope,
+            )
+            .order_by(Order.id)
+            .limit(1)
         )
         return self.session.execute(stmt).scalar_one_or_none()
 
@@ -164,6 +171,27 @@ class OrderRepository:
             stmt = stmt.where(Order.symbol == symbol.upper())
         stmt = stmt.order_by(Order.id.desc()).limit(limit)
         return list(self.session.execute(stmt).scalars().all())
+
+    def get_pending_for_symbol(self, symbol: str, *, exclude_order_id: int) -> Order | None:
+        stmt = (
+            select(Order)
+            .where(
+                Order.inventory_scope == self.inventory_scope,
+                Order.symbol == symbol.upper(),
+                Order.id != exclude_order_id,
+                Order.status.in_(
+                    {
+                        OrderStatus.SUBMITTED.value,
+                        OrderStatus.ACKNOWLEDGED.value,
+                        OrderStatus.PARTIALLY_FILLED.value,
+                        OrderStatus.UNKNOWN.value,
+                    }
+                ),
+            )
+            .order_by(Order.id)
+            .limit(1)
+        )
+        return self.session.execute(stmt).scalar_one_or_none()
 
     def set_status(
         self,
@@ -188,6 +216,8 @@ class OrderRepository:
         filled_lots: int,
         avg_fill_price: Decimal | None,
         filled_quantity: Decimal | None = None,
+        commission_by_asset: dict[str, Decimal] | None = None,
+        commission_complete: bool = True,
     ) -> BrokerFillDelta:
         previous_lots = int(order.filled_lots)
         previous_quantity = Decimal(order.filled_quantity)
@@ -203,6 +233,24 @@ class OrderRepository:
         cumulative_quantity = max(previous_quantity, reported_quantity)
         delta_lots = cumulative_lots - previous_lots
         delta_quantity = cumulative_quantity - previous_quantity
+        previous_commissions = {
+            asset.upper(): Decimal(amount) for asset, amount in order.commission_json.items()
+        }
+        reported_commissions = {
+            asset.upper(): max(Decimal("0"), Decimal(amount))
+            for asset, amount in (commission_by_asset or {}).items()
+        }
+        cumulative_commissions = {
+            asset: max(previous_commissions.get(asset, Decimal("0")), amount)
+            for asset, amount in reported_commissions.items()
+        }
+        for asset, amount in previous_commissions.items():
+            cumulative_commissions.setdefault(asset, amount)
+        delta_commissions = {
+            asset: amount - previous_commissions.get(asset, Decimal("0"))
+            for asset, amount in cumulative_commissions.items()
+            if amount > previous_commissions.get(asset, Decimal("0"))
+        }
 
         delta_price = avg_fill_price
         if delta_quantity > 0 and avg_fill_price is not None and previous_quantity > 0:
@@ -230,6 +278,10 @@ class OrderRepository:
             order.broker_order_id = broker_order_id
         order.filled_lots = cumulative_lots
         order.filled_quantity = cumulative_quantity
+        order.commission_json = {
+            asset: str(amount) for asset, amount in cumulative_commissions.items()
+        }
+        order.commission_complete = commission_complete
         if avg_fill_price is not None and (
             delta_lots > 0 or delta_quantity > 0 or previous_avg_price is None
         ):
@@ -237,7 +289,12 @@ class OrderRepository:
         order.updated_at = datetime.now(UTC)
         self.session.add(order)
         self.session.flush()
-        return BrokerFillDelta(lots=delta_lots, quantity=delta_quantity, price=delta_price)
+        return BrokerFillDelta(
+            lots=delta_lots,
+            quantity=delta_quantity,
+            price=delta_price,
+            commission_by_asset=delta_commissions,
+        )
 
     def set_realized_pnl(self, order: Order, realized_pnl: Decimal) -> None:
         order.realized_pnl = realized_pnl
@@ -245,11 +302,34 @@ class OrderRepository:
         self.session.add(order)
         self.session.flush()
 
-    def count_orders_today(self) -> int:
+    def lock_daily_risk_scope(self) -> None:
+        bind = self.session.get_bind()
+        if bind.dialect.name != "postgresql":
+            return
+        lock_id = int.from_bytes(
+            hashlib.sha256(self.inventory_scope.encode()).digest()[:8],
+            byteorder="big",
+            signed=True,
+        )
+        self.session.execute(select(func.pg_advisory_xact_lock(lock_id)))
+
+    def count_submitted_orders_today(self, *, exclude_order_id: int) -> int:
         start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+        submitted_statuses = {
+            OrderStatus.SUBMITTED.value,
+            OrderStatus.ACKNOWLEDGED.value,
+            OrderStatus.PARTIALLY_FILLED.value,
+            OrderStatus.FILLED.value,
+            OrderStatus.CANCELLED.value,
+            OrderStatus.EXPIRED.value,
+            OrderStatus.UNKNOWN.value,
+            OrderStatus.FAILED.value,
+        }
         stmt = select(func.count(Order.id)).where(
             Order.created_at >= start,
             Order.inventory_scope == self.inventory_scope,
+            Order.id != exclude_order_id,
+            Order.status.in_(submitted_statuses),
         )
         return int(self.session.execute(stmt).scalar() or 0)
 
