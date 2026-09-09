@@ -4,16 +4,16 @@ Bu belge, 6 Eylül 2026 tarihli salt okunur proje incelemesinden çıkan işleri
 
 ## Kaldığımız nokta
 
-- **Son yerel çalışma:** P1-3 — Pine Binance Spot/standart grafik koruması, webhook zaman/index sınırları ve v1 tekrar sözleşmesi uygulandı (2026-09-09). Gerçek Pine derlemesi/alarm/testnet kabulü açık.
+- **Son çalışma:** P1-3 — Pine Binance Spot/standart grafik koruması, webhook zaman/index sınırları ve v1 tekrar sözleşmesi uygulandı (2026-09-09). Kullanıcı tam kaynağın TradingView'de derlendiğini bildirdi; grafik korumaları, alarm teslimi ve testnet emir kabulü açık.
 - **Uygulama durumu:** P0 işleri, P1-1, **P1-2** ve P1-7 doğrulandı. P1-3 sonrası tam Python paketi **403/403**; bir mevcut tarih deprecation warning'i kaldı. 52 backend ve 22 Pine kaynak sözleşmesi testi eklendi. Frontend kodu bu adımda değişmedi; önceki 12/12 ve build/proxy kanıtı P1-2'de kayıtlı.
 - **P1-2 durumu — Doğrulandı:** **8f60f8e üretim geçişi ve [HTTPS](https://138.68.71.27) kabulü tamamlandı.** API, bot, frontend, middleware ve PG16 sağlıklı; veri korunumu, dış HTTPS/auth/WSS, yetkisiz webhook reddi ve sertifika yenileme dry-run testi geçti. Eski supervisor'lar devre dışı; özgün DB/checkout ve geri dönüş kaynakları korundu.
 - **Uzak doğrulama:** P1-3 `ea2d0a5` için [CI 34375597532](https://github.com/Rapto0/Rapot/actions/runs/34375597532) başarılı; Python 403/403 ve diğer kontroller geçti. Dağıtılan uygulama kaynağı `8f60f8ece7b728f832b0bf2d9d5ba5a7949c47be` için [CI 34376132398](https://github.com/Rapto0/Rapot/actions/runs/34376132398) ve [imaj yayını 34378537277](https://github.com/Rapto0/Rapot/actions/runs/34378537277) başarılı. Gerçek üretim geçişi P1-2'de ayrıca doğrulandı. Sonraki yalnız-belge commit'i uygulama imajlarının kaynak SHA'sını değiştirmez.
-- **Aktif adım:** Kullanıcının isteğiyle P1-4'e geçmeden **P1-3 dış kabul açıklarını kapatmak**. Pine CE10244 sonrasında eksik kopya tespit edildi; orijinalle aynı 1.089 satırlık tam TXT açıldı, kullanıcıdan derleme sonucu bekleniyor. Mevcut HTTP TradingView webhook adresleri HTTPS'ye güncellenmeli; yönlendirme takibi veya gerçek alarm teslimi henüz doğrulanmadı.
+- **Aktif adım:** Kullanıcının isteğiyle P1-4'e geçmeden **P1-3 dış kabul açıklarını kapatmak**. Tam Pine kaynağının derlemesi kullanıcı yanıtıyla doğrulandı. Kullanıcı futures/Heikin Ashi kontrollerini yapamadığını belirtti; bu kontroller tamamlandı sayılmıyor. HTTPS alarm teslimi, preset/ALL/FIRST davranışı ve izole testnet emir kabulü sırada.
 - **Bekleyen kod işi:** P1-4 — scanner AI ilişkileri ve scan history. Ön inceleme tamamlandı; başlangıç `market_scanner.py::process_symbol`. Uygulama başlamadı. Gerçek Pine runtime/alarm ve ayrılmış testnet BUY → FIFO SELL → reconcile kabulü de açık; mevcut deployment gerçek/testnet emir onayı veya sonucu değildir.
 - **Başlangıç kaydı:** Bu belge ilk oluşturulduğunda yalnız belge değişmişti; sonraki uygulama değişiklikleri aşağıda ayrı kaydedildi.
 - **Seçilen geliştirme ortamı:** `.venv` / Python 3.12; Node 20.20.2 / npm 10.9.9. Yerelde Python 3.12.8 ile doğrulandı.
 - **Commit / yayın düzeni:** Her tamamlanan P maddesi ayrı commit; doğrulanan grup CI için push edilir, sunucu deploy'u CI ve sunucu kontrollerinden sonra yapılır. İlk sunucu yayını eşiği P0 işleri + P1-7 test hatası + P1-2 dağıtım uyumu.
-- **Açık işler:** Tam Pine kaynağının derleme/runtime/alarm kabulü, HTTPS webhook adresiyle gerçek alarm kontrolü, testnet hesabı/izinleri ve ileride middleware'in dashboard'a bağlanıp bağlanmayacağı. Pine EMA/ATR ilk değer sınırı P3-1'e kaydedildi. 1 GB VPS'de yeni imaj/yedek öncesi disk/RAM kapasitesi kontrol edilmeli; mevcut veri/rollback otomatik temizlenmeyecek.
+- **Açık işler:** Pine grafik/preset/runtime kontrolleri, HTTPS webhook adresiyle gerçek alarm teslimi ve testnet için ayrı DB/kapsam ile sınırlı emir kabulü. Mevcut testnet anahtarlarıyla salt okunur SPOT hesap erişimi doğrulandı; emir gönderilmedi. Middleware-dashboard entegrasyonu ve Pine EMA/ATR ilk değer sınırı ayrıca açık. 1 GB VPS'de yeni imaj/yedek öncesi disk/RAM kapasitesi kontrol edilmeli; mevcut veri/rollback otomatik temizlenmeyecek.
 
 ## Kapsam ve yetki kaydı
 
@@ -147,7 +147,7 @@ Kapsam tahminleri süre taahhüdü değildir: küçük birkaç dosya; orta bir �
 | P0-4 | Emir sonucu ve pozisyon tutarlılığı | Doğrulandı | Büyük | P0-1, P0-3 |
 | P1-1 | Komisyon, hassasiyet, limit ve replay doğruluğu | Doğrulandı | Orta/büyük | P0-3, P0-4 |
 | P1-2 | Çalıştırma ve dağıtım topolojisi | Doğrulandı — üretim Compose, veri göçü, HTTPS/auth/WSS ve yenileme kabulü geçti | Orta | P0-1 |
-| P1-3 | Pine sözleşmesi ve testnet kabul akışı | Yerel/CI sözleşmesi doğrulandı; Pine/testnet kabulü açık | Orta | Tüm P0 işleri, P1-1; dış kabul için P1-2 |
+| P1-3 | Pine sözleşmesi ve testnet kabul akışı | Yerel/CI ve kullanıcı derleme bildirimi tamam; grafik/alarm/testnet emir kabulü açık | Orta | Tüm P0 işleri, P1-1; dış kabul için P1-2 |
 | P1-4 | AI ilişkileri ve scan history | Bekliyor | Orta | P0-1 |
 | P1-5 | Süreçler arası realtime ve scanner eşdeğerliği | Bekliyor | Orta/büyük | P0-1, P1-2 |
 | P1-6 | PnL, bot durumu ve ayarlar ekranı | Bekliyor | Orta | P0-1; backend ayar sözleşmesi ve P0-2 |
@@ -456,11 +456,19 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 
 **İlk dış doğrulama sınırı (tarihsel):** Bağlı tarayıcıda oturum yoktu. TradingView misafir Pine editöründe geçici yalnız-grafik-koruması kontrolünün Add to chart adımı **Sign in** ekranı istedi; derleme başarısı alınmadı, sekme kapatıldı. Kaynak testleri Pine derleyicisi/tick yürütücüsü değildir. Bu aşamada alarm/hesap oluşturulmadı veya broker emri gönderilmedi. TradingView çalışan alarmlarının eski script kopyasını kullanabileceği README'de açıklandı.
 
-**2026-09-09 kullanıcı derleme adımı:** Tarayıcıdan editör işlemi politika engeline takıldı. Kullanıcı **CE10244** bildirdi ve editördeki kaynağın kısa olduğunu, `plotshape` içermediğini doğruladı; eksik kopya tespit edildi. Git dışında `runtime-data/TradingView_TAM_KOD.txt`, orijinal Pine ile aynı SHA-256'ya sahip **1.089 satır / 6 plotshape** içeren tam kopya olarak hazırlanıp açıldı. Kullanıcının tam kopyayla yeniden derleme sonucu bekleniyor; CE10244 giderildi veya gerçek derleme başarılı denmiyor. Spot/futures/sentetik grafik runtime kontrolü, örnek alarm JSON'u ve ayrılmış testnet BUY → FIFO SELL → reconcile kabulü hâlâ açık. P1-4 bu adımlar kapanmadan başlamayacak.
+**2026-09-09 kullanıcı derleme adımı:** Tarayıcıdan editör işlemi politika engeline takıldı. Kullanıcı **CE10244** bildirdi ve editördeki kaynağın kısa olduğunu, `plotshape` içermediğini doğruladı; eksik kopya tespit edildi. Git dışında `runtime-data/TradingView_TAM_KOD.txt`, orijinal Pine ile aynı SHA-256'ya sahip **1.089 satır / 6 plotshape** içeren tam kopya olarak hazırlanıp açıldı. Kullanıcı, **BINANCE:BTCUSDT / standart mum / 1D / Add to chart** kontrol sorusunu seçerek **“derlendi”** yanıtını verdi. Bu, kullanıcı tarafından bildirilen gerçek TradingView derleme başarısıdır; araçla alınmış derleyici çıktısı değildir. CE10244 için yeni kod değişikliği gerekmedi. Ardından kullanıcı futures ve Heikin Ashi kontrollerini **yapamadığını** belirtti; grafik korumalarının gerçek runtime sonucu, alarm JSON'u ve testnet emir kabulü hâlâ açık.
+
+**Sıradaki manuel grafik kontrolü:** Aynı scriptte `BINANCE:BTCUSDT.P` / 1D ve `BINANCE:BTCUSDT` / Heikin Ashi / 1D için Durum satırında `UYARI: Binance Spot ve standart grafik gerekli. Alertler kapali.` ve son hücrede `Grafik Engelli` beklenir. Sonra Spot/standart/1D grafiğine dönülür. Bunlar kaynak koddan çıkarılmış beklenen sonuçlardır; kullanıcı henüz gözlemleyemedi. P1-4 bu dış kabul işleri kapanmadan başlamayacak.
+
+**Testnet erişim ön kontrolü:** VPS'den yalnız izin verilen `https://testnet.binance.vision` hedefine `GET /api/v3/time` ve imzalı `GET /api/v3/account` yapıldı; yönlendirme takibi kapalıydı. Mevcut middleware kimlik bilgileriyle hesap okundu: `accountType=SPOT`, `canTrade=true`, USDT bakiye alanı mevcut. Bu, bakiye tutarının yeterli olduğunu veya hesabın başka işlerce kullanılmadığını kanıtlamaz. Emir isteği **0**; üretim ayarları/DB değiştirilmedi. Anahtarlar, imza ve bakiye tutarları log/belgeye yazılmadı. Sonuç `/root/rapot-ops/20260909-8f60f8e/testnet-readiness.json` içinde. Resmi sözleşme: [Binance Spot Testnet REST API](https://developers.binance.com/en/docs/products/spot/testnet/rest-api). Ayrı test DB'si, hesap kullanım sınırı ve somut testnet emir kapsamı hâlâ hazırlanıp doğrulanmalı.
+
+**Önceki belge yayını:** P1-2 kapanışını kaydeden `7473975` commit'i main'e gönderildi, aynı dosya hash'iyle sunucu ops dizinine kopyalandı. [CI 34389057669](https://github.com/Rapto0/Rapot/actions/runs/34389057669) başarılı tamamlandı. Uygulama imajları `8f60f8e` kaynak sürümünde kaldı.
+
+**Alarm kabulünde veri sınırı:** `DRY_RUN` ve `MW_TRADING_ENABLED=false`, simülasyon kayıtlarını engellemez; geçerli ve riskten geçen alarm simülasyon emri/tranche oluşturabilir. Gerçek Binance emir POST'u yapılmaz. Bu yüzden tekrar/FIFO kabulü ayrı DB/kapsamda yürütülmeli; production'a deneme alarmı gönderilmesi salt okunur kontrol olarak sunulmamalı.
 
 **HTTPS alarm adresi:** Mevcut tokenlı HTTP TradingView webhook URL'leri, token korunarak doğrudan `https://138.68.71.27/webhooks/tradingview` adresine güncellenmeli; token değeri bu belgeye yazılmamalı. Sunucu 308 yönlendirme yapıyor, fakat TradingView'ın yönlendirmeyi takip ettiği doğrulanmadı. Yetkisiz HTTPS isteğinin 401 dönmesi P1-2 kanıtıdır; gerçek alarmın doğru auth/payload ile teslimi ve idempotency kabulü bu maddede açık.
 
-**Neden:** Son Pine commit'i büyük; derleme/alarm testi doğrulanmadı. Varsayılan Manuel/günlük/saat filtresi ile Kripto 24/7 preset'i farklı. barTime=timenow ve tüm payload hash'i, aynı bar/sinyalin tekrar semantiğini etkiliyor.
+**Neden:** Son Pine commit'i büyük; başlangıçta derleme/alarm testi doğrulanmamıştı. Derleme artık kullanıcı bildirimiyle kayıtlı, alarm/runtime kabulü açık. Varsayılan Manuel/günlük/saat filtresi ile Kripto 24/7 preset'i farklı. barTime=timenow ve tüm payload hash'i, aynı bar/sinyalin tekrar semantiğini etkiliyor.
 
 **Dosyalar:** [Pine](../middleware/pine/combo_hunter_binance.pine), [Pine README](../middleware/pine/README.md), [payload modeli](../middleware/domain/events.py), [signal repository](../middleware/repositories/signal_repository.py), [middleware README](../middleware/README.md), [webhook testleri](../middleware/tests/test_webhook_validation.py).
 
@@ -469,7 +477,8 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 - [x] Spot sembolü, sinyal kodu/yönü, timeframe ve v1 olay zamanı sözleşmesi açık; ayrı bar açılış alanı olmadığının sınırı belgeli.
 - [x] Birebir HTTP tekrarının korunması ile aynı bar/sinyalin yeniden üretilmesi ayrıldı; eski hash ve kasıtlı tekrarlı BUY davranışı test edildi.
 - [ ] Manuel/Kripto 24/7, saat dilimi ve ALL/FIRST kaynak sözleşmesi test edildi; gerçek Pine runtime/alarm doğrulaması bekliyor.
-- [ ] Pine derlemesi ve örnek alarm JSON'u doğrulandı; strategy() başlığı tek başına çalışan backtest kanıtı sayılmadı.
+- [x] Tam Pine kaynağı için BINANCE:BTCUSDT / standart mum / 1D derlemesi kullanıcı tarafından bildirildi; araç çıktısı veya çalışan backtest kanıtı olarak sunulmadı.
+- [ ] Gerçek alarm JSON'u, HTTPS teslimi ve tekrar davranışı doğrulandı.
 - [ ] İlgili izin verildiğinde yalnız ayrılmış testnet hesabı/DB ile BUY → FIFO SELL → reconcile kabul akışı kaydedildi; tokenlar kayda alınmadı.
 - [x] Yerel test sonucu testnet/gerçek hesap doğrulaması veya otomatik canlıya geçiş olarak işaretlenmedi.
 
@@ -690,6 +699,7 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 | 2026-09-09 | P1-2 | İzole smoke → üretim geçişi → HTTP kabulü | Docker 29.8.0/Compose 5.5.1; 8f60f8e backend/frontend ve PG16 digest'leriyle beş production konteyner sağlıklı. SQLite 1.721.138 sinyal ve middleware 135/135/28/383 kayıt korundu; PG14 final dump → PG16/Alembic 0006 geçti. Eski supervisor'lar devre dışı, checkout/DB/yedek/rollback korundu. HTTP/auth/WS geçti; IP sertifikası alındı, nginx TLS kurulumu/kabulü sürüyor. Emir gönderilmedi |
 | 2026-09-09 | P1-3 / P3-1 | Kullanıcı derleme adımı → kaynak sınırı kaydı | CE10244 sonrası eksik editör kopyası doğrulandı; orijinal SHA ile aynı 1.089 satır/6 plotshape TXT açıldı, yeniden derleme sonucu bekleniyor. Mevcut EMA/ATR ilk değer sınırı P3-1'e kaydedildi; kod değişmedi. Pine runtime/alarm/testnet açık, P1-4 başlamadı |
 | 2026-09-09 | P1-2 | HTTPS/yenileme kabulü → Doğrulandı | Güvenilir IP sertifikasıyla altı dış HTTPS rota 200, HTTP308, login/admin/anonim401 ve WSS101 geçti. Yetkisiz webhook401 sonrası MW sayıları aynı. Certbot renew dry-run+deploy-hook exit0, timer enabled/active; beş konteyner healthy/restart0. Ops HTTPS sonucu verified, veri/rollback korunuyor. P1-2 kapandı; aktif P1-3 tam Pine kopyası ve HTTPS alarm/testnet kabulü |
+| 2026-09-09 | P1-3 | Kullanıcı derleme kabulü → testnet salt okunur ön kontrol | Kullanıcı BTCUSDT/standart/1D derleme sorusuna “derlendi” dedi; derleme kutusu kullanıcı bildirimi olarak kapatıldı. Futures/Heikin Ashi kontrollerini yapamadığını söyledi; bunlar açık. VPS'den mevcut testnet anahtarıyla yalnız time/account GET geçti, SPOT/canTrade=true; emir isteği 0. Grafik/alarm ve izole testnet emir kabulü bekliyor; Pine/uygulama kodu değişmedi |
 
 Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 
@@ -709,4 +719,4 @@ Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 4. Aktif işin bulgusunu ve bağımlılıklarını güncel kodda kontrol et. İncelemeyi baştan tekrarlamak yerine ilgili kanıttan devam et.
 5. İşin dört adımını tamamla veya engeli somutlaştır; ardından durum tablosu, günlük ve Kaldığımız nokta bölümünü güncelle.
 
-**P0-1–P0-4, P1-1, P1-2 ve P1-7 tamamlandı; Python 403/403. 8f60f8e üretim Compose/HTTPS geçişi, veri korunumu, auth/WSS ve yenileme kabulü doğrulandı. Aktif P1-3: tam Pine kopyasının derlemesi, HTTPS alarm teslimi ve testnet kabulü. P3-1 EMA/ATR sınırı kayıtlı; P1-4 başlamadı.**
+**P0-1–P0-4, P1-1, P1-2 ve P1-7 tamamlandı; Python 403/403. 8f60f8e üretim Compose/HTTPS kabulü doğrulandı. P1-3 derlemesi kullanıcı bildirimiyle tamam; mevcut testnet hesabı salt okunur erişilebilir. Aktif açıklar: kullanıcı henüz yapamadığı grafik koruması kontrolleri, HTTPS alarm teslimi ve ayrı DB/kapsamda testnet emir kabulü. P3-1 EMA/ATR sınırı kayıtlı; P1-4 başlamadı.**

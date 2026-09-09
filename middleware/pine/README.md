@@ -117,10 +117,13 @@ Yerel kaynak sözleşmesi kontrolü:
 
 Testler gerçek Pine kaynağındaki grafik koşulunu sahte metadata ile ve diğer
 dispatch/payload sözleşmelerini kaynak incelemesiyle kontrol eder. Pine derleyici,
-TradingView sunucusu veya tick yürütücüsü değildir. Pine derlemesi, gerçek
-alarm JSON'u ve ayrıca izin verilmiş ayrılmış testnet hesabı/DB üzerinde
-BUY → FIFO SELL → reconcile kabulü **henüz doğrulanmadı**. `strategy()` başlığı
-ve `realtimeOnly=false`, çalışan backtest kanıtı değildir; scriptte
+TradingView sunucusu veya tick yürütücüsü değildir. 9 Eylül 2026'da kullanıcı,
+tam kaynağın `BINANCE:BTCUSDT` / standart mum / 1D grafiğinde derlendiğini bildirdi;
+bu kayıt araçla alınmış derleyici çıktısı değildir. Grafik korumalarının runtime
+kontrolü, gerçek alarm JSON'u ve ayrıca izin verilmiş ayrılmış testnet hesabı/DB
+üzerinde BUY → FIFO SELL → reconcile kabulü **henüz doğrulanmadı**.
+Ayrıntılı kanıt ve kalan adımlar [devam planında](../../docs/RAPOT_DEVAM_PLANI.md).
+`strategy()` başlığı ve `realtimeOnly=false`, çalışan backtest kanıtı değildir; scriptte
 `strategy.entry/order/exit` emri yoktur.
 
 ## Miktar ve FIFO
