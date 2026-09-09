@@ -7,9 +7,9 @@ Bu belge, 6 Eylül 2026 tarihli salt okunur proje incelemesinden çıkan işleri
 - **Son yerel çalışma:** P1-3 — Pine Binance Spot/standart grafik koruması, webhook zaman/index sınırları ve v1 tekrar sözleşmesi uygulandı (2026-09-09). Gerçek Pine derlemesi/alarm/testnet kabulü açık.
 - **Uygulama durumu:** P0 işleri, P1-1 ve P1-7 doğrulandı. P1-3 sonrası tam Python paketi **403/403**; bir mevcut tarih deprecation warning'i kaldı. 52 backend ve 22 Pine kaynak sözleşmesi testi eklendi. Frontend kodu bu adımda değişmedi; önceki 12/12 ve build/proxy kanıtı P1-2'de kayıtlı.
 - **P1-2 durumu:** Yerel kod ve Linux CI imaj kontrolleri doğrulandı; gerçek VPS geçişi SSH erişimi nedeniyle engellendi. Madde bütünüyle tamamlandı sayılmıyor.
-- **Uzak doğrulama başlangıcı:** Önceki grup `89890f8` ile main'de; [CI 34369220615](https://github.com/Rapto0/Rapot/actions/runs/34369220615) başarılı. P1-3 değişikliklerinin yeni commit/CI kaydı ayrıca eklenecek. Sunucu deploy'u yapılmadı.
-- **Aktif adım:** P1-3 yerel checkpoint'ini commit/push et ve Linux CI sonucunu doğrula. TradingView misafir editörü Add to chart aşamasında giriş istiyor; kullanılabilir oturum yok. Testnet hesabı/DB/izin bilgileri de doğrulanmadı.
-- **Sıradaki bağımsız kod işi:** P1-4 — scanner AI ilişkileri ve scan history. P1-2 VPS geçişi ile P1-3 dış kabul testleri erişim/hesap koşulları sağlandığında ayrıca sürdürülecek.
+- **Uzak doğrulama:** P1-3 kodu `ea2d0a5` ile main'e push edildi; [CI 34375597532](https://github.com/Rapto0/Rapot/actions/runs/34375597532) başarılı. Python 403/403, lint/format, frontend ve Docker kontrolleri geçti. Sunucu deploy'u yapılmadı.
+- **Aktif adım:** P1-3 yerel/CI doğrulaması kapandı; dış kabul açık. TradingView misafir editörü Add to chart aşamasında giriş istiyor; kullanılabilir oturum yok. Testnet hesabı/DB/izin bilgileri de doğrulanmadı.
+- **Sıradaki bağımsız kod işi:** P1-4 — scanner AI ilişkileri ve scan history. Ön inceleme tamamlandı; ilk değişiklik yeri `market_scanner.py::process_symbol`, kaydedilen sinyal ID'si ve piyasanın AI çağrısına aktarılması. P1-2 VPS geçişi ile P1-3 dış kabul testleri erişim/hesap koşulları sağlandığında ayrıca sürdürülecek.
 - **Başlangıç kaydı:** Bu belge ilk oluşturulduğunda yalnız belge değişmişti; sonraki uygulama değişiklikleri aşağıda ayrı kaydedildi.
 - **Seçilen geliştirme ortamı:** `.venv` / Python 3.12; Node 20.20.2 / npm 10.9.9. Yerelde Python 3.12.8 ile doğrulandı.
 - **Commit / yayın düzeni:** Her tamamlanan P maddesi ayrı commit; doğrulanan grup CI için push edilir, sunucu deploy'u CI ve sunucu kontrollerinden sonra yapılır. İlk sunucu yayını eşiği P0 işleri + P1-7 test hatası + P1-2 dağıtım uyumu.
@@ -145,7 +145,7 @@ Kapsam tahminleri süre taahhüdü değildir: küçük birkaç dosya; orta bir �
 | P0-4 | Emir sonucu ve pozisyon tutarlılığı | Doğrulandı | Büyük | P0-1, P0-3 |
 | P1-1 | Komisyon, hassasiyet, limit ve replay doğruluğu | Doğrulandı | Orta/büyük | P0-3, P0-4 |
 | P1-2 | Çalıştırma ve dağıtım topolojisi | Kod/imaj CI doğrulandı; VPS erişimi engellendi | Orta | P0-1; gerçek sunucu erişimi |
-| P1-3 | Pine sözleşmesi ve testnet kabul akışı | Yerel sözleşme doğrulandı; Pine/testnet kabulü açık | Orta | Tüm P0 işleri, P1-1; dış kabul için P1-2 |
+| P1-3 | Pine sözleşmesi ve testnet kabul akışı | Yerel/CI sözleşmesi doğrulandı; Pine/testnet kabulü açık | Orta | Tüm P0 işleri, P1-1; dış kabul için P1-2 |
 | P1-4 | AI ilişkileri ve scan history | Bekliyor | Orta | P0-1 |
 | P1-5 | Süreçler arası realtime ve scanner eşdeğerliği | Bekliyor | Orta/büyük | P0-1, P1-2 |
 | P1-6 | PnL, bot durumu ve ayarlar ekranı | Bekliyor | Orta | P0-1; backend ayar sözleşmesi ve P0-2 |
@@ -415,6 +415,8 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 
 **Doğrulama:** 52 backend sınır/hash/freshness/retry testi + 22 Pine kaynak sözleşmesi testi; tam `.venv/Scripts/python.exe -m pytest -q` **403/403** (27,42 saniye), bir mevcut P2-3 tarih uyarısı. Yedi değişen Python dosyası Ruff lint/format ve diff kontrolünden geçti. Üç gerçek DB SHA-256 değeri başlangıçla aynı. Gerçek/testnet emir ve migration çalıştırılmadı.
 
+**Commit ve Linux CI:** `ea2d0a579d997a0ca1e13e98f4a4ea358ae3e938` main'e push edildi. [CI 34375597532](https://github.com/Rapto0/Rapot/actions/runs/34375597532) beş job ile başarılı: Python **403/403** (26,28 saniye, aynı mevcut warning), lint/format, frontend lint/type/build/proxy, Docker ve güvenlik taraması. Docker job'u backend/frontend imajlarını, ağsız importları, boş geçici PostgreSQL'de altı migration ile middleware DRY_RUN health kontrolünü ve frontend container HTML/statik dosyalarını doğruladı. Bu migration yalnız CI test veritabanında çalıştı. Güvenlik taramasının hata toleranslı olması, mevcut action runtime ve gitlink temizleme uyarıları P2-3'te açık; yeşil job güvenlik borcunun kapandığını göstermez. VPS deploy'u yapılmadı.
+
 **Dış doğrulama sınırı:** Bağlı tarayıcıda oturum yoktu. TradingView misafir Pine editöründe geçici yalnız-grafik-koruması kontrolünün Add to chart adımı **Sign in** ekranı istedi; derleme başarısı alınmadı, sekme kapatıldı. Kaynak testleri Pine derleyicisi/tick yürütücüsü değildir. Asıl scriptin Pine derlemesi, BINANCE Spot/futures/sentetik grafik runtime doğrulaması, gerçek örnek alarm JSON'u ve ayrılmış testnet BUY → FIFO SELL → reconcile kabulü açık. Alarm/hesap oluşturulmadı, oturum açılmadı, broker emri gönderilmedi. TradingView çalışan alarmlarının eski script kopyasını kullanabileceği README'de açıklandı.
 
 **Neden:** Son Pine commit'i büyük; derleme/alarm testi doğrulanmadı. Varsayılan Manuel/günlük/saat filtresi ile Kripto 24/7 preset'i farklı. barTime=timenow ve tüm payload hash'i, aynı bar/sinyalin tekrar semantiğini etkiliyor.
@@ -435,6 +437,12 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 **Neden:** Scanner AI çağrısı market_type/signal_id göndermiyor; varsayılan BIST/None. Scan history okuyucusu var, aktif scanner yazma bağlantısı bulunamadı.
 
 **Dosyalar:** [market_scanner.py](../market_scanner.py), [async_scanner.py](../async_scanner.py), [ai_analyst.py](../ai_analyst.py), [system repository](../infrastructure/repositories/system_repository.py), [ops repository](../infrastructure/persistence/ops_repository.py), [modeller](../models.py).
+
+**2026-09-09 ön incelemesi — uygulama başlamadı:** `market_scanner.py::process_symbol` içindeki dört `_save_signal_and_publish()` çağrısının döndürdüğü kimlik kullanılmıyor; `trigger_ai_analysis()` → `analyze_with_gemini()` zincirine `market_type` ve `signal_id` aktarılmıyor. Gerçek yazıcı `infrastructure/persistence/signal_repository.py::save_signal`, başarılı eklemede ID, uniqueness çatışmasında `0` döndürüyor; `application/scanner/signal_handlers.py` bu değeri koruyor. `mark_special_signal()` son eşleşen satırı güncellediğinden, başarısız yeni kayıt sonrasında eski sinyali etiketlememek/analize bağlamamak için aynı turdaki başarılı kayıt ID'si kullanılmalı. Kök repository dosyaları wrapper; değişiklik gerçek uygulama dosyalarında yapılmalı.
+
+**Uygulama başlangıcı ve kararlar:** Önce `process_symbol` içinde strateji/yön/timeframe bazında başarılı ID'leri tutup özel sinyalin hedef timeframe ID'sini ve piyasa türünü AI'a geçir. Ardından `infrastructure/persistence/ops_repository.py` üzerinden sync/async kabul edilmiş tarama çağrısı başına tek terminal history kaydı tasarla; `finally` içinde monotonic süre, sayaçlar ve hata/iptal durumu ele alınmalı. Async "zaten çalışıyor" dönüşü yeni tarama sayılmamalı. `ScanHistory` modelinde açık başarı alanı yok; hata bilgisinin saklama politikası ve `signals_found` için tespit/kayıt sayımı uygulamadan önce belirlenmeli. Async scanner bugün AI çağırmıyor; bu eşdeğerlik P1-5 kapsamında kalıyor.
+
+**Hedef doğrulama:** BIST/Kripto doğru AI ilişkisi ve `/signals/{id}/analysis`; insert=`0` iken eski satıra bağlanmama; AI kapalı/hatalı iken sinyalin korunması; sync/async başarı, sembol hatası, fatal hata, iptal ve reentry durumlarında tek history kaydı; `/scans` ve overview görünürlüğü. Mevcut scanner mock'larının çoğu ID yerine `None` döndürüyor; testler gerçek ID sözleşmesini kapsamalı. Ön incelemede DB açılmadı ve dış AI/veri çağrısı yapılmadı.
 
 **Kabul kriterleri:**
 
@@ -630,6 +638,8 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 | 2026-09-09 | P1-2 | Doğrula → belgeyi güncelle — CI tamam; VPS engellendi | `3b9bbbf` push edildi; CI 34368224479 başarılı. Backend/frontend imajları, ağsız import, boş PostgreSQL'de altı migration ve production middleware health, frontend container HTML/statik dosyaları geçti. Veri korundu; server deploy'u ve gerçek/testnet emir yok. Sıradaki bağımsız kod adımı P1-3 Spot/tarih sözleşmesi |
 | 2026-09-09 | P1-3 | İncele → düzelt | Futures soneki silme, taşan zaman/index ve Unicode büyük harf dönüşümü doğrulandı; Pine Spot/standart grafik kapısı, backend ham ASCII ve integer tarih/index sınırları ile hassas UTC dönüşümü uygulandı |
 | 2026-09-09 | P1-3 | Doğrula → belgeyi güncelle — yerel tamam | 74 yeni test; tam 403/403 ve bir mevcut warning. Ruff lint/format/diff geçti; DB hash'leri aynı. v1 eski hash, ayrı BUY ve retry testleri geçti. TradingView Add to chart giriş istiyor; Pine derlemesi/alarm/testnet açık. Sonraki bağımsız kod işi P1-4 |
+| 2026-09-09 | P1-3 | Commit/push → Linux CI → belgeyi güncelle | `ea2d0a5` main'de; CI 34375597532 başarılı. Python 403/403, frontend, lint ve Docker/izole PostgreSQL kontrolleri geçti. Pine runtime/testnet ve VPS deploy'u erişim koşulları nedeniyle açık; mevcut P2-3 uyarıları sürüyor |
+| 2026-09-09 | P1-4 | Salt okunur ön inceleme | Sinyal ID'sinin AI çağrısında kaybı, eski satırı etiketleme riski ve eksik scan-history yazımı doğrulandı. Başlangıç `market_scanner.py::process_symbol`; gerçek repository dosyaları ve hedef testler kaydedildi. Uygulama başlamadı |
 
 Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 
@@ -649,4 +659,4 @@ Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 4. Aktif işin bulgusunu ve bağımlılıklarını güncel kodda kontrol et. İncelemeyi baştan tekrarlamak yerine ilgili kanıttan devam et.
 5. İşin dört adımını tamamla veya engeli somutlaştır; ardından durum tablosu, günlük ve Kaldığımız nokta bölümünü güncelle.
 
-**P0-1–P0-4, P1-1 ve P1-7 tamamlandı. P1-3 yerel sözleşmesi doğrulandı; tam Python paketi 403/403. P1-2 VPS erişimi ve P1-3 Pine/testnet dış kabulü açık. Sıradaki bağımsız kod işi P1-4 AI ilişkileri/scan history.**
+**P0-1–P0-4, P1-1 ve P1-7 tamamlandı. P1-3 yerel/CI sözleşmesi doğrulandı; tam Python paketi 403/403, `ea2d0a5` CI başarılı. P1-2 VPS erişimi ve P1-3 Pine/testnet dış kabulü açık. Sıradaki bağımsız kod işi P1-4 AI ilişkileri/scan history; ön inceleme tamamlandı.**
