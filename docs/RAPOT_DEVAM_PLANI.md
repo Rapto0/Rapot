@@ -7,7 +7,7 @@ Bu belge, 6 Eylül 2026 tarihli salt okunur proje incelemesinden çıkan işleri
 - **Son tamamlanan çalışma:** P1-7 — kısa seride HUNTER/ATR hatası ve ölçülmemiş ATR'nin sıfır sayılması giderildi (2026-09-09).
 - **Uygulama durumu:** P1-1 `4e045eb`, P1-2 yerel checkpoint'i `66e2238`, P1-7 `dc433a7` ile kaydedildi. Tam Python paketi **329/329**; önceki dört hata kapandı, bir mevcut tarih deprecation warning'i kaldı. Frontend 12/12, standalone build (TypeScript dahil), lint ve sahte yerel servislerle HTTP/health/WebSocket proxy smoke kontrolü geçti.
 - **Aktif iş:** P1-2 yerel uygulama/doğrulama; Docker imaj koşumu ve gerçek VPS doğrulaması bekliyor.
-- **Uzak doğrulama:** İlk grup `5449aae` ile `main`'e push edildi. Linux Python ve lint işleri geçti; frontend lint/typecheck/test/build geçti, standalone smoke kapanışında bekledi. İlk CI koşumu durduruldu; mock bağlantılarını önce kapatan ve süreç kapanışını sınırlayan düzeltme yerelde smoke/ESLint ile doğrulandı. Yeni CI sonucu bekleniyor; deploy yapılmadı.
+- **Uzak doğrulama:** İlk grup `5449aae` ile `main`'e push edildi. `86718fc` koşumunda Linux Python/lint/frontend (standalone smoke dahil) geçti ve backend imajı üretildi. İmaj import smoke adımı eksik test JWT ayarı yüzünden durdu; test ortamına ayrı sahte JWT eklendi. Frontend imajının ağsız açılış/statik dosya kontrolü de eklendi. Yeni CI sonucu bekleniyor; deploy yapılmadı.
 - **Sıradaki somut adım:** Yerel kontrolleri geçen grubu push ederek Linux CI üzerinde backend/frontend imajları ile geçici PostgreSQL migration/startup kontrolünü çalıştır. Erişim sağlanmadan VPS deploy'u tamamlandı sayılmayacak.
 - **İşlevsel düzeltme odağı:** P1-2 çalıştırma ve dağıtım topolojisi; ardından P1-3 Pine/testnet kabul akışı.
 - **Başlangıç kaydı:** Bu belge ilk oluşturulduğunda yalnız belge değişmişti; sonraki uygulama değişiklikleri aşağıda ayrı kaydedildi.
@@ -385,6 +385,8 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 
 **İlk Linux koşumu:** [34366928776](https://github.com/Rapto0/Rapot/actions/runs/34366928776), `5449aae` üzerinde Python/lint başarılı; frontend build sonrası standalone smoke adımında bekledi. Test, Linux Next.js graceful shutdown'ı beklemeden önce mock upstream soketlerini kapatacak şekilde düzeltildi; statik yanıt gövdesi tüketiliyor, HTTP/süreç beklemeleri ve CI smoke adımı süre sınırına sahip. Yerel smoke ve ESLint tekrar geçti. Takılan kendi CI koşumumuz iptal edildi; yeni koşumun Linux/Docker sonucu açık. Bu test düzeltmesi uygulamanın çalışma davranışını değiştirmiyor.
 
+**İkinci Linux koşumu:** [34367517745](https://github.com/Rapto0/Rapot/actions/runs/34367517745), `86718fc` üzerinde Python 329/329 ve frontend'in tüm adımları geçti; standalone kapanışı düzeldi. Backend imajı üretildi fakat import smoke ortamında `JWT_SECRET_KEY` eksikti. Yalnız bu ağsız test için sahte anahtar eklendi; uygulamanın zorunlu anahtar kontrolü korundu. Ayrıca frontend imajının gerçekten başlayıp HTML/statik JS sunduğunu ağsız container ile doğrulayan adım eklendi. PostgreSQL ve frontend imaj kontrolleri sonraki koşumda tamamlanacak.
+
 **P0-1'de eklenen bulgu:** Geliştirme/CI Python 3.12'ye alındı; Dockerfile hâlâ Python 3.10 kullanıyor. `ai_evaluation.py` ve `infrastructure/compat/wrapper_telemetry.py`, Python 3.10'da bulunmayan `datetime.UTC` import ediyor. Image build başarısı uygulama importlarının çalıştığını kanıtlamaz. Container sürümünü ve `pyproject.toml` destek beyanını birlikte ele al; bu aşamada deploy/runtime değiştirilmedi.
 
 **Neden:** Frontend Dockerfile standalone çıktı bekliyor fakat Next config bunu açmıyor. Health proxy frontend localhost'una gidiyor, servis bot tarafında. Middleware Compose/PM2'de yok; deploy workflow'un son adımı yalnız mesaj basıyor.
@@ -515,6 +517,8 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 
 **P0-1 doğrulaması:** Değişen yedi Python dosyası Ruff lint/format kontrolünden geçti; tüm-repo borcu açık. Tam pytest'te `tests/test_async_scanner.py::test_scan_market_async_returns_failed_status_on_fatal_error` sırasında SQLAlchemy model varsayılanının `datetime.utcnow()` kullanımı için bir deprecation warning görüldü. Zaman damgası saklama/okuma sözleşmesini koruyarak ele alınmalı.
 
+**9 Eylül CI ek bulguları:** Checkout kapanışı, Git'e gitlink olarak kayıtlı `.claude/worktrees/festive-bartik-1395fb` için `.gitmodules` URL'si bulamadığını uyarı olarak bildiriyor. Yerel worktree silinmedi/değiştirilmedi; kayıt/kapsam kararı bu işte verilecek. Bazı action sürümlerinin Node 20 runtime bildirimi GitHub tarafından Node 24'e yönlendiriliyor ve deprecation uyarısı üretiyor; bu, frontend testinde seçilen Node sürümünden ayrı bir konu. Action sürümü güncellemesi burada takip edilecek. Security işi araç hata/bulgularını `|| true` ile yuttuğundan yeşil olması güvenlik bulgusu yok demek değildir.
+
 **Neden:** Ana projede 8 Ruff bulgusu; iç worktree'de tekrarları var. PortfolioPanel TODO'ları ve bazı eski mock/dashboard bileşenleri için aktif kullanım bulunamadı.
 
 **Dosyalar:** [main.py](../main.py), [backfill scripti](../scripts/backfill_signal_details.py), [signals.py](../signals.py), [test_config.py](../tests/test_config.py), [pyproject.toml](../pyproject.toml), [dashboard bileşenleri](../frontend/src/components/dashboard), [mock data](../frontend/src/lib/mock-data.ts).
@@ -609,6 +613,7 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 | 2026-09-09 | P1-7 | Doğrula → belgeyi güncelle — Doğrulandı | 10 yeni sınır/rapor testi, hedefli 37/37 ve tam Python 329/329 geçti; Ruff lint/format temiz. P2-3 tarih uyarısı sürüyor; önceki dört HUNTER hatası kapandı |
 | 2026-09-09 | P1-2 | CI hazırlığı | İzole PostgreSQL migration/production startup smoke adımı eklendi; CI/Compose TCP readiness yarışı giderildi. P1-7 `dc433a7` kaydedildi; tam Python 329/329 ve frontend kontrolleri sonrası doğrulama push'u hazırlanıyor. Sunucu erişimi hâlâ eksik |
 | 2026-09-09 | P1-2 | Push → Linux CI → test düzeltmesi | `5449aae` main'e gönderildi. İlk CI Python/lint geçti; frontend smoke kapanışı takıldı. Mock soketleri önce kapatma, yanıt gövdesini tüketme ve süre sınırları eklendi; yerel smoke/ESLint geçti. İlk koşum iptal edildi; sonraki Linux/Docker doğrulaması bekliyor. Üç gerçek DB hash'i hâlâ aynı |
+| 2026-09-09 | P1-2 | Linux smoke düzeldi; imaj test ortamı düzeltildi | `86718fc` push edildi; Python/lint/frontend geçti, backend imajı üretildi. Ağsız import testine eksik sahte JWT eklendi; frontend container başlangıç/statik varlık testi eklendi. Güvenlik kontrolü gevşetilmedi; sonraki CI sonucu bekleniyor |
 
 Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 

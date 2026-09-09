@@ -198,6 +198,7 @@ jobs:
           docker run --rm --network none \
             -e TELEGRAM_TOKEN=ci-test-token -e TELEGRAM_CHAT_ID=ci-test-chat \
             -e APP_ENV=test -e AI_ENABLED=0 -e RUN_EMBEDDED_BOT=false \
+            -e JWT_SECRET_KEY=ci-only-secret-not-used-for-real-sessions \
             -e DATABASE_PATH=/tmp/trading.sqlite3 -e CACHE_DATABASE_PATH=/tmp/cache.sqlite3 \
             -e MW_WEBHOOK_AUTH_TOKEN=ci-test-webhook \
             otonom-analiz:${{ github.sha }} \
@@ -242,6 +243,35 @@ jobs:
           context: ./frontend
           file: frontend/Dockerfile
           push: false
+          load: true
           tags: rapot-frontend:${{ github.sha }}
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
+
+      - name: Verify frontend container starts and serves standalone assets
+        timeout-minutes: 3
+        shell: bash
+        run: |
+          set -euo pipefail
+          trap 'docker rm -f rapot-ci-frontend >/dev/null 2>&1 || true' EXIT
+          docker run -d --name rapot-ci-frontend --network none rapot-frontend:${{ github.sha }}
+          for attempt in $(seq 1 30); do
+            if docker exec rapot-ci-frontend node -e "fetch('http://127.0.0.1:3000/', {signal: AbortSignal.timeout(3000)}).then(async r => {await r.arrayBuffer(); if (!r.ok) process.exitCode = 1;}).catch(() => {process.exitCode = 1;})"; then break; fi
+            sleep 2
+          done
+          docker logs rapot-ci-frontend
+          docker exec -i rapot-ci-frontend node <<'JS'
+          const assert = require('node:assert/strict');
+          (async () => {
+            const origin = 'http://127.0.0.1:3000';
+            const page = await fetch(origin, {signal: AbortSignal.timeout(3000)});
+            assert.equal(page.status, 200);
+            const html = await page.text();
+            const asset = html.match(/src="(\/_next\/static\/[^" ]+\.js)"/);
+            assert.ok(asset, 'Expected a standalone script asset');
+            const script = await fetch(origin + asset[1], {signal: AbortSignal.timeout(3000)});
+            assert.equal(script.status, 200);
+            assert.ok((await script.arrayBuffer()).byteLength > 0);
+            console.log('Frontend container HTML and static asset checks passed.');
+          })().catch(error => {console.error(error); process.exitCode = 1;});
+          JS
