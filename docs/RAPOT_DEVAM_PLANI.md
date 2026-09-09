@@ -7,6 +7,7 @@ Bu belge, 6 Eylül 2026 tarihli salt okunur proje incelemesinden çıkan işleri
 - **Son tamamlanan çalışma:** P1-7 — kısa seride HUNTER/ATR hatası ve ölçülmemiş ATR'nin sıfır sayılması giderildi (2026-09-09).
 - **Uygulama durumu:** P1-1 `4e045eb`, P1-2 yerel checkpoint'i `66e2238`, P1-7 `dc433a7` ile kaydedildi. Tam Python paketi **329/329**; önceki dört hata kapandı, bir mevcut tarih deprecation warning'i kaldı. Frontend 12/12, standalone build (TypeScript dahil), lint ve sahte yerel servislerle HTTP/health/WebSocket proxy smoke kontrolü geçti.
 - **Aktif iş:** P1-2 yerel uygulama/doğrulama; Docker imaj koşumu ve gerçek VPS doğrulaması bekliyor.
+- **Uzak doğrulama:** İlk grup `5449aae` ile `main`'e push edildi. Linux Python ve lint işleri geçti; frontend lint/typecheck/test/build geçti, standalone smoke kapanışında bekledi. İlk CI koşumu durduruldu; mock bağlantılarını önce kapatan ve süreç kapanışını sınırlayan düzeltme yerelde smoke/ESLint ile doğrulandı. Yeni CI sonucu bekleniyor; deploy yapılmadı.
 - **Sıradaki somut adım:** Yerel kontrolleri geçen grubu push ederek Linux CI üzerinde backend/frontend imajları ile geçici PostgreSQL migration/startup kontrolünü çalıştır. Erişim sağlanmadan VPS deploy'u tamamlandı sayılmayacak.
 - **İşlevsel düzeltme odağı:** P1-2 çalıştırma ve dağıtım topolojisi; ardından P1-3 Pine/testnet kabul akışı.
 - **Başlangıç kaydı:** Bu belge ilk oluşturulduğunda yalnız belge değişmişti; sonraki uygulama değişiklikleri aşağıda ayrı kaydedildi.
@@ -382,6 +383,8 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 
 **CI doğrulama eklemesi:** GitHub Linux runner'ında backend imajından ağsız import kontrolü, izole Docker ağı ve geçici PostgreSQL 16 ile sıfırdan Alembic migration, production middleware şema kapısı ve DRY_RUN/işlem kapalı health kontrolü eklendi. Test kaynakları koşum sonunda kaldırılır; gerçek DB/hesap bilgisi kullanılmaz. PostgreSQL readiness, init sırasında yalnız Unix socket'te çalışan geçici sunucuyu hazır saymamak için TCP `127.0.0.1` kullanır; Compose kontrolü de aynı düzeltmeyi içerir. İki workflow YAML ve tüm shell blokları `bash -n` kontrolünden geçti; push grubundaki 55 Python dosyası Ruff lint/format kontrolünden geçti. Gerçek CI sonucu henüz bekleniyor.
 
+**İlk Linux koşumu:** [34366928776](https://github.com/Rapto0/Rapot/actions/runs/34366928776), `5449aae` üzerinde Python/lint başarılı; frontend build sonrası standalone smoke adımında bekledi. Test, Linux Next.js graceful shutdown'ı beklemeden önce mock upstream soketlerini kapatacak şekilde düzeltildi; statik yanıt gövdesi tüketiliyor, HTTP/süreç beklemeleri ve CI smoke adımı süre sınırına sahip. Yerel smoke ve ESLint tekrar geçti. Takılan kendi CI koşumumuz iptal edildi; yeni koşumun Linux/Docker sonucu açık. Bu test düzeltmesi uygulamanın çalışma davranışını değiştirmiyor.
+
 **P0-1'de eklenen bulgu:** Geliştirme/CI Python 3.12'ye alındı; Dockerfile hâlâ Python 3.10 kullanıyor. `ai_evaluation.py` ve `infrastructure/compat/wrapper_telemetry.py`, Python 3.10'da bulunmayan `datetime.UTC` import ediyor. Image build başarısı uygulama importlarının çalıştığını kanıtlamaz. Container sürümünü ve `pyproject.toml` destek beyanını birlikte ele al; bu aşamada deploy/runtime değiştirilmedi.
 
 **Neden:** Frontend Dockerfile standalone çıktı bekliyor fakat Next config bunu açmıyor. Health proxy frontend localhost'una gidiyor, servis bot tarafında. Middleware Compose/PM2'de yok; deploy workflow'un son adımı yalnız mesaj basıyor.
@@ -397,6 +400,8 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 - [ ] Yerel/izole kontrol ile gerçek VPS deploy sonucu ayrı kaydedildi.
 
 ### P1-3 — Pine sözleşmesi ve testnet kabul akışı
+
+**2026-09-09 ön incelemesi (uygulama yok):** `normalizeTicker()` `.P` sonekini silerek futures grafiğini Spot sembolüne çevirebiliyor; dispatch öncesi Spot/borsa koruması gerekiyor. Payload `barTime=2**63` doğrulamadan geçip repository tarih dönüşümünde hata verebiliyor; desteklenen milisaniye aralığı modelde sınırlandırılmalı. `barTime=timenow` mevcut freshness sözleşmesinin parçası: doğrudan bar başlangıcıyla değiştirilmemeli. Hash tüm payload'a bağlı; fiyat yazımı, metin ve timeframe alias farkları ayrı olay oluyor. Önce Spot/tarih sınırlarını ve kasıtlı ayrı BUY olaylarını koruyan yerel sözleşme testlerini ele al. Pine derlemesi/alarm ve testnet hesabı ayrıca doğrulanacak; emir gönderilmedi.
 
 **Neden:** Son Pine commit'i büyük; derleme/alarm testi doğrulanmadı. Varsayılan Manuel/günlük/saat filtresi ile Kripto 24/7 preset'i farklı. barTime=timenow ve tüm payload hash'i, aynı bar/sinyalin tekrar semantiğini etkiliyor.
 
@@ -603,6 +608,7 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 | 2026-09-09 | P1-7 | İncele → düzelt | ATR kısa seride indeks hatası ve `ta` ısınma sıfırları doğrulandı; eksik ölçümler NaN oldu, gerçek sıfır korundu. HUNTER eşikleri ve rapor biçimi değişmedi |
 | 2026-09-09 | P1-7 | Doğrula → belgeyi güncelle — Doğrulandı | 10 yeni sınır/rapor testi, hedefli 37/37 ve tam Python 329/329 geçti; Ruff lint/format temiz. P2-3 tarih uyarısı sürüyor; önceki dört HUNTER hatası kapandı |
 | 2026-09-09 | P1-2 | CI hazırlığı | İzole PostgreSQL migration/production startup smoke adımı eklendi; CI/Compose TCP readiness yarışı giderildi. P1-7 `dc433a7` kaydedildi; tam Python 329/329 ve frontend kontrolleri sonrası doğrulama push'u hazırlanıyor. Sunucu erişimi hâlâ eksik |
+| 2026-09-09 | P1-2 | Push → Linux CI → test düzeltmesi | `5449aae` main'e gönderildi. İlk CI Python/lint geçti; frontend smoke kapanışı takıldı. Mock soketleri önce kapatma, yanıt gövdesini tüketme ve süre sınırları eklendi; yerel smoke/ESLint geçti. İlk koşum iptal edildi; sonraki Linux/Docker doğrulaması bekliyor. Üç gerçek DB hash'i hâlâ aynı |
 
 Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 

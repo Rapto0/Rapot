@@ -22,6 +22,9 @@ const sockets = new Set();
 const servers = [];
 let child;
 let output = '';
+function localFetch(url, options = {}) {
+  return fetch(url, { ...options, signal: AbortSignal.timeout(5000) });
+}
 function listen(server, port, hostname) {
   return new Promise((resolve, reject) => {
     server.once('error', reject);
@@ -63,7 +66,11 @@ try {
   const origin = `http://127.0.0.1:${frontendPort}`;
   let page;
   for (let attempt = 0; attempt < 40; attempt++) {
-    try { page = await fetch(origin); if (page.ok) break; } catch { /* server starting */ }
+    try {
+      page = await localFetch(origin);
+      if (page.ok) break;
+      await page.body?.cancel();
+    } catch { /* server starting */ }
     assert.equal(child.exitCode, null, output);
     await delay(250);
   }
@@ -71,10 +78,12 @@ try {
   const html = await page.text();
   const asset = html.match(/src="(\/_next\/static\/[^" ]+\.js)"/);
   assert.ok(asset, 'Expected a standalone static asset');
-  assert.equal((await fetch(origin + asset[1])).status, 200);
-  const proxied = await fetch(origin + '/api/auth/me?smoke=1', { headers: { Authorization: 'Bearer local-smoke' } });
+  const staticAsset = await localFetch(origin + asset[1]);
+  assert.equal(staticAsset.status, 200);
+  assert.ok((await staticAsset.arrayBuffer()).byteLength > 0);
+  const proxied = await localFetch(origin + '/api/auth/me?smoke=1', { headers: { Authorization: 'Bearer local-smoke' } });
   assert.deepEqual(await proxied.json(), { service: 'api', path: '/auth/me?smoke=1', authorization: 'Bearer local-smoke' });
-  const health = await fetch(origin + '/health-api/health');
+  const health = await localFetch(origin + '/health-api/health');
   assert.deepEqual(await health.json(), { service: 'bot-health', path: '/health' });
   await new Promise((resolve, reject) => {
     const socket = net.connect(frontendPort, '127.0.0.1');
@@ -88,10 +97,15 @@ try {
   });
   console.log('Standalone HTML/static assets, authenticated API proxy, bot health proxy and WebSocket upgrade passed.');
 } finally {
-  if (child && child.exitCode === null) {
-    child.kill();
-    await new Promise(resolve => child.once('exit', resolve));
-  }
+  // Close mock upstream sockets before waiting for Next's POSIX graceful shutdown.
+  // Open upgraded connections can otherwise keep server.close() waiting forever.
   for (const socket of sockets) socket.destroy();
   await Promise.all(servers.map(server => new Promise(resolve => server.close(resolve))));
+  if (child && child.exitCode === null && child.signalCode === null) {
+    await new Promise(resolve => {
+      const deadline = setTimeout(() => child.kill('SIGKILL'), 5000);
+      child.once('exit', () => { clearTimeout(deadline); resolve(); });
+      child.kill();
+    });
+  }
 }

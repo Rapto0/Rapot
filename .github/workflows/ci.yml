@@ -148,6 +148,7 @@ jobs:
         run: npm run build
 
       - name: Verify standalone HTTP and WebSocket proxies with local mocks
+        timeout-minutes: 3
         run: npm run test:standalone
 
   # ==================== SECURITY SCAN ====================
