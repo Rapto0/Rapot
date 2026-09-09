@@ -20,7 +20,7 @@ from middleware.domain.idempotency import build_client_order_id
 from middleware.infra.logging import get_logger
 from middleware.infra.models import Order
 from middleware.infra.settings import MiddlewareSettings
-from middleware.infra.time import UTC
+from middleware.infra.time import UTC, datetime_from_unix_ms
 from middleware.repositories.execution_report_repository import ExecutionReportRepository
 from middleware.repositories.order_repository import BrokerFillDelta, OrderRepository
 from middleware.repositories.signal_repository import SignalRepository
@@ -882,7 +882,7 @@ class TradingService:
             return "isRealtime must be true when MW_REQUIRE_REALTIME_SIGNALS=true"
 
         now = datetime.now(UTC)
-        bar_time = datetime.fromtimestamp(payload.barTime / 1000, tz=UTC)
+        bar_time = datetime_from_unix_ms(payload.barTime)
 
         future_seconds = (bar_time - now).total_seconds()
         if future_seconds > self.cfg.max_signal_future_skew_seconds:

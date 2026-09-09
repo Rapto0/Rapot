@@ -4,12 +4,12 @@ Bu belge, 6 Eylül 2026 tarihli salt okunur proje incelemesinden çıkan işleri
 
 ## Kaldığımız nokta
 
-- **Son tamamlanan çalışma:** P1-7 — kısa seride HUNTER/ATR hatası ve ölçülmemiş ATR'nin sıfır sayılması giderildi (2026-09-09).
-- **Uygulama durumu:** P1-1 `4e045eb`, P1-2 yerel checkpoint'i `66e2238`, P1-7 `dc433a7` ile kaydedildi. Tam Python paketi **329/329**; önceki dört hata kapandı, bir mevcut tarih deprecation warning'i kaldı. Frontend 12/12, standalone build (TypeScript dahil), lint ve sahte yerel servislerle HTTP/health/WebSocket proxy smoke kontrolü geçti.
+- **Son yerel çalışma:** P1-3 — Pine Binance Spot/standart grafik koruması, webhook zaman/index sınırları ve v1 tekrar sözleşmesi uygulandı (2026-09-09). Gerçek Pine derlemesi/alarm/testnet kabulü açık.
+- **Uygulama durumu:** P0 işleri, P1-1 ve P1-7 doğrulandı. P1-3 sonrası tam Python paketi **403/403**; bir mevcut tarih deprecation warning'i kaldı. 52 backend ve 22 Pine kaynak sözleşmesi testi eklendi. Frontend kodu bu adımda değişmedi; önceki 12/12 ve build/proxy kanıtı P1-2'de kayıtlı.
 - **P1-2 durumu:** Yerel kod ve Linux CI imaj kontrolleri doğrulandı; gerçek VPS geçişi SSH erişimi nedeniyle engellendi. Madde bütünüyle tamamlandı sayılmıyor.
-- **Uzak doğrulama:** Grup `main`'e push edildi. `3b9bbbf` üzerindeki [CI 34368224479](https://github.com/Rapto0/Rapot/actions/runs/34368224479) başarılı: Python/lint/frontend, backend/frontend imajları, ağsız import, PostgreSQL migration→production middleware health ve frontend container HTML/statik dosya kontrolü geçti. Sunucu deploy'u yapılmadı.
-- **Sıradaki somut adım:** P1-3'ün bağımsız yerel kısmı: Pine Spot sembol koruması ve webhook tarih sınırı; ardından olay zamanı/idempotency sözleşmesi. P1-2'ye ait gerçek VPS geçişi erişim sağlandığında ayrıca sürdürülecek.
-- **İşlevsel düzeltme odağı:** P1-3 yerel sözleşme düzeltmeleri; TradingView derlemesi/alarm ve testnet kabulü ayrı açık doğrulamalar.
+- **Uzak doğrulama başlangıcı:** Önceki grup `89890f8` ile main'de; [CI 34369220615](https://github.com/Rapto0/Rapot/actions/runs/34369220615) başarılı. P1-3 değişikliklerinin yeni commit/CI kaydı ayrıca eklenecek. Sunucu deploy'u yapılmadı.
+- **Aktif adım:** P1-3 yerel checkpoint'ini commit/push et ve Linux CI sonucunu doğrula. TradingView misafir editörü Add to chart aşamasında giriş istiyor; kullanılabilir oturum yok. Testnet hesabı/DB/izin bilgileri de doğrulanmadı.
+- **Sıradaki bağımsız kod işi:** P1-4 — scanner AI ilişkileri ve scan history. P1-2 VPS geçişi ile P1-3 dış kabul testleri erişim/hesap koşulları sağlandığında ayrıca sürdürülecek.
 - **Başlangıç kaydı:** Bu belge ilk oluşturulduğunda yalnız belge değişmişti; sonraki uygulama değişiklikleri aşağıda ayrı kaydedildi.
 - **Seçilen geliştirme ortamı:** `.venv` / Python 3.12; Node 20.20.2 / npm 10.9.9. Yerelde Python 3.12.8 ile doğrulandı.
 - **Commit / yayın düzeni:** Her tamamlanan P maddesi ayrı commit; doğrulanan grup CI için push edilir, sunucu deploy'u CI ve sunucu kontrollerinden sonra yapılır. İlk sunucu yayını eşiği P0 işleri + P1-7 test hatası + P1-2 dağıtım uyumu.
@@ -145,7 +145,7 @@ Kapsam tahminleri süre taahhüdü değildir: küçük birkaç dosya; orta bir �
 | P0-4 | Emir sonucu ve pozisyon tutarlılığı | Doğrulandı | Büyük | P0-1, P0-3 |
 | P1-1 | Komisyon, hassasiyet, limit ve replay doğruluğu | Doğrulandı | Orta/büyük | P0-3, P0-4 |
 | P1-2 | Çalıştırma ve dağıtım topolojisi | Kod/imaj CI doğrulandı; VPS erişimi engellendi | Orta | P0-1; gerçek sunucu erişimi |
-| P1-3 | Pine sözleşmesi ve testnet kabul akışı | Bekliyor | Orta | Tüm P0 işleri, P1-1, P1-2 |
+| P1-3 | Pine sözleşmesi ve testnet kabul akışı | Yerel sözleşme doğrulandı; Pine/testnet kabulü açık | Orta | Tüm P0 işleri, P1-1; dış kabul için P1-2 |
 | P1-4 | AI ilişkileri ve scan history | Bekliyor | Orta | P0-1 |
 | P1-5 | Süreçler arası realtime ve scanner eşdeğerliği | Bekliyor | Orta/büyük | P0-1, P1-2 |
 | P1-6 | PnL, bot durumu ve ayarlar ekranı | Bekliyor | Orta | P0-1; backend ayar sözleşmesi ve P0-2 |
@@ -407,7 +407,15 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 
 ### P1-3 — Pine sözleşmesi ve testnet kabul akışı
 
-**2026-09-09 ön incelemesi (uygulama yok):** `normalizeTicker()` `.P` sonekini silerek futures grafiğini Spot sembolüne çevirebiliyor; dispatch öncesi Spot/borsa koruması gerekiyor. Payload `barTime=2**63` doğrulamadan geçip repository tarih dönüşümünde hata verebiliyor; desteklenen milisaniye aralığı modelde sınırlandırılmalı. `barTime=timenow` mevcut freshness sözleşmesinin parçası: doğrudan bar başlangıcıyla değiştirilmemeli. Hash tüm payload'a bağlı; fiyat yazımı, metin ve timeframe alias farkları ayrı olay oluyor. Önce Spot/tarih sınırlarını ve kasıtlı ayrı BUY olaylarını koruyan yerel sözleşme testlerini ele al. Pine derlemesi/alarm ve testnet hesabı ayrıca doğrulanacak; emir gönderilmedi.
+**2026-09-09 incelemesi:** `normalizeTicker()` `.P` sonekini silerek futures grafiğini Spot sembolüne çevirebiliyordu. `barTime=2**63` modelden geçip repository tarih dönüşümünde, sınırı aşan `barIndex` ise BIGINT saklamasında hata üretebiliyordu. Unicode harfler `.upper()` sonrasında ASCII'ye dönüşerek önceki sembol kontrolünü geçebiliyordu. Bunlar yerel uygulamada giderildi.
+
+**Uygulama:** Pine yalnız `BINANCE`, `crypto`, base/quote birleşimine uyan ham ASCII ticker ve `chart.is_standard` koşullarında dispatch yapar; tek `alert()` çağrısı da aynı korumaya bağlıdır. `.P`/borsa/sonek silme kaldırıldı; tabloda uygunsuz grafik açıklanır. Backend ham sembolde ASCII kontrolünü büyük harf dönüşümünden önce yapar; separator/sonek reddedilir. `barTime` JSON integer `1..253402300799999`, `barIndex` JSON integer `0..2**63-1` ile sınırlandı. Boolean/float/sayısal metin ve taşmalar webhook/admin replay'de işleme başlamadan `422`; geçerli fakat eski/gelecek olaylar önceki gibi denetlenip `200/rejected` olarak kaydedilir. UTC dönüşümü epoch + integer timedelta ile milisaniyeyi korur.
+
+**Uyumluluk kararı:** `schemaVersion=1`, hash algoritması, geçerli örnek payload/hash ve sinyal eşikleri değişmedi; migration yok. `barTime=timenow` olay üretim zamanıdır, bar açılışı değildir. Aynı normalize payload tek emir, aynı bar/kodda yeni olay zamanı veya farklı kod ayrı emir/tranche üretir. Fiyatın ondalık yazımı, metin ve timeframe alias farkları v1'de ayrı hash olabilir; retry aynı payload'u korumalıdır. Bu davranışı değiştirmek geçmiş idempotency kayıtlarıyla uyumlu sürüm tasarımı gerektirir. Kasıtlı BUY biriktirme korunur.
+
+**Doğrulama:** 52 backend sınır/hash/freshness/retry testi + 22 Pine kaynak sözleşmesi testi; tam `.venv/Scripts/python.exe -m pytest -q` **403/403** (27,42 saniye), bir mevcut P2-3 tarih uyarısı. Yedi değişen Python dosyası Ruff lint/format ve diff kontrolünden geçti. Üç gerçek DB SHA-256 değeri başlangıçla aynı. Gerçek/testnet emir ve migration çalıştırılmadı.
+
+**Dış doğrulama sınırı:** Bağlı tarayıcıda oturum yoktu. TradingView misafir Pine editöründe geçici yalnız-grafik-koruması kontrolünün Add to chart adımı **Sign in** ekranı istedi; derleme başarısı alınmadı, sekme kapatıldı. Kaynak testleri Pine derleyicisi/tick yürütücüsü değildir. Asıl scriptin Pine derlemesi, BINANCE Spot/futures/sentetik grafik runtime doğrulaması, gerçek örnek alarm JSON'u ve ayrılmış testnet BUY → FIFO SELL → reconcile kabulü açık. Alarm/hesap oluşturulmadı, oturum açılmadı, broker emri gönderilmedi. TradingView çalışan alarmlarının eski script kopyasını kullanabileceği README'de açıklandı.
 
 **Neden:** Son Pine commit'i büyük; derleme/alarm testi doğrulanmadı. Varsayılan Manuel/günlük/saat filtresi ile Kripto 24/7 preset'i farklı. barTime=timenow ve tüm payload hash'i, aynı bar/sinyalin tekrar semantiğini etkiliyor.
 
@@ -415,12 +423,12 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 
 **Kabul kriterleri:**
 
-- [ ] Spot sembolü, sinyal kodu/yönü, timeframe, olay zamanı ve bar zamanı sözleşmesi açık ve testlerle uyumlu.
-- [ ] Birebir HTTP tekrarının korunması ile aynı bar/sinyalin yeniden üretilmesi ayrıldı; kasıtlı tekrarlı BUY davranışı kaybolmadı.
-- [ ] Manuel ve Kripto 24/7 preset'leri, saat dilimi ve ALL/FIRST alarm davranışları doğrulandı.
+- [x] Spot sembolü, sinyal kodu/yönü, timeframe ve v1 olay zamanı sözleşmesi açık; ayrı bar açılış alanı olmadığının sınırı belgeli.
+- [x] Birebir HTTP tekrarının korunması ile aynı bar/sinyalin yeniden üretilmesi ayrıldı; eski hash ve kasıtlı tekrarlı BUY davranışı test edildi.
+- [ ] Manuel/Kripto 24/7, saat dilimi ve ALL/FIRST kaynak sözleşmesi test edildi; gerçek Pine runtime/alarm doğrulaması bekliyor.
 - [ ] Pine derlemesi ve örnek alarm JSON'u doğrulandı; strategy() başlığı tek başına çalışan backtest kanıtı sayılmadı.
 - [ ] İlgili izin verildiğinde yalnız ayrılmış testnet hesabı/DB ile BUY → FIFO SELL → reconcile kabul akışı kaydedildi; tokenlar kayda alınmadı.
-- [ ] Testnet sonucu, gerçek hesapta doğrulama veya otomatik canlıya geçiş olarak işaretlenmedi.
+- [x] Yerel test sonucu testnet/gerçek hesap doğrulaması veya otomatik canlıya geçiş olarak işaretlenmedi.
 
 ### P1-4 — AI ilişkileri ve scan history
 
@@ -583,6 +591,7 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 | 2026-09-07 | Emir komisyonu doğrulanmadan envanter değiştirilmeyecek | Query Order komisyon döndürmez; recovery `myTrades` ile doğrular. Eksik bilgi `unknown`, base/quote ücretleri net envanter ve quote PnL'ye uygulanır |
 | 2026-09-07 | Reconciliation report-only kalacak | Toplam hesap bakiyesi tek bir middleware scope'unun kaynağını kanıtlamaz; otomatik düzeltme yanlış envanter üretebilir |
 | 2026-09-09 | Yerel kontrolleri geçen ilk grup CI için push edilecek | Docker Desktop motor hatası nedeniyle Linux imaj/migration doğrulaması CI'de yapılacak; bu push deploy veya testnet emri değildir. Kullanıcı zamanlama seçimini asistana bıraktı |
+| 2026-09-09 | P1-3 v1 olay/hash sözleşmesi korunacak | `barTime` olay zamanı olarak kalır; fiyat yazımı/timeframe alias gibi sunum farklarını birleştirmek veya bar başına tek BUY yapmak geçmiş hash'leri ve kasıtlı biriktirmeyi değiştirebilir; ayrıca sürümlendirilmeden uygulanmaz |
 
 ## İlerleme günlüğü
 
@@ -619,6 +628,8 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 | 2026-09-09 | P1-2 | Push → Linux CI → test düzeltmesi | `5449aae` main'e gönderildi. İlk CI Python/lint geçti; frontend smoke kapanışı takıldı. Mock soketleri önce kapatma, yanıt gövdesini tüketme ve süre sınırları eklendi; yerel smoke/ESLint geçti. İlk koşum iptal edildi; sonraki Linux/Docker doğrulaması bekliyor. Üç gerçek DB hash'i hâlâ aynı |
 | 2026-09-09 | P1-2 | Linux smoke düzeldi; imaj test ortamı düzeltildi | `86718fc` push edildi; Python/lint/frontend geçti, backend imajı üretildi. Ağsız import testine eksik sahte JWT eklendi; frontend container başlangıç/statik varlık testi eklendi. Güvenlik kontrolü gevşetilmedi; sonraki CI sonucu bekleniyor |
 | 2026-09-09 | P1-2 | Doğrula → belgeyi güncelle — CI tamam; VPS engellendi | `3b9bbbf` push edildi; CI 34368224479 başarılı. Backend/frontend imajları, ağsız import, boş PostgreSQL'de altı migration ve production middleware health, frontend container HTML/statik dosyaları geçti. Veri korundu; server deploy'u ve gerçek/testnet emir yok. Sıradaki bağımsız kod adımı P1-3 Spot/tarih sözleşmesi |
+| 2026-09-09 | P1-3 | İncele → düzelt | Futures soneki silme, taşan zaman/index ve Unicode büyük harf dönüşümü doğrulandı; Pine Spot/standart grafik kapısı, backend ham ASCII ve integer tarih/index sınırları ile hassas UTC dönüşümü uygulandı |
+| 2026-09-09 | P1-3 | Doğrula → belgeyi güncelle — yerel tamam | 74 yeni test; tam 403/403 ve bir mevcut warning. Ruff lint/format/diff geçti; DB hash'leri aynı. v1 eski hash, ayrı BUY ve retry testleri geçti. TradingView Add to chart giriş istiyor; Pine derlemesi/alarm/testnet açık. Sonraki bağımsız kod işi P1-4 |
 
 Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 
@@ -638,4 +649,4 @@ Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 4. Aktif işin bulgusunu ve bağımlılıklarını güncel kodda kontrol et. İncelemeyi baştan tekrarlamak yerine ilgili kanıttan devam et.
 5. İşin dört adımını tamamla veya engeli somutlaştır; ardından durum tablosu, günlük ve Kaldığımız nokta bölümünü güncelle.
 
-**P0-1–P0-4, P1-1 ve P1-7 tamamlandı. Tam Python paketi 329/329. P1-2 kod/imaj CI doğrulandı; gerçek VPS geçişi erişim bekliyor. Sıradaki yerel iş P1-3 Spot/tarih sözleşmesi.**
+**P0-1–P0-4, P1-1 ve P1-7 tamamlandı. P1-3 yerel sözleşmesi doğrulandı; tam Python paketi 403/403. P1-2 VPS erişimi ve P1-3 Pine/testnet dış kabulü açık. Sıradaki bağımsız kod işi P1-4 AI ilişkileri/scan history.**

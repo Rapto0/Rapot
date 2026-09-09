@@ -49,10 +49,55 @@ TradingView webhook sinyallerini Binance Spot emirlerine çeviren kripto odaklı
 
 Rules:
 - Extra fields are rejected.
-- `symbol` and `ticker` must match.
+- `symbol` and `ticker` must match after trimming/uppercasing and contain only ASCII
+  letters/digits. Exchange prefixes, separators and derivative suffixes such as `.P`
+  are rejected with `422`; they are never removed to manufacture a Spot symbol.
+  This checks syntax; `exchangeInfo`, configured quote asset and risk checks still
+  determine whether an actual Binance Spot pair can be traded.
 - `source` must be `Combo+Hunter`.
 - `signalCode` must match canonical side.
 - TradingView auth uses `?token=<MW_WEBHOOK_AUTH_TOKEN>`.
+- `barTime` must be a JSON integer in `1..253402300799999` (Unix milliseconds through
+  `9999-12-31T23:59:59.999Z`). `barIndex` must be a JSON integer in `0..9223372036854775807`
+  (the stored signed BIGINT range). Booleans, floats, numeric strings and out-of-range
+  values now return `422` in both the webhook and admin replay routes, before processing.
+  No schema migration is needed; existing valid normalized payloads remain compatible.
+
+### V1 time and duplicate semantics
+
+`barTime` is a historical field name: the shipped Pine code sends `timenow`, the
+**alert emission time**, not the candle's open time. The DB/API `bar_time` field
+stores that same instant. Conversion uses integer milliseconds and UTC calendar
+arithmetic; it does not round through a floating-point POSIX timestamp. Future-skew
+and optional freshness limits compare this emission time with the middleware clock.
+Do not replace it with a daily candle open time: a fresh daily alert could then appear
+hours old. Invalid timestamps return `422`; valid but stale/future events remain
+audited `200` responses with order status `rejected`, as before.
+
+V1 hashes the complete normalized payload, excluding default fields. The algorithm
+and existing event hashes are preserved. Source/symbol/code casing, surrounding
+whitespace and an explicit default `schemaVersion: 1` retain their existing normalization.
+Idempotency is enforced per execution/account scope; it is not a global one-order-per-bar rule.
+
+| Input relationship | V1 behavior within one scope |
+| --- | --- |
+| Same normalized payload retried | Existing order returned; no second tranche |
+| Different signal code in the same bar | Separate event/order |
+| Same code/bar but a new emission time | Separate event/order |
+| Next bar | Separate event/order |
+| Price `50000` vs `50000.0`, changed text, or timeframe `60` vs `1H` | May change the hash; separate event/order |
+| Authorized replay with explicit bypass | Separate order for the existing signal event |
+
+Transport retries must resend the original payload without refreshing its timestamp or
+reformatting identity fields. Recreating a TradingView alert can reset its per-bar memory;
+middleware does not merge newly emitted same-bar events automatically. A future logical
+event-ID/bar-open contract requires versioning and a migration/compatibility decision;
+silently changing v1 hashing could re-execute stored events or suppress intended BUY stacking.
+
+Pine generates native `timeframe.period` values (`60`, `1D`, etc.). V1 also accepts
+existing labels such as `1H`, uppercases them and does not merge aliases. This metadata
+does not change order sizing. See [Pine setup and preset contract](pine/README.md) for
+the six code/side mappings, Binance Spot chart gate, ALL/FIRST priority and exchange timezone.
 
 ## Sizing
 

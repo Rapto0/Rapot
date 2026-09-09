@@ -27,6 +27,12 @@ requireDailyChart = input.bool(true, "Sadece 1D grafikte sinyal üret", group=gr
 isDailyChart      = timeframe.isdaily and timeframe.multiplier == 1
 timeframeOk       = not requireDailyChart or isDailyChart
 
+// Alertler yalnız Binance Spot ve gerçek OHLC kullanan standart grafiklerde gönderilir.
+// Türev sonekleri (.P vb.) silinmez; başka bir enstrüman Spot sembolüne dönüştürülmez.
+middlewareSymbol = str.upper(syminfo.ticker)
+binanceSpotSymbol = syminfo.prefix == "BINANCE" and syminfo.type == "crypto" and str.length(syminfo.basecurrency) > 0 and str.length(syminfo.currency) > 0 and middlewareSymbol == str.upper(syminfo.basecurrency + syminfo.currency) and str.length(middlewareSymbol) <= 24 and str.match(syminfo.ticker, "^[A-Za-z0-9]+$") == syminfo.ticker
+middlewareChartOk = binanceSpotSymbol and chart.is_standard
+
 // ══════════════════════════════════════════════════════════════
 // MIDDLEWARE ALERT DISPATCHER
 // Middleware JSON payload script icinden alert() ile gonderilir.
@@ -969,13 +975,13 @@ if barstate.islast and showTable
     table.cell(tbl, 3, 6, f_scoreText(cp_s3, cp_sc3, cp_t3e), bgcolor=f_condBg(cp_s3, cp_sc3, cp_t3e, color.new(color.orange, 65), cFAL, cNA), text_color=wt, text_size=size.small)
     table.cell(tbl, 4, 6, c_pahali ? "✓" : "–", bgcolor=c_pahali ? color.new(clrCP, 50) : bk, text_color=wt, text_size=size.small)
 
-    string statusText = timeframeOk ? "TF OK | HTF1:" + htf1Tf + " HTF2:" + htf2Tf + " HTF3:" + htf3Tf + " HTF4:" + htf4Tf : "UYARI: 1D grafik değil. Sinyaller kapalı."
-    color statusBg = timeframeOk ? color.new(color.green, 80) : color.new(color.red, 60)
+    string statusText = not middlewareChartOk ? "UYARI: Binance Spot ve standart grafik gerekli. Alertler kapali." : timeframeOk ? "TF OK | HTF1:" + htf1Tf + " HTF2:" + htf2Tf + " HTF3:" + htf3Tf + " HTF4:" + htf4Tf : "UYARI: 1D grafik değil. Sinyaller kapalı."
+    color statusBg = timeframeOk and middlewareChartOk ? color.new(color.green, 80) : color.new(color.red, 60)
     table.cell(tbl, 0, 7, "Durum", bgcolor=statusBg, text_color=wt, text_size=size.small)
     table.cell(tbl, 1, 7, statusText, bgcolor=statusBg, text_color=wt, text_size=size.small)
     table.cell(tbl, 2, 7, "HMax:" + str.tostring(hMaxScore), bgcolor=statusBg, text_color=wt, text_size=size.small)
     table.cell(tbl, 3, 7, "CMax:" + str.tostring(cMaxScore), bgcolor=statusBg, text_color=wt, text_size=size.small)
-    table.cell(tbl, 4, 7, orderSessionNowOk ? "Alert Acik" : "Alert Kapali", bgcolor=orderSessionNowOk ? color.new(color.green, 75) : color.new(color.red, 70), text_color=wt, text_size=size.small)
+    table.cell(tbl, 4, 7, not middlewareChartOk ? "Grafik Engelli" : orderSessionNowOk ? "Alert Acik" : "Alert Kapali", bgcolor=orderSessionNowOk and middlewareChartOk ? color.new(color.green, 75) : color.new(color.red, 70), text_color=wt, text_size=size.small)
 
 // ══════════════════════════════════════════════════════════════
 // MIDDLEWARE ALERT BLOĞU
@@ -983,18 +989,11 @@ if barstate.islast and showTable
 // H.UCZ / H.BLS / C.UCZ / C.BLS = BUY
 // H.PAH / C.PAH = SELL
 // ══════════════════════════════════════════════════════════════
-normalizeTicker(string rawTicker) =>
-    string result = str.upper(str.replace_all(rawTicker, " ", ""))
-    result := str.replace_all(result, "BINANCE:", "")
-    result := str.replace_all(result, "BINANCEUS:", "")
-    result := str.replace_all(result, ".P", "")
-    result
-
 jsonEscape(string value) =>
     str.replace_all(str.replace_all(value, "\\", "\\\\"), "\"", "\\\"")
 
 buildPayload(string signalCode, string signalText, string side) =>
-    string symbol = normalizeTicker(syminfo.tickerid)
+    string symbol = middlewareSymbol
     string payload = "{"
     payload += "\"schemaVersion\":1,"
     payload += "\"source\":\"Combo+Hunter\","
@@ -1012,7 +1011,8 @@ buildPayload(string signalCode, string signalText, string side) =>
     payload
 
 sendMiddlewareAlert(string signalCode, string signalText, string side) =>
-    alert(buildPayload(signalCode, signalText, side), alert.freq_all)
+    if middlewareChartOk
+        alert(buildPayload(signalCode, signalText, side), alert.freq_all)
 
 varip bool sent_h_ucuz   = false
 varip bool sent_h_beles  = false
@@ -1032,7 +1032,7 @@ if barstate.isnew
     sent_any      := false
 
 allowRealtime = realtimeOnly ? barstate.isrealtime : true
-allowOrderNow = enableStrategyOrders and allowRealtime and orderSessionNowOk and (watchlistIntrabar ? true : barstate.isconfirmed)
+allowOrderNow = enableStrategyOrders and middlewareChartOk and allowRealtime and orderSessionNowOk and (watchlistIntrabar ? true : barstate.isconfirmed)
 allMode = multiSignalMode == "ALL"
 
 // ALL MODE: aynı barda tüm farklı sinyaller ayrı ayrı alert üretir.

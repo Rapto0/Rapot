@@ -7,6 +7,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from middleware.domain.constants import (
+    MAX_BAR_INDEX,
+    MAX_EVENT_TIMESTAMP_MS,
     SIGNAL_SIDE_MAP,
     SUPPORTED_SIGNAL_CODES,
     SUPPORTED_SIGNAL_SOURCES,
@@ -27,18 +29,20 @@ class TradingViewWebhookPayload(BaseModel):
     side: Side
     price: Decimal = Field(gt=0)
     timeframe: str = Field(min_length=1, max_length=24)
-    barTime: int = Field(gt=0)
-    barIndex: int = Field(ge=0)
+    # v1 barTime is the alert emission time (Pine timenow), not the candle open time.
+    barTime: int = Field(gt=0, le=MAX_EVENT_TIMESTAMP_MS, strict=True)
+    barIndex: int = Field(ge=0, le=MAX_BAR_INDEX, strict=True)
     isRealtime: bool
 
     @field_validator("symbol", "ticker")
     @classmethod
     def normalize_symbol(cls, value: str) -> str:
-        normalized = value.strip().upper()
-        if not normalized.isascii():
+        raw_symbol = value.strip()
+        if not raw_symbol.isascii():
             raise ValueError("symbol/ticker must be ASCII")
-        if not normalized.replace(".", "").replace("-", "").isalnum():
-            raise ValueError("symbol/ticker contains invalid characters")
+        normalized = raw_symbol.upper()
+        if not normalized.isalnum():
+            raise ValueError("symbol/ticker must contain only ASCII letters and digits")
         return normalized
 
     @field_validator("signalCode")

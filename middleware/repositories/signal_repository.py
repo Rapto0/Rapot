@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from middleware.domain.events import TradingViewWebhookPayload
 from middleware.infra.models import SignalEvent
-from middleware.infra.time import UTC
+from middleware.infra.time import UTC, datetime_from_unix_ms
 
 
 class SignalRepository:
@@ -19,6 +19,8 @@ class SignalRepository:
 
     @staticmethod
     def build_event_hash(payload: TradingViewWebhookPayload) -> str:
+        # v1 hashes the normalized full payload. Preserve this serialization so stored
+        # events remain deduplicated; changing identity requires an explicit version plan.
         canonical = json.dumps(
             payload.model_dump(mode="json", exclude_defaults=True),
             sort_keys=True,
@@ -31,7 +33,7 @@ class SignalRepository:
         return self.session.execute(stmt).scalar_one_or_none()
 
     def create(self, payload: TradingViewWebhookPayload, event_hash: str) -> SignalEvent:
-        bar_time = datetime.fromtimestamp(payload.barTime / 1000, tz=UTC)
+        bar_time = datetime_from_unix_ms(payload.barTime)
         entity = SignalEvent(
             event_hash=event_hash,
             schema_version=payload.schemaVersion,
