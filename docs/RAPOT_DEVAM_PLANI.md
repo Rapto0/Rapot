@@ -4,10 +4,10 @@ Bu belge, 6 Eylül 2026 tarihli salt okunur proje incelemesinden çıkan işleri
 
 ## Kaldığımız nokta
 
-- **Son tamamlanan çalışma:** P1-1 — komisyon, hassasiyet, günlük emir kotası, kalıcı dispatch ve report-only reconciliation doğrulandı (2026-09-08).
-- **Uygulama durumu:** P1-1 `4e045eb` commit'iyle kaydedildi. P1-2 ile tam Python paketi 315/319; yalnız önceki 4 HUNTER/ATR hatası ve bir warning açık. Frontend 12/12, standalone build (TypeScript dahil), lint ve sahte yerel servislerle HTTP/health/WebSocket proxy smoke kontrolü geçti.
+- **Son tamamlanan çalışma:** P1-7 — kısa seride HUNTER/ATR hatası ve ölçülmemiş ATR'nin sıfır sayılması giderildi (2026-09-09).
+- **Uygulama durumu:** P1-1 `4e045eb`, P1-2 yerel checkpoint'i `66e2238` ile kaydedildi. P1-7 sonrası tam Python paketi **329/329**; önceki dört hata kapandı, bir mevcut tarih deprecation warning'i kaldı. Frontend 12/12, standalone build (TypeScript dahil), lint ve sahte yerel servislerle HTTP/health/WebSocket proxy smoke kontrolü geçti.
 - **Aktif iş:** P1-2 yerel uygulama/doğrulama; Docker imaj koşumu ve gerçek VPS doğrulaması bekliyor.
-- **Sıradaki somut adım:** P1-2 yerel checkpoint'ini kaydet; Docker/CI imaj kontrolünü tamamla ve P1-7 ile tam test kapısını aç. Erişim sağlanmadan VPS deploy'u tamamlandı sayılmayacak.
+- **Sıradaki somut adım:** P1-7 sonucunu kaydet; P1-2 Docker/CI imaj kontrolünü tamamla. Erişim sağlanmadan VPS deploy'u tamamlandı sayılmayacak.
 - **İşlevsel düzeltme odağı:** P1-2 çalıştırma ve dağıtım topolojisi; ardından P1-3 Pine/testnet kabul akışı.
 - **Başlangıç kaydı:** Bu belge ilk oluşturulduğunda yalnız belge değişmişti; sonraki uygulama değişiklikleri aşağıda ayrı kaydedildi.
 - **Seçilen geliştirme ortamı:** `.venv` / Python 3.12; Node 20.20.2 / npm 10.9.9. Yerelde Python 3.12.8 ile doğrulandı.
@@ -148,7 +148,7 @@ Kapsam tahminleri süre taahhüdü değildir: küçük birkaç dosya; orta bir �
 | P1-4 | AI ilişkileri ve scan history | Bekliyor | Orta | P0-1 |
 | P1-5 | Süreçler arası realtime ve scanner eşdeğerliği | Bekliyor | Orta/büyük | P0-1, P1-2 |
 | P1-6 | PnL, bot durumu ve ayarlar ekranı | Bekliyor | Orta | P0-1; backend ayar sözleşmesi ve P0-2 |
-| P1-7 | HUNTER kısa seride ATR hatası | Bekliyor | Küçük/orta | P0-1; tam CI'nin yeşile dönmesini engelliyor |
+| P1-7 | HUNTER kısa seride ATR hatası | Doğrulandı | Küçük/orta | P0-1 |
 | P2-1 | Dışa aktar, alarmlar ve grafik URL davranışı | Bekliyor | Orta | P0-1 |
 | P2-2 | Belgeler ve wrapper göçünün kapanışı | Bekliyor | Küçük/orta | İlgili mimari kararlar; kaldırma için kullanım kanıtı |
 | P2-3 | Ruff, atıl kod ve araç tarama kapsamı | Bekliyor | Küçük/orta | P0-1 |
@@ -451,13 +451,13 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 
 ### P1-7 — HUNTER kısa seride ATR hatası
 
-**Kaynak:** P0-1 tam test koşumu; önceki salt okunur incelemede davranış testleri çalıştırılmadığı için raporlanmamıştı. Bu iş henüz uygulanmadı.
+**Kaynak:** P0-1 tam test koşumu; önceki salt okunur incelemede davranış testleri çalıştırılmadığı için raporlanmamıştı. **2026-09-09'da uygulandı ve doğrulandı.**
 
-**Neden:** 480 günlük örnek veri aylık seride 17 muma düşüyor. `calculate_hunter_signal` → Keltner %B → `df.ta.atr(length=20)` → `ta.volatility.AverageTrueRange` yolu `IndexError: index 19 is out of bounds for axis 0 with size 17` üretiyor. Mevcut exception listesi bu durumu karşılamıyor. Bu hata AI/inspector rapor üretimini kesebilir ve tam CI'yi şu anda engelliyor.
+**Doğrulanan eski hata:** 480 günlük örnek veri aylık seride 17 muma düşüyordu. `calculate_hunter_signal` → Keltner %B → `df.ta.atr(length=20)` → `ta.volatility.AverageTrueRange` yolu `IndexError: index 19 is out of bounds for axis 0 with size 17` üreterek AI/inspector raporunu ve tam test paketini kesiyordu.
 
 **Dosyalar / kapsam / bağımlılık:** [signals.py](../signals.py), [strategy_inspector.py](../strategy_inspector.py), [test_strategy_inspector.py](../tests/test_strategy_inspector.py), [test_signals.py](../tests/test_signals.py); küçük/orta; P0-1 tamamlandıktan sonra bağımsız ele alınabilir.
 
-**Tekrar üretme:** `.venv/Scripts/python.exe -m pytest tests/test_strategy_inspector.py` (mevcut sonuç 2 geçti / 4 başarısız). Başarısız testler:
+**Önceki tekrar üretme:** `.venv/Scripts/python.exe -m pytest tests/test_strategy_inspector.py` (düzeltme öncesi 2 geçti / 4 başarısız). Artık geçen dört test:
 
 - `test_inspect_strategy_dataframe_hunter_structure`
 - `test_build_strategy_inspector_chunks_contains_symbol_and_strategy`
@@ -466,9 +466,13 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 
 **Kabul kriterleri:**
 
-- [ ] ATR için yetersiz mum davranışı belirlenip uygulandı; eksik gösterge geçerli sinyal gibi değerlendirilmedi.
-- [ ] 19/20 mum sınırı, aylık kısa seri, boş veri ve yeterli veri senaryoları doğrulandı.
-- [ ] Yukarıdaki dört test ve tam backend/middleware paketi geçti; skor/rapor sözleşmesi korundu.
+- [x] ATR için yetersiz mum davranışı belirlenip uygulandı; eksik gösterge geçerli sinyal gibi değerlendirilmedi.
+- [x] 19/20 mum sınırı, aylık kısa seri, boş veri ve yeterli veri senaryoları doğrulandı.
+- [x] Yukarıdaki dört test ve tam backend/middleware paketi geçti; skor/rapor sözleşmesi korundu.
+
+**Davranış:** Kilitli `ta` bağımlılığı için uyumluluk accessor'ı, 20 mumdan kısa seride aynı indeksli NaN ATR döndürüyor; yeterli serinin ilk 19 ısınma değeri de NaN. Ölçülmüş gerçek sıfır ATR korunuyor. HUNTER eksik Keltner değerini `N/A` gösteriyor ve puana katmıyor; mevcut dip/tepe eşikleri değişmedi.
+
+**Doğrulama:** `tests/test_hunter_warmup.py` içinde 10 yeni test: 0/19/20/80 mum, gerçek sıfır, aktif gösterge/puan sınırları ve 17 mumluk aylık rapor. HUNTER/inspector/signals seçimi **37/37**, tam `.venv/Scripts/python.exe -m pytest -q` **329/329** (28,23 saniye). Tek mevcut `datetime.utcnow()` uyarısı P2-3'te açık. Ruff lint/format ve diff kontrolü geçti. Strateji performansı veya canlı hesap doğrulaması yapılmadı.
 
 ## P2 — İyileştirmeler
 
@@ -593,6 +597,8 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 | 2026-09-08 | P1-1 | Son inceleme ve belge kapanışı | Client ID'nin açık emir sınırı resmi Binance sözleşmesiyle doğrulandı; P0-4 crash garantisi kalıcı dispatch ile tamamlandı. Recovery geçmişinin eksiksizliği, dust/FIFO, bilinmeyen sonuç rezervasyonu ve manuel inceleme sınırı belgelendi |
 | 2026-09-09 | P1-2 | İncele → düzelt | Tek Compose topolojisi, sürüm/bağımlılık uyumu, standalone HTTP/WS/health proxy, ayrı DB/migration servisleri ve tek bot kilidi uygulandı; deploy aracı gerçek manuel davranışına göre düzenlendi |
 | 2026-09-09 | P1-2 | Doğrula → belgeyi güncelle (kısmi) | Python 315/319, yeni testler 10/10; frontend 12/12, lint/build ve standalone proxy smoke geçti. Docker motor hatası ve SSH erişimi imaj/VPS doğrulamasını engelliyor; madde Doğrulandı olarak kapatılmadı |
+| 2026-09-09 | P1-7 | İncele → düzelt | ATR kısa seride indeks hatası ve `ta` ısınma sıfırları doğrulandı; eksik ölçümler NaN oldu, gerçek sıfır korundu. HUNTER eşikleri ve rapor biçimi değişmedi |
+| 2026-09-09 | P1-7 | Doğrula → belgeyi güncelle — Doğrulandı | 10 yeni sınır/rapor testi, hedefli 37/37 ve tam Python 329/329 geçti; Ruff lint/format temiz. P2-3 tarih uyarısı sürüyor; önceki dört HUNTER hatası kapandı |
 
 Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 
@@ -612,4 +618,4 @@ Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 4. Aktif işin bulgusunu ve bağımlılıklarını güncel kodda kontrol et. İncelemeyi baştan tekrarlamak yerine ilgili kanıttan devam et.
 5. İşin dört adımını tamamla veya engeli somutlaştır; ardından durum tablosu, günlük ve Kaldığımız nokta bölümünü güncelle.
 
-**P0-1–P0-4 ve P1-1 tamamlandı. P1-2 yerel kodu hazır; imaj/VPS doğrulaması açık. Tam test tabanındaki dört hata P1-7'de takip ediliyor.**
+**P0-1–P0-4, P1-1 ve P1-7 tamamlandı. Tam Python paketi 329/329. P1-2 yerel kodu hazır; imaj/VPS doğrulaması açık.**

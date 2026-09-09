@@ -43,9 +43,9 @@ except ImportError:
         def willr(self, high=None, low=None, close=None, length=14):
             """Williams %R hesapla."""
             h = high if high is not None else self.df["High"]
-            l = low if low is not None else self.df["Low"]
+            low_series = low if low is not None else self.df["Low"]
             c = close if close is not None else self.df["Close"]
-            return ta.momentum.williams_r(h, l, c, lbp=length)
+            return ta.momentum.williams_r(h, low_series, c, lbp=length)
 
         def cmo(self, close=None, length=14):
             """CMO hesapla - RSI tabanlı yaklaşım."""
@@ -71,10 +71,15 @@ except ImportError:
             return ta.trend.ema_indicator(c, window=length)
 
         def atr(self, length=20):
-            """ATR hesapla."""
-            return ta.volatility.average_true_range(
+            """ATR hesapla; pencere dolmadan göstergeyi kullanılamaz bırak."""
+            if len(self.df) < length:
+                return pd.Series(np.nan, index=self.df.index, name="atr", dtype=float)
+            atr = ta.volatility.average_true_range(
                 self.df["High"], self.df["Low"], self.df["Close"], window=length
             )
+            # ta, ilk length-1 mumu sıfırla doldurur; bunlar ölçülmüş ATR değildir.
+            atr.iloc[: length - 1] = np.nan
+            return atr
 
     # DataFrame'e .ta accessor ekle
     @pd.api.extensions.register_dataframe_accessor("ta")
@@ -482,7 +487,7 @@ def calculate_hunter_signal(df: pd.DataFrame, timeframe: str) -> dict[str, Any] 
         ("rsi2", v_rsi2, lambda x: x <= 10, lambda x: x >= 90),
     ]
 
-    for name, value, dip_cond, top_cond in indicators:
+    for _name, value, dip_cond, top_cond in indicators:
         if not np.isnan(value):
             active_count += 1
             if dip_cond(value):
