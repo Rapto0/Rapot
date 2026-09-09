@@ -5,14 +5,14 @@ Bu belge, 6 Eylül 2026 tarihli salt okunur proje incelemesinden çıkan işleri
 ## Kaldığımız nokta
 
 - **Son tamamlanan çalışma:** P1-7 — kısa seride HUNTER/ATR hatası ve ölçülmemiş ATR'nin sıfır sayılması giderildi (2026-09-09).
-- **Uygulama durumu:** P1-1 `4e045eb`, P1-2 yerel checkpoint'i `66e2238` ile kaydedildi. P1-7 sonrası tam Python paketi **329/329**; önceki dört hata kapandı, bir mevcut tarih deprecation warning'i kaldı. Frontend 12/12, standalone build (TypeScript dahil), lint ve sahte yerel servislerle HTTP/health/WebSocket proxy smoke kontrolü geçti.
+- **Uygulama durumu:** P1-1 `4e045eb`, P1-2 yerel checkpoint'i `66e2238`, P1-7 `dc433a7` ile kaydedildi. Tam Python paketi **329/329**; önceki dört hata kapandı, bir mevcut tarih deprecation warning'i kaldı. Frontend 12/12, standalone build (TypeScript dahil), lint ve sahte yerel servislerle HTTP/health/WebSocket proxy smoke kontrolü geçti.
 - **Aktif iş:** P1-2 yerel uygulama/doğrulama; Docker imaj koşumu ve gerçek VPS doğrulaması bekliyor.
-- **Sıradaki somut adım:** P1-7 sonucunu kaydet; P1-2 Docker/CI imaj kontrolünü tamamla. Erişim sağlanmadan VPS deploy'u tamamlandı sayılmayacak.
+- **Sıradaki somut adım:** Yerel kontrolleri geçen grubu push ederek Linux CI üzerinde backend/frontend imajları ile geçici PostgreSQL migration/startup kontrolünü çalıştır. Erişim sağlanmadan VPS deploy'u tamamlandı sayılmayacak.
 - **İşlevsel düzeltme odağı:** P1-2 çalıştırma ve dağıtım topolojisi; ardından P1-3 Pine/testnet kabul akışı.
 - **Başlangıç kaydı:** Bu belge ilk oluşturulduğunda yalnız belge değişmişti; sonraki uygulama değişiklikleri aşağıda ayrı kaydedildi.
 - **Seçilen geliştirme ortamı:** `.venv` / Python 3.12; Node 20.20.2 / npm 10.9.9. Yerelde Python 3.12.8 ile doğrulandı.
-- **Commit / yayın düzeni:** Her tamamlanan P maddesi ayrı yerel commit; push ve sunucu deploy'u doğrulanmış gruplar halinde. İlk yayın eşiği P0 işleri + P1-7 test hatası + P1-2 dağıtım uyumu.
-- **Açık kararlar:** Hedef çalıştırma topolojisi ve Docker Python sürümü, testnet hesabı/veritabanı ayrımı ve ileride middleware'in dashboard'a bağlanıp bağlanmayacağı.
+- **Commit / yayın düzeni:** Her tamamlanan P maddesi ayrı commit; doğrulanan grup CI için push edilir, sunucu deploy'u CI ve sunucu kontrollerinden sonra yapılır. İlk sunucu yayını eşiği P0 işleri + P1-7 test hatası + P1-2 dağıtım uyumu.
+- **Açık kararlar:** VPS erişimi ve mevcut süreç/veri durumu, testnet kabul testinin hesap/izin bilgileri ve ileride middleware'in dashboard'a bağlanıp bağlanmayacağı. Hedef topoloji Compose, Docker Python 3.12.8 ve ayrı middleware PostgreSQL olarak belirlendi.
 
 ## Kapsam ve yetki kaydı
 
@@ -30,11 +30,11 @@ Kullanıcının ilk isteği yalnız inceleme ve raporlamaydı; dosya değişikli
 ### Commit, push ve sunucu deploy düzeni
 
 1. Her P maddesinde **incele → düzelt → doğrula → belgeyi güncelle → yerel commit** sırası uygulanır. Commit yalnız o işe ait dosyaları içerir. P0-1 gibi amacı başlangıç test tabanı kurmak olan işlerde mevcut davranış hataları açık iş ID'leriyle kaydedilerek checkpoint commit'i oluşturulabilir.
-2. **Push ve deploy**, P0/P1 gibi tamamlanmış gruplar için yapılır. Yayınlanacak commitin tam testleri, lint/typecheck/build kontrolleri geçmeli; gerekli CI sonucu doğrulanmalıdır. İlk yayın için P0 işleriyle birlikte P1-7 HUNTER hatası ve P1-2 dağıtım uyumsuzlukları kapatılmalıdır.
+2. **Push**, grubun yerel tam testleri, değişen dosya lint'i ve frontend typecheck/build kontrolleri geçince CI doğrulamasını başlatır. 9 Eylül'de yerel Docker motoru açılamadığı için imaj ve geçici PostgreSQL kontrolü Linux CI'ye taşındı. **Sunucu deploy'u** için bu CI sonucu da başarılı olmalı; P0 işleri, P1-7 ve P1-2 dağıtım uyumu kapıları sağlanmalıdır. CI başlatmak için yapılan push sunucu deploy'u sayılmaz.
 3. Deploy öncesinde hedef sunucu/branch, çalışan sürüm ve yerel değişiklikler okunarak kontrol edilir. Deploy, doğrulanmış commit ile yapılır; ardından sunucu commit'i, süreçler ve sağlık kontrolleri doğrulanıp buraya kaydedilir. Başarısız adımın ardından yayın zinciri ilerletilmez.
 4. Bu düzen kapsamındaki commit/push/deploy için kullanıcıdan her seferinde tekrar onay istenmez. Erişim bilgisi gerçekten eksikse veya kapsam dışı veri işlemi gerekiyorsa yalnız o eksik nokta açıklanır.
 
-**Mevcut mekanizma, koddan doğrulanan:** `.github/workflows/deploy.yml` release/manual tetiklemeli; deploy adımı yalnız mesaj yazıyor. `scripts/deploy.ps1` commit+push yapıp sunucu komutlarını yazdırıyor, SSH çalıştırmıyor. Repo içinde normal push'u sunucu deploy'una bağlayan bir workflow yok; sunucuda repo dışı otomasyon bulunup bulunmadığı henüz doğrulanmadı. Bu nedenle yalnız push yapılması deploy başarısı sayılmayacak.
+**Mevcut mekanizma, koddan doğrulanan (P1-2 sonrası):** `.github/workflows/deploy.yml` release/manual tetiklemeli ve backend/frontend imajlarını tam commit SHA etiketiyle yayımlıyor; sunucu deploy'u yapmıyor. `scripts/deploy.ps1` temiz ağaç ve doğrulanmış tam SHA ister; isteğe bağlı push yapar, manuel sunucu komutlarını yazdırır, SSH çalıştırmaz. Repo içinde normal push'u sunucu deploy'una bağlayan bir workflow yok; sunucuda repo dışı otomasyon bulunup bulunmadığı henüz doğrulanmadı. Yalnız push yapılması deploy başarısı sayılmayacak.
 
 ## Başlangıç fotoğrafı
 
@@ -380,6 +380,8 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 
 **Açık doğrulama engelleri:** Docker Desktop 4.70.0 motoru başlamıyor. 9 Eylül logunda `starting services: initializing Inference manager ... dockerInference ... Sistem dosyaya erişemiyor` hatası var. Factory reset, Docker verisi silme veya sistem ayarı değiştirme yapılmadı; Linux image build/container-start/PostgreSQL gerçek migration hâlâ doğrulanmadı. VPS SSH kimlik doğrulaması reddedildi; `.ssh` altında yalnız known_hosts dosyaları bulundu. Kullanıcı erişim bilgisini bilmediğini belirtti. Sunucu süreçleri, veri yolu ve deploy sonucu doğrulanamadı. Yerel kod kontrolleri bu iki dış koşulu kanıtlamaz.
 
+**CI doğrulama eklemesi:** GitHub Linux runner'ında backend imajından ağsız import kontrolü, izole Docker ağı ve geçici PostgreSQL 16 ile sıfırdan Alembic migration, production middleware şema kapısı ve DRY_RUN/işlem kapalı health kontrolü eklendi. Test kaynakları koşum sonunda kaldırılır; gerçek DB/hesap bilgisi kullanılmaz. PostgreSQL readiness, init sırasında yalnız Unix socket'te çalışan geçici sunucuyu hazır saymamak için TCP `127.0.0.1` kullanır; Compose kontrolü de aynı düzeltmeyi içerir. İki workflow YAML ve tüm shell blokları `bash -n` kontrolünden geçti; push grubundaki 55 Python dosyası Ruff lint/format kontrolünden geçti. Gerçek CI sonucu henüz bekleniyor.
+
 **P0-1'de eklenen bulgu:** Geliştirme/CI Python 3.12'ye alındı; Dockerfile hâlâ Python 3.10 kullanıyor. `ai_evaluation.py` ve `infrastructure/compat/wrapper_telemetry.py`, Python 3.10'da bulunmayan `datetime.UTC` import ediyor. Image build başarısı uygulama importlarının çalıştığını kanıtlamaz. Container sürümünü ve `pyproject.toml` destek beyanını birlikte ele al; bu aşamada deploy/runtime değiştirilmedi.
 
 **Neden:** Frontend Dockerfile standalone çıktı bekliyor fakat Next config bunu açmıyor. Health proxy frontend localhost'una gidiyor, servis bot tarafında. Middleware Compose/PM2'de yok; deploy workflow'un son adımı yalnız mesaj basıyor.
@@ -567,6 +569,7 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 | 2026-09-07 | Binance client order ID tam yerel niyetin hash'inden üretilecek | 36 karakter sınırı korunurken replay son eki ve kapsam bilgisi kimliğe katılır; yeniden başlatma sonrası broker kaydı aynı kimlikle bulunabilir |
 | 2026-09-07 | Emir komisyonu doğrulanmadan envanter değiştirilmeyecek | Query Order komisyon döndürmez; recovery `myTrades` ile doğrular. Eksik bilgi `unknown`, base/quote ücretleri net envanter ve quote PnL'ye uygulanır |
 | 2026-09-07 | Reconciliation report-only kalacak | Toplam hesap bakiyesi tek bir middleware scope'unun kaynağını kanıtlamaz; otomatik düzeltme yanlış envanter üretebilir |
+| 2026-09-09 | Yerel kontrolleri geçen ilk grup CI için push edilecek | Docker Desktop motor hatası nedeniyle Linux imaj/migration doğrulaması CI'de yapılacak; bu push deploy veya testnet emri değildir. Kullanıcı zamanlama seçimini asistana bıraktı |
 
 ## İlerleme günlüğü
 
@@ -599,6 +602,7 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 | 2026-09-09 | P1-2 | Doğrula → belgeyi güncelle (kısmi) | Python 315/319, yeni testler 10/10; frontend 12/12, lint/build ve standalone proxy smoke geçti. Docker motor hatası ve SSH erişimi imaj/VPS doğrulamasını engelliyor; madde Doğrulandı olarak kapatılmadı |
 | 2026-09-09 | P1-7 | İncele → düzelt | ATR kısa seride indeks hatası ve `ta` ısınma sıfırları doğrulandı; eksik ölçümler NaN oldu, gerçek sıfır korundu. HUNTER eşikleri ve rapor biçimi değişmedi |
 | 2026-09-09 | P1-7 | Doğrula → belgeyi güncelle — Doğrulandı | 10 yeni sınır/rapor testi, hedefli 37/37 ve tam Python 329/329 geçti; Ruff lint/format temiz. P2-3 tarih uyarısı sürüyor; önceki dört HUNTER hatası kapandı |
+| 2026-09-09 | P1-2 | CI hazırlığı | İzole PostgreSQL migration/production startup smoke adımı eklendi; CI/Compose TCP readiness yarışı giderildi. P1-7 `dc433a7` kaydedildi; tam Python 329/329 ve frontend kontrolleri sonrası doğrulama push'u hazırlanıyor. Sunucu erişimi hâlâ eksik |
 
 Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 

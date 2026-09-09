@@ -202,6 +202,39 @@ jobs:
             otonom-analiz:${{ github.sha }} \
             python -c "import ai_evaluation; import infrastructure.compat.wrapper_telemetry; import api.main; import middleware.api.main"
 
+      - name: Verify fresh PostgreSQL migration and middleware startup
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker network create rapot-ci
+          trap 'docker rm -f rapot-ci-middleware rapot-ci-postgres >/dev/null 2>&1 || true; docker network rm rapot-ci >/dev/null 2>&1 || true' EXIT
+          docker run -d --name rapot-ci-postgres --network rapot-ci \
+            -e POSTGRES_USER=rapot_middleware -e POSTGRES_DB=rapot_middleware \
+            -e POSTGRES_PASSWORD=ci-only-password postgres:16-alpine
+          for attempt in $(seq 1 30); do
+            if docker exec rapot-ci-postgres pg_isready -h 127.0.0.1 -U rapot_middleware -d rapot_middleware; then break; fi
+            sleep 2
+          done
+          docker exec rapot-ci-postgres pg_isready -h 127.0.0.1 -U rapot_middleware -d rapot_middleware
+          middleware_env=(
+            -e MW_APP_ENV=production -e MW_EXECUTION_MODE=DRY_RUN
+            -e MW_TRADING_ENABLED=false -e MW_BINANCE_LIVE_ENABLED=false
+            -e MW_WEBHOOK_AUTH_TOKEN=ci-only-webhook -e MW_ADMIN_AUTH_TOKEN=ci-only-admin
+            -e MW_INVENTORY_ACCOUNT_ID=ci-simulation
+            -e MW_DATABASE_URL=postgresql+psycopg://rapot_middleware:ci-only-password@rapot-ci-postgres:5432/rapot_middleware
+          )
+          docker run --rm --network rapot-ci "${middleware_env[@]}" \
+            otonom-analiz:${{ github.sha }} python -m scripts.runtime migrate-middleware
+          docker run -d --name rapot-ci-middleware --network rapot-ci "${middleware_env[@]}" \
+            otonom-analiz:${{ github.sha }} python -m scripts.runtime middleware
+          health_check="import json, urllib.request; data=json.load(urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=3)); assert data['status']=='ok' and data['execution_mode']=='DRY_RUN' and data['trading_enabled'] is False"
+          for attempt in $(seq 1 30); do
+            if docker exec rapot-ci-middleware python -c "$health_check"; then break; fi
+            sleep 2
+          done
+          docker logs rapot-ci-middleware
+          docker exec rapot-ci-middleware python -c "$health_check"
+
       - name: Build frontend standalone image
         uses: docker/build-push-action@v5
         with:
