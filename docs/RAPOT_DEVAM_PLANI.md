@@ -6,10 +6,10 @@ Bu belge, 6 Eylül 2026 tarihli salt okunur proje incelemesinden çıkan işleri
 
 - **Son tamamlanan çalışma:** P1-7 — kısa seride HUNTER/ATR hatası ve ölçülmemiş ATR'nin sıfır sayılması giderildi (2026-09-09).
 - **Uygulama durumu:** P1-1 `4e045eb`, P1-2 yerel checkpoint'i `66e2238`, P1-7 `dc433a7` ile kaydedildi. Tam Python paketi **329/329**; önceki dört hata kapandı, bir mevcut tarih deprecation warning'i kaldı. Frontend 12/12, standalone build (TypeScript dahil), lint ve sahte yerel servislerle HTTP/health/WebSocket proxy smoke kontrolü geçti.
-- **Aktif iş:** P1-2 yerel uygulama/doğrulama; Docker imaj koşumu ve gerçek VPS doğrulaması bekliyor.
-- **Uzak doğrulama:** İlk grup `5449aae` ile `main`'e push edildi. `86718fc` koşumunda Linux Python/lint/frontend (standalone smoke dahil) geçti ve backend imajı üretildi. İmaj import smoke adımı eksik test JWT ayarı yüzünden durdu; test ortamına ayrı sahte JWT eklendi. Frontend imajının ağsız açılış/statik dosya kontrolü de eklendi. Yeni CI sonucu bekleniyor; deploy yapılmadı.
-- **Sıradaki somut adım:** Yerel kontrolleri geçen grubu push ederek Linux CI üzerinde backend/frontend imajları ile geçici PostgreSQL migration/startup kontrolünü çalıştır. Erişim sağlanmadan VPS deploy'u tamamlandı sayılmayacak.
-- **İşlevsel düzeltme odağı:** P1-2 çalıştırma ve dağıtım topolojisi; ardından P1-3 Pine/testnet kabul akışı.
+- **P1-2 durumu:** Yerel kod ve Linux CI imaj kontrolleri doğrulandı; gerçek VPS geçişi SSH erişimi nedeniyle engellendi. Madde bütünüyle tamamlandı sayılmıyor.
+- **Uzak doğrulama:** Grup `main`'e push edildi. `3b9bbbf` üzerindeki [CI 34368224479](https://github.com/Rapto0/Rapot/actions/runs/34368224479) başarılı: Python/lint/frontend, backend/frontend imajları, ağsız import, PostgreSQL migration→production middleware health ve frontend container HTML/statik dosya kontrolü geçti. Sunucu deploy'u yapılmadı.
+- **Sıradaki somut adım:** P1-3'ün bağımsız yerel kısmı: Pine Spot sembol koruması ve webhook tarih sınırı; ardından olay zamanı/idempotency sözleşmesi. P1-2'ye ait gerçek VPS geçişi erişim sağlandığında ayrıca sürdürülecek.
+- **İşlevsel düzeltme odağı:** P1-3 yerel sözleşme düzeltmeleri; TradingView derlemesi/alarm ve testnet kabulü ayrı açık doğrulamalar.
 - **Başlangıç kaydı:** Bu belge ilk oluşturulduğunda yalnız belge değişmişti; sonraki uygulama değişiklikleri aşağıda ayrı kaydedildi.
 - **Seçilen geliştirme ortamı:** `.venv` / Python 3.12; Node 20.20.2 / npm 10.9.9. Yerelde Python 3.12.8 ile doğrulandı.
 - **Commit / yayın düzeni:** Her tamamlanan P maddesi ayrı commit; doğrulanan grup CI için push edilir, sunucu deploy'u CI ve sunucu kontrollerinden sonra yapılır. İlk sunucu yayını eşiği P0 işleri + P1-7 test hatası + P1-2 dağıtım uyumu.
@@ -144,7 +144,7 @@ Kapsam tahminleri süre taahhüdü değildir: küçük birkaç dosya; orta bir �
 | P0-3 | DRY_RUN/LIVE envanter ayrımı | Doğrulandı | Büyük | P0-1; mevcut veri sınıflandırması |
 | P0-4 | Emir sonucu ve pozisyon tutarlılığı | Doğrulandı | Büyük | P0-1, P0-3 |
 | P1-1 | Komisyon, hassasiyet, limit ve replay doğruluğu | Doğrulandı | Orta/büyük | P0-3, P0-4 |
-| P1-2 | Çalıştırma ve dağıtım topolojisi | Uygulandı; imaj/VPS doğrulaması bekliyor | Orta | P0-1; topoloji seçimi |
+| P1-2 | Çalıştırma ve dağıtım topolojisi | Kod/imaj CI doğrulandı; VPS erişimi engellendi | Orta | P0-1; gerçek sunucu erişimi |
 | P1-3 | Pine sözleşmesi ve testnet kabul akışı | Bekliyor | Orta | Tüm P0 işleri, P1-1, P1-2 |
 | P1-4 | AI ilişkileri ve scan history | Bekliyor | Orta | P0-1 |
 | P1-5 | Süreçler arası realtime ve scanner eşdeğerliği | Bekliyor | Orta/büyük | P0-1, P1-2 |
@@ -379,27 +379,31 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 
 **Geçen kontroller:** Yeni Python kilit/topoloji/şema testleri 10/10; tam paket 315/319 ve yalnız önceki P1-7 hataları. Frontend 12/12, ESLint, TypeScript dahil production standalone build; gerçek standalone sunucuda sahte localhost API/bot ile HTML, statik JS, Authorization/query aktarımı, health ve WebSocket 101 testi geçti. Compose config ve PowerShell AST doğrulandı; değişen Python dosyalarında Ruff lint/format geçti.
 
-**Açık doğrulama engelleri:** Docker Desktop 4.70.0 motoru başlamıyor. 9 Eylül logunda `starting services: initializing Inference manager ... dockerInference ... Sistem dosyaya erişemiyor` hatası var. Factory reset, Docker verisi silme veya sistem ayarı değiştirme yapılmadı; Linux image build/container-start/PostgreSQL gerçek migration hâlâ doğrulanmadı. VPS SSH kimlik doğrulaması reddedildi; `.ssh` altında yalnız known_hosts dosyaları bulundu. Kullanıcı erişim bilgisini bilmediğini belirtti. Sunucu süreçleri, veri yolu ve deploy sonucu doğrulanamadı. Yerel kod kontrolleri bu iki dış koşulu kanıtlamaz.
+**Açık ortam engelleri:** Docker Desktop 4.70.0 motoru başlamıyor. 9 Eylül logunda `starting services: initializing Inference manager ... dockerInference ... Sistem dosyaya erişemiyor` hatası var. Factory reset, Docker verisi silme veya sistem ayarı değiştirme yapılmadı; gerekli Linux imaj/migration doğrulaması GitHub CI'de tamamlandı. VPS SSH kimlik doğrulaması reddedildi; `.ssh` altında yalnız known_hosts dosyaları bulundu, kullanılabilir SSH agent veya bu host için kayıtlı PuTTY oturumu bulunamadı. Kullanıcı erişim bilgisini bilmediğini belirtti. Sunucu süreçleri, veri yolu ve deploy sonucu doğrulanamadı. Erişimin yetkili SSH anahtarı/kullanıcı bilgisi veya hosting paneli konsolu üzerinden sağlanması gerekir.
 
-**CI doğrulama eklemesi:** GitHub Linux runner'ında backend imajından ağsız import kontrolü, izole Docker ağı ve geçici PostgreSQL 16 ile sıfırdan Alembic migration, production middleware şema kapısı ve DRY_RUN/işlem kapalı health kontrolü eklendi. Test kaynakları koşum sonunda kaldırılır; gerçek DB/hesap bilgisi kullanılmaz. PostgreSQL readiness, init sırasında yalnız Unix socket'te çalışan geçici sunucuyu hazır saymamak için TCP `127.0.0.1` kullanır; Compose kontrolü de aynı düzeltmeyi içerir. İki workflow YAML ve tüm shell blokları `bash -n` kontrolünden geçti; push grubundaki 55 Python dosyası Ruff lint/format kontrolünden geçti. Gerçek CI sonucu henüz bekleniyor.
+**CI doğrulama eklemesi:** GitHub Linux runner'ında backend imajından ağsız import kontrolü, izole Docker ağı ve geçici PostgreSQL 16 ile sıfırdan Alembic migration, production middleware şema kapısı ve DRY_RUN/işlem kapalı health kontrolü eklendi. Test kaynakları koşum sonunda kaldırılır; gerçek DB/hesap bilgisi kullanılmaz. PostgreSQL readiness, init sırasında yalnız Unix socket'te çalışan geçici sunucuyu hazır saymamak için TCP `127.0.0.1` kullanır; Compose kontrolü de aynı düzeltmeyi içerir. İki workflow YAML ve tüm shell blokları `bash -n` kontrolünden geçti; push grubundaki 55 Python dosyası Ruff lint/format kontrolünden geçti. Gerçek başarılı koşum aşağıda kayıtlı.
 
-**İlk Linux koşumu:** [34366928776](https://github.com/Rapto0/Rapot/actions/runs/34366928776), `5449aae` üzerinde Python/lint başarılı; frontend build sonrası standalone smoke adımında bekledi. Test, Linux Next.js graceful shutdown'ı beklemeden önce mock upstream soketlerini kapatacak şekilde düzeltildi; statik yanıt gövdesi tüketiliyor, HTTP/süreç beklemeleri ve CI smoke adımı süre sınırına sahip. Yerel smoke ve ESLint tekrar geçti. Takılan kendi CI koşumumuz iptal edildi; yeni koşumun Linux/Docker sonucu açık. Bu test düzeltmesi uygulamanın çalışma davranışını değiştirmiyor.
+**İlk Linux koşumu (tarihsel):** [34366928776](https://github.com/Rapto0/Rapot/actions/runs/34366928776), `5449aae` üzerinde Python/lint başarılı; frontend build sonrası standalone smoke adımında bekledi. Logda işlevsel kontrollerin geçtiği, kapanışın takıldığı doğrulandı. Test, Linux Next.js graceful shutdown'ı beklemeden önce mock upstream soketlerini kapatacak şekilde düzeltildi; statik yanıt gövdesi tüketiliyor, HTTP/süreç beklemeleri ve CI smoke adımı süre sınırına sahip. Yerel smoke ve ESLint tekrar geçti; takılan kendi koşumumuz iptal edildi. Bu test düzeltmesi uygulamanın çalışma davranışını değiştirmiyor.
 
-**İkinci Linux koşumu:** [34367517745](https://github.com/Rapto0/Rapot/actions/runs/34367517745), `86718fc` üzerinde Python 329/329 ve frontend'in tüm adımları geçti; standalone kapanışı düzeldi. Backend imajı üretildi fakat import smoke ortamında `JWT_SECRET_KEY` eksikti. Yalnız bu ağsız test için sahte anahtar eklendi; uygulamanın zorunlu anahtar kontrolü korundu. Ayrıca frontend imajının gerçekten başlayıp HTML/statik JS sunduğunu ağsız container ile doğrulayan adım eklendi. PostgreSQL ve frontend imaj kontrolleri sonraki koşumda tamamlanacak.
+**İkinci Linux koşumu (tarihsel):** [34367517745](https://github.com/Rapto0/Rapot/actions/runs/34367517745), `86718fc` üzerinde Python 329/329 ve frontend'in tüm adımları geçti; standalone kapanışı düzeldi. Backend imajı üretildi fakat import smoke ortamında `JWT_SECRET_KEY` eksikti. Yalnız bu ağsız test için sahte anahtar eklendi; uygulamanın zorunlu anahtar kontrolü korundu. Aynı importlar yerelde test izolasyonuyla geçti. Ayrıca frontend imajının gerçekten başlayıp HTML/statik JS sunduğunu ağsız container ile doğrulayan adım eklendi.
 
-**P0-1'de eklenen bulgu:** Geliştirme/CI Python 3.12'ye alındı; Dockerfile hâlâ Python 3.10 kullanıyor. `ai_evaluation.py` ve `infrastructure/compat/wrapper_telemetry.py`, Python 3.10'da bulunmayan `datetime.UTC` import ediyor. Image build başarısı uygulama importlarının çalıştığını kanıtlamaz. Container sürümünü ve `pyproject.toml` destek beyanını birlikte ele al; bu aşamada deploy/runtime değiştirilmedi.
+**Başarılı Linux koşumu:** [34368224479](https://github.com/Rapto0/Rapot/actions/runs/34368224479), tam kaynak SHA `3b9bbbf84c7a7b37e61b80042647b50c30ef8f90`, 2026-09-09. Python/lint/frontend işleri ve Docker işi başarılı. Backend imajı Python 3.12.8 altında ağsız import edildi; PostgreSQL 16 üzerinde tüm altı revision `20260907_0006`'ya kadar uygulandı. Production middleware DRY_RUN ve `trading_enabled=false` ile açılıp health kontrolünü geçti. Frontend standalone imajı üretildi, ağsız container içinde HTML ve statik JS sunumu geçti. Frontend'in 12 testi, lint/typecheck/build ve localhost HTTP/health/WebSocket proxy smoke testi de başarılı. Security işi sonucu, P2-3'te açıklanan `|| true` sınırı nedeniyle temiz güvenlik raporu olarak yorumlanmıyor.
 
-**Neden:** Frontend Dockerfile standalone çıktı bekliyor fakat Next config bunu açmıyor. Health proxy frontend localhost'una gidiyor, servis bot tarafında. Middleware Compose/PM2'de yok; deploy workflow'un son adımı yalnız mesaj basıyor.
+**Kanıt sınırı:** CI imaj import/startup ve **boş PostgreSQL** migration'ını sınar; mevcut üretim verisinin yükseltilmesini kanıtlamaz. HTTP/WebSocket proxy testi localhost sahte servislerle, frontend imaj testi ağsız HTML/statik dosyalarla çalışır. Compose içindeki `api`/`bot` DNS entegrasyonu, tüm topolojinin birlikte açılması, paylaşılan gerçek SQLite dizini/izinleri, bot döngüsü ve container restart sonrası kalıcılık VPS doğrulamasında açık kalır. Reverse proxy/TLS, üretim ortam dosyaları, sunucu commit'i ve gerçek broker/testnet işlemleri doğrulanmadı.
+
+**P0-1 sırasında kaydedilen ve P1-2'de giderilen bulgu:** Geliştirme/CI Python 3.12'ye geçmişken Docker Python 3.10'daydı; `datetime.UTC` importları bu sürümde çalışmıyordu. Container Python 3.12.8 ve `pyproject.toml` destek beyanı birlikte düzeltildi; yalnız build değil, ağsız imaj importu da doğrulandı.
+
+**Başlangıç sorunu:** Frontend Dockerfile standalone çıktı bekliyor fakat Next config bunu açmıyordu. Health proxy frontend localhost'una gidiyordu; middleware Compose'ta yoktu. Bu uyumsuzluklar ve deploy workflow'unun yanıltıcı adı giderildi.
 
 **Dosyalar:** [docker-compose.yml](../docker-compose.yml), [frontend Dockerfile](../frontend/Dockerfile), [Next config](../frontend/next.config.ts), [ecosystem.config.js](../ecosystem.config.js), [start-api.sh](../start-api.sh), [deploy workflow](../.github/workflows/deploy.yml), [deploy rehberi](../scripts/DEPLOY.md), [middleware README](../middleware/README.md).
 
 **Kabul kriterleri:**
 
-- [ ] Hedef topoloji, süreçler, portlar, DB ayrımı ve health yönlendirmeleri kaydedildi.
-- [ ] Seçilen frontend çıktı biçimiyle image/build tamamlanıyor; API/health hedefleri uygun ağdaki servise gidiyor.
-- [ ] Middleware'in başlatma, migration, health, log ve durdurma adımları mevcut; aynı botun iki kez başlatılması önleniyor.
-- [ ] Dağıtım workflow'u gerçek davranışına uygun: çalışan dağıtım adımları veya açıkça manuel akış.
-- [ ] Yerel/izole kontrol ile gerçek VPS deploy sonucu ayrı kaydedildi.
+- [x] Hedef topoloji, süreçler, portlar, DB ayrımı ve health yönlendirmeleri kaydedildi.
+- [ ] Frontend image/build ve izole proxy kontrolü geçti; gerçek Compose/VPS ağındaki API/health hedefleri henüz doğrulanmadı.
+- [x] Middleware'in başlatma, migration, health, log ve durdurma adımları mevcut; desteklenen bot girişleri ortak kilitle korunuyor. Eski VPS süreçlerinin tespiti açık.
+- [x] Dağıtım workflow'u gerçek davranışına uygun: açıkça manuel sunucu akışı, ayrı imaj yayınlama.
+- [x] Yerel/izole CI kontrolü ile erişim yüzünden yapılmayan gerçek VPS deploy'u ayrı kaydedildi.
 
 ### P1-3 — Pine sözleşmesi ve testnet kabul akışı
 
@@ -614,6 +618,7 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 | 2026-09-09 | P1-2 | CI hazırlığı | İzole PostgreSQL migration/production startup smoke adımı eklendi; CI/Compose TCP readiness yarışı giderildi. P1-7 `dc433a7` kaydedildi; tam Python 329/329 ve frontend kontrolleri sonrası doğrulama push'u hazırlanıyor. Sunucu erişimi hâlâ eksik |
 | 2026-09-09 | P1-2 | Push → Linux CI → test düzeltmesi | `5449aae` main'e gönderildi. İlk CI Python/lint geçti; frontend smoke kapanışı takıldı. Mock soketleri önce kapatma, yanıt gövdesini tüketme ve süre sınırları eklendi; yerel smoke/ESLint geçti. İlk koşum iptal edildi; sonraki Linux/Docker doğrulaması bekliyor. Üç gerçek DB hash'i hâlâ aynı |
 | 2026-09-09 | P1-2 | Linux smoke düzeldi; imaj test ortamı düzeltildi | `86718fc` push edildi; Python/lint/frontend geçti, backend imajı üretildi. Ağsız import testine eksik sahte JWT eklendi; frontend container başlangıç/statik varlık testi eklendi. Güvenlik kontrolü gevşetilmedi; sonraki CI sonucu bekleniyor |
+| 2026-09-09 | P1-2 | Doğrula → belgeyi güncelle — CI tamam; VPS engellendi | `3b9bbbf` push edildi; CI 34368224479 başarılı. Backend/frontend imajları, ağsız import, boş PostgreSQL'de altı migration ve production middleware health, frontend container HTML/statik dosyaları geçti. Veri korundu; server deploy'u ve gerçek/testnet emir yok. Sıradaki bağımsız kod adımı P1-3 Spot/tarih sözleşmesi |
 
 Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 
@@ -633,4 +638,4 @@ Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 4. Aktif işin bulgusunu ve bağımlılıklarını güncel kodda kontrol et. İncelemeyi baştan tekrarlamak yerine ilgili kanıttan devam et.
 5. İşin dört adımını tamamla veya engeli somutlaştır; ardından durum tablosu, günlük ve Kaldığımız nokta bölümünü güncelle.
 
-**P0-1–P0-4, P1-1 ve P1-7 tamamlandı. Tam Python paketi 329/329. P1-2 yerel kodu hazır; imaj/VPS doğrulaması açık.**
+**P0-1–P0-4, P1-1 ve P1-7 tamamlandı. Tam Python paketi 329/329. P1-2 kod/imaj CI doğrulandı; gerçek VPS geçişi erişim bekliyor. Sıradaki yerel iş P1-3 Spot/tarih sözleşmesi.**

@@ -122,7 +122,15 @@ compatibility; never automatically downgrade live data.
 
 ## CI and publication
 
-`ci.yml` checks Python/frontend and builds both images, including isolated backend imports.
+`ci.yml` checks Python/frontend and builds both images. It verifies backend imports without
+network access, migrates a disposable PostgreSQL database to Alembic head, starts middleware
+with production schema checks and trading disabled, and serves frontend HTML/static assets
+from the built container. The separate standalone proxy test uses local mock API/health
+servers, including a WebSocket upgrade.
+
+These checks do not validate existing VPS data, the complete Compose network, production
+volume permissions, reverse proxy/TLS, or actual broker operations. Complete the cutover
+checks above on the authorized server before declaring deployment successful.
 `deploy.yml` publishes backend/frontend images with full source SHA tags on release/manual
 invocation. It has no server deploy job. Compose above builds locally from the verified
 checkout; publishing images does not update the VPS.
