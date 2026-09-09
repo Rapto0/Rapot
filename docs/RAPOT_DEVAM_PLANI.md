@@ -5,9 +5,9 @@ Bu belge, 6 Eylül 2026 tarihli salt okunur proje incelemesinden çıkan işleri
 ## Kaldığımız nokta
 
 - **Son tamamlanan çalışma:** P1-1 — komisyon, hassasiyet, günlük emir kotası, kalıcı dispatch ve report-only reconciliation doğrulandı (2026-09-08).
-- **Uygulama durumu:** 309 Python testi; 305 geçti, önceki 4 HUNTER/ATR hatası açık (P1-7). Middleware testlerinin tamamı (110/110) geçti; Ruff lint/format temiz. Frontend için son doğrulanmış P0-2 sonucu 9/9 oturum testi + lint/typecheck/build. Bu sonuç tüm projenin hatasız olduğu anlamına gelmez.
-- **Aktif iş:** P1-1 commit kapanışı; ardından P1-2 çalıştırma ve dağıtım topolojisi.
-- **Sıradaki somut adım:** P1-2 için hedef VPS topolojisini mevcut Compose, PM2, Dockerfile, Next standalone ayarı, health yönlendirmeleri ve deploy scripti üzerinden netleştir; migration-before-start ve tek bot süreci güvencesini uygula.
+- **Uygulama durumu:** P1-1 `4e045eb` commit'iyle kaydedildi. P1-2 ile tam Python paketi 315/319; yalnız önceki 4 HUNTER/ATR hatası ve bir warning açık. Frontend 12/12, standalone build (TypeScript dahil), lint ve sahte yerel servislerle HTTP/health/WebSocket proxy smoke kontrolü geçti.
+- **Aktif iş:** P1-2 yerel uygulama/doğrulama; Docker imaj koşumu ve gerçek VPS doğrulaması bekliyor.
+- **Sıradaki somut adım:** P1-2 yerel checkpoint'ini kaydet; Docker/CI imaj kontrolünü tamamla ve P1-7 ile tam test kapısını aç. Erişim sağlanmadan VPS deploy'u tamamlandı sayılmayacak.
 - **İşlevsel düzeltme odağı:** P1-2 çalıştırma ve dağıtım topolojisi; ardından P1-3 Pine/testnet kabul akışı.
 - **Başlangıç kaydı:** Bu belge ilk oluşturulduğunda yalnız belge değişmişti; sonraki uygulama değişiklikleri aşağıda ayrı kaydedildi.
 - **Seçilen geliştirme ortamı:** `.venv` / Python 3.12; Node 20.20.2 / npm 10.9.9. Yerelde Python 3.12.8 ile doğrulandı.
@@ -143,7 +143,7 @@ Kapsam tahminleri süre taahhüdü değildir: küçük birkaç dosya; orta bir �
 | P0-3 | DRY_RUN/LIVE envanter ayrımı | Doğrulandı | Büyük | P0-1; mevcut veri sınıflandırması |
 | P0-4 | Emir sonucu ve pozisyon tutarlılığı | Doğrulandı | Büyük | P0-1, P0-3 |
 | P1-1 | Komisyon, hassasiyet, limit ve replay doğruluğu | Doğrulandı | Orta/büyük | P0-3, P0-4 |
-| P1-2 | Çalıştırma ve dağıtım topolojisi | Bekliyor | Orta | P0-1; topoloji seçimi |
+| P1-2 | Çalıştırma ve dağıtım topolojisi | Uygulandı; imaj/VPS doğrulaması bekliyor | Orta | P0-1; topoloji seçimi |
 | P1-3 | Pine sözleşmesi ve testnet kabul akışı | Bekliyor | Orta | Tüm P0 işleri, P1-1, P1-2 |
 | P1-4 | AI ilişkileri ve scan history | Bekliyor | Orta | P0-1 |
 | P1-5 | Süreçler arası realtime ve scanner eşdeğerliği | Bekliyor | Orta/büyük | P0-1, P1-2 |
@@ -372,6 +372,14 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 
 ### P1-2 — Çalıştırma ve dağıtım topolojisi
 
+**2026-09-09 uygulaması:** Canonical topoloji Compose 2.24+: tek worker API + ayrı tek bot + Next standalone; opsiyonel middleware + ayrı PostgreSQL + tek seferlik Alembic servisi. Ana SQLite dizini `RAPOT_DATA_DIR` ile WAL/SHM ve bot kilidi dahil paylaşılır; kaynak kod image'dan gelir. Python 3.12.8/runtime constraint lock, Node 20.20.2/npm 10.9.9, build sırasında API/health Compose DNS hedefleri ve aynı origin üzerinden WebSocket yolu uygulandı. Ana DB hazırlığı ve middleware migration başarı koşulları başlatmaya bağlandı; üretimde Alembic head kontrol edilir, sürümsüz eski mw_* tabloları otomatik stamp edilmez. Doğrudan ve embedded bot girişleri ortak dosya kilidiyle korunur. Eski kilitsiz VPS süreçlerinin ilk geçişte tespit edilmesi hâlâ gerekir.
+
+**Araç/doküman:** `scripts/runtime.py`, Compose, Dockerfile'lar, build-context dışlama kuralları, legacy PM2 launcher'ları, CI image kontrolleri ve `scripts/DEPLOY.md` güncellendi. Deploy scripti temiz ağaç + tam doğrulanmış SHA ister; isteğe bağlı push ve gerçek davranışını açıkça belirten manuel sunucu komutları üretir. Stage-all, stash ve reset kaldırıldı. Workflow'un image yayınlaması sunucu deploy'u olarak sunulmuyor.
+
+**Geçen kontroller:** Yeni Python kilit/topoloji/şema testleri 10/10; tam paket 315/319 ve yalnız önceki P1-7 hataları. Frontend 12/12, ESLint, TypeScript dahil production standalone build; gerçek standalone sunucuda sahte localhost API/bot ile HTML, statik JS, Authorization/query aktarımı, health ve WebSocket 101 testi geçti. Compose config ve PowerShell AST doğrulandı; değişen Python dosyalarında Ruff lint/format geçti.
+
+**Açık doğrulama engelleri:** Docker Desktop 4.70.0 motoru başlamıyor. 9 Eylül logunda `starting services: initializing Inference manager ... dockerInference ... Sistem dosyaya erişemiyor` hatası var. Factory reset, Docker verisi silme veya sistem ayarı değiştirme yapılmadı; Linux image build/container-start/PostgreSQL gerçek migration hâlâ doğrulanmadı. VPS SSH kimlik doğrulaması reddedildi; `.ssh` altında yalnız known_hosts dosyaları bulundu. Kullanıcı erişim bilgisini bilmediğini belirtti. Sunucu süreçleri, veri yolu ve deploy sonucu doğrulanamadı. Yerel kod kontrolleri bu iki dış koşulu kanıtlamaz.
+
 **P0-1'de eklenen bulgu:** Geliştirme/CI Python 3.12'ye alındı; Dockerfile hâlâ Python 3.10 kullanıyor. `ai_evaluation.py` ve `infrastructure/compat/wrapper_telemetry.py`, Python 3.10'da bulunmayan `datetime.UTC` import ediyor. Image build başarısı uygulama importlarının çalıştığını kanıtlamaz. Container sürümünü ve `pyproject.toml` destek beyanını birlikte ele al; bu aşamada deploy/runtime değiştirilmedi.
 
 **Neden:** Frontend Dockerfile standalone çıktı bekliyor fakat Next config bunu açmıyor. Health proxy frontend localhost'una gidiyor, servis bot tarafında. Middleware Compose/PM2'de yok; deploy workflow'un son adımı yalnız mesaj basıyor.
@@ -583,6 +591,8 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 | 2026-09-08 | P1-1 | Doğrula | Tam paket 305/309; middleware 110/110; yalnız önceki dört P1-7 hatası ve bir warning. Kalıcı dispatch/crash, bypass tekrar, komisyon sayfalama, dust ve hatalı muhasebe regresyonları geçti. Ruff, SQLite migration round-trip ve PostgreSQL offline ileri/geri SQL geçti; üç gerçek DB hash'i aynı |
 | 2026-09-07 | P1-1 | Belgeyi güncelle — Doğrulandı | Komisyon varlığı semantiği, üçüncü varlık PnL sınırı, 0/1/N kota politikası, hassasiyet ve report-only gerekçesi kaydedildi. Commit başlığı `fix(middleware): account for commissions and order limits`; sonraki iş P1-2 |
 | 2026-09-08 | P1-1 | Son inceleme ve belge kapanışı | Client ID'nin açık emir sınırı resmi Binance sözleşmesiyle doğrulandı; P0-4 crash garantisi kalıcı dispatch ile tamamlandı. Recovery geçmişinin eksiksizliği, dust/FIFO, bilinmeyen sonuç rezervasyonu ve manuel inceleme sınırı belgelendi |
+| 2026-09-09 | P1-2 | İncele → düzelt | Tek Compose topolojisi, sürüm/bağımlılık uyumu, standalone HTTP/WS/health proxy, ayrı DB/migration servisleri ve tek bot kilidi uygulandı; deploy aracı gerçek manuel davranışına göre düzenlendi |
+| 2026-09-09 | P1-2 | Doğrula → belgeyi güncelle (kısmi) | Python 315/319, yeni testler 10/10; frontend 12/12, lint/build ve standalone proxy smoke geçti. Docker motor hatası ve SSH erişimi imaj/VPS doğrulamasını engelliyor; madde Doğrulandı olarak kapatılmadı |
 
 Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 
@@ -602,4 +612,4 @@ Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 4. Aktif işin bulgusunu ve bağımlılıklarını güncel kodda kontrol et. İncelemeyi baştan tekrarlamak yerine ilgili kanıttan devam et.
 5. İşin dört adımını tamamla veya engeli somutlaştır; ardından durum tablosu, günlük ve Kaldığımız nokta bölümünü güncelle.
 
-**P0-1–P0-4 ve P1-1 tamamlandı. Sıradaki ana uygulama işi P1-2; tam test tabanında açık dört hata P1-7'de takip ediliyor.**
+**P0-1–P0-4 ve P1-1 tamamlandı. P1-2 yerel kodu hazır; imaj/VPS doğrulaması açık. Tam test tabanındaki dört hata P1-7'de takip ediliyor.**

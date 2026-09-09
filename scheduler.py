@@ -9,6 +9,7 @@ import socket
 import time
 import warnings
 from datetime import datetime
+from pathlib import Path
 from threading import Lock
 from zoneinfo import ZoneInfo
 
@@ -246,6 +247,20 @@ def run_async_scan_wrapper(markets: str | list[str] | tuple[str, ...] | set[str]
 
 
 def start_bot(use_async: bool = True) -> None:
+    """Run one bot per shared lock file, including direct and embedded entry points."""
+    from infrastructure.runtime_lock import bot_instance_lock
+    from settings import settings
+
+    lock_path = (
+        Path(settings.bot_lock_path)
+        if settings.bot_lock_path
+        else Path(settings.database_path).with_suffix(".bot.lock")
+    )
+    with bot_instance_lock(lock_path):
+        _run_bot(use_async=use_async)
+
+
+def _run_bot(use_async: bool = True) -> None:
     """
     Boot bot, configure scheduler, and run loop.
     """

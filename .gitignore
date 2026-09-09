@@ -12,6 +12,7 @@ __pycache__/
 alembic/
 !middleware/infra/alembic/
 !middleware/infra/alembic/**
+middleware/infra/alembic/**/__pycache__/
 venv/
 ENV/
 env/
@@ -27,6 +28,8 @@ env/
 *.log
 logs/
 backups/
+runtime-data/
+*.bot.lock
 
 # Backtest outputs
 backtest_*.xlsx

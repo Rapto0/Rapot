@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     # ==================== APP RUNTIME ====================
     app_env: str = Field("production", description="Runtime env: production/development/test")
     run_embedded_bot: bool = Field(False, description="Run scheduler inside API process")
+    bot_lock_path: str | None = Field(None, description="Shared bot instance lock file path")
     cors_allow_origins: str = Field(
         "http://localhost:3000,http://127.0.0.1:3000",
         description="Comma separated CORS origins",

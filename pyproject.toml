@@ -2,7 +2,7 @@
 name = "otonom-analiz"
 version = "1.0.0"
 description = "7/24 Finansal Analiz ve Sinyal Botu - BIST & Kripto"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [

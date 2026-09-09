@@ -10,8 +10,9 @@ from middleware.api.routes.orders import router as orders_router
 from middleware.api.routes.positions import router as positions_router
 from middleware.api.routes.signals import router as signals_router
 from middleware.api.routes.webhooks import router as webhooks_router
-from middleware.infra.db import init_db
+from middleware.infra.db import get_engine, init_db
 from middleware.infra.logging import configure_logging, get_logger
+from middleware.infra.schema import require_current_schema
 from middleware.infra.settings import settings
 
 configure_logging()
@@ -21,7 +22,10 @@ logger = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings.validate_runtime_configuration()
-    init_db()
+    if settings.is_production:
+        require_current_schema(get_engine())
+    else:
+        init_db()
     logger.info(
         "middleware started",
         extra={

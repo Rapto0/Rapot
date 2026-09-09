@@ -141,11 +141,14 @@ jobs:
       - name: Check TypeScript
         run: npm run typecheck -- --incremental false
 
-      - name: Test frontend authentication client
+      - name: Test frontend authentication and proxy URL behavior
         run: npm test
 
       - name: Build frontend
         run: npm run build
+
+      - name: Verify standalone HTTP and WebSocket proxies with local mocks
+        run: npm run test:standalone
 
   # ==================== SECURITY SCAN ====================
   security:
@@ -185,5 +188,26 @@ jobs:
           context: .
           push: false
           tags: otonom-analiz:${{ github.sha }}
+          load: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Check backend imports without external services
+        run: |
+          docker run --rm --network none \
+            -e TELEGRAM_TOKEN=ci-test-token -e TELEGRAM_CHAT_ID=ci-test-chat \
+            -e APP_ENV=test -e AI_ENABLED=0 -e RUN_EMBEDDED_BOT=false \
+            -e DATABASE_PATH=/tmp/trading.sqlite3 -e CACHE_DATABASE_PATH=/tmp/cache.sqlite3 \
+            -e MW_WEBHOOK_AUTH_TOKEN=ci-test-webhook \
+            otonom-analiz:${{ github.sha }} \
+            python -c "import ai_evaluation; import infrastructure.compat.wrapper_telemetry; import api.main; import middleware.api.main"
+
+      - name: Build frontend standalone image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: frontend/Dockerfile
+          push: false
+          tags: rapot-frontend:${{ github.sha }}
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend

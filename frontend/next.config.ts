@@ -2,6 +2,7 @@ import path from "path";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   allowedDevOrigins: ['http://138.68.71.27:3000'],
   turbopack: {
     root: path.resolve(__dirname),
@@ -11,6 +12,7 @@ const nextConfig: NextConfig = {
     const normalizedApiBasePath =
       apiBasePath.startsWith('/') ? apiBasePath.replace(/\/$/, '') : '/api'
     const apiProxyTarget = (process.env.API_PROXY_TARGET || 'http://localhost:8000').replace(/\/$/, '')
+    const healthProxyTarget = (process.env.HEALTH_PROXY_TARGET || 'http://localhost:5000').replace(/\/$/, '')
 
     return [
       {
@@ -19,7 +21,7 @@ const nextConfig: NextConfig = {
       },
       {
         source: '/health-api/:path*',
-        destination: 'http://localhost:5000/:path*', // Proxy to Health API
+        destination: `${healthProxyTarget}/:path*`,
       },
     ]
   },

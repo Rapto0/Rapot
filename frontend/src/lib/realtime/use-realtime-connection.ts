@@ -5,31 +5,19 @@ import { useCallback, useEffect, useRef } from 'react';
 import { dispatchSignalSocketMessage, dispatchTickerSocketMessage } from './message-parser';
 import { useRealtimeStore } from './store';
 import type { BISTStock, SignalData, TickerData } from './types';
+import { resolveRealtimeWsBaseUrl } from './url';
 
 interface UseRealtimeConnectionOptions {
   autoConnect?: boolean;
   onSignal?: (signal: SignalData) => void;
 }
 
-function resolveRealtimeWsBaseUrl(): string {
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const explicitWsUrl = process.env.NEXT_PUBLIC_WS_URL?.trim();
-  if (explicitWsUrl) {
-    return `${explicitWsUrl.replace(/\/$/, '')}/realtime/ws`;
-  }
-
-  const configuredApiUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
-  if (configuredApiUrl && /^https?:\/\//.test(configuredApiUrl)) {
-    try {
-      const parsed = new URL(configuredApiUrl);
-      return `${protocol}//${parsed.host}/realtime/ws`;
-    } catch {
-      // Continue with hostname fallback when URL parsing fails.
-    }
-  }
-
-  const host = `${window.location.hostname}:8000`;
-  return `${protocol}//${host}/realtime/ws`;
+function realtimeWsBaseUrl(): string {
+  return resolveRealtimeWsBaseUrl(
+    window.location.origin,
+    process.env.NEXT_PUBLIC_API_URL,
+    process.env.NEXT_PUBLIC_WS_URL,
+  );
 }
 
 export function useRealtimeConnection(options: UseRealtimeConnectionOptions = {}) {
@@ -56,7 +44,7 @@ export function useRealtimeConnection(options: UseRealtimeConnectionOptions = {}
     if (signalWsRef.current?.readyState === WebSocket.CONNECTING) return;
 
     try {
-      const signalWs = new WebSocket(`${resolveRealtimeWsBaseUrl()}/signals`);
+      const signalWs = new WebSocket(`${realtimeWsBaseUrl()}/signals`);
 
       signalWs.onmessage = (event) => {
         dispatchSignalSocketMessage(event.data, {
@@ -96,7 +84,7 @@ export function useRealtimeConnection(options: UseRealtimeConnectionOptions = {}
     store.setConnectionState('connecting');
 
     try {
-      const tickerWs = new WebSocket(`${resolveRealtimeWsBaseUrl()}/ticker`);
+      const tickerWs = new WebSocket(`${realtimeWsBaseUrl()}/ticker`);
 
       tickerWs.onopen = () => {
         useRealtimeStore.getState().setConnectionState('connected');

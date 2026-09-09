@@ -1,62 +1,191 @@
+# Docker Compose >= 2.24.0 (optional env_file support).
+# Override the project name with `docker compose -p <isolated-name> ...` for tests.
+name: rapot
+
+x-python: &python
+  image: rapot-backend:${RAPOT_RELEASE:-local}
+  build:
+    context: .
+    dockerfile: Dockerfile
+  init: true
+  networks:
+    - rapot_net
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+x-main-environment: &main-environment
+  APP_ENV: production
+  RUN_EMBEDDED_BOT: "false"
+  DATABASE_URL: ""
+  DATABASE_PATH: /app/runtime-data/trading_bot.db
+  CACHE_DATABASE_PATH: /app/runtime-data/price_cache.db
+  HEALTH_API_HOST: 0.0.0.0
+  HEALTH_API_PORT: "5000"
+
+x-main-volumes: &main-volumes
+  # The directory includes SQLite database, WAL, SHM and the process lock.
+  # Existing host databases are never moved by Compose; prepare this directory explicitly.
+  - type: bind
+    source: ${RAPOT_DATA_DIR:-./runtime-data}
+    target: /app/runtime-data
+    bind:
+      create_host_path: false
+
+x-middleware-env-file: &middleware-env-file
+  - path: ${RAPOT_MIDDLEWARE_ENV_FILE:-./middleware/.env}
+    required: false
+
+x-middleware-environment: &middleware-environment
+  MW_APP_ENV: production
+  # Live execution is a separate rollout after the testnet acceptance work.
+  MW_EXECUTION_MODE: DRY_RUN
+  MW_TRADING_ENABLED: "false"
+  MW_BINANCE_LIVE_ENABLED: "false"
+
 services:
-  # 1. FastAPI Backend API
-  api:
-    build: .
-    container_name: rapot_api
-    command: uvicorn api.main:app --host 0.0.0.0 --port 8000
-    volumes:
-      - .:/app
-      - ./trading_bot.db:/app/trading_bot.db
-    ports:
-      - "8000:8000"
+  main-init:
+    <<: *python
+    command: ["python", "-m", "scripts.runtime", "init-main-db"]
     env_file:
-      - .env
-    environment:
-      - DATABASE_URL=sqlite:///trading_bot.db
+      - ${RAPOT_MAIN_ENV_FILE:-.env}
+    environment: *main-environment
+    volumes: *main-volumes
+    restart: "no"
+
+  api:
+    <<: *python
+    command: ["python", "-m", "scripts.runtime", "api"]
+    env_file:
+      - ${RAPOT_MAIN_ENV_FILE:-.env}
+    environment: *main-environment
+    volumes: *main-volumes
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      main-init:
+        condition: service_completed_successfully
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 3
-    networks:
-      - rapot_net
+      start_period: 30s
 
-  # 2. Next.js Frontend Dashboard
+  bot:
+    <<: *python
+    # A fixed name per project also prevents accidental Compose scaling of the scanner.
+    container_name: ${COMPOSE_PROJECT_NAME:-rapot}-bot
+    command: ["python", "-m", "scripts.runtime", "bot"]
+    env_file:
+      - ${RAPOT_MAIN_ENV_FILE:-.env}
+    environment: *main-environment
+    volumes: *main-volumes
+    ports:
+      - "127.0.0.1:5000:5000"
+    depends_on:
+      main-init:
+        condition: service_completed_successfully
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
   frontend:
+    image: rapot-frontend:${RAPOT_RELEASE:-local}
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: rapot_frontend
-    ports:
-      - "3000:3000"
+      args:
+        NEXT_PUBLIC_API_URL: /api
+        API_PROXY_TARGET: http://api:8000
+        HEALTH_PROXY_TARGET: http://bot:5000
+    init: true
     environment:
-      - NEXT_PUBLIC_API_URL=/api
-      - API_PROXY_TARGET=http://api:8000
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: /api
+      API_PROXY_TARGET: http://api:8000
+      HEALTH_PROXY_TARGET: http://bot:5000
+    ports:
+      - "127.0.0.1:3000:3000"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - rapot_net
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  postgres:
+    image: postgres:16-alpine
+    profiles: [middleware]
+    env_file: *middleware-env-file
+    environment:
+      POSTGRES_USER: rapot_middleware
+      POSTGRES_DB: rapot_middleware
+      # POSTGRES_PASSWORD is required in the middleware env file by the image.
+    volumes:
+      - middleware_postgres:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rapot_middleware -d rapot_middleware"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - rapot_net
 
-  # 3. Trading Bot (Scanner)
-  bot:
-    build: .
-    container_name: rapot_bot
-    command: python main.py
-    volumes:
-      - .:/app
-      - ./trading_bot.db:/app/trading_bot.db
-    env_file:
-      - .env
-    environment:
-      - DATABASE_URL=sqlite:///trading_bot.db
+  middleware-migrate:
+    <<: *python
+    profiles: [middleware]
+    command: ["python", "-m", "scripts.runtime", "migrate-middleware"]
+    env_file: *middleware-env-file
+    environment: *middleware-environment
     depends_on:
-      - api
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  middleware:
+    <<: *python
+    profiles: [middleware]
+    command: ["python", "-m", "scripts.runtime", "middleware"]
+    env_file: *middleware-env-file
+    environment: *middleware-environment
+    ports:
+      - "127.0.0.1:8001:8001"
+    depends_on:
+      middleware-migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
-    networks:
-      - rapot_net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
 networks:
   rapot_net:
     driver: bridge
+
+volumes:
+  middleware_postgres:

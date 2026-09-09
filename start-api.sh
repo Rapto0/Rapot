@@ -1,22 +1,17 @@
 #!/bin/bash
-set -e
-# PM2 cwd ile hizali: varsayilan sunucu dizini /root/Rapot.
-# Fallback olarak script'in bulundugu dizine iner.
-cd /root/Rapot 2>/dev/null || cd "$(dirname "$0")"
+set -eu
 
-# Sunucu ortamlarinda farkli venv yollarini destekle.
-if [ -f /opt/rapot-venv/bin/activate ]; then
-  source /opt/rapot-venv/bin/activate
-elif [ -f /root/Rapot/.venv/bin/activate ]; then
-  source /root/Rapot/.venv/bin/activate
-elif [ -f /root/Rapot/venv/bin/activate ]; then
-  source /root/Rapot/venv/bin/activate
-elif [ -f /root/.venv/bin/activate ]; then
-  source /root/.venv/bin/activate
+# LEGACY ONLY. Docker Compose runs the scripts.runtime api command directly.
+if [ "${RAPOT_ALLOW_LEGACY_PM2:-}" != "1" ]; then
+  echo 'Legacy API launcher is disabled. Follow scripts/DEPLOY.md for Docker Compose.' >&2
+  exit 1
 fi
 
-if command -v uvicorn >/dev/null 2>&1; then
-  exec uvicorn api.main:app --host 0.0.0.0 --port 8000
-else
-  exec python3 -m uvicorn api.main:app --host 0.0.0.0 --port 8000
+cd -- "$(dirname -- "$0")"
+if [ ! -x .venv/bin/python ]; then
+  echo 'Legacy launcher requires the reviewed project .venv/bin/python (Python 3.12.8).' >&2
+  exit 1
 fi
+
+export RUN_EMBEDDED_BOT=false
+exec .venv/bin/python -m uvicorn api.main:app --host 127.0.0.1 --port 8000
