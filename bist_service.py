@@ -6,6 +6,7 @@ Fetches and caches BIST data with automatic refresh.
 import asyncio
 import json
 import ssl
+from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -74,6 +75,7 @@ class BISTDataService:
         self._session: aiohttp.ClientSession | None = None
         self._ssl_context: ssl.SSLContext | None = None
         self._running = False
+        self._refresh_task: asyncio.Task | None = None
         self._callbacks: list = []
         self._symbols: list[str] = []
         self._load_symbols()
@@ -138,14 +140,22 @@ class BISTDataService:
                 "Accept-Language": "tr-TR,tr;q=0.9,en;q=0.8",
             },
         )
-        asyncio.create_task(self._refresh_loop())
+        self._refresh_task = asyncio.create_task(self._refresh_loop(), name="rapot-bist-refresh")
         logger.info("BISTDataService started")
 
     async def stop(self):
         """Stop the BIST data service."""
         self._running = False
-        if self._session and not self._session.closed:
-            await self._session.close()
+        try:
+            if self._refresh_task is not None:
+                self._refresh_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await self._refresh_task
+        finally:
+            self._refresh_task = None
+            if self._session and not self._session.closed:
+                await asyncio.wait_for(self._session.close(), timeout=5)
+            self._session = None
         logger.info("BISTDataService stopped")
 
     async def _refresh_loop(self):
@@ -273,7 +283,8 @@ class BISTDataService:
 
     def on_update(self, callback):
         """Register a callback for data updates."""
-        self._callbacks.append(callback)
+        if callback not in self._callbacks:
+            self._callbacks.append(callback)
 
     def off_update(self, callback):
         """Remove a callback."""
@@ -283,7 +294,7 @@ class BISTDataService:
     async def _notify_subscribers(self):
         """Notify all subscribers of data update."""
         data = self.get_all_stocks()
-        for callback in self._callbacks:
+        for callback in tuple(self._callbacks):
             try:
                 if asyncio.iscoroutinefunction(callback):
                     await callback(data)

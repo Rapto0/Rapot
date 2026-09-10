@@ -12,6 +12,8 @@ import type {
 interface RealtimeStore {
   connectionState: ConnectionState;
   setConnectionState: (state: ConnectionState) => void;
+  signalConnectionState: ConnectionState;
+  setSignalConnectionState: (state: ConnectionState) => void;
 
   tickers: Map<string, TickerData>;
   bistStocks: Map<string, BISTStock>;
@@ -24,6 +26,7 @@ interface RealtimeStore {
 
   realtimeSignals: SignalData[];
   addSignal: (signal: SignalData) => void;
+  clearSignals: () => void;
 
   klineData: Map<string, KlineData>;
   updateKline: (kline: KlineData) => void;
@@ -35,6 +38,8 @@ interface RealtimeStore {
 export const useRealtimeStore = create<RealtimeStore>((set, get) => ({
   connectionState: 'disconnected',
   setConnectionState: (state) => set({ connectionState: state }),
+  signalConnectionState: 'disconnected',
+  setSignalConnectionState: (state) => set({ signalConnectionState: state }),
 
   tickers: new Map(),
   bistStocks: new Map(),
@@ -99,9 +104,11 @@ export const useRealtimeStore = create<RealtimeStore>((set, get) => ({
   realtimeSignals: [],
   addSignal: (signal) => {
     set((state) => ({
-      realtimeSignals: [signal, ...state.realtimeSignals].slice(0, 50),
+      realtimeSignals: [signal, ...state.realtimeSignals.filter((existing) => existing.id !== signal.id)].slice(0, 50),
     }));
   },
+
+  clearSignals: () => set({ realtimeSignals: [] }),
 
   klineData: new Map(),
   updateKline: (kline) => {

@@ -31,10 +31,10 @@ async def test_bist_service_start_uses_isyatirim_ssl_context(monkeypatch):
     def fake_get_ssl_context():
         return ssl_context
 
-    def fake_create_task(coro):
+    def fake_create_task(coro, **_kwargs):
         created_tasks.append(coro)
         coro.close()
-        return object()
+        return bist_service.asyncio.get_running_loop().create_future()
 
     def fake_client_session(**kwargs):
         session = DummyClientSession(**kwargs)
@@ -64,10 +64,10 @@ async def test_bist_service_start_without_ssl_context(monkeypatch):
     created_tasks = []
     captured = {}
 
-    def fake_create_task(coro):
+    def fake_create_task(coro, **_kwargs):
         created_tasks.append(coro)
         coro.close()
-        return object()
+        return bist_service.asyncio.get_running_loop().create_future()
 
     def fake_client_session(**kwargs):
         session = DummyClientSession(**kwargs)

@@ -38,13 +38,16 @@ def scanners(monkeypatch, sample_ohlcv_data):
     monkeypatch.setattr(market_scanner, "get_bist_data", lambda *_a, **_k: sample_ohlcv_data)
     monkeypatch.setattr(market_scanner, "cached_get_crypto_data", lambda *_: sample_ohlcv_data)
     monkeypatch.setattr(market_scanner, "is_dataframe_fresh", lambda *_: True)
+    monkeypatch.setattr(async_scanner, "is_dataframe_fresh", lambda *_: True)
     monkeypatch.setattr(market_scanner.time, "sleep", lambda *_: None)
     monkeypatch.setattr(market_scanner.price_cache, "clear_expired", lambda: None)
     monkeypatch.setattr(
         market_scanner.price_cache, "get_stats", lambda: {"session_hits": 0, "session_misses": 0}
     )
     monkeypatch.setattr(
-        market_scanner, "process_symbol", lambda _df, sym, market: saved_signal(sym, market)
+        market_scanner,
+        "process_symbol",
+        lambda _df, sym, market, **_kwargs: saved_signal(sym, market),
     )
 
     async def fetch(symbols, **_kwargs):

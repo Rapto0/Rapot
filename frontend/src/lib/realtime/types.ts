@@ -57,6 +57,7 @@ export interface SignalData {
   score: string;
   price: number;
   createdAt: string;
+  specialTag?: 'BELES' | 'COK_UCUZ' | 'PAHALI' | 'FAHIS_FIYAT' | null;
 }
 
 export type ConnectionState =

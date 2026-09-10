@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tests/auth-client.test.mjs tests/realtime-url.test.mjs tests/scan-history.test.mjs",
+    "test": "node --test tests/auth-client.test.mjs tests/realtime-url.test.mjs tests/scan-history.test.mjs tests/realtime-connection.test.mjs",
     "test:standalone": "node tests/standalone-proxy-smoke.mjs"
   },
   "engines": {

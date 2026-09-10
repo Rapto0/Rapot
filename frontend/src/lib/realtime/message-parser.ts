@@ -13,7 +13,22 @@ interface TickerMessageHandlers {
 
 interface SignalMessageHandlers {
   onSignal: (signal: SignalData) => void;
+  onResync?: () => void;
   onParseError?: (error: unknown) => void;
+}
+
+function parseSignal(data: unknown): SignalData {
+  if (!data || typeof data !== 'object') throw new Error('Invalid signal payload');
+  const signal = data as Record<string, unknown>;
+  if (!Number.isInteger(signal.id) || Number(signal.id) <= 0 ||
+      typeof signal.price !== 'number' || !Number.isFinite(signal.price) ||
+      !['AL', 'SAT'].includes(String(signal.signalType)) ||
+      !['symbol', 'marketType', 'strategy', 'timeframe', 'score', 'createdAt'].every((field) => typeof signal[field] === 'string')) {
+    throw new Error('Invalid signal fields');
+  }
+  const specialTag = ['BELES', 'COK_UCUZ', 'PAHALI', 'FAHIS_FIYAT'].includes(String(signal.specialTag))
+    ? signal.specialTag as SignalData['specialTag'] : null;
+  return { ...signal, specialTag } as unknown as SignalData;
 }
 
 function parseSocketMessage(data: string): Record<string, unknown> {
@@ -52,7 +67,7 @@ export function dispatchTickerSocketMessage(
         handlers.onTrade(message.data as TradeData);
         break;
       case 'signal':
-        handlers.onSignal(message.data as SignalData);
+        handlers.onSignal(parseSignal(message.data));
         break;
       case 'heartbeat':
         break;
@@ -72,7 +87,9 @@ export function dispatchSignalSocketMessage(
   try {
     const message = parseSocketMessage(rawData);
     if (message.type === 'signal') {
-      handlers.onSignal(message.data as SignalData);
+      handlers.onSignal(parseSignal(message.data));
+    } else if (message.type === 'resync' && message.reason === 'signal_feed_reset') {
+      handlers.onResync?.();
     }
   } catch (error) {
     handlers.onParseError?.(error);

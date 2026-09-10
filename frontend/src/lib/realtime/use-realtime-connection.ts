@@ -1,10 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 
-import { dispatchSignalSocketMessage, dispatchTickerSocketMessage } from './message-parser';
+import { createRealtimeConnection } from './connection';
 import { useRealtimeStore } from './store';
-import type { BISTStock, SignalData, TickerData } from './types';
+import type { SignalData } from './types';
 import { resolveRealtimeWsBaseUrl } from './url';
 
 interface UseRealtimeConnectionOptions {
@@ -12,186 +13,45 @@ interface UseRealtimeConnectionOptions {
   onSignal?: (signal: SignalData) => void;
 }
 
-function realtimeWsBaseUrl(): string {
-  return resolveRealtimeWsBaseUrl(
-    window.location.origin,
-    process.env.NEXT_PUBLIC_API_URL,
-    process.env.NEXT_PUBLIC_WS_URL,
-  );
-}
-
 export function useRealtimeConnection(options: UseRealtimeConnectionOptions = {}) {
   const { autoConnect = true, onSignal } = options;
-  const tickerWsRef = useRef<WebSocket | null>(null);
-  const signalWsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const signalReconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const reconnectAttemptsRef = useRef(0);
+  const queryClient = useQueryClient();
+  const connectionRef = useRef<ReturnType<typeof createRealtimeConnection> | null>(null);
   const onSignalRef = useRef(onSignal);
 
-  useEffect(() => {
-    onSignalRef.current = onSignal;
-  }, [onSignal]);
-
-  const handleRealtimeSignal = useCallback((signal: SignalData) => {
-    const store = useRealtimeStore.getState();
-    store.addSignal(signal);
-    onSignalRef.current?.(signal);
-  }, []);
-
-  const ensureSignalSocket = useCallback(() => {
-    if (signalWsRef.current?.readyState === WebSocket.OPEN) return;
-    if (signalWsRef.current?.readyState === WebSocket.CONNECTING) return;
-
-    try {
-      const signalWs = new WebSocket(`${realtimeWsBaseUrl()}/signals`);
-
-      signalWs.onmessage = (event) => {
-        dispatchSignalSocketMessage(event.data, {
-          onSignal: handleRealtimeSignal,
-          onParseError: (error) => {
-            console.error('[Realtime] Failed to parse signal message:', error);
-          },
-        });
-      };
-
-      signalWs.onclose = () => {
-        signalWsRef.current = null;
-        if (tickerWsRef.current?.readyState === WebSocket.OPEN) {
-          if (signalReconnectTimeoutRef.current) clearTimeout(signalReconnectTimeoutRef.current);
-          signalReconnectTimeoutRef.current = setTimeout(() => {
-            ensureSignalSocket();
-          }, 3000);
-        }
-      };
-
-      signalWs.onerror = () => {
-        // Avoid noisy logs; onclose handles retry.
-      };
-
-      signalWsRef.current = signalWs;
-    } catch (error) {
-      console.error('[Realtime] Signal socket connection error:', error);
-    }
-  }, [handleRealtimeSignal]);
-
-  const connect = useCallback(() => {
-    if (tickerWsRef.current?.readyState === WebSocket.OPEN) {
-      return;
-    }
-
-    const store = useRealtimeStore.getState();
-    store.setConnectionState('connecting');
-
-    try {
-      const tickerWs = new WebSocket(`${realtimeWsBaseUrl()}/ticker`);
-
-      tickerWs.onopen = () => {
-        useRealtimeStore.getState().setConnectionState('connected');
-        reconnectAttemptsRef.current = 0;
-        console.log('[Realtime] Connected to WebSocket');
-        ensureSignalSocket();
-      };
-
-      tickerWs.onmessage = (event) => {
-        const storeState = useRealtimeStore.getState();
-        dispatchTickerSocketMessage(event.data, {
-          onInit: (payload) => {
-            if (payload.crypto) {
-              Object.values(payload.crypto).forEach((ticker) => {
-                storeState.updateTicker(ticker as TickerData);
-              });
-            }
-            if (payload.bist) {
-              storeState.updateBistStocks(payload.bist as BISTStock[]);
-            }
-          },
-          onTicker: (ticker) => storeState.updateTicker(ticker),
-          onBist: (stocks) => storeState.updateBistStocks(stocks),
-          onKline: (kline) => storeState.updateKline(kline),
-          onTrade: (trade) => storeState.addTrade(trade),
-          onSignal: handleRealtimeSignal,
-          onUnknownType: (messageType) => {
-            console.log('[Realtime] Unknown message type:', messageType);
-          },
-          onParseError: (error) => {
-            console.error('[Realtime] Failed to parse message:', error);
-          },
-        });
-      };
-
-      tickerWs.onclose = () => {
-        useRealtimeStore.getState().setConnectionState('disconnected');
-        if (signalWsRef.current) {
-          signalWsRef.current.close();
-          signalWsRef.current = null;
-        }
-
-        if (reconnectAttemptsRef.current < 5) {
-          const delay = Math.min(2000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
-          useRealtimeStore.getState().setConnectionState('reconnecting');
-          reconnectTimeoutRef.current = setTimeout(() => {
-            reconnectAttemptsRef.current++;
-            connect();
-          }, delay);
-        } else if (reconnectAttemptsRef.current === 5) {
-          console.warn(
-            '[Realtime] Backend unavailable - real-time features disabled. Data will load via REST API.'
-          );
-        }
-      };
-
-      tickerWs.onerror = () => {
-        useRealtimeStore.getState().setConnectionState('error');
-      };
-
-      tickerWsRef.current = tickerWs;
-    } catch (error) {
-      useRealtimeStore.getState().setConnectionState('error');
-      console.error('[Realtime] Connection error:', error);
-    }
-  }, [ensureSignalSocket, handleRealtimeSignal]);
-
-  const disconnect = useCallback(() => {
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-    }
-    if (signalReconnectTimeoutRef.current) {
-      clearTimeout(signalReconnectTimeoutRef.current);
-    }
-    if (tickerWsRef.current) {
-      tickerWsRef.current.close();
-      tickerWsRef.current = null;
-    }
-    if (signalWsRef.current) {
-      signalWsRef.current.close();
-      signalWsRef.current = null;
-    }
-    useRealtimeStore.getState().setConnectionState('disconnected');
-  }, []);
-
-  const subscribe = useCallback((type: 'ticker' | 'kline' | 'trade', symbol: string) => {
-    if (tickerWsRef.current?.readyState === WebSocket.OPEN) {
-      tickerWsRef.current.send(JSON.stringify({
-        action: 'subscribe',
-        type,
-        symbol,
-      }));
-    }
-  }, []);
+  useEffect(() => { onSignalRef.current = onSignal; }, [onSignal]);
 
   useEffect(() => {
-    if (autoConnect) {
-      connect();
-    }
+    // Each effect setup owns a fresh controller, including StrictMode's second setup.
+    const connection = createRealtimeConnection({
+      baseUrl: () => resolveRealtimeWsBaseUrl(
+        window.location.origin,
+        process.env.NEXT_PUBLIC_API_URL,
+        process.env.NEXT_PUBLIC_WS_URL,
+      ),
+      getStore: useRealtimeStore.getState,
+      onSignal: (signal) => onSignalRef.current?.(signal),
+      refreshSignals: () => {
+        // A continuous feed must not keep cancelling slower REST requests.
+        const options = { cancelRefetch: false };
+        void queryClient.invalidateQueries({ queryKey: ['signals'] }, options);
+        void queryClient.invalidateQueries({ queryKey: ['signal-analysis'] }, options);
+        void queryClient.invalidateQueries({ queryKey: ['analyses'] }, options);
+        void queryClient.invalidateQueries({ queryKey: ['scanner-v2', 'signals'] }, options);
+      },
+    });
+    connectionRef.current = connection;
+    if (autoConnect) connection.connect();
     return () => {
-      disconnect();
+      connectionRef.current = null;
+      connection.dispose();
     };
-  }, [autoConnect, connect, disconnect]);
+  }, [autoConnect, queryClient]);
 
-  return {
-    connect,
-    disconnect,
-    subscribe,
-  };
+  const connect = useCallback(() => connectionRef.current?.connect(), []);
+  const disconnect = useCallback(() => connectionRef.current?.disconnect(), []);
+  const subscribe = useCallback((type: 'ticker' | 'kline' | 'trade', symbol: string, interval = '1m') =>
+    connectionRef.current?.subscribe(type, symbol, interval) ?? (() => {}), []);
+
+  return { connect, disconnect, subscribe };
 }

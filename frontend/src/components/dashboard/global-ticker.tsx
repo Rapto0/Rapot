@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { TrendingUp, TrendingDown, Minus, Wifi, WifiOff } from 'lucide-react';
-import { useRealtime, useTickerData, useAnimatedNumber } from '@/lib/hooks/use-realtime';
+import { useRealtimeStore, useTickerData, useAnimatedNumber } from '@/lib/hooks/use-realtime';
 import { cn } from '@/lib/utils';
 
 // ==================== TYPES ====================
@@ -111,7 +111,7 @@ function TickerItemComponent({ item }: { item: TickerItem }) {
 // ==================== GLOBAL TICKER ====================
 
 export function GlobalTicker() {
-  const { connectionState } = useRealtime();
+  const connectionState = useRealtimeStore((state) => state.connectionState);
   const { combinedTickers } = useTickerData();
   const [isPaused, setIsPaused] = useState(false);
 

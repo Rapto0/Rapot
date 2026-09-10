@@ -6,6 +6,7 @@ ECONOMIC_CALENDAR_COMPONENT = FRONTEND_SRC / "components" / "dashboard" / "econo
 API_CORE_FILE = FRONTEND_SRC / "lib" / "api" / "core.ts"
 API_CLIENT_FACADE_FILE = FRONTEND_SRC / "lib" / "api" / "client.ts"
 REALTIME_CONNECTION_FILE = FRONTEND_SRC / "lib" / "realtime" / "use-realtime-connection.ts"
+REALTIME_TRANSPORT_FILE = FRONTEND_SRC / "lib" / "realtime" / "connection.ts"
 
 
 def _iter_frontend_source_files():
@@ -42,10 +43,15 @@ def test_api_client_normalizes_public_base_urls():
     assert "const API_BASE_URL = normalizeBaseUrl" in source
 
 
-def test_realtime_hook_uses_dedicated_signal_channel():
+def test_realtime_hook_delegates_to_dedicated_signal_transport():
     source = REALTIME_CONNECTION_FILE.read_text(encoding="utf-8", errors="ignore")
+    transport = REALTIME_TRANSPORT_FILE.read_text(encoding="utf-8", errors="ignore")
 
-    assert "/realtime/ws/signals" in source or "/signals" in source
+    # Runtime reconnect/independence coverage lives in realtime-connection.test.mjs.
+    # Keep the architectural guard attached to the transport used by the hook.
+    assert "import { createRealtimeConnection } from './connection';" in source
+    assert "createRealtimeConnection({" in source
+    assert "/realtime/ws/signals" in transport or "/signals" in transport
 
 
 def test_api_client_file_is_thin_facade():

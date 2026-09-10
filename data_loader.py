@@ -139,6 +139,7 @@ def _fetch_bist_data_yfinance(symbol: str, start_date: str = "01-01-2015") -> pd
                 progress=False,
                 auto_adjust=False,
                 threads=False,
+                timeout=10,
             )
 
         raw_output = buffer.getvalue().strip()
@@ -329,11 +330,15 @@ def _normalize_ohlcv_frame(df: pd.DataFrame | None) -> pd.DataFrame | None:
         work = work.sort_index()
         work = work[~work.index.duplicated(keep="last")]
 
-        keep_columns = [col for col in ["Open", "High", "Low", "Close", "Volume"] if col in work.columns]
+        keep_columns = [
+            col for col in ["Open", "High", "Low", "Close", "Volume"] if col in work.columns
+        ]
         if not keep_columns:
             return None
         work = work[keep_columns]
-        work = work.dropna(subset=[col for col in ["Open", "High", "Low", "Close"] if col in work.columns])
+        work = work.dropna(
+            subset=[col for col in ["Open", "High", "Low", "Close"] if col in work.columns]
+        )
         return work
     except Exception as e:
         logger.debug(f"OHLCV normalize error: {e}")
@@ -356,11 +361,15 @@ def _normalize_ohlcv_frame_utc(df: pd.DataFrame | None) -> pd.DataFrame | None:
         work = work.sort_index()
         work = work[~work.index.duplicated(keep="last")]
 
-        keep_columns = [col for col in ["Open", "High", "Low", "Close", "Volume"] if col in work.columns]
+        keep_columns = [
+            col for col in ["Open", "High", "Low", "Close", "Volume"] if col in work.columns
+        ]
         if not keep_columns:
             return None
         work = work[keep_columns]
-        work = work.dropna(subset=[col for col in ["Open", "High", "Low", "Close"] if col in work.columns])
+        work = work.dropna(
+            subset=[col for col in ["Open", "High", "Low", "Close"] if col in work.columns]
+        )
         return work
     except Exception as e:
         logger.debug(f"UTC OHLCV normalize error: {e}")
@@ -639,9 +648,7 @@ def get_bist_data(symbol: str, start_date: str = "01-01-2015") -> pd.DataFrame |
                 # Son çare: İş Yatırım açılış kolonu yoksa yfinance fallback
                 fallback = _fetch_bist_data_yfinance(symbol, start_date)
                 if fallback is not None:
-                    logger.warning(
-                        f"BIST open fallback (yfinance) kullanıldı: {symbol}"
-                    )
+                    logger.warning(f"BIST open fallback (yfinance) kullanıldı: {symbol}")
                     return fallback
                 logger.warning(
                     f"BIST open fallback başarısız ({symbol}); geçici olarak Open=Close kullanılacak."
@@ -663,9 +670,7 @@ def get_bist_data(symbol: str, start_date: str = "01-01-2015") -> pd.DataFrame |
                 )
                 fallback = _fetch_bist_data_yfinance(symbol, start_date)
                 if fallback is not None:
-                    logger.warning(
-                        f"BIST şüpheli-open fallback (yfinance) kullanıldı: {symbol}"
-                    )
+                    logger.warning(f"BIST şüpheli-open fallback (yfinance) kullanıldı: {symbol}")
                     return fallback
 
             fetched_at_ts = time.time()

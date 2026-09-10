@@ -47,7 +47,10 @@ def get_bist_news(symbol: str) -> str:
     rss_url = f"https://news.google.com/rss/search?q={symbol}+hisse&hl=tr&gl=TR&ceid=TR:tr"
 
     try:
-        feed = feedparser.parse(rss_url)
+        response = requests.get(rss_url, timeout=10)
+        response.raise_for_status()
+        # feedparser receives bytes only; it must not make its own unbounded URL request.
+        feed = feedparser.parse(response.content)
         if not feed.entries:
             return "İlgili hisse için güncel haber bulunamadı."
 

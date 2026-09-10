@@ -8,6 +8,7 @@ import json
 import textwrap
 import time
 import unicodedata
+from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
@@ -848,7 +849,12 @@ def format_ai_message_for_telegram(
 
 
 def process_symbol(
-    df_daily: pd.DataFrame | None, symbol: str, market_type: str, check_commands_callback=None
+    df_daily: pd.DataFrame | None,
+    symbol: str,
+    market_type: str,
+    check_commands_callback=None,
+    *,
+    notify: bool = True,
 ) -> None:
     """
     Tek bir sembol icin tum timeframe'lerde sinyal analizi yapar.
@@ -867,7 +873,6 @@ def process_symbol(
 
     combo_hits = {"buy": {}, "sell": {}}
     hunter_hits = {"buy": {}, "sell": {}}
-    strategy_reports: dict[str, dict[str, Any]] = {}
     saved_signal_ids: dict[tuple[str, str, str], int] = {}
 
     for tf_code, tf_label in TIMEFRAMES:
@@ -952,9 +957,48 @@ def process_symbol(
             record_scan_error()
             logger.error(f"HATA: {symbol} - {tf_label}: {str(e)}")
 
-    # --- Ã–ZEL SÄ°NYALLER & YAPAY ZEKA ANALÄ°ZÄ° ---
+    finalize_symbol_signals(
+        df_daily=df_daily,
+        symbol=symbol,
+        market_type=market_type,
+        combo_hits=combo_hits,
+        hunter_hits=hunter_hits,
+        saved_signal_ids=saved_signal_ids,
+        notify=notify,
+    )
+
+
+def finalize_symbol_signals(
+    *,
+    df_daily: pd.DataFrame,
+    symbol: str,
+    market_type: str,
+    combo_hits: dict[str, dict[str, Any]],
+    hunter_hits: dict[str, dict[str, Any]],
+    saved_signal_ids: dict[tuple[str, str, str], int],
+    notify: bool = True,
+    telegram_send: Callable[[str], Any] | None = None,
+) -> None:
+    """Shared special-tag/AI path, using only this invocation's committed IDs.
+
+    Both scanners call this synchronously, retaining existing provider/AI timeout
+    behavior. Async callers yield between phases; no detached side-effect worker
+    can keep writing after an async scan finishes cancellation.
+    Second-source confirmation gates AI/notifications as in the sync reference;
+    regular signals and their exact-row tags remain persisted on a failed check.
+    """
+    strategy_reports: dict[str, dict[str, Any]] = {}
     secondary_df_cache: pd.DataFrame | None = None
     secondary_df_loaded = False
+
+    def notify_special(message: str) -> None:
+        if not notify:
+            return
+        try:
+            if not (telegram_send or send_message)(message):
+                logger.error("Ozel sinyal mesaji gonderilemedi: %s", symbol)
+        except Exception:
+            logger.exception("Ozel sinyal bildirimi gonderilemedi; AI/sinyal korunuyor: %s", symbol)
 
     def get_secondary_df() -> pd.DataFrame | None:
         nonlocal secondary_df_cache, secondary_df_loaded
@@ -1016,8 +1060,7 @@ def process_symbol(
             scenario_name=title_prefix,
         )
         title_message = f"{title_prefix} #{symbol}"
-        if not send_message(title_message):
-            logger.error("Ozel sinyal baslik mesaji gonderilemedi: %s", title_message)
+        notify_special(title_message)
         news_data = fetch_market_news(symbol, market_type)
         ai_msg = analyze_with_gemini(
             symbol=symbol,
@@ -1028,18 +1071,18 @@ def process_symbol(
             market_type=market_type,
             signal_id=signal_id,
         )
-        final_message = format_ai_message_for_telegram(
-            symbol,
-            ai_msg,
-            strategy_name=strategy_name,
-            signal_dir=signal_dir,
-            special_tag=special_tag,
-            report=get_strategy_report(strategy_name),
-            technical_levels=_derive_technical_levels(df_daily, special_tag, market_type),
-            trigger_rule=trigger_rule,
-        )
-        if not send_message(final_message):
-            logger.error("Ozel sinyal AI mesaji gonderilemedi: %s %s", symbol, special_tag)
+        if notify:
+            final_message = format_ai_message_for_telegram(
+                symbol,
+                ai_msg,
+                strategy_name=strategy_name,
+                signal_dir=signal_dir,
+                special_tag=special_tag,
+                report=get_strategy_report(strategy_name),
+                technical_levels=_derive_technical_levels(df_daily, special_tag, market_type),
+                trigger_rule=trigger_rule,
+            )
+            notify_special(final_message)
 
     def trigger_ai_analysis(
         title_prefix: str,
@@ -1206,6 +1249,8 @@ def _normalize_scan_markets(
 def scan_market(
     check_commands_callback=None,
     markets: str | list[str] | tuple[str, ...] | set[str] | None = None,
+    *,
+    notify: bool = True,
 ) -> None:
     """
     Tum BIST ve Kripto piyasalarini tarar.
@@ -1250,7 +1295,7 @@ def scan_market(
                         record_scan_error()
                         logger.warning("BIST veri tazeligi dogrulanamadi: %s", sym)
                     else:
-                        process_symbol(df, sym, market_type)
+                        process_symbol(df, sym, market_type, notify=notify)
                 except Exception:
                     record_scan_error()
                     logger.exception("Sembol taramasi basarisiz (%s): %s", market_type, sym)
@@ -1271,10 +1316,11 @@ def scan_market(
 
     outcome_label = "tamamlandi" if progress.status == "success" else "eksik tamamlandi"
     logger.info("Tarama #%s %s | Piyasalar: %s", scan_num, outcome_label, market_label)
-    try:
-        send_message(f"Tarama {outcome_label} ({market_label}).")
-    except Exception:
-        logger.exception("Tarama bildirimi gonderilemedi.")
+    if notify:
+        try:
+            send_message(f"Tarama {outcome_label} ({market_label}).")
+        except Exception:
+            logger.exception("Tarama bildirimi gonderilemedi.")
     return
 
 

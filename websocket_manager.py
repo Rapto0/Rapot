@@ -5,11 +5,14 @@ Handles ticker, depth, and trade streams with automatic reconnection.
 
 import asyncio
 import json
+import re
 from collections import defaultdict
 from collections.abc import Callable
+from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from time import monotonic
 from typing import Any
 
 import aiohttp
@@ -17,6 +20,39 @@ import aiohttp
 from logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def normalize_stream_symbol(symbol: str) -> str:
+    if not isinstance(symbol, str):
+        raise ValueError("Invalid stream symbol")
+    normalized = symbol.strip().upper()
+    if re.fullmatch(r"[A-Z0-9]{2,30}", normalized) is None:
+        raise ValueError("Invalid stream symbol")
+    return normalized
+
+
+def normalize_kline_interval(interval: str) -> str:
+    allowed = {
+        "1s",
+        "1m",
+        "3m",
+        "5m",
+        "15m",
+        "30m",
+        "1h",
+        "2h",
+        "4h",
+        "6h",
+        "8h",
+        "12h",
+        "1d",
+        "3d",
+        "1w",
+        "1M",
+    }
+    if not isinstance(interval, str) or interval.strip() not in allowed:
+        raise ValueError("Invalid kline interval")
+    return interval.strip()
 
 
 class StreamType(Enum):
@@ -125,6 +161,14 @@ class BinanceWebSocketManager:
         self._reconnect_delay = 1
         self._max_reconnect_delay = 60
         self._subscriptions: set[str] = set()
+        self._subscription_counts: dict[str, int] = {}
+        self._subscription_lock = asyncio.Lock()
+        self._message_id = 0
+        self._next_control_at = 0.0
+        self._control_sleep = asyncio.sleep
+        self._pending_controls: dict[int, tuple[str, str]] = {}
+        self._last_subscription_error: str | None = None
+        self._connection_task: asyncio.Task | None = None
         self._callbacks: dict[str, list[Callable]] = defaultdict(list)
         self._ticker_cache: dict[str, TickerData] = {}
         self._last_prices: dict[str, float] = {}
@@ -136,18 +180,39 @@ class BinanceWebSocketManager:
 
         self._running = True
         self._session = aiohttp.ClientSession()
-        asyncio.create_task(self._connection_loop())
+        await self.subscribe_all_tickers()
+        self._connection_task = asyncio.create_task(
+            self._connection_loop(), name="rapot-binance-stream"
+        )
         logger.info("BinanceWebSocketManager started")
 
     async def stop(self):
         """Stop the WebSocket manager and cleanup."""
         self._running = False
-
-        if self._ws and not self._ws.closed:
-            await self._ws.close()
-
-        if self._session and not self._session.closed:
-            await self._session.close()
+        error = None
+        if self._connection_task is not None:
+            self._connection_task.cancel()
+            try:
+                with suppress(asyncio.CancelledError):
+                    await self._connection_task
+            except Exception as exc:
+                error = exc
+            finally:
+                self._connection_task = None
+        for attribute in ("_ws", "_session"):
+            resource = getattr(self, attribute)
+            if resource is not None and not resource.closed:
+                try:
+                    await asyncio.wait_for(resource.close(), timeout=5)
+                except Exception as exc:
+                    error = error or exc
+            if resource is None or resource.closed:
+                setattr(self, attribute, None)
+        self._subscriptions.clear()
+        self._subscription_counts.clear()
+        self._pending_controls.clear()
+        if error is not None:
+            raise error
 
         logger.info("BinanceWebSocketManager stopped")
 
@@ -163,6 +228,11 @@ class BinanceWebSocketManager:
                 break
             except Exception as e:
                 logger.exception(f"Unexpected error in WebSocket: {e}")
+            finally:
+                if self._ws is not None and not self._ws.closed:
+                    with suppress(Exception):
+                        await asyncio.wait_for(self._ws.close(), timeout=5)
+                self._ws = None
 
             if self._running:
                 logger.info(f"Reconnecting in {self._reconnect_delay}s...")
@@ -174,12 +244,15 @@ class BinanceWebSocketManager:
         if not self._subscriptions:
             # Default: subscribe to all USDT pairs mini ticker
             await self.subscribe_all_tickers()
-            return
-
-        streams = "/".join(self._subscriptions)
-        url = f"{self.COMBINED_URL}?streams={streams}"
-
-        self._ws = await self._session.ws_connect(url, heartbeat=30)
+        # Serialize the initial subscription snapshot with dynamic requests so
+        # a subscription arriving during the handshake cannot be lost.
+        async with self._subscription_lock:
+            streams = "/".join(sorted(self._subscriptions))
+            url = f"{self.COMBINED_URL}?streams={streams}"
+            self._ws = await asyncio.wait_for(
+                self._session.ws_connect(url, heartbeat=30), timeout=10
+            )
+            self._pending_controls.clear()
         self._reconnect_delay = 1
         logger.info(f"Connected to Binance WebSocket with {len(self._subscriptions)} streams")
 
@@ -221,6 +294,28 @@ class BinanceWebSocketManager:
 
         if not isinstance(data, dict):
             logger.warning("Ignoring unexpected WebSocket payload type: %s", type(data).__name__)
+            return
+
+        if "id" in data and ("result" in data or "code" in data):
+            request_id = data.get("id")
+            request = (
+                self._pending_controls.pop(request_id, None)
+                if isinstance(request_id, int)
+                else None
+            )
+            if "code" in data:
+                self._last_subscription_error = f"{data.get('code')}: {data.get('msg')}"
+                logger.warning(
+                    "Binance stream control rejected (%s): %s",
+                    request,
+                    self._last_subscription_error,
+                )
+                # Reconnect with the current desired set; a transport send is
+                # not an acknowledgement of the server's subscription state.
+                if self._ws is not None and not self._ws.closed:
+                    await asyncio.wait_for(self._ws.close(), timeout=5)
+            elif request is not None and data.get("result") is None:
+                logger.debug("Binance stream control acknowledged: %s", request)
             return
 
         if "stream" in data:
@@ -363,31 +458,92 @@ class BinanceWebSocketManager:
 
     async def subscribe_all_tickers(self):
         """Subscribe to all USDT pair mini tickers."""
-        self._subscriptions.add("!miniTicker@arr")
+        if "!miniTicker@arr" not in self._subscriptions:
+            await self._subscribe_stream("!miniTicker@arr")
+
+    async def _send_subscription(self, method: str, stream: str) -> None:
+        if self._ws is None or self._ws.closed:
+            return
+        # Binance allows 5 incoming messages/s including ping/pong. Spread
+        # control requests to <3/s under the subscription lock, leaving headroom.
+        self._message_id += 1
+        request_id = self._message_id
+        try:
+            delay = self._next_control_at - monotonic()
+            if delay > 0:
+                await self._control_sleep(delay)
+            if len(self._pending_controls) >= 1024:
+                raise RuntimeError("Too many unacknowledged Binance stream requests")
+            self._pending_controls[request_id] = (method, stream)
+            await asyncio.wait_for(
+                self._ws.send_json({"method": method, "params": [stream], "id": request_id}),
+                timeout=5,
+            )
+        except BaseException:
+            self._pending_controls.pop(request_id, None)
+            if self._ws is not None and not self._ws.closed:
+                with suppress(Exception):
+                    await asyncio.wait_for(self._ws.close(), timeout=5)
+            raise
+        finally:
+            self._next_control_at = monotonic() + 0.35
+
+    async def _subscribe_stream(self, stream: str) -> None:
+        async with self._subscription_lock:
+            count = self._subscription_counts.get(stream, 0)
+            if count == 0:
+                if len(self._subscriptions) >= 1024:
+                    raise ValueError("Binance stream subscription limit reached")
+                await self._send_subscription("SUBSCRIBE", stream)
+                self._subscriptions.add(stream)
+            self._subscription_counts[stream] = count + 1
+
+    async def _unsubscribe_stream(self, stream: str) -> None:
+        async with self._subscription_lock:
+            count = self._subscription_counts.get(stream, 0)
+            if count > 1:
+                self._subscription_counts[stream] = count - 1
+            elif count == 1:
+                self._subscription_counts.pop(stream, None)
+                self._subscriptions.discard(stream)
+                await self._send_subscription("UNSUBSCRIBE", stream)
 
     async def subscribe_ticker(self, symbol: str):
         """Subscribe to a specific symbol's ticker."""
-        stream = f"{symbol.lower()}@ticker"
-        self._subscriptions.add(stream)
+        await self._subscribe_stream(f"{normalize_stream_symbol(symbol).lower()}@ticker")
+
+    async def unsubscribe_ticker(self, symbol: str) -> None:
+        await self._unsubscribe_stream(f"{normalize_stream_symbol(symbol).lower()}@ticker")
 
     async def subscribe_kline(self, symbol: str, interval: str = "1m"):
         """Subscribe to kline stream for a symbol."""
-        stream = f"{symbol.lower()}@kline_{interval}"
-        self._subscriptions.add(stream)
+        await self._subscribe_stream(
+            f"{normalize_stream_symbol(symbol).lower()}@kline_{normalize_kline_interval(interval)}"
+        )
+
+    async def unsubscribe_kline(self, symbol: str, interval: str = "1m") -> None:
+        await self._unsubscribe_stream(
+            f"{normalize_stream_symbol(symbol).lower()}@kline_{normalize_kline_interval(interval)}"
+        )
 
     async def subscribe_trade(self, symbol: str):
         """Subscribe to trade stream for a symbol."""
-        stream = f"{symbol.lower()}@trade"
-        self._subscriptions.add(stream)
+        await self._subscribe_stream(f"{normalize_stream_symbol(symbol).lower()}@trade")
+
+    async def unsubscribe_trade(self, symbol: str) -> None:
+        await self._unsubscribe_stream(f"{normalize_stream_symbol(symbol).lower()}@trade")
 
     async def subscribe_agg_trade(self, symbol: str):
         """Subscribe to aggregated trade stream."""
-        stream = f"{symbol.lower()}@aggTrade"
-        self._subscriptions.add(stream)
+        await self._subscribe_stream(f"{normalize_stream_symbol(symbol).lower()}@aggTrade")
+
+    async def unsubscribe_agg_trade(self, symbol: str) -> None:
+        await self._unsubscribe_stream(f"{normalize_stream_symbol(symbol).lower()}@aggTrade")
 
     def on(self, event: str, callback: Callable):
         """Register a callback for an event type."""
-        self._callbacks[event].append(callback)
+        if callback not in self._callbacks[event]:
+            self._callbacks[event].append(callback)
 
     def off(self, event: str, callback: Callable):
         """Remove a callback for an event type."""
@@ -396,7 +552,7 @@ class BinanceWebSocketManager:
 
     async def _notify(self, event: str, data: Any):
         """Notify all registered callbacks for an event."""
-        for callback in self._callbacks[event]:
+        for callback in tuple(self._callbacks[event]):
             try:
                 if asyncio.iscoroutinefunction(callback):
                     await callback(data)

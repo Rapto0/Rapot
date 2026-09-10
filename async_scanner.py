@@ -16,8 +16,8 @@ from async_data_loader import (
     fetch_multiple_crypto_async,
     get_all_binance_symbols_async,
 )
-from config import TIMEFRAMES
-from data_loader import get_all_bist_symbols, resample_market_data
+from config import TIMEFRAMES, signal_guard_settings
+from data_loader import get_all_bist_symbols, is_dataframe_fresh, resample_market_data
 from domain.events import SignalDomainEvent
 from infrastructure.persistence.signal_repository import save_signal as db_save_signal
 from logger import get_logger
@@ -243,7 +243,12 @@ async def process_symbol_async(symbol: str, df_daily, market_type: str) -> dict[
             record_scan_error()
             logger.error(f"Sinyal hesaplama hatasÄ± ({symbol} - {tf_code}): {e}")
 
-    return {"symbol": symbol, "market_type": market_type, "signals": signals}
+    return {
+        "symbol": symbol,
+        "market_type": market_type,
+        "signals": signals,
+        "df_daily": df_daily,
+    }
 
 
 async def process_signals_batch(results: list[dict[str, Any]], notify: bool = True) -> int:
@@ -257,6 +262,8 @@ async def process_signals_batch(results: list[dict[str, Any]], notify: bool = Tr
     Returns:
         Toplam sinyal sayÄ±sÄ±
     """
+    from market_scanner import finalize_symbol_signals
+
     total_signals = 0
 
     def on_persisted(signal_id: int) -> None:
@@ -267,29 +274,84 @@ async def process_signals_batch(results: list[dict[str, Any]], notify: bool = Tr
             _async_state.increment_signal()
 
     for result in results:
+        # Cooperative checkpoints keep cancellation before the next write/AI phase.
+        # The synchronous phase itself has no detached worker that can write later.
+        await asyncio.sleep(0)
         symbol = result["symbol"]
         market_type = result.get("market_type", "BIST")
+        df_daily = result.get("df_daily")
+        if (
+            market_type == "BIST"
+            and df_daily is not None
+            and (
+                df_daily.empty
+                or not is_dataframe_fresh(df_daily, signal_guard_settings.BIST_MAX_DATA_AGE_SECONDS)
+            )
+        ):
+            # An earlier symbol's synchronous AI/news may have aged this snapshot
+            # since batch receipt. Recheck before this symbol can write anything.
+            record_scan_error()
+            logger.warning("BIST verisi isleme oncesi bayatladi: %s", symbol)
+            continue
+        hits = {strategy: {"buy": {}, "sell": {}} for strategy in ("COMBO", "HUNTER")}
+        saved_signal_ids = {}
+        failed_timeframes = set()
 
         for signal in result.get("signals", []):
-            event = SignalDomainEvent(
+            await asyncio.sleep(0)
+            strategy = str(signal["strategy"])
+            signal_type = str(signal["type"])
+            timeframe = str(signal["timeframe"])
+            if timeframe in failed_timeframes:
+                continue
+            if strategy in hits and signal_type in {"AL", "SAT"}:
+                hits[strategy]["buy" if signal_type == "AL" else "sell"][timeframe] = signal.get(
+                    "details", {}
+                )
+            try:
+                event = SignalDomainEvent(
+                    symbol=symbol,
+                    market_type=market_type,
+                    strategy=strategy,
+                    signal_type=signal_type,
+                    timeframe=timeframe,
+                    score=str(signal["score"]),
+                    price=float(signal["price"]),
+                    details=signal.get("details"),
+                    special_tag=None,
+                )
+                signal_id = persist_and_publish_signal_event(
+                    event=event,
+                    save_signal_fn=db_save_signal,
+                    publish_signal_fn=_publish_realtime_signal,
+                    payload_builder_fn=_build_realtime_signal_payload,
+                    details_serializer=_serialize_signal_details,
+                    on_persisted=on_persisted,
+                )
+                if signal_id > 0:
+                    saved_signal_ids[(strategy, signal_type, timeframe)] = signal_id
+            except Exception:
+                # Sync processing stops this timeframe after a persistence error,
+                # while keeping previous commits and continuing later timeframes.
+                failed_timeframes.add(timeframe)
+                record_scan_error()
+                logger.exception("Sinyal kaydi basarisiz (%s - %s)", symbol, timeframe)
+
+        # Legacy callers may provide only ready-made signals, without an OHLCV frame.
+        # They retain their persistence contract; no synthetic AI input is invented.
+        if df_daily is not None and not df_daily.empty:
+            await asyncio.sleep(0)
+            finalize_symbol_signals(
+                df_daily=df_daily,
                 symbol=symbol,
                 market_type=market_type,
-                strategy=str(signal["strategy"]),
-                signal_type=str(signal["type"]),
-                timeframe=str(signal["timeframe"]),
-                score=str(signal["score"]),
-                price=float(signal["price"]),
-                details=signal.get("details"),
-                special_tag=None,
+                combo_hits=hits["COMBO"],
+                hunter_hits=hits["HUNTER"],
+                saved_signal_ids=saved_signal_ids,
+                notify=notify,
+                telegram_send=send_message,
             )
-            persist_and_publish_signal_event(
-                event=event,
-                save_signal_fn=db_save_signal,
-                publish_signal_fn=_publish_realtime_signal,
-                payload_builder_fn=_build_realtime_signal_payload,
-                details_serializer=_serialize_signal_details,
-                on_persisted=on_persisted,
-            )
+            await asyncio.sleep(0)
 
     return total_signals
 
@@ -357,33 +419,50 @@ async def scan_market_async(
                 if not symbols:
                     record_scan_error()
                     logger.warning("%s sembol listesi bos; tarama eksik.", market_type)
-                # Count targets handed to the batch provider, including missing data.
-                progress.symbols_scanned += len(symbols)
                 logger.info("%s taraniyor: %s sembol", market_type, len(symbols))
-                if market_type == "BIST":
-                    bist_data = data = await fetch_multiple_bist_async(symbols, batch_size=30)
-                else:
-                    crypto_data = data = await fetch_multiple_crypto_async(symbols, batch_size=50)
-                record_scan_error(len(set(symbols) - data.keys()))
-                tasks = [
-                    process_symbol_async(sym, data[sym], market_type)
-                    for sym in symbols
-                    if sym in data
-                ]
-                # Await every child before closing accounting, even if one fails.
-                results = await asyncio.gather(*tasks, return_exceptions=True)
-                successful_results = []
-                for result in results:
-                    if isinstance(result, asyncio.CancelledError):
-                        raise result
-                    if isinstance(result, BaseException):
-                        if not isinstance(result, Exception):
-                            raise result
-                        record_scan_error()
-                        logger.error("Sembol analizi basarisiz: %s", type(result).__name__)
+                batch_size = 30 if market_type == "BIST" else 50
+                for start in range(0, len(symbols), batch_size):
+                    batch = symbols[start : start + batch_size]
+                    # Count only targets handed to this provider call, even on cancellation.
+                    progress.symbols_scanned += len(batch)
+                    if market_type == "BIST":
+                        data = await fetch_multiple_bist_async(batch, batch_size=batch_size)
+                        bist_data.update(data)
                     else:
-                        successful_results.append(result)
-                await process_signals_batch(successful_results, notify)
+                        data = await fetch_multiple_crypto_async(batch, batch_size=batch_size)
+                        crypto_data.update(data)
+                    record_scan_error(len(set(batch) - data.keys()))
+                    eligible = []
+                    # Reject stale provider data on receipt, then recheck each symbol
+                    # before writes because earlier AI work can age this same batch.
+                    for symbol in batch:
+                        if symbol not in data:
+                            continue
+                        frame = data[symbol]
+                        if frame is None or frame.empty:
+                            record_scan_error()
+                        elif market_type == "BIST" and not is_dataframe_fresh(
+                            frame, signal_guard_settings.BIST_MAX_DATA_AGE_SECONDS
+                        ):
+                            record_scan_error()
+                            logger.warning("BIST veri tazeligi dogrulanamadi: %s", symbol)
+                        else:
+                            eligible.append(symbol)
+                    tasks = [process_symbol_async(sym, data[sym], market_type) for sym in eligible]
+                    # Await every child before closing accounting, even if one fails.
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    successful_results = []
+                    for result in results:
+                        if isinstance(result, asyncio.CancelledError):
+                            raise result
+                        if isinstance(result, BaseException):
+                            if not isinstance(result, Exception):
+                                raise result
+                            record_scan_error()
+                            logger.error("Sembol analizi basarisiz: %s", type(result).__name__)
+                        else:
+                            successful_results.append(result)
+                    await process_signals_batch(successful_results, notify)
     except Exception as e:
         scan_error = str(e)
         logger.exception("Async tarama hatasi.")

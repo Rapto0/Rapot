@@ -24,6 +24,7 @@ export function useRealtime(options: UseRealtimeOptions = {}) {
   const { autoConnect = true, onSignal } = options;
 
   const connectionState = useRealtimeStore((state) => state.connectionState);
+  const signalConnectionState = useRealtimeStore((state) => state.signalConnectionState);
   const tickers = useRealtimeStore((state) => state.tickers);
   const bistStocks = useRealtimeStore((state) => state.bistStocks);
   const priceChanges = useRealtimeStore((state) => state.priceChanges);
@@ -36,6 +37,7 @@ export function useRealtime(options: UseRealtimeOptions = {}) {
 
   return {
     connectionState,
+    signalConnectionState,
     connect,
     disconnect,
     subscribe,
@@ -103,23 +105,30 @@ export function useKlineStream(symbol: string, interval: string = '1m') {
   const { subscribe } = useRealtime({ autoConnect: false });
   const { klineData } = useRealtimeStore();
 
-  const key = `${symbol}_${interval}`;
+  const normalizedSymbol = symbol.trim().toUpperCase();
+  const key = `${normalizedSymbol}_${interval}`;
   const kline = klineData.get(key);
 
   useEffect(() => {
-    subscribe('kline', symbol);
-  }, [symbol, interval, subscribe]);
+    return subscribe('kline', normalizedSymbol, interval);
+  }, [normalizedSymbol, interval, subscribe]);
 
   return kline;
 }
 
 export function useTradeStream(symbol?: string) {
+  const { subscribe } = useRealtime({ autoConnect: false });
   const { recentTrades } = useRealtimeStore();
+  const normalizedSymbol = symbol?.trim().toUpperCase();
+
+  useEffect(() => {
+    if (normalizedSymbol) return subscribe('trade', normalizedSymbol);
+  }, [normalizedSymbol, subscribe]);
 
   const filteredTrades = useMemo(() => {
-    if (!symbol) return recentTrades;
-    return recentTrades.filter((t) => t.symbol === symbol);
-  }, [recentTrades, symbol]);
+    if (!normalizedSymbol) return recentTrades;
+    return recentTrades.filter((t) => t.symbol === normalizedSymbol);
+  }, [recentTrades, normalizedSymbol]);
 
   return filteredTrades;
 }

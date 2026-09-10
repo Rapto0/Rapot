@@ -20,21 +20,13 @@ import {
 } from 'lucide-react';
 import { useRealtimeStore } from '@/lib/hooks/use-realtime';
 import { useSignals } from '@/lib/hooks/use-signals';
+import { mergeSignals } from '@/lib/realtime/signals';
+import type { SignalData } from '@/lib/realtime/types';
 import { cn } from '@/lib/utils';
 
 // ==================== TYPES ====================
 
-interface Signal {
-  id: number;
-  symbol: string;
-  marketType: string;
-  strategy: string;
-  signalType: 'AL' | 'SAT';
-  timeframe: string;
-  score: string;
-  price: number;
-  createdAt: string;
-}
+type Signal = SignalData;
 
 // ==================== PAGINATION COMPONENT ====================
 
@@ -378,18 +370,10 @@ export function SignalTerminal({
       score: s.score || '',
       price: s.price,
       createdAt: s.createdAt,
+      specialTag: s.specialTag,
     })) || [];
 
-    // Merge with realtime signals
-    const all = [...realtimeSignals, ...apiSignals];
-
-    // Remove duplicates
-    const seen = new Set<number>();
-    const unique = all.filter((s) => {
-      if (seen.has(s.id)) return false;
-      seen.add(s.id);
-      return true;
-    });
+    const unique = mergeSignals(apiSignals, realtimeSignals);
 
     // Apply filters including time range
     const timeCutoff = getTimeFilterCutoff(filter.timeRange);
