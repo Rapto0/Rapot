@@ -119,9 +119,18 @@ Testler gerçek Pine kaynağındaki grafik koşulunu sahte metadata ile ve diğe
 dispatch/payload sözleşmelerini kaynak incelemesiyle kontrol eder. Pine derleyici,
 TradingView sunucusu veya tick yürütücüsü değildir. 9 Eylül 2026'da kullanıcı,
 tam kaynağın `BINANCE:BTCUSDT` / standart mum / 1D grafiğinde derlendiğini bildirdi;
-bu kayıt araçla alınmış derleyici çıktısı değildir. Grafik korumalarının runtime
-kontrolü, gerçek alarm JSON'u ve ayrıca izin verilmiş ayrılmış testnet hesabı/DB
-üzerinde BUY → FIFO SELL → reconcile kabulü **henüz doğrulanmadı**.
+bu kayıt araçla alınmış derleyici çıktısı değildir. 10 Eylül'de kullanıcı,
+BTCUSDT.P/1D ve BTCUSDT/Heikin Ashi/1D için `Grafik Engelli`, standart
+BTCUSDT/1D/Kripto 24/7 için `TF OK` ve `Alert Acik` gördüğünü bildirdi.
+Bu gözlemler gerçek HTTP alarm teslimini kanıtlamaz.
+
+Ayrı VPS PostgreSQL/kapsamında operatörün sentetik payload'uyla HTTPS/query-token,
+iki simülasyon BUY → iki FIFO SELL ve restart öncesi/sonrası birebir tekrar
+kabulü geçti; üretim kayıt sayıları değişmedi. Bu alıcı `DRY_RUN` ve boş Binance
+kimlik bilgileriyle çalıştı, sonrasında test servisleri/HTTPS rotası kaldırıldı.
+Gerçek TradingView alarm JSON'u/teslimi, ALL/FIRST ve saat filtresi runtime
+kontrolü, ayrıca izin verilmiş ayrılmış testnet hesabı/DB üzerinde
+BUY → FIFO SELL → reconcile kabulü **henüz doğrulanmadı**.
 Ayrıntılı kanıt ve kalan adımlar [devam planında](../../docs/RAPOT_DEVAM_PLANI.md).
 `strategy()` başlığı ve `realtimeOnly=false`, çalışan backtest kanıtı değildir; scriptte
 `strategy.entry/order/exit` emri yoktur.
