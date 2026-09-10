@@ -27,10 +27,11 @@ trading disabled and live adapter disabled. Deployment does not enable or send b
 
 ## First cutover from the old layout
 
-The recorded target is `root@138.68.71.27`, `/root/Rapot`. The September 2026 local SSH
-attempt failed authentication; no usable private key was found on the development computer.
-No VPS deployment has been verified in P1-2. Use an authorized server console or arrange
-SSH access through the server owner; never paste private keys or passwords into reports.
+The verified target is `root@138.68.71.27`, with releases under `/opt/rapot/releases`
+and `/opt/rapot/current` selecting the active release. The original `/root/Rapot` checkout
+is retained as history. P1-2 cutover and HTTPS were verified after SSH access was restored;
+see [the current release and evidence record](../docs/RAPOT_DEVAM_PLANI.md). Keep private
+keys and passwords outside reports. The following checklist describes the initial cutover.
 
 1. Record server commit, checkout changes, PM2/systemd/nohup processes, listening ports,
    actual data paths and reverse proxy. Do not stop unidentified processes.
@@ -45,6 +46,13 @@ SSH access through the server owner; never paste private keys or passwords into 
    headers. Backend ports bind to loopback. A public webhook route must not expose middleware
    management paths. Verify P0-2 login/admin configuration before publishing.
 
+Host Nginx upstreams must explicitly use `127.0.0.1` for ports 3000, 8000, 5000 and 8001,
+matching the Compose bindings. `localhost` can resolve to `::1`, where these services do
+not listen, causing intermittent 502 responses even when containers are healthy. Preserve
+each location's existing path/trailing-slash and WebSocket behavior when changing the host.
+Back up the active configuration, run `nginx -t`, reload Nginx, then verify public HTTPS
+routes. On this VPS, the reviewed configuration is `/etc/nginx/sites-available/default`.
+
 Frontend image builds use `API_PROXY_TARGET=http://api:8000` and
 `HEALTH_PROXY_TARGET=http://bot:5000`; changing these targets requires a rebuild. Browser HTTP
 and WebSockets use `/api`, health uses `/health-api`. Local npm builds default to localhost
@@ -52,9 +60,9 @@ and WebSockets use `/api`, health uses `/health-api`. Local npm builds default t
 
 ## Release
 
-Complete tests, lint/types, builds and required CI for the exact commit. The first release
-still requires P1-7 and P1-2 verification. `scripts/deploy.ps1` checks clean tree/branch/full
-SHA, optionally pushes, then prints server commands. It does not stage, commit, stash, reset
+Complete tests, lint/types, builds and required CI for the exact commit. P1-7 and P1-2
+initial-release checks are recorded as complete in the plan. `scripts/deploy.ps1` checks
+clean tree/branch/full SHA, optionally pushes, then prints server commands. It does not stage, commit, stash, reset
 or connect over SSH. Supplying a SHA does not run or replace the release checks.
 
 ```powershell
@@ -86,6 +94,11 @@ curl --fail --output /dev/null http://127.0.0.1:3000/
 
 Also verify authenticated UI and WebSockets through the real reverse proxy. Record full
 server SHA, image IDs and services. Local health alone does not prove TLS/login/webhook routing.
+Bot database health can become ready before scheduler startup finishes. Separately verify
+`/health-api/status` reports `bot.state=running` with `state_source=local_lifecycle`.
+The P1-6 operator allows 180 seconds for this startup observation, with status requests
+bounded to seven seconds; it retains the separate 20-second API health request limit.
+This observation allowance is not a guarantee that startup finishes within 180 seconds.
 
 ## Optional middleware
 
