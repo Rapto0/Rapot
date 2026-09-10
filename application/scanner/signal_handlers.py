@@ -13,12 +13,15 @@ def persist_and_publish_signal(
     payload_builder_fn: Callable[..., dict[str, Any]],
     save_kwargs: dict[str, Any],
     payload_kwargs: dict[str, Any],
+    on_persisted: Callable[[int], None] | None = None,
 ) -> int:
     """
     Persist a signal and publish realtime payload when persistence succeeds.
     """
     signal_id = save_signal_fn(**save_kwargs)
     if signal_id:
+        if on_persisted is not None:
+            on_persisted(int(signal_id))
         payload = payload_builder_fn(signal_id=int(signal_id), **payload_kwargs)
         publish_signal_fn(payload)
     return int(signal_id or 0)
@@ -31,6 +34,7 @@ def persist_and_publish_signal_event(
     publish_signal_fn: Callable[[dict[str, Any]], bool],
     payload_builder_fn: Callable[..., dict[str, Any]],
     details_serializer: Callable[[dict[str, Any] | None], str | None],
+    on_persisted: Callable[[int], None] | None = None,
 ) -> int:
     """
     Persist and publish a typed scanner signal event.
@@ -42,4 +46,5 @@ def persist_and_publish_signal_event(
         payload_builder_fn=payload_builder_fn,
         save_kwargs=event.to_save_kwargs(serialized_details=serialized_details),
         payload_kwargs=event.to_payload_kwargs(),
+        on_persisted=on_persisted,
     )

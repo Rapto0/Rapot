@@ -15,6 +15,12 @@ import pandas as pd
 
 from ai_analyst import analyze_with_gemini
 from ai_schema import AIResponseSchemaError, parse_ai_response
+from application.scanner.scan_history import (
+    record_scan_error,
+    record_signal_saved,
+    suspend_scan_tracking,
+    track_scan,
+)
 from application.scanner.signal_handlers import persist_and_publish_signal_event
 from config import TIMEFRAMES, rate_limits, signal_guard_settings
 from data_loader import (
@@ -248,6 +254,11 @@ def _save_signal_and_publish(
     details: dict[str, Any] | None,
     special_tag: str | None = None,
 ) -> int:
+    def on_persisted(signal_id: int) -> None:
+        if signal_id > 0:
+            record_signal_saved()
+            increment_signal_count()
+
     event = SignalDomainEvent(
         symbol=symbol,
         market_type=market_type,
@@ -265,8 +276,8 @@ def _save_signal_and_publish(
         publish_signal_fn=_publish_realtime_signal,
         payload_builder_fn=_build_realtime_signal_payload,
         details_serializer=_serialize_signal_details,
+        on_persisted=on_persisted,
     )
-    increment_signal_count()
     return signal_id
 
 
@@ -723,11 +734,7 @@ def _build_risk_note(header: str, payload: Any) -> str:
         reason = "Model geçerli bir yanıt döndürmedi."
     if error_code in {"invalid_json", "empty_response", "schema_validation"}:
         reason = "Model geçerli bir yanıt döndürmedi."
-    return (
-        f"{header}\n"
-        f"\u26a0\ufe0f AI analizi şu anda üretilemedi.\n"
-        f"Neden: {html.escape(reason)}"
-    )
+    return f"{header}\n\u26a0\ufe0f AI analizi şu anda üretilemedi.\nNeden: {html.escape(reason)}"
 
 
 def format_ai_message_for_telegram(
@@ -861,6 +868,7 @@ def process_symbol(
     combo_hits = {"buy": {}, "sell": {}}
     hunter_hits = {"buy": {}, "sell": {}}
     strategy_reports: dict[str, dict[str, Any]] = {}
+    saved_signal_ids: dict[tuple[str, str, str], int] = {}
 
     for tf_code, tf_label in TIMEFRAMES:
         try:
@@ -875,7 +883,7 @@ def process_symbol(
                     combo_hits["buy"][tf_code] = res_combo["details"]
                     logger.info("COMBO AL signal | %s %s", symbol, tf_label)
                     # VeritabanÄ±na kaydet
-                    _save_signal_and_publish(
+                    signal_id = _save_signal_and_publish(
                         symbol=symbol,
                         market_type=market_type,
                         strategy="COMBO",
@@ -885,11 +893,13 @@ def process_symbol(
                         price=res_combo["details"].get("PRICE", 0),
                         details=res_combo.get("details"),
                     )
+                    if signal_id > 0:
+                        saved_signal_ids[("COMBO", "AL", tf_code)] = signal_id
 
                 if res_combo["sell"]:
                     combo_hits["sell"][tf_code] = res_combo["details"]
                     # SAT sinyalini de veritabanÄ±na kaydet
-                    _save_signal_and_publish(
+                    signal_id = _save_signal_and_publish(
                         symbol=symbol,
                         market_type=market_type,
                         strategy="COMBO",
@@ -899,6 +909,8 @@ def process_symbol(
                         price=res_combo["details"].get("PRICE", 0),
                         details=res_combo.get("details"),
                     )
+                    if signal_id > 0:
+                        saved_signal_ids[("COMBO", "SAT", tf_code)] = signal_id
 
             # --- HUNTER ---
             res_hunter = calculate_hunter_signal(df_resampled, tf_code)
@@ -907,7 +919,7 @@ def process_symbol(
                     hunter_hits["buy"][tf_code] = res_hunter["details"]
                     logger.info("HUNTER DIP signal | %s %s", symbol, tf_label)
                     # VeritabanÄ±na kaydet
-                    _save_signal_and_publish(
+                    signal_id = _save_signal_and_publish(
                         symbol=symbol,
                         market_type=market_type,
                         strategy="HUNTER",
@@ -917,11 +929,13 @@ def process_symbol(
                         price=res_hunter["details"].get("PRICE", 0),
                         details=res_hunter.get("details"),
                     )
+                    if signal_id > 0:
+                        saved_signal_ids[("HUNTER", "AL", tf_code)] = signal_id
 
                 if res_hunter["sell"]:
                     hunter_hits["sell"][tf_code] = res_hunter["details"]
                     # SAT sinyalini de veritabanÄ±na kaydet
-                    _save_signal_and_publish(
+                    signal_id = _save_signal_and_publish(
                         symbol=symbol,
                         market_type=market_type,
                         strategy="HUNTER",
@@ -931,8 +945,11 @@ def process_symbol(
                         price=res_hunter["details"].get("PRICE", 0),
                         details=res_hunter.get("details"),
                     )
+                    if signal_id > 0:
+                        saved_signal_ids[("HUNTER", "SAT", tf_code)] = signal_id
 
         except Exception as e:
+            record_scan_error()
             logger.error(f"HATA: {symbol} - {tf_label}: {str(e)}")
 
     # --- Ã–ZEL SÄ°NYALLER & YAPAY ZEKA ANALÄ°ZÄ° ---
@@ -957,12 +974,13 @@ def process_symbol(
             )
         return strategy_reports[strategy_name]
 
-    def trigger_ai_analysis(
+    def run_ai_analysis(
         title_prefix: str,
         strategy_name: str,
         signal_dir: str,
         special_tag: str,
         trigger_rule: list[str],
+        signal_id: int,
     ) -> None:
         if market_type == "BIST" and signal_guard_settings.BIST_REQUIRE_SECOND_SOURCE_CONFIRMATION:
             ok, reason = _verify_bist_second_source(
@@ -1007,6 +1025,8 @@ def process_symbol(
             signal_type=signal_dir,
             technical_data=technical_payload,
             news_context=news_data,
+            market_type=market_type,
+            signal_id=signal_id,
         )
         final_message = format_ai_message_for_telegram(
             symbol,
@@ -1021,9 +1041,36 @@ def process_symbol(
         if not send_message(final_message):
             logger.error("Ozel sinyal AI mesaji gonderilemedi: %s %s", symbol, special_tag)
 
+    def trigger_ai_analysis(
+        title_prefix: str,
+        strategy_name: str,
+        signal_dir: str,
+        special_tag: str,
+        trigger_rule: list[str],
+    ) -> None:
+        timeframe = SPECIAL_TAG_TARGET_TIMEFRAME[special_tag]
+        signal_id = saved_signal_ids.get((strategy_name, signal_dir, timeframe))
+        if signal_id is None:
+            return
+        try:
+            run_ai_analysis(
+                title_prefix, strategy_name, signal_dir, special_tag, trigger_rule, signal_id
+            )
+        except Exception:
+            logger.exception(
+                "Ozel sinyal AI analizi tamamlanamadi; sinyal korundu: %s %s %s (ID: %s)",
+                symbol,
+                strategy_name,
+                special_tag,
+                signal_id,
+            )
+
     def mark_special_signal(
         strategy_name: str, signal_dir: str, special_tag: str, timeframe: str
     ) -> None:
+        signal_id = saved_signal_ids.get((strategy_name, signal_dir, timeframe))
+        if signal_id is None:
+            return
         try:
             tagged = db_set_signal_special_tag(
                 symbol=symbol,
@@ -1033,6 +1080,7 @@ def process_symbol(
                 timeframe=timeframe,
                 special_tag=special_tag,
                 within_seconds=0,
+                signal_id=signal_id,
             )
             if not tagged:
                 logger.warning(
@@ -1172,65 +1220,61 @@ def scan_market(
     selected_markets = _normalize_scan_markets(markets)
     market_label = " + ".join(m for m in ("BIST", "Kripto") if m in selected_markets)
 
-    increment_scan_count()
-    scan_num = get_scan_count()
-    logger.info(f"Tarama #{scan_num} baÅŸladÄ±")
-    logger.info("--- Tarama Basladi: %s ---", time.strftime("%H:%M:%S"))
+    with track_scan(markets=selected_markets, mode="sync") as progress:
+        scan_num = increment_scan_count()
+        logger.info("Tarama #%s basladi | Piyasalar: %s", scan_num, market_label)
 
-    # BIST Tarama
-    symbols = get_all_bist_symbols() if "BIST" in selected_markets else []
-    logger.info(f"BIST taranÄ±yor: {len(symbols)} hisse")
-    logger.info("BIST taraniyor (%s hisse)", len(symbols))
-
-    for i, sym in enumerate(symbols):
-        if (i + 1) % 50 == 0 or i == len(symbols) - 1:
-            logger.debug("BIST progress: %s/%s %s", i + 1, len(symbols), sym)
-        try:
-            # Trade-time BIST akisinda cache bypass: her turde kaynaktan taze veri cek.
-            df = get_bist_data(sym, start_date="01-01-2015")
-            if not is_dataframe_fresh(df, signal_guard_settings.BIST_MAX_DATA_AGE_SECONDS):
-                age = get_dataframe_age_seconds(df)
-                if age is None:
-                    logger.warning(f"BIST veri tazelik bilgisi yok, atlandi: {sym}")
-                else:
-                    logger.warning(
-                        f"BIST veri bayat ({age:.1f}s > {signal_guard_settings.BIST_MAX_DATA_AGE_SECONDS}s), atlandi: {sym}"
-                    )
+        for market_type in ("BIST", "Kripto"):
+            if market_type not in selected_markets:
                 continue
-            process_symbol(df, sym, "BIST")
-        except Exception as e:
-            logger.error(f"VERÄ° Ã‡EKME HATASI (BIST): {sym} - {str(e)}")
+            symbols = get_all_bist_symbols() if market_type == "BIST" else get_all_binance_symbols()
+            if not symbols:
+                record_scan_error()
+                logger.warning("%s sembol listesi bos; tarama eksik.", market_type)
+            logger.info("%s taraniyor (%s sembol)", market_type, len(symbols))
+            for i, sym in enumerate(symbols):
+                progress.symbols_scanned += 1
+                try:
+                    # BIST continues to bypass cache and require fresh source data.
+                    df = (
+                        get_bist_data(sym, start_date="01-01-2015")
+                        if market_type == "BIST"
+                        else cached_get_crypto_data(sym)
+                    )
+                    if df is None or df.empty:
+                        record_scan_error()
+                        logger.warning("%s verisi yok: %s", market_type, sym)
+                    elif market_type == "BIST" and not is_dataframe_fresh(
+                        df, signal_guard_settings.BIST_MAX_DATA_AGE_SECONDS
+                    ):
+                        record_scan_error()
+                        logger.warning("BIST veri tazeligi dogrulanamadi: %s", sym)
+                    else:
+                        process_symbol(df, sym, market_type)
+                except Exception:
+                    record_scan_error()
+                    logger.exception("Sembol taramasi basarisiz (%s): %s", market_type, sym)
 
-        if i % 10 == 0 and check_commands_callback:
-            check_commands_callback()
-        time.sleep(rate_limits.BIST_DELAY)
+                # Manual analyses requested by the callback have their own scope.
+                if i % 10 == 0 and check_commands_callback:
+                    with suspend_scan_tracking():
+                        check_commands_callback()
+                time.sleep(
+                    rate_limits.BIST_DELAY if market_type == "BIST" else rate_limits.CRYPTO_DELAY
+                )
 
-    # Kripto Tarama
-    crypto_syms = get_all_binance_symbols() if "Kripto" in selected_markets else []
-    logger.info("Kripto taraniyor (%s cift)", len(crypto_syms))
+        price_cache.clear_expired()
+        cache_stats = price_cache.get_stats()
+        logger.info(
+            "Cache: %s hit, %s miss", cache_stats["session_hits"], cache_stats["session_misses"]
+        )
 
-    for i, sym in enumerate(crypto_syms):
-        if (i + 1) % 100 == 0 or i == len(crypto_syms) - 1:
-            logger.debug("Kripto progress: %s/%s %s", i + 1, len(crypto_syms), sym)
-        try:
-            df = cached_get_crypto_data(sym)
-            process_symbol(df, sym, "Kripto")
-        except Exception as e:
-            logger.error(f"VERÄ° Ã‡EKME HATASI (KRIPTO): {sym} - {str(e)}")
-
-        if i % 10 == 0 and check_commands_callback:
-            check_commands_callback()
-        time.sleep(rate_limits.CRYPTO_DELAY)
-
-    # SÃ¼resi dolmuÅŸ cache temizle
-    price_cache.clear_expired()
-
-    # Cache istatistikleri logla
-    cache_stats = price_cache.get_stats()
-    logger.info(f"Cache: {cache_stats['session_hits']} hit, {cache_stats['session_misses']} miss")
-    logger.info(f"Tarama #{scan_num} tamamlandi | Piyasalar: {market_label}")
-    logger.info("Tarama bitti.")
-    send_message(f"Tarama tamamlandi ({market_label}).")
+    outcome_label = "tamamlandi" if progress.status == "success" else "eksik tamamlandi"
+    logger.info("Tarama #%s %s | Piyasalar: %s", scan_num, outcome_label, market_label)
+    try:
+        send_message(f"Tarama {outcome_label} ({market_label}).")
+    except Exception:
+        logger.exception("Tarama bildirimi gonderilemedi.")
     return
 
 

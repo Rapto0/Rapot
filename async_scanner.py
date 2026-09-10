@@ -5,11 +5,11 @@ Paralel piyasa tarama ve sinyal iÅŸleme.
 
 import asyncio
 import json
-import time
 from collections.abc import Callable
 from datetime import datetime
 from typing import Any
 
+from application.scanner.scan_history import record_scan_error, record_signal_saved, track_scan
 from application.scanner.signal_handlers import persist_and_publish_signal_event
 from async_data_loader import (
     fetch_multiple_bist_async,
@@ -172,6 +172,7 @@ async def process_symbol_async(symbol: str, df_daily, market_type: str) -> dict[
         Bulunan sinyaller
     """
     if df_daily is None or df_daily.empty:
+        record_scan_error()
         return {"symbol": symbol, "signals": []}
 
     signals = []
@@ -239,6 +240,7 @@ async def process_symbol_async(symbol: str, df_daily, market_type: str) -> dict[
                     )
 
         except Exception as e:
+            record_scan_error()
             logger.error(f"Sinyal hesaplama hatasÄ± ({symbol} - {tf_code}): {e}")
 
     return {"symbol": symbol, "market_type": market_type, "signals": signals}
@@ -257,14 +259,18 @@ async def process_signals_batch(results: list[dict[str, Any]], notify: bool = Tr
     """
     total_signals = 0
 
+    def on_persisted(signal_id: int) -> None:
+        nonlocal total_signals
+        if signal_id > 0:
+            record_signal_saved()
+            total_signals += 1
+            _async_state.increment_signal()
+
     for result in results:
         symbol = result["symbol"]
         market_type = result.get("market_type", "BIST")
 
         for signal in result.get("signals", []):
-            total_signals += 1
-            _async_state.increment_signal()
-
             event = SignalDomainEvent(
                 symbol=symbol,
                 market_type=market_type,
@@ -282,6 +288,7 @@ async def process_signals_batch(results: list[dict[str, Any]], notify: bool = Tr
                 publish_signal_fn=_publish_realtime_signal,
                 payload_builder_fn=_build_realtime_signal_payload,
                 details_serializer=_serialize_signal_details,
+                on_persisted=on_persisted,
             )
 
     return total_signals
@@ -329,100 +336,94 @@ async def scan_market_async(
     selected_markets = _normalize_scan_markets(markets)
     market_label = " + ".join(m for m in ("BIST", "Kripto") if m in selected_markets)
 
-    scan_num = _async_state.start_scan()
-    start_time = time.time()
-
-    logger.info(f"Async tarama #{scan_num} baÅŸladÄ±")
-    send_message(f"ğŸ”„ Tarama #{scan_num} baÅŸladÄ± (Async Mode)")
-
-    total_signals = 0
     bist_data = {}
     crypto_data = {}
-    scan_failed = False
     scan_error = ""
 
     try:
-        # BIST Tarama
-        bist_symbols = get_all_bist_symbols() if "BIST" in selected_markets else []
-        logger.info(f"BIST taranÄ±yor: {len(bist_symbols)} hisse")
+        with track_scan(markets=selected_markets, mode="async") as progress:
+            scan_num = _async_state.start_scan()
+            logger.info("Async tarama #%s basladi", scan_num)
+            _send_scan_message(f"Tarama #{scan_num} basladi (Async Mode)", notify)
 
-        bist_data = await fetch_multiple_bist_async(bist_symbols, batch_size=30)
-        logger.info(f"BIST verisi Ã§ekildi: {len(bist_data)} sembol")
-
-        # BIST sinyalleri paralel hesapla
-        bist_tasks = [process_symbol_async(sym, df, "BIST") for sym, df in bist_data.items()]
-        bist_results = await asyncio.gather(*bist_tasks)
-
-        bist_signals = await process_signals_batch(bist_results, notify)
-        total_signals += bist_signals
-        logger.info(f"BIST sinyalleri: {bist_signals}")
-
-        # Kripto Tarama
-        crypto_symbols = get_all_binance_symbols_async() if "Kripto" in selected_markets else []
-        logger.info(f"Kripto taranÄ±yor: {len(crypto_symbols)} Ã§ift")
-
-        crypto_data = await fetch_multiple_crypto_async(crypto_symbols, batch_size=50)
-        logger.info(f"Kripto verisi Ã§ekildi: {len(crypto_data)} sembol")
-
-        # Kripto sinyalleri paralel hesapla
-        crypto_tasks = [process_symbol_async(sym, df, "Kripto") for sym, df in crypto_data.items()]
-        crypto_results = await asyncio.gather(*crypto_tasks)
-
-        crypto_signals = await process_signals_batch(crypto_results, notify)
-        total_signals += crypto_signals
-        logger.info(f"Kripto sinyalleri: {crypto_signals}")
-
+            for market_type in ("BIST", "Kripto"):
+                if market_type not in selected_markets:
+                    continue
+                symbols = (
+                    get_all_bist_symbols()
+                    if market_type == "BIST"
+                    else get_all_binance_symbols_async()
+                )
+                if not symbols:
+                    record_scan_error()
+                    logger.warning("%s sembol listesi bos; tarama eksik.", market_type)
+                # Count targets handed to the batch provider, including missing data.
+                progress.symbols_scanned += len(symbols)
+                logger.info("%s taraniyor: %s sembol", market_type, len(symbols))
+                if market_type == "BIST":
+                    bist_data = data = await fetch_multiple_bist_async(symbols, batch_size=30)
+                else:
+                    crypto_data = data = await fetch_multiple_crypto_async(symbols, batch_size=50)
+                record_scan_error(len(set(symbols) - data.keys()))
+                tasks = [
+                    process_symbol_async(sym, data[sym], market_type)
+                    for sym in symbols
+                    if sym in data
+                ]
+                # Await every child before closing accounting, even if one fails.
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+                successful_results = []
+                for result in results:
+                    if isinstance(result, asyncio.CancelledError):
+                        raise result
+                    if isinstance(result, BaseException):
+                        if not isinstance(result, Exception):
+                            raise result
+                        record_scan_error()
+                        logger.error("Sembol analizi basarisiz: %s", type(result).__name__)
+                    else:
+                        successful_results.append(result)
+                await process_signals_batch(successful_results, notify)
     except Exception as e:
-        scan_failed = True
         scan_error = str(e)
         logger.exception("Async tarama hatasi.")
-        send_message(f"âŒ Tarama hatasi: {scan_error}")
+    finally:
+        _async_state.end_scan(progress.duration_seconds)
 
-    duration = time.time() - start_time
-    _async_state.end_scan(duration)
-
-    if scan_failed:
-        failure_summary = (
-            f"Tarama #{scan_num} basarisiz\n"
-            f"Sure: {duration:.1f}s\n"
-            f"BIST: {len(bist_data)} sembol\n"
-            f"Kripto: {len(crypto_data)} sembol\n"
-            f"Toplam Sinyal: {total_signals}\n"
-            f"Piyasalar: {market_label}\n"
-            f"Hata: {scan_error}"
-        )
-        send_message(failure_summary)
-        logger.error(failure_summary.replace("\n", " | "))
-        return {
-            "status": "failed",
-            "error": scan_error,
-            "scan_num": scan_num,
-            "duration": duration,
-            "bist_count": len(bist_data),
-            "crypto_count": len(crypto_data),
-            "total_signals": total_signals,
-        }
-
+    duration = progress.duration_seconds
+    total_signals = progress.signals_found
+    outcome_label = {"success": "tamamlandi", "partial": "eksik tamamlandi", "failed": "basarisiz"}
     summary = (
-        f"Tarama #{scan_num} tamamlandi\n"
+        f"Tarama #{scan_num} {outcome_label[progress.status]}\n"
         f"Sure: {duration:.1f}s\n"
         f"BIST: {len(bist_data)} sembol\n"
         f"Kripto: {len(crypto_data)} sembol\n"
         f"Toplam Sinyal: {total_signals}\n"
         f"Piyasalar: {market_label}"
     )
-    send_message(summary)
+    _send_scan_message(summary, notify)
     logger.info(summary.replace("\n", " | "))
 
     return {
-        "status": "success",
-        "error": None,
+        "status": progress.status,
+        "error": scan_error or None,
         "scan_num": scan_num,
         "duration": duration,
         "bist_count": len(bist_data),
         "crypto_count": len(crypto_data),
         "total_signals": total_signals,
+        "errors_count": progress.errors_count,
+        "history_id": progress.history_id,
     }
+
+
+def _send_scan_message(message: str, notify: bool) -> None:
+    if not notify:
+        return
+    try:
+        send_message(message)
+    except Exception:
+        logger.exception("Tarama bildirimi gonderilemedi.")
 
 
 def run_async_scan(markets: str | list[str] | tuple[str, ...] | set[str] | None = None):

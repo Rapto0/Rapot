@@ -188,6 +188,15 @@ def init_db() -> None:
             "error_code": "VARCHAR(40)",
         },
     )
+    ensure_sqlite_columns(
+        engine,
+        "scan_history",
+        {
+            "mode": "VARCHAR(10) DEFAULT 'unknown'",
+            "errors_count": "INTEGER",
+            "status": "VARCHAR(12) DEFAULT 'unknown'",
+        },
+    )
     logger.info("Veritabanı tabloları oluşturuldu/kontrol edildi")
 
 

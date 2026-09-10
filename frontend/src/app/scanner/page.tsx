@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
 import { ActionDialog } from "@/components/ui/action-dialog"
 import { useToast } from "@/components/ui/toast"
+import { ScanStatus } from "@/components/scanner/scan-status"
 import { cn, getTimeAgo } from "@/lib/utils"
 
 type MarketKind = "BIST" | "Kripto"
@@ -1224,7 +1225,19 @@ export default function ScannerPage() {
                 <span className="text-muted-foreground">Toplam tarama</span>
                 <span className="mono-numbers text-right">{formatCount(health.scanCount)}</span>
                 <span className="text-muted-foreground">Son tarama</span>
-                <span className="mono-numbers text-right">{latestScan ? getTimeAgo(latestScan.created_at) : "--"}</span>
+                <span className="mono-numbers text-right">{scansQuery.isError ? "Alınamadı" : latestScan ? getTimeAgo(latestScan.created_at) : "--"}</span>
+                {latestScan && !scansQuery.isError ? (
+                  <>
+                    <span className="text-muted-foreground">Tarama sonucu</span>
+                    <span className="text-right"><ScanStatus status={latestScan.status} /></span>
+                    <span className="text-muted-foreground">{latestScan.status && latestScan.status !== "unknown" ? "Yeni sinyal" : "Sinyal"}</span>
+                    <span className="mono-numbers text-right">{formatCount(latestScan.signals_found)}</span>
+                    <span className="text-muted-foreground">Tarama hatası</span>
+                    <span className={cn("mono-numbers text-right", latestScan.errors_count ? "text-loss" : "text-muted-foreground")}>
+                      {latestScan.errors_count == null ? "Bilinmiyor" : formatCount(latestScan.errors_count)}
+                    </span>
+                  </>
+                ) : null}
                 <span className="text-muted-foreground">Log warning</span>
                 <span className="mono-numbers text-right text-neutral">{formatCount(warningLogCount)}</span>
                 <span className="text-muted-foreground">Log error</span>

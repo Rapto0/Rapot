@@ -261,6 +261,7 @@ class ScanHistory(Base):
     symbols_scanned = Column(Integer, default=0)
     signals_found = Column(Integer, default=0)
     errors_count = Column(Integer, default=0)
+    status = Column(String(12), default="unknown", server_default="unknown")
     duration_seconds = Column(Float, default=0.0)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
@@ -275,10 +276,11 @@ class ScanHistory(Base):
         return {
             "id": self.id,
             "scan_type": self.scan_type,
-            "mode": self.mode,
+            "mode": self.mode or "unknown",
             "symbols_scanned": self.symbols_scanned,
             "signals_found": self.signals_found,
             "errors_count": self.errors_count,
+            "status": self.status or "unknown",
             "duration_seconds": self.duration_seconds,
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
@@ -350,8 +352,7 @@ class AIAnalysis(Base):
 
     def __repr__(self) -> str:
         return (
-            f"<AIAnalysis(id={self.id}, symbol='{self.symbol}', "
-            f"scenario='{self.scenario_name}')>"
+            f"<AIAnalysis(id={self.id}, symbol='{self.symbol}', scenario='{self.scenario_name}')>"
         )
 
     def to_dict(self) -> dict:

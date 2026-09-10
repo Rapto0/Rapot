@@ -260,13 +260,16 @@ export interface EconomicCalendarParams {
     to_date?: string;
 }
 
+export type ScanStatus = 'success' | 'partial' | 'failed' | 'cancelled' | 'unknown';
+
 export interface ScanHistory {
     id: number;
     scan_type: string;
-    mode: string;
+    mode: 'sync' | 'async' | 'unknown';
+    status: ScanStatus;
     symbols_scanned: number;
     signals_found: number;
-    errors_count: number;
+    errors_count: number | null;
     duration_seconds: number;
     created_at: string;
 }

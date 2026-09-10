@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils"
 import { PageShell } from "@/components/ui/page-shell"
 import { KpiRibbon } from "@/components/ui/kpi-ribbon"
 import { Button } from "@/components/ui/button"
+import { ScanStatus } from "@/components/scanner/scan-status"
 
 export default function HealthPage() {
   const health = useBotHealth()
@@ -133,15 +134,25 @@ export default function HealthPage() {
           {!scansLoading && !scansError && recentScans && recentScans.length > 0 ? (
             <div className="divide-y divide-border">
               {recentScans.map((scan) => (
-                <div key={scan.id} className="grid grid-cols-[72px_1fr_96px_80px] items-center gap-2 px-3 py-2">
+                <div key={scan.id} className="grid grid-cols-[48px_1fr_72px_48px] items-center gap-2 px-3 py-2">
                   <div className="mono-numbers text-xs text-muted-foreground">#{scan.id}</div>
                   <div className="min-w-0">
-                    <div className="text-xs text-foreground">{scan.scan_type}</div>
+                    <div className="flex flex-wrap items-center gap-x-2 text-xs text-foreground">
+                      <span>{scan.scan_type}</span>
+                      <ScanStatus status={scan.status} />
+                    </div>
                     <div className="text-[10px] text-muted-foreground">
                       {scan.symbols_scanned} sembol • {scan.duration_seconds.toFixed(1)} sn
                     </div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {scan.errors_count == null ? "Hata sayısı bilinmiyor" : `${scan.errors_count} hata`}
+                      {scan.mode === "sync" || scan.mode === "async" ? ` • ${scan.mode}` : ""}
+                    </div>
                   </div>
-                  <div className="mono-numbers text-right text-xs text-profit">{scan.signals_found}</div>
+                  <div className="text-right text-muted-foreground">
+                    <div className="mono-numbers text-xs">{scan.signals_found}</div>
+                    <div className="text-[10px]">{scan.status && scan.status !== "unknown" ? "yeni sinyal" : "sinyal"}</div>
+                  </div>
                   <div className="mono-numbers text-right text-[10px] text-muted-foreground">
                     {new Date(scan.created_at).toLocaleTimeString("tr-TR", {
                       hour: "2-digit",

@@ -334,7 +334,8 @@ class TestTelegramSignalFiltering:
             },
         )
         monkeypatch.setattr(
-            "market_scanner.db_save_signal", lambda **kwargs: saved_signals.append(kwargs)
+            "market_scanner.db_save_signal",
+            lambda **kwargs: saved_signals.append(kwargs) or len(saved_signals),
         )
         monkeypatch.setattr("market_scanner.increment_signal_count", lambda: None)
         monkeypatch.setattr("market_scanner.send_message", sent_messages.append)
@@ -385,7 +386,8 @@ class TestTelegramSignalFiltering:
             },
         )
         monkeypatch.setattr(
-            "market_scanner.db_save_signal", lambda **kwargs: saved_signals.append(kwargs)
+            "market_scanner.db_save_signal",
+            lambda **kwargs: saved_signals.append(kwargs) or len(saved_signals),
         )
         monkeypatch.setattr("market_scanner.increment_signal_count", lambda: None)
         monkeypatch.setattr("market_scanner.send_message", sent_messages.append)
@@ -468,7 +470,7 @@ class TestTelegramSignalFiltering:
             "market_scanner._verify_bist_second_source",
             lambda **_kwargs: (True, "disabled_for_test"),
         )
-        monkeypatch.setattr("market_scanner.db_save_signal", lambda **kwargs: None)
+        monkeypatch.setattr("market_scanner.db_save_signal", lambda **kwargs: 73)
         monkeypatch.setattr("market_scanner.increment_signal_count", lambda: None)
         monkeypatch.setattr("market_scanner.send_message", sent_messages.append)
         monkeypatch.setattr("market_scanner.fetch_market_news", lambda symbol, market_type: [])
@@ -564,6 +566,8 @@ class TestTelegramSignalFiltering:
         assert builder_calls[0]["special_tag"] == "BELES"
         assert builder_calls[0]["trigger_rule"] == ["1D", "2W-FRI", "ME"]
         assert ai_calls
+        assert ai_calls[0]["signal_id"] == 73
+        assert ai_calls[0]["market_type"] == "BIST"
         assert ai_calls[0]["technical_data"]["special_tag"] == "BELES"
         assert ai_calls[0]["technical_data"]["trigger_rule"] == ["1D", "2W-FRI", "ME"]
         assert any("COMBO: BELEŞ" in message for message in sent_messages)

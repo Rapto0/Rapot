@@ -58,23 +58,26 @@ def set_signal_special_tag(
     timeframe: str,
     special_tag: str,
     within_seconds: int = 900,
+    *,
+    signal_id: int | None = None,
 ) -> bool:
     """
-    Write special_tag to the latest matching signal row.
+    Tag an exact matching signal, or the latest match for legacy callers.
     """
+    if signal_id is not None and signal_id <= 0:
+        return False
+
     with get_session() as session:
-        signal = (
-            session.query(Signal)
-            .filter(
-                Signal.symbol == symbol,
-                Signal.market_type == market_type,
-                Signal.strategy == strategy,
-                Signal.signal_type == signal_type,
-                Signal.timeframe == timeframe,
-            )
-            .order_by(Signal.id.desc())
-            .first()
+        query = session.query(Signal).filter(
+            Signal.symbol == symbol,
+            Signal.market_type == market_type,
+            Signal.strategy == strategy,
+            Signal.signal_type == signal_type,
+            Signal.timeframe == timeframe,
         )
+        if signal_id is not None:
+            query = query.filter(Signal.id == signal_id)
+        signal = query.order_by(Signal.id.desc()).first()
 
         if signal is None:
             return False

@@ -16,7 +16,8 @@ async def test_process_signals_batch_does_not_send_regular_telegram(monkeypatch)
 
     monkeypatch.setattr("async_scanner.send_message", sent_messages.append)
     monkeypatch.setattr(
-        "async_scanner.db_save_signal", lambda **kwargs: saved_signals.append(kwargs)
+        "async_scanner.db_save_signal",
+        lambda **kwargs: saved_signals.append(kwargs) or len(saved_signals),
     )
     monkeypatch.setattr("async_scanner._async_state.increment_signal", lambda: 1)
 
@@ -70,4 +71,4 @@ async def test_scan_market_async_returns_failed_status_on_fatal_error(monkeypatc
     assert result["status"] == "failed"
     assert "boom" in result["error"]
     assert async_scanner._async_state.is_scanning is False
-    assert any("basarisiz" in msg.lower() for msg in sent_messages)
+    assert sent_messages == []  # notify=False also applies to fatal scan notifications.

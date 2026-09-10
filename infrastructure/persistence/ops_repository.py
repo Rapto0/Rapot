@@ -8,7 +8,9 @@ to use legacy sqlite3 helpers directly.
 from __future__ import annotations
 
 import json
+import math
 from datetime import datetime, timedelta
+from numbers import Integral, Real
 from typing import Any
 
 from sqlalchemy import func, or_, text
@@ -16,7 +18,7 @@ from sqlalchemy.orm import aliased
 
 from db_session import get_session
 from logger import get_logger
-from models import BotStat, Order, Signal, Trade
+from models import BotStat, Order, ScanHistory, Signal, Trade
 from state_keys import (
     ASYNC_SCAN_COUNT_KEY,
     ASYNC_SIGNAL_COUNT_KEY,
@@ -32,6 +34,53 @@ ASYNC_SCAN_COUNT_STAT_KEY = ASYNC_SCAN_COUNT_KEY
 ASYNC_SIGNAL_COUNT_STAT_KEY = ASYNC_SIGNAL_COUNT_KEY
 
 ACTIVE_ORDER_STATUSES = ("NEW", "PENDING", "OPEN", "PARTIALLY_FILLED")
+SCAN_TERMINAL_STATUSES = frozenset({"success", "partial", "failed", "cancelled"})
+
+
+def save_scan_history(
+    *,
+    scan_type: str,
+    mode: str,
+    symbols_scanned: int,
+    signals_found: int,
+    errors_count: int,
+    duration_seconds: float,
+    status: str,
+) -> int:
+    """Persist one terminal scan result; historical unknown is never a new outcome."""
+    if status not in SCAN_TERMINAL_STATUSES:
+        raise ValueError("status must be a terminal scan outcome")
+    if mode not in {"sync", "async"}:
+        raise ValueError("mode must be sync or async")
+    counts = {
+        "symbols_scanned": symbols_scanned,
+        "signals_found": signals_found,
+        "errors_count": errors_count,
+    }
+    for name, value in counts.items():
+        if isinstance(value, bool) or not isinstance(value, Integral) or value < 0:
+            raise ValueError(f"{name} must be a nonnegative integer")
+    if (
+        isinstance(duration_seconds, bool)
+        or not isinstance(duration_seconds, Real)
+        or not math.isfinite(duration_seconds)
+        or duration_seconds < 0
+    ):
+        raise ValueError("duration_seconds must be finite and nonnegative")
+    with get_session() as session:
+        scan = ScanHistory(
+            scan_type=scan_type,
+            mode=mode,
+            symbols_scanned=int(symbols_scanned),
+            signals_found=int(signals_found),
+            errors_count=int(errors_count),
+            duration_seconds=float(duration_seconds),
+            status=status,
+        )
+        session.add(scan)
+        session.flush()
+        return int(scan.id)
+
 
 SPECIAL_TAG_RULES: tuple[dict[str, Any], ...] = (
     {

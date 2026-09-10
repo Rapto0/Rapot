@@ -96,10 +96,10 @@ def list_scanner_activity_projection(limit: int) -> list[dict[str, Any]]:
                 CAST(id AS TEXT) AS item_id,
                 NULL AS symbol,
                 NULL AS market_type,
-                mode AS strategy,
+                COALESCE(mode, 'unknown') AS strategy,
                 scan_type AS action,
                 NULL AS timeframe,
-                NULL AS status,
+                COALESCE(status, 'unknown') AS status,
                 duration_seconds AS numeric_value,
                 created_at
             FROM scan_history
