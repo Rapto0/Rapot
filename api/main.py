@@ -6,6 +6,7 @@ Kullanım:
     uvicorn api.main:app --reload --port 8000
 """
 
+import asyncio
 import math
 import unicodedata
 from datetime import datetime, timedelta
@@ -534,9 +535,9 @@ async def health_check(request: Request, response: Response):
     db_status = "error"
     if db_ok:
         try:
-            from db_session import get_table_stats
+            from db_session import probe_database_readiness
 
-            _ = get_table_stats()
+            await asyncio.to_thread(probe_database_readiness)
             db_status = "connected"
         except Exception:
             db_ok = False

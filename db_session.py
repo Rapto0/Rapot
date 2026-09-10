@@ -272,6 +272,16 @@ def get_db_session() -> Session:
 # ==================== CONVENIENCE FUNCTIONS ====================
 
 
+def probe_database_readiness() -> None:
+    """Verify access to required tables without scanning rows; propagate DB failures."""
+    from sqlalchemy import text
+
+    tables = ("signals", "trades", "orders", "scan_history", "bot_stats", "ai_analyses")
+    with get_session() as session:
+        for table in tables:
+            session.execute(text(f"SELECT 1 FROM {table} LIMIT 0")).close()
+
+
 def execute_raw_sql(sql: str, params: dict | None = None) -> list:
     """
     Raw SQL çalıştırır.
