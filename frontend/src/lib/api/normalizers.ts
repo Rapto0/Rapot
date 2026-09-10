@@ -34,14 +34,14 @@ export function toSpecialTag(
         : null;
 }
 
-export function toTradeDirection(value: string | null | undefined): 'BUY' | 'SELL' {
-    return VALID_DIRECTIONS.has(value as 'BUY' | 'SELL') ? (value as 'BUY' | 'SELL') : 'BUY';
+export function toTradeDirection(value: string | null | undefined): 'BUY' | 'SELL' | null {
+    return VALID_DIRECTIONS.has(value as 'BUY' | 'SELL') ? (value as 'BUY' | 'SELL') : null;
 }
 
-export function toTradeStatus(value: string | null | undefined): 'OPEN' | 'CLOSED' | 'CANCELLED' {
+export function toTradeStatus(value: string | null | undefined): 'OPEN' | 'CLOSED' | 'CANCELLED' | null {
     return VALID_TRADE_STATUSES.has(value as 'OPEN' | 'CLOSED' | 'CANCELLED')
         ? (value as 'OPEN' | 'CLOSED' | 'CANCELLED')
-        : 'OPEN';
+        : null;
 }
 
 export function safeParseTechnicalData(value: string | null): Record<string, unknown> | null {
@@ -71,50 +71,72 @@ export function transformSignal(apiSignal: ApiSignal) {
     };
 }
 
+function finiteNumber(value: unknown): number | null {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function count(value: unknown): number | null {
+    const number = finiteNumber(value);
+    return number !== null && Number.isInteger(number) && number >= 0 ? number : null;
+}
+
+function timestamp(value: string | null | undefined): string | null {
+    return value && Number.isFinite(Date.parse(value)) ? value : null;
+}
+
 export function transformTrade(apiTrade: ApiTrade) {
-    const entryPrice = Number.isFinite(apiTrade.price) ? apiTrade.price : 0;
-    const pnl = Number.isFinite(apiTrade.pnl) ? apiTrade.pnl : 0;
+    const rawEntryPrice = finiteNumber(apiTrade.price);
+    const entryPrice = rawEntryPrice !== null && rawEntryPrice > 0 ? rawEntryPrice : null;
+    const rawQuantity = finiteNumber(apiTrade.quantity);
+    const quantity = rawQuantity !== null && rawQuantity >= 0 ? rawQuantity : null;
+    const status = toTradeStatus(apiTrade.status);
+    // The API stores realized PnL on close; OPEN rows have an unmeasured default zero.
+    const pnl = status === 'CLOSED' ? finiteNumber(apiTrade.pnl) : null;
+    const notional = entryPrice !== null && quantity !== null ? entryPrice * quantity : null;
+    const pnlPercent = pnl !== null && notional !== null && Number.isFinite(notional) && notional > 0
+        ? finiteNumber((pnl / notional) * 100)
+        : null;
     return {
         id: apiTrade.id,
         symbol: apiTrade.symbol,
         marketType: toMarketType(apiTrade.market_type),
         direction: toTradeDirection(apiTrade.direction),
         entryPrice,
-        currentPrice: entryPrice,
-        quantity: apiTrade.quantity,
+        // /trades exposes no current quote or valuation timestamp.
+        currentPrice: null,
+        quantity,
         pnl,
-        pnlPercent: entryPrice > 0 ? (pnl / entryPrice) * 100 : 0,
-        status: toTradeStatus(apiTrade.status),
-        createdAt: apiTrade.created_at || new Date().toISOString(),
+        pnlPercent,
+        status,
+        createdAt: timestamp(apiTrade.created_at),
     };
 }
 
 export function transformStats(apiStats: ApiStats) {
     return {
-        totalPnL: apiStats.total_pnl,
-        totalPnLPercent: 0,
-        winRate: apiStats.win_rate,
-        openPositions: apiStats.open_trades,
-        closedPositions: apiStats.total_trades - apiStats.open_trades,
-        totalTrades: apiStats.total_trades,
-        lastScanTime: new Date().toISOString(),
-        totalSignals: apiStats.total_signals,
-        todaySignals: 0,
+        totalPnL: finiteNumber(apiStats.total_pnl),
+        totalPnLPercent: null,
+        winRate: finiteNumber(apiStats.win_rate),
+        openPositions: count(apiStats.open_trades),
+        closedPositions: count(apiStats.closed_trades),
+        totalTrades: count(apiStats.total_trades),
+        lastScanTime: null,
+        totalSignals: count(apiStats.total_signals),
+        todaySignals: null,
     };
 }
 
 export function transformOpsOverviewReadModel(overview: OpsOverviewReadModel) {
-    const closedTrades = Math.max(0, overview.total_trades - overview.open_trades);
     return {
-        totalPnL: overview.total_pnl,
-        totalPnLPercent: 0,
-        winRate: 0,
-        openPositions: overview.open_trades,
-        closedPositions: closedTrades,
-        totalTrades: overview.total_trades,
-        lastScanTime: overview.last_scan_at || new Date().toISOString(),
-        totalSignals: overview.total_signals,
-        todaySignals: 0,
+        totalPnL: finiteNumber(overview.total_pnl),
+        totalPnLPercent: null,
+        winRate: null,
+        openPositions: count(overview.open_trades),
+        closedPositions: null,
+        totalTrades: count(overview.total_trades),
+        lastScanTime: timestamp(overview.last_scan_at),
+        totalSignals: count(overview.total_signals),
+        todaySignals: null,
     };
 }
 

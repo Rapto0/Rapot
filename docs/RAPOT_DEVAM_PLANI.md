@@ -4,11 +4,11 @@ Bu belge, 6 Eylül 2026 tarihli salt okunur proje incelemesinden çıkan işleri
 
 ## Kaldığımız nokta
 
-- **Son çalışma:** **P1-5 tamamlandı ve 2026-09-10'da üretime alındı.** Kaynak `a513af9c60e1be1df646bf7acf841e8a9f4c3d89`: süreçler arası SQLite sinyal akışı, frontend reconnect/REST toparlanması ve sync/async özel sinyal eşdeğerliği. Beş servis healthy/restart=0; HTTPS/WSS kabulü ve veri korunumu geçti. İlk eşzamanlı ekran yükleme/WSS denemesinde görülen zaman aşımı performans takibinde açık.
-- **Uygulama durumu:** P0 işleri, P1-1, **P1-2, P1-4, P1-5** ve P1-7 doğrulandı. **542/542 Python**, **23/23 frontend**, lint/typecheck/build geçti; P1-5'te 71 yeni Python ve 8 frontend test durumu. Mevcut `datetime.utcnow()` yolları daha fazla sınandığından 862 deprecation warning var; P2-3'te açık. İlk tam koşumdaki üç eski mock/kaynak assertion uyumsuzluğu giderildi, son tam paket geçti.
+- **Son çalışma:** **P1-6 yerel uygulama ve doğrulama tamamlandı.** Ayarlar/secret temizliği, miktarı içeren PnL yüzdesi ve kanıt temelli bot/tarama durumu uygulandı; CI ve sunucu geçişi sırada. Üretim şu anda önceki P1-5 kaynak `a513af9c60e1be1df646bf7acf841e8a9f4c3d89` üzerinde.
+- **Uygulama durumu:** P0 işleri, P1-1, P1-2, P1-4, P1-5 ve P1-7 doğrulandı. P1-6 son tam paketi **578/578 Python** (55,65 saniye), **52/52 frontend**, lint/typecheck/build ve yedi Python dosyasında Ruff temiz. 36 yeni Python ve 29 frontend test durumu eklendi. Mevcut UTC yollarından **874 deprecation warning** P2-3'te açık.
 - **P1-2 durumu — Doğrulandı:** **8f60f8e üretim geçişi ve [HTTPS](https://138.68.71.27) kabulü tamamlandı.** API, bot, frontend, middleware ve PG16 sağlıklı; veri korunumu, dış HTTPS/auth/WSS, yetkisiz webhook reddi ve sertifika yenileme dry-run testi geçti. Eski supervisor'lar devre dışı; özgün DB/checkout ve geri dönüş kaynakları korundu.
 - **Uzak doğrulama:** Dağıtılan `a513af9` için [CI 34516407676](https://github.com/Rapto0/Rapot/actions/runs/34516407676) ve [imaj yayını 34516429765](https://github.com/Rapto0/Rapot/actions/runs/34516429765) başarılı. Sunucu 10 Eylül 18:59:03 UTC'de tekrar doğrulandı; eski `fce5d01` release/config ve yedekler korunuyor. Sonraki yalnız-belge commit'i uygulama imajlarının kaynak SHA'sını değiştirmez.
-- **Sıradaki adım:** **P1-6 — PnL, bot durumu ve ayarlar ekranı.** Salt okunur başlangıç bulguları kaydedildi; uygulama başlamadı. Önce yerel secret saklama ve etkisiz ayarların gerçek bot ayarı gibi sunulması ele alınmalı; PnL ve bilinmeyen bot durumu bunu izlemeli. Kullanıcının 10 Eylül erteleme talimatıyla borsa/alarm dış kabulü beklenmiyor.
+- **Aktif iş:** **P1-6 yayın kabulü.** Yerel sonuçları geçen kaynak commit/push edilecek; exact SHA CI/imaj doğrulaması ve doğrulanmış SQLite/config yedeği sonrası sunucu geçişi yapılacak. Sonrasında P2-1 dışa aktar/yerel alarm/grafik URL davranışı sırada. Borsa/alarm dış kabulü beklenmiyor.
 - **Ertelenen dış kabul:** Gerçek TradingView alarm teslimi, ALL/FIRST/saat filtresi runtime kabulü ve sınırlı testnet emir testi tamamlanmış sayılmıyor. Hazır test araçları korunuyor; testnet onayı ve Webhook URL erişimi için artık yanıt beklenmiyor, bu işler kullanıcı yeniden seçtiğinde ele alınacak. Borsa emri gönderilmedi; geçici test servisleri kapalı.
 - **Başlangıç kaydı:** Bu belge ilk oluşturulduğunda yalnız belge değişmişti; sonraki uygulama değişiklikleri aşağıda ayrı kaydedildi.
 - **Seçilen geliştirme ortamı:** `.venv` / Python 3.12; Node 20.20.2 / npm 10.9.9. Yerelde Python 3.12.8 ile doğrulandı.
@@ -151,7 +151,7 @@ Kapsam tahminleri süre taahhüdü değildir: küçük birkaç dosya; orta bir �
 | P1-3 | Pine sözleşmesi ve testnet kabul akışı | Yerel/CI, kullanıcı derleme/grafik ve izole VPS HTTPS/simülasyon kabulü tamam; dış alarm/emir kabulü kullanıcı isteğiyle ertelendi | Orta | Tüm P0 işleri, P1-1; dış kabul için P1-2 |
 | P1-4 | AI ilişkileri ve scan history | Doğrulandı — yerel/CI ve fce5d01 üretim yayını tamam | Orta | P0-1 |
 | P1-5 | Süreçler arası realtime ve scanner eşdeğerliği | Doğrulandı — yerel/CI ve a513af9 üretim kabulü tamam | Orta/büyük | P0-1, P1-2 |
-| P1-6 | PnL, bot durumu ve ayarlar ekranı | Bekliyor | Orta | P0-1; backend ayar sözleşmesi ve P0-2 |
+| P1-6 | PnL, bot durumu ve ayarlar ekranı | Yerel doğrulandı; yayın sırada | Orta | P0-1; backend ayar sözleşmesi ve P0-2 |
 | P1-7 | HUNTER kısa seride ATR hatası | Doğrulandı | Küçük/orta | P0-1 |
 | P2-1 | Dışa aktar, alarmlar ve grafik URL davranışı | Bekliyor | Orta | P0-1 |
 | P2-2 | Belgeler ve wrapper göçünün kapanışı | Bekliyor | Küçük/orta | İlgili mimari kararlar; kaldırma için kullanım kanıtı |
@@ -570,17 +570,31 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 
 **Neden:** currentPrice giriş fiyatına eşitleniyor; PnL yüzdesi miktarı içermiyor. Bot durumu yokken isRunning=true varsayılıyor. Ayarlar yalnız localStorage'a, secret alanlarıyla birlikte yazılıyor.
 
+**2026-09-10 uygulama kapsamı:** Gerçek bot eşiği/anahtar yönetimi eklenmedi. Etkisiz ayarlar formu ve kullanılmayan Settings store kaldırıldı; sayfa sunucudan yönetilen ayarları açıklıyor, çalışan tarayıcı tercihleri için `/scanner` ekranına bağlantı veriyor. Her sayfanın başlangıcında yalnız `rapot.settings.v1` ve `rapot-settings` kayıtları temizleniyor: dört sayısal tercih ve bildirim boolean'ı etkisiz geçmiş olarak kalabilir; bağlantı kimlikleri, secret ve diğer alanlar kaldırılır. Bozuk kayıt yalnız kendi anahtarından silinir; başka localStorage kayıtları okunmaz/temizlenmez. Depolama erişim hatası tamamlanmış sayılmaz, hassas içerik loga veya ağa aktarılmaz.
+
+**PnL sözleşmesi:** Yalnız CLOSED satırın kayıtlı gerçekleşmiş PnL'si kullanılır; yüzde `pnl / (entryPrice × quantity) × 100`. OPEN, CANCELLED, bilinmeyen durum ve eksik/sonsuz/sıfır payda için ölçülmemiş değerler `null` / `—`. API güncel fiyat taşımadığı için giriş fiyatından türetilmez. Geçersiz tarih şu anın tarihiyle doldurulmaz. `/stats.closed_trades` gerçek CLOSED sayısını taşır; `total - open` hesabı iptal edilmiş işlemleri kapalı saymaz. Overview sağlamadığı kazanma oranı/kapalı işlem sayısını uydurmaz. Ana DB'nin BIST/Kripto PnL toplamında kur dönüşümü yoktur; ortak toplama tek para birimi simgesi eklenmez. Canlı değerleme, FX dönüşümü ve middleware portföy entegrasyonu bu işte eklenmez.
+
+**Bot durumu kapsamı:** Eski `runtime_is_running` kaydının güncelliği kanıtlanamıyor; gerçek yazar bulunmadı. Aynı süreçteki scheduler lifecycle ve thread sahipliği kullanılıyor; standalone health veya yalnız eski kayıt çalışan bot kanıtı sayılmıyor. Veritabanı, HTTP, yüklenme ve eskimiş istemci verisi ayrı ele alınır. Süresi dolmamış eski tarama kilidi tek başına canlı tarama kanıtı değildir. Son tarama zamanı ile herhangi bir sayaç güncelleme zamanı birbirine eşitlenmez. Docker `/health` veritabanı bağlantısı temelli 200/503 anlamını korur.
+
 **Dosyalar:** [normalizers](../frontend/src/lib/api/normalizers.ts), [health hook](../frontend/src/lib/hooks/use-health.ts), [ayarlar sayfası](../frontend/src/app/settings/page.tsx), [ops API](../frontend/src/lib/api/ops-api.ts), [backend modelleri](../models.py), [settings.py](../settings.py), [config.py](../config.py).
 
 **2026-09-10 salt okunur başlangıç kanıtı:** `transformTrade` yüzdeyi `pnl / entryPrice` ile hesaplıyor; modelin PnL'si miktarı zaten içerdiğinden giriş 100, miktar 5, PnL 50 örneği %10 yerine %50 gösteriyor. API güncel fiyat taşımadığı halde `currentPrice` girişe eşitleniyor. `useBotHealth` eksik veride `isRunning=true` kullanıyor; backend `health_api.py` de eksik runtime bilgisini çalışıyor sayabiliyor. Ayarlar yalnız `rapot.settings.v1` localStorage anahtarına yazılıyor; backend çağrısı yok. Kullanılmayan `frontend/src/lib/stores/index.ts::useSettingsStore` içinde ikinci `rapot-settings` saklama yolu var; ikisi de secret alanlarını içerebiliyor. İlk dar uygulama: secret alanlarını ve iki bilinen eski anahtardaki secret saklamasını kaldırmak, ekranın yalnız gerçekten çalışan tarayıcı tercihlerini sunduğunu açıklaştırmak; ardından PnL/bilinmeyen fiyat ve bot durum sözleşmesi. Gerçek bot eşiği yönetimi yetkili backend ve hesaplayıcı bağlantısı gerektirir. Bu ön incelemede kod değişmedi.
 
+**Ek API/UI düzeltmeleri:** Şemada mümkün olan legacy `pnl=NULL`, `/trades` response modelinde de kabul edilir; artık 500 üretmez. OpenAPI snapshot güncellendi. Kullanılmayan PortfolioPanel içindeki yalnız `console.log` yapan AL/SAT/kapat yolları ve sahte Paper/Real seçimi kaldırıldı; düğmeler devre dışı, işlem gönderiminin bağlı olmadığı açık. Yeni borsa emri yolu eklenmedi.
+
+**Doğrulama:** `.venv` / Python 3.12.8 tam pytest **578/578**, mevcut UTC kullanımlarından 874 warning. Node 20.20.2 / npm 10.9.9 altında **52/52 frontend**, ESLint, incremental kapalı typecheck ve production build geçti. Yeni backend testleri gerçek izole DB ile closed/open/cancelled/legacy sayımını ve nullable PnL HTTP sözleşmesini; health testleri lifecycle/owner thread, sync/async/manual giriş, nested scan/failure cleanup, eski lease/bayrak, eksik/bozuk/sıfır sayaç ve ScanHistory zamanını kapsıyor. Frontend testleri normalizer ve gerçek sayfa/bileşen SSR çıktısını, eski cache/hata/yüklenme durumunu, iki formatta secret temizliğini ve disabled/onClick'siz işlem düğmelerini sınadı. Başka tarayıcı depolaması, gerçek emir, Telegram veya AI test çağrısı kullanılmadı. Değişen yedi Python dosyasında Ruff lint/format temiz.
+
+**Kanıt sınırı:** Thread canlılığı görevlerin ilerlediğine dair heartbeat değildir; uptime süreç/import süresidir. İstemci 30 saniyede bir yeniler ve yenileme sırasında yükleniyor gösterebilir. Bot health, kendi süreç taramalarını gözlemler; ayrı API sürecinden başlatılmış işlerin küresel tarama durumu değildir. Dört kalıcı sayaçtan biri eksikse toplam sayaç grubu bilinmiyor kalır; son ScanHistory zamanı bundan bağımsızdır. Storage cleanup erişilebilen mevcut tarayıcı/origin'de yeni sürüm açıldığında çalışır; başka cihazlar, kapalı tarayıcılar ve eski HTTP origin'i temizlenmiş sayılmaz. PnL yüzdesi giriş tutarına göre gerçekleşmiş değerdir; canlı portföy getirisi/komisyonlu muhasebe/kur dönüşümü sağlamaz.
+
+**Yayın:** Commit/CI/imaj ve üretim kabulü henüz tamamlanmadı; sonuçlar aşağıya eklenecek. Önceki yalnız-belge commit `9a7d149` için CI **34517948297 başarılı**; P1-5 ops release-record güncellendi.
+
 **Kabul kriterleri:**
 
-- [ ] PnL yüzdesi miktar/giriş değeriyle tutarlı; sıfır ve farklı miktar örnekleri doğrulandı.
-- [ ] Güncel fiyat yokken giriş fiyatı güncel fiyat gibi sunulmuyor; API bağlantısı bot çalışıyor bilgisiyle karıştırılmıyor.
-- [ ] Botun bilinmeyen/kapalı/çalışan durumları doğru gösteriliyor.
-- [ ] Kalıcı bot ayarları için yetkili backend sözleşmesi uygulandı veya ekranın yalnız tarayıcı tercihi olduğu açıklaştırıldı; seçilen kapsam kaydedildi.
-- [ ] Secret alanları düz localStorage'a kaydedilmiyor; ayarın gerçek hesaplamaya etkisi gösterildi. Config eşik nesnelerinin üretim hesaplayıcısına bağlı olmadığı bulgusu dikkate alındı.
+- [x] PnL yüzdesi miktar/giriş değeriyle tutarlı; sıfır ve farklı miktar örnekleri doğrulandı.
+- [x] Güncel fiyat yokken giriş fiyatı güncel fiyat gibi sunulmuyor; API bağlantısı bot çalışıyor bilgisiyle karıştırılmıyor.
+- [x] Botun bilinmeyen/kapalı/çalışan durumları doğru gösteriliyor.
+- [x] Kalıcı bot ayarları için yetkili backend sözleşmesi uygulandı veya ekranın yalnız tarayıcı tercihi olduğu açıklaştırıldı; seçilen kapsam kaydedildi.
+- [x] Secret alanları düz localStorage'a kaydedilmiyor; ayarın gerçek hesaplamaya etkisi gösterildi. Config eşik nesnelerinin üretim hesaplayıcısına bağlı olmadığı bulgusu dikkate alındı.
 
 ### P1-7 — HUNTER kısa seride ATR hatası
 
@@ -780,6 +794,8 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 | 2026-09-10 | P1-5 | Düzelt → doğrula → belgeyi güncelle | SQLite SignalFeed, bağımsız istemci/reconnect/REST, kline/trade abonelik lifecycle ve ortak scanner finalizasyonu uygulandı. 71 yeni Python ve 8 frontend test; tam 542/542, frontend 23/23, lint/typecheck/build ve Ruff geçti. Aynı batch içinde yaşlanan BIST verisi yazım öncesi reddediliyor; no-network subprocess ASGI kabulü eklendi |
 | 2026-09-10 | P1-5 | Commit/push → CI/imaj → yayın hazırlığı | a513af9 main'e gönderildi. CI 34516407676 ve imaj yayını 34516429765 tamamen başarılı; ağsız subprocess sinyal kabulü, boş PostgreSQL migration/middleware startup ve frontend container HTML/JS geçti. Config/SQLite arşivi bağımsız doğrulandı, kaynak ve imaj digest'leri sabitlendi; kontrollü sunucu geçişi başlatıldı |
 | 2026-09-10 | P1-5 | Üretim → dış kabul → Doğrulandı | a513af9 üretimde; beş servis healthy/restart0, DB sayıları aynı, middleware135/135/28/383 ve DRY_RUN/false/false korundu. HTTPS/feedready, BTCUSDT kline/trade ve sinyal heartbeat kabulü geçti; kanal sayaçları kapanışta0. Tarayıcı300satır/etiket gösterdi. İlk UI yükü sırasında timeout P2-4'e açık kaydedildi; test sinyali/AI/emir yok |
+| 2026-09-10 | P1-6 | İncele → düzelt → doğrula | Etkisiz/secret saklayan settings kaldırıldı; eski iki key allowlist ile temizleniyor. PnL miktar/null, gerçek CLOSED count ve nullable API sözleşmesi; lifecycle/scan context, eksik sayaç ve history zaman ayrımı uygulandı. Tam Python578/578, frontend52/52, lint/typecheck/build ve yedi Python Ruff geçti; 874 mevcut UTC warning. Bağımsız incelemede saptanan manuel async tarama/DB lease/sayaç hataları da kapandı |
+| 2026-09-10 | P1-6 | Belgeyi güncelle → yayın hazırlığı | Yerel kabul kaydedildi; config/SQLite yedeği ve disk rezervleriyle ayrı p16 ops dizini hazırlanıyor. Doğrulanmış kaynak CI/imaj sonrasında dağıtılacak; şu anda üretim a513af9. Snapshot üretimindeki geçici Windows log klasörü temizliği otomatik denetimce blocked by policy ile reddedildi; klasör bırakıldı, uygulama kontrolleri etkilenmedi |
 
 Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 
@@ -799,4 +815,4 @@ Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 4. Aktif işin bulgusunu ve bağımlılıklarını güncel kodda kontrol et. İncelemeyi baştan tekrarlamak yerine ilgili kanıttan devam et.
 5. İşin dört adımını tamamla veya engeli somutlaştır; ardından durum tablosu, günlük ve Kaldığımız nokta bölümünü güncelle.
 
-**P0-1–P0-4, P1-1, P1-2, P1-4, P1-5 ve P1-7 tamamlandı. P1-3 dış alarm/emir kabulü kullanıcı isteğiyle ertelendi. Üretim a513af9; Python542/542, frontend23/23, lint/typecheck/build, LinuxCI/imaj ve HTTPS/WSS kabulü geçti. Veri ve DRY_RUN/false/false korundu. Sıradaki kod işi P1-6 PnL/bot durumu/ayarlar; ön inceleme hazır. P2-4 eşzamanlı yük gecikmesi ve P3-1 EMA/ATR sınırı açık.**
+**P0-1–P0-4, P1-1, P1-2, P1-4, P1-5 ve P1-7 tamamlandı. P1-6 yerelde Python578/578, frontend52/52, lint/typecheck/build ve Ruff ile doğrulandı; CI/imaj ve üretim kabulü sırada. Üretim hâlâ a513af9; DRY_RUN/false/false korunuyor. P1-3 dış alarm/emir kabulü kullanıcı isteğiyle ertelendi. Sonraki kod işi P2-1; P2-4 eşzamanlı gecikme ve P3-1 EMA/ATR sınırı açık.**

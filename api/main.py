@@ -240,7 +240,7 @@ class TradeResponse(BaseModel):
     direction: str
     price: float
     quantity: float
-    pnl: float
+    pnl: float | None
     status: str
     created_at: str | None = None
 
@@ -253,6 +253,7 @@ class StatsResponse(BaseModel):
     total_signals: int
     total_trades: int
     open_trades: int
+    closed_trades: int
     total_pnl: float
     win_rate: float
     scan_count: int

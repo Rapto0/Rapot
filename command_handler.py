@@ -263,8 +263,10 @@ def check_commands(scan_market_callback=None, get_scan_count_callback=None) -> N
         elif msg_lower == "/asynctara":
             send_message("Async tarama baslatiliyor...")
             from async_scanner import run_async_scan
+            from health_api import track_bot_scan
 
-            run_async_scan()
+            with track_bot_scan():
+                run_async_scan()
 
         else:
             parts = stripped.split()

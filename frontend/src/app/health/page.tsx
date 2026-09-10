@@ -1,6 +1,5 @@
 ﻿"use client"
 
-import { useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { fetchLogs, fetchScanHistory } from "@/lib/api/client"
 import { useBotHealth } from "@/lib/hooks/use-health"
@@ -41,11 +40,9 @@ export default function HealthPage() {
     refetchIntervalInBackground: false,
   })
 
-  const apiState = useMemo(() => {
-    if (health.isError) return "Hata"
-    if (health.isLoading) return "Yükleniyor"
-    return "Sağlıklı"
-  }, [health.isError, health.isLoading])
+  const apiState = health.apiState === "connected" ? "Bağlı"
+    : health.apiState === "error" ? "Hata"
+      : health.apiState === "loading" ? "Yükleniyor" : "Bilinmiyor"
 
   return (
     <PageShell
@@ -53,20 +50,20 @@ export default function HealthPage() {
       title="Bot durum ekranı"
       description="Süreç durumu, log akışı ve son taramalar."
       actions={
-        <span className={health.isRunning ? "signal-badge signal-buy" : "signal-badge signal-sell"}>
-          {health.isRunning ? "ÇALIŞIYOR" : "DURDU"}
+        <span className={cn("signal-badge", health.state === "running" ? "signal-buy" : health.state === "stopped" ? "signal-sell" : "signal-neutral")}>
+          {health.label}
         </span>
       }
     >
       <KpiRibbon
         items={[
-          { label: "API", value: apiState, tone: health.isError ? "loss" : "profit" },
+          { label: "API", value: apiState, tone: health.apiState === "connected" ? "profit" : health.apiState === "error" ? "loss" : "neutral" },
           {
             label: "Tarama",
-            value: health.isScanning ? "Sürüyor" : "Hazır",
-            tone: health.isScanning ? "neutral" : undefined,
+            value: health.scanningLabel,
+            tone: "neutral",
           },
-          { label: "Toplam", value: `${health.scanCount}` },
+          { label: "Toplam", value: health.scanCount == null ? "--" : `${health.scanCount}` },
           { label: "Uptime", value: health.uptime },
         ]}
       />

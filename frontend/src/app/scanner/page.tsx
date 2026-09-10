@@ -880,7 +880,7 @@ export default function ScannerPage() {
         </div>
 
         <div className="grid grid-cols-2 border-b border-border md:grid-cols-3 xl:grid-cols-6">
-          <RibbonCell label="Bot Durumu" value={health.isRunning ? "AKTIF" : "PASIF"} tone={health.isRunning ? "profit" : "loss"} />
+          <RibbonCell label="Bot Durumu" value={health.label} tone={health.tone} />
           <RibbonCell label="Screener Satiri" value={formatCount(sortedRows.length)} />
           <RibbonCell label="Universe" value={formatCount(screenerRows.length)} />
           <RibbonCell label="24s Sinyal" value={formatCount(signals24h)} />
@@ -1219,11 +1219,11 @@ export default function ScannerPage() {
             <div className="border border-border bg-base p-2">
               <div className="mb-2 flex items-center justify-between">
                 <span className="label-uppercase">Tarama Ozet</span>
-                <span className={cn("signal-badge", health.isScanning ? "signal-neutral" : "signal-buy")}>{health.isScanning ? "SCAN ACTIVE" : "IDLE"}</span>
+                <span className="signal-badge signal-neutral">{health.scanningLabel}</span>
               </div>
               <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
                 <span className="text-muted-foreground">Toplam tarama</span>
-                <span className="mono-numbers text-right">{formatCount(health.scanCount)}</span>
+                <span className="mono-numbers text-right">{health.scanCount == null ? "--" : formatCount(health.scanCount)}</span>
                 <span className="text-muted-foreground">Son tarama</span>
                 <span className="mono-numbers text-right">{scansQuery.isError ? "Alınamadı" : latestScan ? getTimeAgo(latestScan.created_at) : "--"}</span>
                 {latestScan && !scansQuery.isError ? (

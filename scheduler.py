@@ -164,7 +164,10 @@ def _run_scheduled_scan(scan_func, label: str) -> None:
                 return
 
         logger.info(f"{label} basladi.")
-        scan_func()
+        from health_api import track_bot_scan
+
+        with track_bot_scan():
+            scan_func()
     except Exception:
         logger.exception("%s hatasi.", label)
     finally:
@@ -214,6 +217,9 @@ def run_bot_loop(scan_func, check_commands_func) -> None:
     Main loop.
     """
     del scan_func  # intentionally unused in this loop
+    from health_api import mark_bot_runtime_running
+
+    mark_bot_runtime_running()
     logger.info("Bot dongusu baslatildi")
 
     while True:
@@ -235,15 +241,17 @@ def run_async_scan_wrapper(markets: str | list[str] | tuple[str, ...] | set[str]
     Run async scanner in a sync wrapper.
     """
     from async_scanner import scan_market_async
+    from health_api import track_bot_scan
 
-    try:
-        asyncio.run(scan_market_async(markets=markets))
-    except Exception:
-        logger.exception("Async tarama hatasi.")
-        logger.info("Sync taramaya geri donuluyor...")
-        from market_scanner import scan_market
+    with track_bot_scan():
+        try:
+            asyncio.run(scan_market_async(markets=markets))
+        except Exception:
+            logger.exception("Async tarama hatasi.")
+            logger.info("Sync taramaya geri donuluyor...")
+            from market_scanner import scan_market
 
-        scan_market(markets=markets)
+            scan_market(markets=markets)
 
 
 def start_bot(use_async: bool = True) -> None:
@@ -257,7 +265,13 @@ def start_bot(use_async: bool = True) -> None:
         else Path(settings.database_path).with_suffix(".bot.lock")
     )
     with bot_instance_lock(lock_path):
-        _run_bot(use_async=use_async)
+        from health_api import begin_bot_runtime, end_bot_runtime
+
+        begin_bot_runtime()
+        try:
+            _run_bot(use_async=use_async)
+        finally:
+            end_bot_runtime()
 
 
 def _run_bot(use_async: bool = True) -> None:
@@ -305,7 +319,10 @@ def _run_bot(use_async: bool = True) -> None:
     send_message(welcome_msg)
 
     def run_sync_scan(markets: str | list[str] | tuple[str, ...] | set[str] | None = None):
-        scan_market(check_commands_callback=check_commands_wrapper, markets=markets)
+        from health_api import track_bot_scan
+
+        with track_bot_scan():
+            scan_market(check_commands_callback=check_commands_wrapper, markets=markets)
 
     def run_manual_sync_full_scan():
         run_sync_scan(markets={"BIST", "Kripto"})

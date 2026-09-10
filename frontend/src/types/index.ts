@@ -26,14 +26,14 @@ export interface Trade {
     signalId?: string;
     symbol: string;
     direction: 'LONG' | 'SHORT';
-    entryPrice: number;
+    entryPrice: number | null;
     exitPrice?: number;
-    currentPrice: number;
-    quantity: number;
+    currentPrice: number | null;
+    quantity: number | null;
     leverage: number;
     status: 'OPEN' | 'CLOSED' | 'LIQUIDATED';
-    pnl: number;
-    pnlPercent: number;
+    pnl: number | null;
+    pnlPercent: number | null;
     openedAt: Date;
     closedAt?: Date;
     fees: number;
@@ -114,15 +114,15 @@ export interface KPI {
 }
 
 export interface DashboardStats {
-    totalPnL: number;
-    totalPnLPercent: number;
-    winRate: number;
-    openPositions: number;
-    closedPositions: number;
-    totalTrades: number;
-    lastScanTime: string;
-    totalSignals: number;
-    todaySignals: number;
+    totalPnL: number | null;
+    totalPnLPercent: number | null;
+    winRate: number | null;
+    openPositions: number | null;
+    closedPositions: number | null;
+    totalTrades: number | null;
+    lastScanTime: string | null;
+    totalSignals: number | null;
+    todaySignals: number | null;
 }
 
 // ===== LOG TYPES =====
@@ -192,18 +192,4 @@ export interface TradeFilters {
     marketType?: 'BIST' | 'Kripto' | 'all';
     status?: 'OPEN' | 'CLOSED' | 'all';
     direction?: 'LONG' | 'SHORT' | 'all';
-}
-
-// ===== SETTINGS TYPES =====
-export interface AppSettings {
-    telegramChatId: string;
-    telegramToken: string;
-    binanceApiKey: string;
-    binanceSecretKey: string;
-    rsiOversold: number;
-    rsiOverbought: number;
-    macdSignalThreshold: number;
-    hunterMinScore: number;
-    scanInterval: number;
-    notifications: boolean;
 }

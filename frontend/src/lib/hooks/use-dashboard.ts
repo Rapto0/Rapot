@@ -5,18 +5,9 @@ import {
     transformOpsOverviewReadModel,
     transformStats,
 } from '@/lib/api/client';
+import type { DashboardStats } from '@/types';
 
-export interface DashboardKPIs {
-    totalPnL: number;
-    totalPnLPercent: number;
-    winRate: number;
-    openPositions: number;
-    closedPositions: number;
-    totalTrades: number;
-    lastScanTime: string;
-    totalSignals: number;
-    todaySignals: number;
-}
+export type DashboardKPIs = DashboardStats;
 
 // Fetch dashboard KPIs from API
 async function fetchDashboardKPIs(): Promise<DashboardKPIs> {

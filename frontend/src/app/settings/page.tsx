@@ -1,308 +1,52 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useMutation } from "@tanstack/react-query"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Switch } from "@/components/ui/switch"
-import { useToast } from "@/components/ui/toast"
-import { Eye, EyeOff, RefreshCw, Save } from "lucide-react"
-
-interface TerminalSettings {
-  telegramChatId: string
-  telegramToken: string
-  binanceApiKey: string
-  binanceSecretKey: string
-  rsiOversold: number
-  rsiOverbought: number
-  hunterMinScore: number
-  scanInterval: number
-  notifications: boolean
-}
-
-const SETTINGS_STORAGE_KEY = "rapot.settings.v1"
-
-const DEFAULT_SETTINGS: TerminalSettings = {
-  telegramChatId: "123456789",
-  telegramToken: "bot1234567890:ABCdefGHIjklMNOpqrsTUVwxyz",
-  binanceApiKey: "aBcDeFgHiJkLmNoPqRsTuVwXyZ123456",
-  binanceSecretKey: "aBcDeFgHiJkLmNoPqRsTuVwXyZ789012",
-  rsiOversold: 30,
-  rsiOverbought: 70,
-  hunterMinScore: 10,
-  scanInterval: 30,
-  notifications: true,
-}
-
-const parseStoredSettings = (raw: string): TerminalSettings | null => {
-  try {
-    const parsed = JSON.parse(raw) as Partial<TerminalSettings>
-    if (
-      typeof parsed.telegramChatId !== "string" ||
-      typeof parsed.telegramToken !== "string" ||
-      typeof parsed.binanceApiKey !== "string" ||
-      typeof parsed.binanceSecretKey !== "string" ||
-      typeof parsed.rsiOversold !== "number" ||
-      typeof parsed.rsiOverbought !== "number" ||
-      typeof parsed.hunterMinScore !== "number" ||
-      typeof parsed.scanInterval !== "number" ||
-      typeof parsed.notifications !== "boolean"
-    ) {
-      return null
-    }
-
-    return parsed as TerminalSettings
-  } catch {
-    return null
-  }
-}
-
-const persistSettings = async (settings: TerminalSettings): Promise<void> => {
-  if (typeof window === "undefined") {
-    throw new Error("Tarayici baglami bulunamadi.")
-  }
-  window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings))
-}
+import Link from "next/link"
+import { PageShell } from "@/components/ui/page-shell"
+import { cleanupLegacyBrowserSettings, type LegacySettingsCleanupResult } from "@/lib/browser-preferences"
 
 export default function SettingsPage() {
-  const { addToast } = useToast()
-  const [showApiKey, setShowApiKey] = useState(false)
-  const [showTelegramToken, setShowTelegramToken] = useState(false)
-  const [settings, setSettings] = useState<TerminalSettings>(DEFAULT_SETTINGS)
+  const [cleanup, setCleanup] = useState<LegacySettingsCleanupResult | null>(null)
 
   useEffect(() => {
-    if (typeof window === "undefined") return
-    const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY)
-    if (!raw) return
-    const restored = parseStoredSettings(raw)
-    if (!restored) return
-    setSettings(restored)
+    setCleanup(cleanupLegacyBrowserSettings())
   }, [])
 
-  const saveMutation = useMutation({
-    mutationFn: persistSettings,
-    onSuccess: () => {
-      addToast({
-        type: "success",
-        title: "Ayarlar kaydedildi",
-        message: "Degisiklikler yerel olarak saklandi.",
-      })
-    },
-    onError: (error) => {
-      addToast({
-        type: "error",
-        title: "Kaydetme basarisiz",
-        message: error instanceof Error ? error.message : "Ayarlar kaydedilemedi.",
-      })
-    },
-  })
-
-  const handleSave = () => {
-    saveMutation.mutate(settings)
-  }
-
   return (
-    <div className="mx-auto flex w-full max-w-[1280px] flex-col gap-3 p-3">
+    <PageShell
+      label="Ayarlar"
+      title="Bot ayarları ve tarayıcı tercihleri"
+      description="Bot yapılandırması sunucuda yönetilir. Bu sayfa bot ayarlarını değiştirmez."
+      width="narrow"
+    >
       <section className="border border-border bg-surface p-4">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <div className="label-uppercase">Ayarlar</div>
-            <h1 className="mt-1 text-lg font-semibold tracking-[-0.02em]">Bot ve strateji parametreleri</h1>
-            <p className="mt-1 text-xs text-muted-foreground">API anahtarları, bildirimler ve temel eşik değerleri.</p>
-          </div>
-          <Button onClick={handleSave} variant="outline" className="gap-1.5" disabled={saveMutation.isPending}>
-            {saveMutation.isPending ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-            {saveMutation.isPending ? "Kaydediliyor..." : "Kaydet"}
-          </Button>
-        </div>
+        <h2 className="text-sm font-semibold">Sunucuda yönetilen ayarlar</h2>
+        <p className="mt-2 text-xs leading-5 text-muted-foreground">
+          Binance ve Telegram bağlantıları, sinyal eşikleri ve tarama zamanlaması sunucu yapılandırmasından gelir.
+          Bağlantı anahtarları bu ekrandan girilemez veya görüntülenemez.
+        </p>
+        <p className="mt-2 text-xs leading-5 text-muted-foreground">
+          Önceki sürümde bu sayfaya girilen strateji değerleri ve bildirim seçimi yalnız tarayıcıya kaydediliyordu;
+          botun hesaplamalarını veya Telegram bildirimlerini değiştirmiyordu.
+          Bu eski seçimler, gizli bağlantı alanları temizlenerek etkisiz geçmiş kayıtları olarak korunur.
+        </p>
+        {cleanup?.status === "blocked" ? (
+          <p role="alert" className="mt-3 text-xs leading-5 text-loss">
+            Eski bağlantı bilgileri için tarayıcı temizliği tamamlanamadı. Tarayıcı depolama izinlerini kontrol edip sayfayı yenileyin.
+          </p>
+        ) : null}
       </section>
 
-      <section className="grid gap-3 md:grid-cols-2">
-        <ConfigPanel title="Telegram">
-          <Field label="Chat ID">
-            <Input
-              value={settings.telegramChatId}
-              onChange={(event) => setSettings({ ...settings, telegramChatId: event.target.value })}
-              placeholder="Telegram Chat ID"
-            />
-          </Field>
-
-          <Field label="Bot Token">
-            <SecretInput
-              value={settings.telegramToken}
-              show={showTelegramToken}
-              onToggle={() => setShowTelegramToken((prev) => !prev)}
-              onChange={(value) => setSettings({ ...settings, telegramToken: value })}
-            />
-          </Field>
-        </ConfigPanel>
-
-        <ConfigPanel title="Binance API">
-          <Field label="API Key">
-            <SecretInput
-              value={settings.binanceApiKey}
-              show={showApiKey}
-              onToggle={() => setShowApiKey((prev) => !prev)}
-              onChange={(value) => setSettings({ ...settings, binanceApiKey: value })}
-            />
-          </Field>
-
-          <Field label="Secret Key">
-            <Input
-              type="password"
-              value={settings.binanceSecretKey}
-              onChange={(event) => setSettings({ ...settings, binanceSecretKey: event.target.value })}
-            />
-          </Field>
-        </ConfigPanel>
+      <section className="border border-border bg-surface p-4">
+        <h2 className="text-sm font-semibold">Bu tarayıcıdaki tercihler</h2>
+        <p className="mt-2 text-xs leading-5 text-muted-foreground">
+          Tarayıcı ekranındaki izleme listeleri, sütunlar ve filtreler kendi ekranından düzenlenir ve bu tarayıcıda saklanır.
+          Bu tercihler sunucunun taradığı piyasaları veya ürettiği sinyalleri değiştirmez.
+        </p>
+        <Link href="/scanner" className="mt-3 inline-block text-xs text-primary underline underline-offset-4">
+          Piyasa tarayıcısını aç
+        </Link>
       </section>
-
-      <section className="grid gap-3 md:grid-cols-2">
-        <ConfigPanel title="RSI Eşikleri">
-          <RangeField
-            label="Aşırı satım"
-            min={10}
-            max={40}
-            value={settings.rsiOversold}
-            onChange={(value) => setSettings({ ...settings, rsiOversold: value })}
-          />
-          <RangeField
-            label="Aşırı alım"
-            min={60}
-            max={90}
-            value={settings.rsiOverbought}
-            onChange={(value) => setSettings({ ...settings, rsiOverbought: value })}
-          />
-        </ConfigPanel>
-
-        <ConfigPanel title="HUNTER Ayarları">
-          <RangeField
-            label="Minimum skor"
-            min={5}
-            max={15}
-            value={settings.hunterMinScore}
-            onChange={(value) => setSettings({ ...settings, hunterMinScore: value })}
-          />
-          <RangeField
-            label="Tarama aralığı (dk)"
-            min={5}
-            max={60}
-            step={5}
-            value={settings.scanInterval}
-            onChange={(value) => setSettings({ ...settings, scanInterval: value })}
-          />
-        </ConfigPanel>
-      </section>
-
-      <section className="border border-border bg-surface p-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-sm font-semibold">Telegram bildirimleri</div>
-            <div className="text-xs text-muted-foreground">Yeni sinyaller geldiğinde bildirim gönder.</div>
-          </div>
-          <Switch
-            checked={settings.notifications}
-            onCheckedChange={(checked) => setSettings({ ...settings, notifications: checked })}
-          />
-        </div>
-      </section>
-    </div>
-  )
-}
-
-function ConfigPanel({
-  title,
-  children,
-}: {
-  title: string
-  children: React.ReactNode
-}) {
-  return (
-    <section className="border border-border bg-surface p-3">
-      <div className="mb-3 border-b border-border pb-2">
-        <span className="label-uppercase">{title}</span>
-      </div>
-      <div className="space-y-3">{children}</div>
-    </section>
-  )
-}
-
-function Field({
-  label,
-  children,
-}: {
-  label: string
-  children: React.ReactNode
-}) {
-  return (
-    <label className="block space-y-1.5">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      {children}
-    </label>
-  )
-}
-
-function SecretInput({
-  value,
-  show,
-  onToggle,
-  onChange,
-}: {
-  value: string
-  show: boolean
-  onToggle: () => void
-  onChange: (value: string) => void
-}) {
-  return (
-    <div className="relative">
-      <Input
-        type={show ? "text" : "password"}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="pr-8"
-      />
-      <button
-        type="button"
-        onClick={onToggle}
-        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-        aria-label="Göster/Gizle"
-      >
-        {show ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-      </button>
-    </div>
-  )
-}
-
-function RangeField({
-  label,
-  min,
-  max,
-  step = 1,
-  value,
-  onChange,
-}: {
-  label: string
-  min: number
-  max: number
-  step?: number
-  value: number
-  onChange: (value: number) => void
-}) {
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between text-xs">
-        <span className="text-muted-foreground">{label}</span>
-        <span className="mono-numbers text-foreground">{value}</span>
-      </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(event) => onChange(Number(event.target.value))}
-        className="h-1.5 w-full cursor-pointer appearance-none border border-border bg-base"
-      />
-    </div>
+    </PageShell>
   )
 }

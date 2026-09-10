@@ -69,55 +69,6 @@ export const useDashboardStore = create<DashboardState>()(
     )
 );
 
-// ===== SETTINGS STORE =====
-interface SettingsState {
-    // Telegram
-    telegramChatId: string;
-    telegramToken: string;
-
-    // Binance API
-    binanceApiKey: string;
-    binanceSecretKey: string;
-
-    // Strategy params
-    rsiOversold: number;
-    rsiOverbought: number;
-    hunterMinScore: number;
-    scanInterval: number;
-
-    // Notifications
-    notifications: boolean;
-
-    // Actions
-    updateSettings: (settings: Partial<SettingsState>) => void;
-    resetSettings: () => void;
-}
-
-const defaultSettings = {
-    telegramChatId: '',
-    telegramToken: '',
-    binanceApiKey: '',
-    binanceSecretKey: '',
-    rsiOversold: 30,
-    rsiOverbought: 70,
-    hunterMinScore: 10,
-    scanInterval: 30,
-    notifications: true,
-};
-
-export const useSettingsStore = create<SettingsState>()(
-    persist(
-        (set) => ({
-            ...defaultSettings,
-            updateSettings: (newSettings) => set((state) => ({ ...state, ...newSettings })),
-            resetSettings: () => set(defaultSettings),
-        }),
-        {
-            name: 'rapot-settings',
-        }
-    )
-);
-
 // ===== SIGNAL FILTERS STORE =====
 interface SignalFiltersState {
     marketType: 'all' | 'BIST' | 'Kripto';

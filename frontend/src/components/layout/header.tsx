@@ -41,7 +41,7 @@ export function Header() {
   const panelRef = useRef<HTMLDivElement | null>(null)
 
   const { data: signals } = useSpecialNotificationSignals(100)
-  const { isError } = useBotHealth()
+  const { apiState } = useBotHealth()
 
   const unreadSignals = useMemo(
     () => (signals ?? []).filter((signal) => !readSignalIds.has(signal.id)),
@@ -94,11 +94,11 @@ export function Header() {
             <span
               className={cn(
                 "h-2 w-2 rounded-full",
-                isError ? "bg-loss" : "bg-profit"
+                apiState === "connected" ? "bg-profit" : apiState === "error" ? "bg-loss" : "bg-neutral"
               )}
             />
             <span className="label-uppercase text-[10px] tracking-[0.06em]">
-              {isError ? "API Kopuk" : "API Bağlı"}
+              {apiState === "connected" ? "API Bağlı" : apiState === "error" ? "API Kopuk" : apiState === "loading" ? "API Yükleniyor" : "API Bilinmiyor"}
             </span>
           </div>
 

@@ -4,13 +4,14 @@ import { cn } from "@/lib/utils"
 import { Card, CardContent } from "@/components/ui/card"
 import { useDashboardKPIs } from "@/lib/hooks/use-dashboard"
 import { TrendingUp, TrendingDown, Target, Clock, Briefcase, BarChart3 } from "lucide-react"
-import { formatCurrency, getTimeAgo } from "@/lib/utils"
+import { getTimeAgo } from "@/lib/utils"
+import { formatMetric, formatMetricPercent, metricTone } from "@/lib/metric-display"
 import { SkeletonKPICard } from "@/components/ui/skeleton"
 
 interface KPICardProps {
     title: string
     value: string | number
-    change?: number
+    change?: number | null
     icon: React.ElementType
     trend?: "up" | "down" | "neutral"
     suffix?: string
@@ -42,7 +43,7 @@ function KPICard({ title, value, change, icon: Icon, trend = "neutral", suffix, 
                                 <span className="text-sm text-muted-foreground">{suffix}</span>
                             )}
                         </div>
-                        {change !== undefined && (
+                        {change != null && (
                             <div className={cn(
                                 "flex items-center gap-1 text-xs font-medium",
                                 change >= 0 ? "text-profit" : "text-loss"
@@ -81,7 +82,7 @@ export function KPICards() {
     const { data: stats, isLoading, isError } = useDashboardKPIs()
 
     // Show skeletons while loading
-    if (isLoading || !stats) {
+    if (isLoading) {
         return (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <SkeletonKPICard />
@@ -92,14 +93,14 @@ export function KPICards() {
         )
     }
 
-    // Error fallback - show cards with default values
-    if (isError) {
+    // Missing measurements stay unknown even when the request has failed.
+    if (isError || !stats) {
         return (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <KPICard title="Toplam PnL" value="--" icon={TrendingUp} trend="neutral" />
-                <KPICard title="Win Rate" value="--" suffix="%" icon={Target} trend="neutral" />
-                <KPICard title="Açık Pozisyonlar" value="--" icon={Briefcase} trend="neutral" />
-                <KPICard title="Son Tarama" value="--" icon={Clock} trend="neutral" />
+                <KPICard title="Gerçekleşmiş PnL" value="—" icon={TrendingUp} trend="neutral" />
+                <KPICard title="Win Rate" value="—" icon={Target} trend="neutral" />
+                <KPICard title="Açık Pozisyonlar" value="—" icon={Briefcase} trend="neutral" />
+                <KPICard title="Son Tarama" value="—" icon={Clock} trend="neutral" />
             </div>
         )
     }
@@ -107,28 +108,27 @@ export function KPICards() {
     return (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <KPICard
-                title="Toplam PnL"
-                value={formatCurrency(stats.totalPnL)}
+                title="PnL (dönüşümsüz toplam)"
+                value={formatMetric(stats.totalPnL, 2, true)}
                 change={stats.totalPnLPercent}
                 icon={TrendingUp}
-                trend={stats.totalPnL >= 0 ? "up" : "down"}
+                trend={metricTone(stats.totalPnL) === "neutral" ? "neutral" : (stats.totalPnL ?? 0) >= 0 ? "up" : "down"}
             />
             <KPICard
                 title="Win Rate"
-                value={stats.winRate.toFixed(1)}
-                suffix="%"
+                value={formatMetricPercent(stats.winRate, 1)}
                 icon={Target}
-                trend={stats.winRate >= 50 ? "up" : "down"}
+                trend={metricTone(stats.winRate, 50) === "neutral" ? "neutral" : (stats.winRate ?? 0) >= 50 ? "up" : "down"}
             />
             <KPICard
                 title="Açık Pozisyonlar"
-                value={stats.openPositions}
+                value={formatMetric(stats.openPositions, 0)}
                 icon={Briefcase}
                 trend="neutral"
             />
             <KPICard
                 title="Son Tarama"
-                value={getTimeAgo(stats.lastScanTime)}
+                value={stats.lastScanTime ? getTimeAgo(stats.lastScanTime) : "—"}
                 icon={Clock}
                 trend="neutral"
             />
@@ -139,7 +139,7 @@ export function KPICards() {
 export function MiniStats() {
     const { data: stats, isLoading } = useDashboardKPIs()
 
-    if (isLoading || !stats) {
+    if (isLoading) {
         return (
             <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-lg bg-card border border-border p-3 animate-pulse">
@@ -161,14 +161,14 @@ export function MiniStats() {
                     <BarChart3 className="h-3 w-3" />
                     Bugünkü Sinyaller
                 </div>
-                <div className="text-lg font-bold">{stats.todaySignals}</div>
+                <div className="text-lg font-bold">{formatMetric(stats?.todaySignals, 0)}</div>
             </div>
             <div className="rounded-lg bg-card border border-border p-3">
                 <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
                     <Target className="h-3 w-3" />
                     Toplam İşlem
                 </div>
-                <div className="text-lg font-bold">{stats.totalTrades}</div>
+                <div className="text-lg font-bold">{formatMetric(stats?.totalTrades, 0)}</div>
             </div>
         </div>
     )

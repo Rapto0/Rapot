@@ -1,26 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
-import { fetchStats, fetchTrades, transformTrade, type TradesParams } from '@/lib/api/client';
+import { fetchStats, fetchTrades, transformStats, transformTrade, type TradesParams } from '@/lib/api/client';
 
-export interface Trade {
-    id: number;
-    symbol: string;
-    marketType: 'BIST' | 'Kripto';
-    direction: 'BUY' | 'SELL';
-    entryPrice: number;
-    currentPrice: number;
-    quantity: number;
-    pnl: number;
-    pnlPercent: number;
-    status: 'OPEN' | 'CLOSED' | 'CANCELLED';
-    createdAt: string;
-    closedAt?: string;
-}
+export type Trade = ReturnType<typeof transformTrade>;
 
 interface UseTradesOptions {
-    status?: 'all' | 'OPEN' | 'CLOSED';
+    status?: 'all' | 'OPEN' | 'CLOSED' | 'CANCELLED';
 }
 
-// Fetch trades from API or fallback to mock data
+// Fetch persisted trade records; valuation data is not part of this endpoint.
 async function fetchTradesData(options: UseTradesOptions = {}): Promise<Trade[]> {
     const { status } = options;
 
@@ -53,14 +40,15 @@ export function useTradeStats() {
         queryKey: ['trades', 'stats'],
         queryFn: fetchStats,
         select: (stats) => {
+            const normalized = transformStats(stats);
             return {
-                total: stats.total_trades,
-                open: stats.open_trades,
-                closed: Math.max(0, stats.total_trades - stats.open_trades),
-                totalPnL: stats.total_pnl,
-                winRate: stats.win_rate,
-                openPnL: 0,
-                closedPnL: stats.total_pnl,
+                total: normalized.totalTrades,
+                open: normalized.openPositions,
+                closed: normalized.closedPositions,
+                totalPnL: normalized.totalPnL,
+                winRate: normalized.winRate,
+                openPnL: null,
+                closedPnL: normalized.totalPnL,
             };
         },
     });

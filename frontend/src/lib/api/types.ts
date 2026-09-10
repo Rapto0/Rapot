@@ -17,9 +17,9 @@ export interface ApiTrade {
     symbol: string;
     market_type: string;
     direction: string;
-    price: number;
-    quantity: number;
-    pnl: number;
+    price: number | null;
+    quantity: number | null;
+    pnl: number | null;
     status: string;
     created_at: string | null;
 }
@@ -28,6 +28,7 @@ export interface ApiStats {
     total_signals: number;
     total_trades: number;
     open_trades: number;
+    closed_trades?: number | null;
     total_pnl: number;
     win_rate: number;
     scan_count: number;
@@ -69,19 +70,27 @@ export interface ApiHealth {
 
 export interface ApiBotStatus {
     bot: {
-        is_running: boolean;
-        is_scanning: boolean;
+        is_running: boolean | null;
+        state?: 'running' | 'stopped' | 'unknown';
+        state_source?: 'local_lifecycle' | 'unverified_repository' | 'unavailable';
+        observed_at?: string | null;
+        last_reported_is_running?: boolean | null;
+        is_scanning: boolean | null;
+        database?: 'connected' | 'disconnected';
         uptime_seconds: number;
         uptime_human: string;
         started_at: string;
     };
     scanning: {
+        data_available?: boolean;
+        last_scan_available?: boolean;
+        counters_updated_at?: string | null;
         last_scan_time: string | null;
-        scan_count: number;
-        signal_count: number;
+        scan_count: number | null;
+        signal_count: number | null;
     };
     errors: {
-        error_count: number;
+        error_count: number | null;
         last_error: string | null;
     };
     timestamp: string;
@@ -177,7 +186,7 @@ export interface SignalsParams {
 
 export interface TradesParams {
     symbol?: string;
-    status?: 'OPEN' | 'CLOSED';
+    status?: 'OPEN' | 'CLOSED' | 'CANCELLED';
     limit?: number;
 }
 

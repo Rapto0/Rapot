@@ -7,8 +7,10 @@ import { SidebarProvider } from '@/components/layout/sidebar-context';
 import { useSession } from '@/lib/hooks/use-session';
 import { ApiError } from '@/lib/api/core';
 import { RealtimeBridge } from '@/components/realtime-bridge';
+import { cleanupLegacyBrowserSettings } from '@/lib/browser-preferences';
 
 export function Providers({ children }: { children: React.ReactNode }) {
+    useEffect(() => { cleanupLegacyBrowserSettings(); }, []);
     const session = useSession();
     const sessionKey = session ? `${session.user.username}:${session.expiresAt}` : 'guest';
     // Remount private component state as well as the cache when the account changes.

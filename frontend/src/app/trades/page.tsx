@@ -15,16 +15,18 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { useTrades, useTradeStats } from "@/lib/hooks/use-trades"
-import { formatDate, formatCurrency, cn } from "@/lib/utils"
+import { formatDate, cn } from "@/lib/utils"
+import { formatMetric, formatMetricPercent, formatTradePrice, metricTextClass, metricTone } from "@/lib/metric-display"
 import { EmptyState } from "@/components/shared/error-boundary"
 import { History, RefreshCw } from "lucide-react"
 
-type StatusFilter = "all" | "OPEN" | "CLOSED"
+type StatusFilter = "all" | "OPEN" | "CLOSED" | "CANCELLED"
 
 const STATUS_OPTIONS = [
   { value: "all", label: "Tümü" },
   { value: "OPEN", label: "Açık" },
   { value: "CLOSED", label: "Kapalı" },
+  { value: "CANCELLED", label: "İptal" },
 ] as const satisfies readonly FilterChipOption<StatusFilter>[]
 
 export default function TradesPage() {
@@ -37,10 +39,10 @@ export default function TradesPage() {
 
   const ribbon = useMemo(() => {
     return {
-      totalPnl: stats?.totalPnL ?? 0,
-      open: stats?.open ?? 0,
-      closed: stats?.closed ?? 0,
-      winRate: stats?.winRate ?? 0,
+      totalPnl: stats?.totalPnL,
+      open: stats?.open,
+      closed: stats?.closed,
+      winRate: stats?.winRate,
     }
   }, [stats])
 
@@ -48,7 +50,7 @@ export default function TradesPage() {
     <PageShell
       label="İşlemler"
       title="İşlem geçmişi"
-      description="Açık ve kapalı pozisyon kayıtları."
+      description="PnL yalnız kapanmış işlemler için kayıtlıdır. Toplam, işlemlerin kendi para birimlerini toplar; döviz dönüşümü içermez."
       actions={
         <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => refetch()} disabled={isFetching}>
           <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />
@@ -59,16 +61,16 @@ export default function TradesPage() {
       <KpiRibbon
         items={[
           {
-            label: "Toplam PnL",
-            value: `${ribbon.totalPnl >= 0 ? "+" : ""}${formatCurrency(ribbon.totalPnl)}`,
-            tone: ribbon.totalPnl >= 0 ? "profit" : "loss",
+            label: "Gerçekleşmiş PnL",
+            value: formatMetric(ribbon.totalPnl, 2, true),
+            tone: metricTone(ribbon.totalPnl),
           },
-          { label: "Açık", value: `${ribbon.open}` },
-          { label: "Kapalı", value: `${ribbon.closed}` },
+          { label: "Açık", value: formatMetric(ribbon.open, 0) },
+          { label: "Kapalı", value: formatMetric(ribbon.closed, 0) },
           {
             label: "Win Rate",
-            value: `${ribbon.winRate.toFixed(1)}%`,
-            tone: ribbon.winRate >= 50 ? "profit" : "loss",
+            value: formatMetricPercent(ribbon.winRate, 1),
+            tone: metricTone(ribbon.winRate, 50),
           },
         ]}
       />
@@ -96,7 +98,7 @@ export default function TradesPage() {
               <TableHead className="text-right">Giriş</TableHead>
               <TableHead className="text-right">Güncel</TableHead>
               <TableHead className="text-right">Miktar</TableHead>
-              <TableHead className="text-right">PnL</TableHead>
+              <TableHead className="text-right">Gerçekleşmiş PnL</TableHead>
               <TableHead>Durum</TableHead>
               <TableHead className="text-right">Tarih</TableHead>
             </TableRow>
@@ -135,35 +137,31 @@ export default function TradesPage() {
                     <Badge variant={trade.marketType === "BIST" ? "bist" : "crypto"}>{trade.marketType}</Badge>
                   </TableCell>
                   <TableCell>
-                    <span className={cn("signal-badge", trade.direction === "BUY" ? "signal-buy" : "signal-sell")}>
-                      {trade.direction === "BUY" ? "AL" : "SAT"}
+                    <span className={cn("signal-badge", trade.direction === "BUY" ? "signal-buy" : trade.direction === "SELL" ? "signal-sell" : "text-muted-foreground")}>
+                      {trade.direction === "BUY" ? "AL" : trade.direction === "SELL" ? "SAT" : "—"}
                     </span>
                   </TableCell>
                   <TableCell className="mono-numbers text-right">
-                    {trade.marketType === "Kripto" ? "$" : "₺"}
-                    {trade.entryPrice.toLocaleString("tr-TR", { maximumFractionDigits: 4 })}
+                    {formatTradePrice(trade.entryPrice, trade.marketType, 4)}
                   </TableCell>
                   <TableCell className="mono-numbers text-right">
-                    {trade.marketType === "Kripto" ? "$" : "₺"}
-                    {trade.currentPrice.toLocaleString("tr-TR", { maximumFractionDigits: 4 })}
+                    {formatTradePrice(trade.currentPrice, trade.marketType, 4)}
                   </TableCell>
-                  <TableCell className="mono-numbers text-right">{trade.quantity.toLocaleString("tr-TR")}</TableCell>
+                  <TableCell className="mono-numbers text-right">{formatMetric(trade.quantity, 4)}</TableCell>
                   <TableCell className="text-right">
-                    <div className={cn("mono-numbers", trade.pnl >= 0 ? "text-profit" : "text-loss")}>
-                      {trade.pnl >= 0 ? "+" : ""}
-                      {formatCurrency(trade.pnl)}
+                    <div className={cn("mono-numbers", metricTextClass(trade.pnl))}>
+                      {trade.pnl === null ? "—" : `${trade.pnl >= 0 ? "+" : ""}${formatTradePrice(trade.pnl, trade.marketType)}`}
                     </div>
-                    <div className={cn("mono-numbers text-[10px]", trade.pnlPercent >= 0 ? "text-profit" : "text-loss")}>
-                      {trade.pnlPercent >= 0 ? "+" : ""}
-                      {trade.pnlPercent.toFixed(2)}%
+                    <div className={cn("mono-numbers text-[10px]", metricTextClass(trade.pnlPercent))}>
+                      {formatMetricPercent(trade.pnlPercent, 2, true)}
                     </div>
                   </TableCell>
                   <TableCell>
                     <Badge variant={trade.status === "OPEN" ? "default" : "secondary"}>
-                      {trade.status === "OPEN" ? "Açık" : "Kapalı"}
+                      {trade.status === "OPEN" ? "Açık" : trade.status === "CLOSED" ? "Kapalı" : trade.status === "CANCELLED" ? "İptal" : "Bilinmiyor"}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right text-xs text-muted-foreground">{formatDate(trade.createdAt)}</TableCell>
+                  <TableCell className="text-right text-xs text-muted-foreground">{trade.createdAt ? formatDate(trade.createdAt) : "—"}</TableCell>
                 </TableRow>
               ))}
           </TableBody>

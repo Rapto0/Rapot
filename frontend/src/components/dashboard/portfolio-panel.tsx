@@ -5,8 +5,6 @@ import {
   Wallet,
   TrendingUp,
   TrendingDown,
-  ArrowUpRight,
-  ArrowDownRight,
   RefreshCcw,
   Eye,
   EyeOff,
@@ -14,127 +12,34 @@ import {
   DollarSign,
   Percent,
   Zap,
-  AlertTriangle,
 } from 'lucide-react';
 import { useTrades, useTradeStats } from '@/lib/hooks';
 import { cn } from '@/lib/utils';
+import { formatMetric, formatMetricPercent, formatTradePrice, metricTextClass, metricTone } from '@/lib/metric-display';
 
 // ==================== TYPES ====================
 
 interface Position {
   symbol: string;
   marketType: string;
-  quantity: number;
-  avgPrice: number;
-  currentPrice: number;
-  pnl: number;
-  pnlPercent: number;
+  quantity: number | null;
+  avgPrice: number | null;
+  currentPrice: number | null;
+  pnl: number | null;
+  pnlPercent: number | null;
 }
 
 // ==================== QUICK TRADE BUTTONS ====================
 
-interface QuickTradeProps {
-  symbol: string;
-  currentPrice: number;
-  onBuy: (symbol: string, amount: number) => void;
-  onSell: (symbol: string, amount: number) => void;
-  disabled?: boolean;
-}
-
-function QuickTradeButtons({ symbol, currentPrice, onBuy, onSell, disabled }: QuickTradeProps) {
-  const [amount, setAmount] = useState('');
-  const [mode, setMode] = useState<'paper' | 'real'>('paper');
-
-  const handleBuy = () => {
-    const qty = parseFloat(amount) || 0;
-    if (qty > 0) {
-      onBuy(symbol, qty);
-      setAmount('');
-    }
-  };
-
-  const handleSell = () => {
-    const qty = parseFloat(amount) || 0;
-    if (qty > 0) {
-      onSell(symbol, qty);
-      setAmount('');
-    }
-  };
-
+function QuickTradeButtons() {
   return (
     <div className="flex flex-col gap-3 p-4 rounded-lg bg-card/30 border border-border/30">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-medium">Hızlı İşlem</span>
-        <div className="flex items-center gap-1 bg-muted/30 rounded-lg p-0.5">
-          <button
-            onClick={() => setMode('paper')}
-            className={cn(
-              'px-2 py-1 text-xs rounded-md transition-all',
-              mode === 'paper'
-                ? 'bg-primary/20 text-primary'
-                : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            Paper
-          </button>
-          <button
-            onClick={() => setMode('real')}
-            className={cn(
-              'px-2 py-1 text-xs rounded-md transition-all',
-              mode === 'real'
-                ? 'bg-loss/20 text-loss'
-                : 'text-muted-foreground hover:text-foreground'
-            )}
-          >
-            Gerçek
-          </button>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <input
-          type="number"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          placeholder="Miktar"
-          className="flex-1 px-3 py-2 bg-background/50 border border-border/50 rounded-lg text-sm focus:outline-none focus:border-primary/50 mono-numbers"
-        />
-        <div className="text-xs text-muted-foreground">
-          ≈ ${((parseFloat(amount) || 0) * currentPrice).toFixed(2)}
-        </div>
-      </div>
-
+      <span className="text-sm font-medium">Hızlı İşlem</span>
+      <p className="text-xs text-muted-foreground">İşlem gönderimi bağlı değil.</p>
       <div className="grid grid-cols-2 gap-2">
-        <button
-          onClick={handleBuy}
-          disabled={disabled || !amount}
-          className={cn(
-            'btn-profit flex items-center justify-center gap-2 py-3',
-            'disabled:opacity-50 disabled:cursor-not-allowed'
-          )}
-        >
-          <ArrowUpRight className="w-4 h-4" />
-          <span>AL</span>
-        </button>
-        <button
-          onClick={handleSell}
-          disabled={disabled || !amount}
-          className={cn(
-            'btn-loss flex items-center justify-center gap-2 py-3',
-            'disabled:opacity-50 disabled:cursor-not-allowed'
-          )}
-        >
-          <ArrowDownRight className="w-4 h-4" />
-          <span>SAT</span>
-        </button>
+        <button type="button" disabled className="btn-profit py-3 opacity-50 cursor-not-allowed">AL</button>
+        <button type="button" disabled className="btn-loss py-3 opacity-50 cursor-not-allowed">SAT</button>
       </div>
-
-      {mode === 'real' && (
-        <div className="flex items-center gap-2 text-xs text-loss">
-          <AlertTriangle className="w-3 h-3" />
-          <span>Gerçek mod - Dikkatli olun!</span>
-        </div>
-      )}
     </div>
   );
 }
@@ -143,11 +48,11 @@ function QuickTradeButtons({ symbol, currentPrice, onBuy, onSell, disabled }: Qu
 
 interface PositionCardProps {
   position: Position;
-  onClose?: (symbol: string) => void;
 }
 
-function PositionCard({ position, onClose }: PositionCardProps) {
-  const isProfit = position.pnl >= 0;
+function PositionCard({ position }: PositionCardProps) {
+  const tone = metricTone(position.pnl);
+  const percentTone = metricTone(position.pnlPercent);
 
   return (
     <div className="flex items-center gap-4 p-3 rounded-lg bg-card/30 border border-border/20 hover:border-primary/20 transition-colors">
@@ -160,22 +65,22 @@ function PositionCard({ position, onClose }: PositionCardProps) {
           </span>
         </div>
         <div className="text-xs text-muted-foreground mt-0.5">
-          {position.quantity} adet @ ₺{position.avgPrice.toFixed(2)}
+          {formatMetric(position.quantity, 4)} adet @ {formatTradePrice(position.avgPrice, position.marketType)}
         </div>
       </div>
 
       {/* Current Price */}
       <div className="text-right">
         <div className="mono-numbers font-medium">
-          ₺{position.currentPrice.toFixed(2)}
+          {formatTradePrice(position.currentPrice, position.marketType)}
         </div>
         <div className={cn(
           'flex items-center justify-end gap-1 text-xs',
-          isProfit ? 'text-profit' : 'text-loss'
+          metricTextClass(position.pnlPercent)
         )}>
-          {isProfit ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+          {percentTone === 'profit' ? <TrendingUp className="w-3 h-3" /> : percentTone === 'loss' ? <TrendingDown className="w-3 h-3" /> : null}
           <span className="mono-numbers">
-            {isProfit ? '+' : ''}{position.pnlPercent.toFixed(2)}%
+            {formatMetricPercent(position.pnlPercent, 2, true)}
           </span>
         </div>
       </div>
@@ -183,26 +88,25 @@ function PositionCard({ position, onClose }: PositionCardProps) {
       {/* PnL */}
       <div className={cn(
         'text-right min-w-[80px] px-3 py-2 rounded-lg',
-        isProfit ? 'bg-profit/10' : 'bg-loss/10'
+        tone === 'profit' ? 'bg-profit/10' : tone === 'loss' ? 'bg-loss/10' : 'bg-muted/10'
       )}>
         <div className={cn(
           'font-bold mono-numbers',
-          isProfit ? 'text-profit' : 'text-loss'
+          metricTextClass(position.pnl)
         )}>
-          {isProfit ? '+' : ''}₺{position.pnl.toFixed(2)}
+          {position.pnl === null ? '—' : `${position.pnl >= 0 ? '+' : ''}${formatTradePrice(position.pnl, position.marketType)}`}
         </div>
       </div>
 
-      {/* Close button */}
-      {onClose && (
-        <button
-          onClick={() => onClose(position.symbol)}
-          className="p-2 rounded-lg bg-muted/30 hover:bg-loss/20 hover:text-loss transition-colors"
-          title="Pozisyonu Kapat"
-        >
-          <RefreshCcw className="w-4 h-4" />
-        </button>
-      )}
+      <button
+        type="button"
+        disabled
+        className="p-2 rounded-lg bg-muted/30 opacity-50 cursor-not-allowed"
+        title="Pozisyonu Kapat — işlem gönderimi bağlı değil"
+        aria-label="Pozisyonu Kapat"
+      >
+        <RefreshCcw className="w-4 h-4" />
+      </button>
     </div>
   );
 }
@@ -251,29 +155,27 @@ interface PortfolioPanelProps {
 }
 
 export function PortfolioPanel({
-  selectedSymbol = 'BTCUSDT',
-  selectedPrice = 0,
   className,
 }: PortfolioPanelProps) {
   const [hideBalance, setHideBalance] = useState(false);
 
   // Get trades and stats from API
-  const { data: trades } = useTrades({ status: 'OPEN' });
+  const { data: trades, isLoading, isError } = useTrades({ status: 'OPEN' });
   const { data: stats } = useTradeStats();
 
   // Calculate portfolio stats
   const portfolioStats = useMemo(() => {
-    const totalPnl = stats?.totalPnL || 0;
-    const winRate = stats?.winRate || 0;
-    const openTrades = stats?.open || 0;
-    const totalTrades = stats?.total || 0;
+    const totalPnl = stats?.totalPnL;
+    const winRate = stats?.winRate;
+    const openTrades = stats?.open;
+    const totalTrades = stats?.total;
 
     return {
       totalPnl,
       winRate,
       openTrades,
       totalTrades,
-      isProfit: totalPnl >= 0,
+      tone: metricTone(totalPnl),
     };
   }, [stats]);
 
@@ -292,21 +194,6 @@ export function PortfolioPanel({
     }));
   }, [trades]);
 
-  // Handlers
-  const handleBuy = (symbol: string, amount: number) => {
-    console.log('Buy', symbol, amount);
-    // TODO: Implement actual buy logic
-  };
-
-  const handleSell = (symbol: string, amount: number) => {
-    console.log('Sell', symbol, amount);
-    // TODO: Implement actual sell logic
-  };
-
-  const handleClosePosition = (symbol: string) => {
-    console.log('Close position', symbol);
-    // TODO: Implement close position logic
-  };
 
   return (
     <div className={cn('flex flex-col h-full', className)}>
@@ -333,48 +220,48 @@ export function PortfolioPanel({
         {/* Stats Grid */}
         <div className="grid grid-cols-2 gap-3">
           <StatCard
-            label="Toplam PnL"
-            value={hideBalance ? '****' : `${portfolioStats.isProfit ? '+' : ''}₺${portfolioStats.totalPnl.toFixed(2)}`}
+            label="Gerçekleşmiş PnL"
+            value={hideBalance ? '****' : formatMetric(portfolioStats.totalPnl, 2, true)}
+            subValue="Para birimi dönüşümü yapılmaz."
             icon={<DollarSign className="w-4 h-4" />}
-            trend={portfolioStats.isProfit ? 'up' : 'down'}
+            trend={portfolioStats.tone === 'profit' ? 'up' : portfolioStats.tone === 'loss' ? 'down' : 'neutral'}
           />
           <StatCard
             label="Kazanma Oranı"
-            value={`%${portfolioStats.winRate.toFixed(1)}`}
-            subValue={`${portfolioStats.totalTrades} işlem`}
+            value={formatMetricPercent(portfolioStats.winRate, 1)}
+            subValue={`${formatMetric(portfolioStats.totalTrades, 0)} işlem`}
             icon={<Percent className="w-4 h-4" />}
-            trend={portfolioStats.winRate >= 50 ? 'up' : 'down'}
+            trend={metricTone(portfolioStats.winRate, 50) === 'neutral' ? 'neutral' : (portfolioStats.winRate ?? 0) >= 50 ? 'up' : 'down'}
           />
           <StatCard
             label="Açık Pozisyon"
-            value={portfolioStats.openTrades}
+            value={formatMetric(portfolioStats.openTrades, 0)}
             icon={<BarChart3 className="w-4 h-4" />}
           />
           <StatCard
             label="Toplam İşlem"
-            value={portfolioStats.totalTrades}
+            value={formatMetric(portfolioStats.totalTrades, 0)}
             icon={<Zap className="w-4 h-4" />}
           />
         </div>
 
         {/* Quick Trade */}
-        <QuickTradeButtons
-          symbol={selectedSymbol}
-          currentPrice={selectedPrice}
-          onBuy={handleBuy}
-          onSell={handleSell}
-        />
+        <QuickTradeButtons />
 
         {/* Open Positions */}
         <div>
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm font-medium">Açık Pozisyonlar</span>
             <span className="text-xs text-muted-foreground">
-              {positions.length} pozisyon
+              {trades ? positions.length : '—'} pozisyon
             </span>
           </div>
 
-          {positions.length === 0 ? (
+          {isError ? (
+            <p className="text-sm text-muted-foreground">Pozisyonlar yüklenemedi.</p>
+          ) : isLoading || !trades ? (
+            <p className="text-sm text-muted-foreground">Pozisyonlar yükleniyor...</p>
+          ) : positions.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
               <Wallet className="w-8 h-8 mb-2 opacity-50" />
               <span className="text-sm">Açık pozisyon yok</span>
@@ -385,7 +272,6 @@ export function PortfolioPanel({
                 <PositionCard
                   key={position.symbol}
                   position={position}
-                  onClose={handleClosePosition}
                 />
               ))}
             </div>
@@ -396,11 +282,7 @@ export function PortfolioPanel({
       {/* Footer */}
       <div className="px-4 py-2 border-t border-border/30 text-xs text-muted-foreground">
         <div className="flex items-center justify-between">
-          <span>Paper Trading Aktif</span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-profit animate-pulse" />
-            Bağlı
-          </span>
+          <span>İşlem gönderimi bağlı değil.</span>
         </div>
       </div>
     </div>
@@ -412,24 +294,23 @@ export function PortfolioPanel({
 export function MiniPortfolio() {
   const { data: stats } = useTradeStats();
 
-  const totalPnl = stats?.totalPnL || 0;
-  const isProfit = totalPnl >= 0;
+  const totalPnl = stats?.totalPnL;
 
   return (
     <div className="flex items-center gap-4 p-3 rounded-lg bg-card/30 border border-border/20">
       <Wallet className="w-5 h-5 text-primary" />
       <div className="flex-1">
-        <div className="text-xs text-muted-foreground">Toplam PnL</div>
+        <div className="text-xs text-muted-foreground" title="Para birimi dönüşümü yapılmaz.">Gerçekleşmiş PnL</div>
         <div className={cn(
           'font-bold mono-numbers',
-          isProfit ? 'text-profit' : 'text-loss'
+          metricTextClass(totalPnl)
         )}>
-          {isProfit ? '+' : ''}₺{totalPnl.toFixed(2)}
+          {formatMetric(totalPnl, 2, true)}
         </div>
       </div>
       <div className="text-right">
         <div className="text-xs text-muted-foreground">Açık</div>
-        <div className="font-medium">{stats?.open || 0}</div>
+        <div className="font-medium">{formatMetric(stats?.open, 0)}</div>
       </div>
     </div>
   );

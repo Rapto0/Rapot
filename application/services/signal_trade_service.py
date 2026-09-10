@@ -104,6 +104,7 @@ def get_trade_stats_summary() -> dict[str, int | float]:
         "total_signals": int(stats["total_signals"]),
         "total_trades": int(stats["total_trades"]),
         "open_trades": int(stats["open_trades"]),
+        "closed_trades": closed_trades,
         "total_pnl": float(stats["total_pnl"]),
         "win_rate": round(float(win_rate), 2),
         "scan_count": int(scan_count),

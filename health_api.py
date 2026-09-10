@@ -1,7 +1,9 @@
 """Health API endpoints for runtime observability."""
 
 import threading
-from datetime import datetime
+from collections.abc import Iterator
+from contextlib import contextmanager
+from datetime import UTC, datetime
 from typing import Any
 
 from flask import Flask, jsonify, request
@@ -13,10 +15,8 @@ from state_keys import (
     ASYNC_SIGNAL_COUNT_KEY,
     RUNTIME_ERROR_COUNT_KEY,
     RUNTIME_IS_RUNNING_KEY,
-    RUNTIME_IS_SCANNING_KEY,
     RUNTIME_LAST_ERROR_KEY,
     RUNTIME_LAST_SCAN_TIME_KEY,
-    SCHEDULED_SCAN_LOCK_NAME,
     SYNC_SCAN_COUNT_KEY,
     SYNC_SIGNAL_COUNT_KEY,
 )
@@ -28,12 +28,68 @@ BOT_START_TIME = datetime.now()
 
 # Legacy in-memory state retained for backward compatibility with callers.
 _bot_status = {
-    "is_running": True,
-    "is_scanning": False,
+    "is_running": None,
+    "is_scanning": None,
     "last_scan_time": None,
     "error_count": 0,
     "last_error": None,
 }
+_runtime_lock = threading.Lock()
+_runtime_lifecycle: dict[str, Any] = {"phase": "unknown", "owner": None}
+
+
+def begin_bot_runtime() -> None:
+    """Bind status to this process's scheduler, not a persisted flag from an old run."""
+    with _runtime_lock:
+        _runtime_lifecycle.update(
+            phase="starting", owner=threading.current_thread(), active_scans=0
+        )
+
+
+def mark_bot_runtime_running() -> None:
+    with _runtime_lock:
+        if _runtime_lifecycle.get("owner") is threading.current_thread():
+            _runtime_lifecycle["phase"] = "running"
+
+
+def end_bot_runtime() -> None:
+    with _runtime_lock:
+        if _runtime_lifecycle.get("owner") is threading.current_thread():
+            _runtime_lifecycle["phase"] = "stopped"
+
+
+@contextmanager
+def track_bot_scan() -> Iterator[None]:
+    """Observe active scan calls in this process, without trusting an old database lease."""
+    with _runtime_lock:
+        _runtime_lifecycle["active_scans"] = _runtime_lifecycle.get("active_scans", 0) + 1
+    try:
+        yield
+    finally:
+        with _runtime_lock:
+            _runtime_lifecycle["active_scans"] -= 1
+
+
+def _observe_bot_runtime() -> dict[str, Any]:
+    with _runtime_lock:
+        phase = _runtime_lifecycle.get("phase")
+        owner = _runtime_lifecycle.get("owner")
+        active_scans = _runtime_lifecycle.get("active_scans", 0)
+    is_running = None
+    if phase == "stopped":
+        is_running = False
+    elif phase == "running" and owner is not None and owner.is_alive():
+        is_running = True
+    return {
+        "is_running": is_running,
+        "is_scanning": bool(active_scans)
+        if is_running is True
+        else False
+        if is_running is False
+        else None,
+        "state_source": "local_lifecycle" if owner is not None else "unverified_repository",
+        "observed_at": datetime.now(UTC).isoformat() if owner is not None else None,
+    }
 
 
 def get_uptime_seconds() -> float:
@@ -78,25 +134,32 @@ def _probe_database() -> bool:
 
 def _load_scanner_counters() -> dict[str, Any]:
     defaults = {
-        "sync_scans": 0,
-        "sync_signals": 0,
-        "async_scans": 0,
-        "async_signals": 0,
-        "total_scans": 0,
-        "total_signals": 0,
+        "sync_scans": None,
+        "sync_signals": None,
+        "async_scans": None,
+        "async_signals": None,
+        "total_scans": None,
+        "total_signals": None,
         "last_updated": None,
+        "last_scan_time": None,
+        "data_available": False,
+        "last_scan_available": False,
     }
 
     try:
+        from application.services.system_service import list_recent_scans
         from infrastructure.persistence.ops_repository import (
-            get_bot_stat_int,
+            get_bot_stat,
             get_bot_stats_last_updated,
         )
 
-        sync_scans = get_bot_stat_int(SYNC_SCAN_COUNT_KEY, default=0)
-        sync_signals = get_bot_stat_int(SYNC_SIGNAL_COUNT_KEY, default=0)
-        async_scans = get_bot_stat_int(ASYNC_SCAN_COUNT_KEY, default=0)
-        async_signals = get_bot_stat_int(ASYNC_SIGNAL_COUNT_KEY, default=0)
+        sync_scans = _parse_stat_count(get_bot_stat(SYNC_SCAN_COUNT_KEY))
+        sync_signals = _parse_stat_count(get_bot_stat(SYNC_SIGNAL_COUNT_KEY))
+        async_scans = _parse_stat_count(get_bot_stat(ASYNC_SCAN_COUNT_KEY))
+        async_signals = _parse_stat_count(get_bot_stat(ASYNC_SIGNAL_COUNT_KEY))
+        counters_available = all(
+            value is not None for value in (sync_scans, sync_signals, async_scans, async_signals)
+        )
 
         last_updated = get_bot_stats_last_updated(
             (
@@ -106,25 +169,50 @@ def _load_scanner_counters() -> dict[str, Any]:
                 ASYNC_SIGNAL_COUNT_KEY,
             )
         )
+        recent_scans = list_recent_scans(1)
+        last_scan_time = recent_scans[0].get("created_at") if recent_scans else None
+        if last_scan_time:
+            parsed = datetime.fromisoformat(last_scan_time)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=UTC)
+            last_scan_time = parsed.astimezone(UTC).isoformat()
 
         return {
-            "sync_scans": int(sync_scans),
-            "sync_signals": int(sync_signals),
-            "async_scans": int(async_scans),
-            "async_signals": int(async_signals),
-            "total_scans": int(sync_scans) + int(async_scans),
-            "total_signals": int(sync_signals) + int(async_signals),
+            "sync_scans": sync_scans,
+            "sync_signals": sync_signals,
+            "async_scans": async_scans,
+            "async_signals": async_signals,
+            "total_scans": sync_scans + async_scans
+            if sync_scans is not None and async_scans is not None
+            else None,
+            "total_signals": sync_signals + async_signals
+            if sync_signals is not None and async_signals is not None
+            else None,
             "last_updated": last_updated.isoformat() if last_updated else None,
+            "last_scan_time": last_scan_time,
+            "data_available": counters_available,
+            "last_scan_available": True,
         }
     except Exception as exc:
         logger.warning("Scanner counters could not be loaded from repository: %s", exc)
         return defaults
 
 
-def _parse_stat_bool(raw_value: str | None, default: bool) -> bool:
-    if raw_value is None:
-        return default
-    return str(raw_value).strip().lower() in {"1", "true", "yes", "on"}
+def _parse_stat_bool(raw_value: str | None) -> bool | None:
+    normalized = str(raw_value).strip().lower() if raw_value is not None else ""
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return None
+
+
+def _parse_stat_count(raw_value: str | None) -> int | None:
+    try:
+        value = int(str(raw_value).strip())
+    except (TypeError, ValueError):
+        return None
+    return value if value >= 0 else None
 
 
 def _parse_query_bool(key: str, default: bool = False) -> bool:
@@ -136,38 +224,38 @@ def _parse_query_bool(key: str, default: bool = False) -> bool:
 
 def _load_runtime_state_from_repo() -> dict[str, Any]:
     defaults = {
-        "is_running": bool(_bot_status.get("is_running", True)),
-        "is_scanning": bool(_bot_status.get("is_scanning", False)),
+        "is_running": None,
+        "is_scanning": None,
+        "last_reported_is_running": None,
+        "state_source": "unavailable",
+        "observed_at": None,
         "last_scan_time": _bot_status.get("last_scan_time"),
-        "error_count": int(_bot_status.get("error_count", 0) or 0),
+        "error_count": None,
         "last_error": _bot_status.get("last_error"),
     }
 
     try:
         from infrastructure.persistence.ops_repository import (
             get_bot_stat,
-            get_bot_stat_int,
-            get_distributed_lock_state,
         )
 
-        distributed_scan_lock = get_distributed_lock_state(SCHEDULED_SCAN_LOCK_NAME)
-        is_running = _parse_stat_bool(get_bot_stat(RUNTIME_IS_RUNNING_KEY), default=True)
-        runtime_scanning = _parse_stat_bool(get_bot_stat(RUNTIME_IS_SCANNING_KEY), default=False)
+        last_reported_is_running = _parse_stat_bool(get_bot_stat(RUNTIME_IS_RUNNING_KEY))
+        observation = _observe_bot_runtime()
         last_scan_time = get_bot_stat(RUNTIME_LAST_SCAN_TIME_KEY) or _bot_status.get(
             "last_scan_time"
         )
-        error_count = get_bot_stat_int(RUNTIME_ERROR_COUNT_KEY, default=0)
+        error_count = _parse_stat_count(get_bot_stat(RUNTIME_ERROR_COUNT_KEY))
         last_error = get_bot_stat(RUNTIME_LAST_ERROR_KEY)
 
         return {
-            "is_running": bool(is_running),
-            "is_scanning": bool(distributed_scan_lock.get("locked") or runtime_scanning),
+            **observation,
+            "last_reported_is_running": last_reported_is_running,
             "last_scan_time": last_scan_time,
-            "error_count": int(error_count),
+            "error_count": error_count,
             "last_error": last_error,
         }
     except Exception as exc:
-        logger.warning("Runtime state load failed; using in-memory fallback: %s", exc)
+        logger.warning("Runtime state unavailable (%s).", type(exc).__name__)
         return defaults
 
 
@@ -197,7 +285,8 @@ def health():
     db_ok = _probe_database()
     runtime_state = _load_runtime_state_from_repo()
     status = "healthy" if db_ok else "unhealthy"
-    realtime_status = "running" if runtime_state.get("is_running", False) else "error"
+    running = runtime_state.get("is_running") if db_ok else None
+    realtime_status = "running" if running is True else "stopped" if running is False else "unknown"
 
     payload = build_health_payload(
         status=status,
@@ -216,28 +305,43 @@ def status():
     db_ok = _probe_database()
     counters = _load_scanner_counters()
     runtime_state = _load_runtime_state_from_repo()
+    running = runtime_state.get("is_running") if db_ok else None
+    state = "running" if running is True else "stopped" if running is False else "unknown"
+    counters_available = db_ok and counters.get("data_available", True)
+    last_scan_available = db_ok and counters.get("last_scan_available", False)
     include_compat_telemetry = _parse_query_bool("include_compat_telemetry", default=False)
     include_wrapper_details = _parse_query_bool("include_wrapper_details", default=False)
 
     payload = {
         "bot": {
-            "is_running": bool(runtime_state.get("is_running", True)) and db_ok,
-            "is_scanning": bool(runtime_state.get("is_scanning", False)),
+            "is_running": running,
+            "state": state,
+            "state_source": runtime_state.get("state_source", "unavailable")
+            if db_ok
+            else "unavailable",
+            "observed_at": runtime_state.get("observed_at") if db_ok else None,
+            "last_reported_is_running": runtime_state.get("last_reported_is_running"),
+            "is_scanning": runtime_state.get("is_scanning") if db_ok else None,
             "uptime_seconds": round(uptime, 2),
             "uptime_human": format_uptime(uptime),
             "started_at": BOT_START_TIME.isoformat(),
             "database": "connected" if db_ok else "disconnected",
         },
         "scanning": {
-            "last_scan_time": counters.get("last_updated") or runtime_state.get("last_scan_time"),
-            "sync_scan_count": counters["sync_scans"],
-            "async_scan_count": counters["async_scans"],
-            "scan_count": counters["total_scans"],
-            "signal_count": counters["total_signals"],
+            "data_available": counters_available,
+            "last_scan_available": last_scan_available,
+            "last_scan_time": counters.get("last_scan_time") if last_scan_available else None,
+            "counters_updated_at": counters.get("last_updated") if counters_available else None,
+            "sync_scan_count": counters["sync_scans"] if counters_available else None,
+            "async_scan_count": counters["async_scans"] if counters_available else None,
+            "scan_count": counters["total_scans"] if counters_available else None,
+            "signal_count": counters["total_signals"] if counters_available else None,
         },
         "errors": {
-            "error_count": int(runtime_state.get("error_count", 0) or 0),
-            "last_error": runtime_state.get("last_error"),
+            "error_count": runtime_state.get("error_count")
+            if db_ok and runtime_state.get("state_source") != "unavailable"
+            else None,
+            "last_error": runtime_state.get("last_error") if db_ok else None,
         },
         "timestamp": datetime.now().isoformat(),
     }

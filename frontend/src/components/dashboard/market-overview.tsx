@@ -1,9 +1,10 @@
 "use client"
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { cn, formatCurrency } from "@/lib/utils"
+import { cn } from "@/lib/utils"
 import { useQuery } from "@tanstack/react-query"
-import { fetchMarketOverview, fetchTrades } from "@/lib/api/client"
+import { fetchMarketOverview, fetchTrades, transformTrade } from "@/lib/api/client"
+import { formatMetric, formatMetricPercent, metricTextClass } from "@/lib/metric-display"
 import { useBinanceTicker } from "@/lib/hooks/use-binance-ticker"
 import { TrendingUp, TrendingDown, Loader2, Zap } from "lucide-react"
 import {
@@ -172,6 +173,7 @@ export function OpenPositions() {
     const { data: trades, isLoading } = useQuery({
         queryKey: ['openTrades'],
         queryFn: () => fetchTrades({ status: 'OPEN' }),
+        select: (rows) => rows.map(transformTrade),
         refetchInterval: 15000,
     })
 
@@ -215,7 +217,7 @@ export function OpenPositions() {
                                     <div>
                                         <div className="font-medium text-sm">{trade.symbol}</div>
                                         <div className="text-xs text-muted-foreground">
-                                            {trade.market_type} • Adet: {trade.quantity}
+                                            {trade.marketType} • Adet: {formatMetric(trade.quantity, 4)}
                                         </div>
                                     </div>
                                 </div>
@@ -223,22 +225,18 @@ export function OpenPositions() {
                                     <div
                                         className={cn(
                                             "font-medium text-sm",
-                                            trade.pnl >= 0 ? "text-profit" : "text-loss"
+                                            metricTextClass(trade.pnl)
                                         )}
                                     >
-                                        {trade.pnl >= 0 ? "+" : ""}
-                                        {formatCurrency(trade.pnl)}
+                                        {formatMetric(trade.pnl, 2, true)}
                                     </div>
                                     <div
                                         className={cn(
                                             "text-xs",
-                                            // PnL percent calculation if needed, currently just showing PnL
-                                            trade.pnl >= 0 ? "text-profit" : "text-loss"
+                                            metricTextClass(trade.pnlPercent)
                                         )}
                                     >
-                                        {trade.price > 0
-                                            ? `${((trade.pnl / (trade.price * trade.quantity)) * 100).toFixed(2)}%`
-                                            : '0.00%'}
+                                        {formatMetricPercent(trade.pnlPercent, 2, true)}
                                     </div>
                                 </div>
                             </div>

@@ -1320,6 +1320,10 @@
       "StatsResponse": {
         "description": "İstatistik yanıtı.",
         "properties": {
+          "closed_trades": {
+            "title": "Closed Trades",
+            "type": "integer"
+          },
           "open_trades": {
             "title": "Open Trades",
             "type": "integer"
@@ -1349,6 +1353,7 @@
           "total_signals",
           "total_trades",
           "open_trades",
+          "closed_trades",
           "total_pnl",
           "win_rate",
           "scan_count"
@@ -1600,8 +1605,15 @@
             "type": "string"
           },
           "pnl": {
-            "title": "Pnl",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pnl"
           },
           "price": {
             "title": "Price",
