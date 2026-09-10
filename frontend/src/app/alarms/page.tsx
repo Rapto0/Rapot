@@ -1,41 +1,30 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { fetchCandles } from "@/lib/api/client"
+import { useLocalAlarms } from "@/lib/hooks/use-local-alarms"
+import { readAlarmRuleStorage, updateAlarmRuleStorage, type AlarmRuleChange } from "@/lib/alarm-rule-storage"
 import { cn } from "@/lib/utils"
 import {
     ALARM_INDICATOR_OPTIONS,
     ALARM_TIMEFRAME_OPTIONS,
     WATCHLIST_STORAGE_KEY,
     WATCHLIST_ALARMS_STORAGE_KEY,
-    evaluateWatchlistAlarmRule,
     loadStoredWatchlists,
-    loadWatchlistAlarmRules,
-    saveWatchlistAlarmRules,
-    type AlarmSide,
     type StoredWatchlistModel,
     type WatchlistAlarmRule,
-    type WatchlistSymbolRow,
 } from "@/lib/watchlist-alarms"
 import { Bell, RefreshCw, Trash2 } from "lucide-react"
 
-interface TriggerHit {
-    symbol: string
-    marketType: "BIST" | "Kripto"
-    side: AlarmSide
-    detail: string
-    value: number | null
-}
-
-interface RuleRuntimeState {
-    checkedAt: string
-    checkedSymbols: number
-    triggerHits: TriggerHit[]
-    errors: string[]
-}
-
-const toWatchlistSymbols = (watchlist: StoredWatchlistModel): WatchlistSymbolRow[] =>
-    watchlist.rows.filter((row): row is WatchlistSymbolRow => row.kind === "symbol")
+const RUNTIME_LABELS = {
+    checking: "Kontrol ediliyor",
+    disabled: "Kontrol kapalı",
+    hit: "Tetik bulundu",
+    no_hit: "Tetik yok.",
+    no_data: "Veri yok; kural değerlendirilemedi.",
+    unknown: "Sonuç bilinmiyor; gösterge değerlendirilemedi.",
+    error: "Veri alınamadı; kontrol başarısız.",
+    partial: "Kısmi kontrol; bazı semboller değerlendirilemedi.",
+} as const
 
 const formatThresholdSummary = (rule: WatchlistAlarmRule): string => {
     if (rule.indicator === "rsi") {
@@ -50,19 +39,24 @@ const formatThresholdSummary = (rule: WatchlistAlarmRule): string => {
     return `DIP>=${rule.thresholds.hunterDipThreshold} / TEPE>=${rule.thresholds.hunterTopThreshold}`
 }
 
-const formatSide = (side: AlarmSide) => (side === "dip" ? "DIP" : "TEPE")
+const formatSide = (side: "dip" | "top") => (side === "dip" ? "DIP" : "TEPE")
 
 export default function AlarmsPage() {
     const [watchlists, setWatchlists] = useState<StoredWatchlistModel[]>([])
     const [alarmRules, setAlarmRules] = useState<WatchlistAlarmRule[]>([])
-    const [runtimeByRuleId, setRuntimeByRuleId] = useState<Record<string, RuleRuntimeState>>({})
-    const [isChecking, setIsChecking] = useState(false)
-    const [lastCheckedAt, setLastCheckedAt] = useState<string | null>(null)
     const [hydrated, setHydrated] = useState(false)
+    const [storageError, setStorageError] = useState<string | null>(null)
+    const { runtimeByRuleId, isChecking, lastCheckedAt, run: evaluateRules } = useLocalAlarms(alarmRules, watchlists, hydrated)
 
     const hydrateFromStorage = useCallback(() => {
         setWatchlists(loadStoredWatchlists())
-        setAlarmRules(loadWatchlistAlarmRules())
+        const result = readAlarmRuleStorage()
+        if (result.ok) {
+            setAlarmRules(result.rules)
+            setStorageError(null)
+        } else {
+            setStorageError("Yerel alarm kuralları okunamadı. Kayıtlar değiştirilmiyor.")
+        }
         setHydrated(true)
     }, [])
 
@@ -71,14 +65,8 @@ export default function AlarmsPage() {
     }, [hydrateFromStorage])
 
     useEffect(() => {
-        if (!hydrated) return
-        saveWatchlistAlarmRules(alarmRules)
-    }, [alarmRules, hydrated])
-
-    useEffect(() => {
         const onStorage = (event: StorageEvent) => {
-            if (!event.key) return
-            if (event.key === WATCHLIST_STORAGE_KEY || event.key === WATCHLIST_ALARMS_STORAGE_KEY) {
+            if (event.key === null || event.key === WATCHLIST_STORAGE_KEY || event.key === WATCHLIST_ALARMS_STORAGE_KEY) {
                 hydrateFromStorage()
             }
         }
@@ -86,130 +74,31 @@ export default function AlarmsPage() {
         return () => window.removeEventListener("storage", onStorage)
     }, [hydrateFromStorage])
 
-    const watchlistById = useMemo(
-        () => new Map(watchlists.map((watchlist) => [watchlist.id, watchlist])),
-        [watchlists]
-    )
-
-    const evaluateRules = useCallback(async () => {
-        if (!hydrated) return
-        setIsChecking(true)
-        try {
-            const enabledRules = alarmRules.filter((rule) => rule.enabled)
-            const nextRuntime: Record<string, RuleRuntimeState> = {}
-
-            for (const rule of enabledRules) {
-                const watchlist = watchlistById.get(rule.watchlistId)
-                if (!watchlist) {
-                    nextRuntime[rule.id] = {
-                        checkedAt: new Date().toISOString(),
-                        checkedSymbols: 0,
-                        triggerHits: [],
-                        errors: ["Liste bulunamadi"],
-                    }
-                    continue
-                }
-
-                if (!watchlist.alarmsEnabled) {
-                    nextRuntime[rule.id] = {
-                        checkedAt: new Date().toISOString(),
-                        checkedSymbols: 0,
-                        triggerHits: [],
-                        errors: ["Bu liste icin alarmlar kapali"],
-                    }
-                    continue
-                }
-
-                const symbols = toWatchlistSymbols(watchlist)
-                const hits: TriggerHit[] = []
-                const errors: string[] = []
-
-                const symbolResults = await Promise.all(
-                    symbols.map(async (row) => {
-                        try {
-                            const candles = await fetchCandles(row.rawSymbol, row.marketType, rule.timeframe, 320)
-                            const evaluated = evaluateWatchlistAlarmRule(rule, candles.candles)
-                            return {
-                                row,
-                                evaluated,
-                            }
-                        } catch (error) {
-                            return {
-                                row,
-                                evaluated: null,
-                                error:
-                                    error instanceof Error
-                                        ? error.message
-                                        : "Veri cekimi basarisiz",
-                            }
-                        }
-                    })
-                )
-
-                for (const item of symbolResults) {
-                    if ("error" in item && item.error) {
-                        errors.push(`${item.row.rawSymbol}: ${item.error}`)
-                        continue
-                    }
-                    if (!item.evaluated || !item.evaluated.triggered || !item.evaluated.side) continue
-                    hits.push({
-                        symbol: item.row.rawSymbol,
-                        marketType: item.row.marketType,
-                        side: item.evaluated.side,
-                        detail: item.evaluated.detail,
-                        value: item.evaluated.value,
-                    })
-                }
-
-                nextRuntime[rule.id] = {
-                    checkedAt: new Date().toISOString(),
-                    checkedSymbols: symbols.length,
-                    triggerHits: hits,
-                    errors,
-                }
-            }
-
-            setRuntimeByRuleId(nextRuntime)
-            setLastCheckedAt(new Date().toISOString())
-        } finally {
-            setIsChecking(false)
+    const applyRuleChange = useCallback((change: AlarmRuleChange) => {
+        const result = updateAlarmRuleStorage(change)
+        if (result.ok) {
+            setAlarmRules(result.rules)
+            setStorageError(null)
+        } else {
+            setStorageError("Alarm değişikliği kaydedilemedi. Yerel depolamayı kontrol edin; önceki kural korunuyor.")
         }
-    }, [alarmRules, hydrated, watchlistById])
-
-    useEffect(() => {
-        if (!hydrated) return
-        evaluateRules()
-        const timer = window.setInterval(() => evaluateRules(), 60_000)
-        return () => window.clearInterval(timer)
-    }, [evaluateRules, hydrated])
+    }, [])
 
     const handleToggleRule = useCallback((ruleId: string) => {
-        setAlarmRules((prev) =>
-            prev.map((rule) =>
-                rule.id === ruleId
-                    ? { ...rule, enabled: !rule.enabled, updatedAt: new Date().toISOString() }
-                    : rule
-            )
-        )
-    }, [])
+        const rule = alarmRules.find((item) => item.id === ruleId)
+        if (rule) applyRuleChange({ type: "set-enabled", id: ruleId, enabled: !rule.enabled, updatedAt: new Date().toISOString() })
+    }, [alarmRules, applyRuleChange])
 
     const handleDeleteRule = useCallback((ruleId: string) => {
-        setAlarmRules((prev) => prev.filter((rule) => rule.id !== ruleId))
-        setRuntimeByRuleId((prev) => {
-            const next = { ...prev }
-            delete next[ruleId]
-            return next
-        })
-    }, [])
+        applyRuleChange({ type: "remove", id: ruleId })
+    }, [applyRuleChange])
 
-    const triggeredTotal = useMemo(
-        () =>
-            Object.values(runtimeByRuleId).reduce(
-                (sum, runtime) => sum + runtime.triggerHits.length,
-                0
-            ),
-        [runtimeByRuleId]
-    )
+    const triggeredTotal = useMemo(() => {
+        const results = Object.values(runtimeByRuleId)
+        return results.some((runtime) => runtime.checkedSymbols > 0)
+            ? results.reduce((sum, runtime) => sum + runtime.triggerHits.length, 0)
+            : null
+    }, [runtimeByRuleId])
 
     const enabledRulesCount = useMemo(
         () => alarmRules.filter((rule) => rule.enabled).length,
@@ -221,14 +110,15 @@ export default function AlarmsPage() {
             <section className="border border-border bg-surface p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                        <div className="text-[11px] uppercase tracking-[0.08em] text-muted-foreground">Frontend Alarm Merkezi</div>
+                        <div className="text-[11px] uppercase tracking-[0.08em] text-muted-foreground">Yerel Alarm Merkezi</div>
                         <h1 className="mt-1 text-xl font-semibold">/alarms</h1>
                         <p className="mt-1 text-xs text-muted-foreground">
-                            Bu sayfa sadece frontend alarm kurallarini calistirir. Bot sinyal/telegram ayarlarindan bagimsizdir.
+                            Kurallar yalnız bu tarayıcıda saklanır ve bu sayfa açıkken yaklaşık 60 saniyede bir kontrol edilir. Önceki kontrol bitmeden yenisi başlamaz. Sayfa kapanınca kontroller durur; Telegram bildirimi veya 7/24 arka plan hizmeti değildir.
                         </p>
                     </div>
                     <button
-                        onClick={evaluateRules}
+                        onClick={() => void evaluateRules()}
+                        disabled={isChecking || !hydrated}
                         className={cn(
                             "inline-flex items-center gap-2 rounded border border-border px-3 py-1.5 text-xs",
                             isChecking ? "opacity-70" : "hover:bg-raised"
@@ -240,6 +130,8 @@ export default function AlarmsPage() {
                 </div>
             </section>
 
+            {storageError && <div role="alert" className="border border-border bg-surface p-3 text-xs text-muted-foreground">{storageError}</div>}
+
             <section className="grid grid-cols-2 gap-2 md:grid-cols-4">
                 <div className="border border-border bg-surface p-3">
                     <div className="text-[11px] uppercase text-muted-foreground">Toplam kural</div>
@@ -250,8 +142,8 @@ export default function AlarmsPage() {
                     <div className="mt-1 text-lg font-semibold">{enabledRulesCount}</div>
                 </div>
                 <div className="border border-border bg-surface p-3">
-                    <div className="text-[11px] uppercase text-muted-foreground">Tetik sayisi</div>
-                    <div className="mt-1 text-lg font-semibold">{triggeredTotal}</div>
+                    <div className="text-[11px] uppercase text-muted-foreground">Bulunan tetik</div>
+                    <div className="mt-1 text-lg font-semibold">{triggeredTotal ?? "—"}</div>
                 </div>
                 <div className="border border-border bg-surface p-3">
                     <div className="text-[11px] uppercase text-muted-foreground">Son kontrol</div>
@@ -269,7 +161,7 @@ export default function AlarmsPage() {
                 <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
                     {alarmRules.length === 0 && (
                         <div className="rounded border border-border/50 bg-base px-3 py-4 text-sm text-muted-foreground">
-                            Alarm kurali yok. `/chart` sayfasinda bir watchlist icin alarm ekleyin.
+                            {storageError ? "Yerel alarm kuralları okunamadı." : "Alarm kurali yok. `/chart` sayfasinda bir watchlist icin alarm ekleyin."}
                         </div>
                     )}
 
@@ -317,21 +209,24 @@ export default function AlarmsPage() {
                                 </div>
 
                                 <div className="mt-2 text-[11px] text-muted-foreground">
-                                    Son kontrol: {runtime?.checkedAt ? new Date(runtime.checkedAt).toLocaleString("tr-TR") : "--"} • Kontrol edilen sembol: {runtime?.checkedSymbols ?? 0}
+                                    Son kontrol: {runtime?.checkedAt ? new Date(runtime.checkedAt).toLocaleString("tr-TR") : "--"} • Kontrol edilen sembol: {runtime?.checkedSymbols ?? "—"}
                                 </div>
 
                                 {runtime?.errors && runtime.errors.length > 0 && (
-                                    <div className="mt-2 rounded border border-loss/30 bg-loss/10 px-2 py-1 text-[11px] text-loss">
+                                    <div className="mt-2 rounded border border-border px-2 py-1 text-[11px] text-muted-foreground">
                                         {runtime.errors[0]}
-                                        {runtime.errors.length > 1 ? ` (+${runtime.errors.length - 1} hata)` : ""}
+                                        {runtime.errors.length > 1 ? ` (+${runtime.errors.length - 1} değerlendirilemeyen sembol)` : ""}
                                     </div>
                                 )}
 
+                                {runtime?.state === "partial" && runtime.triggerHits.length > 0 && (
+                                    <div className="mt-2 text-[11px] text-muted-foreground">{RUNTIME_LABELS.partial}</div>
+                                )}
                                 <div className="mt-2 space-y-1">
-                                    {runtime?.triggerHits && runtime.triggerHits.length > 0 ? (
+                                    {rule.enabled && !isChecking && runtime?.triggerHits && runtime.triggerHits.length > 0 ? (
                                         runtime.triggerHits.map((hit) => (
                                             <div
-                                                key={`${rule.id}-${hit.symbol}-${hit.side}`}
+                                                key={`${rule.id}-${hit.marketType}-${hit.symbol}-${hit.side}`}
                                                 className={cn(
                                                     "flex items-center justify-between rounded px-2 py-1 text-[11px]",
                                                     hit.side === "dip"
@@ -344,7 +239,7 @@ export default function AlarmsPage() {
                                             </div>
                                         ))
                                     ) : (
-                                        <div className="text-[11px] text-muted-foreground">Tetik yok.</div>
+                                        <div className="text-[11px] text-muted-foreground">{!rule.enabled ? "Kural kapalı" : isChecking ? "Kontrol ediliyor" : runtime ? RUNTIME_LABELS[runtime.state] : "Henüz kontrol edilmedi"}</div>
                                     )}
                                 </div>
                             </article>
@@ -355,4 +250,3 @@ export default function AlarmsPage() {
         </div>
     )
 }
-

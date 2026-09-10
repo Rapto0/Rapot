@@ -16,6 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { useSignals } from "@/lib/hooks/use-signals"
+import { buildSignalCsv, SIGNAL_EXPORT_LIMIT } from "@/lib/signal-export"
 import { formatDate, cn } from "@/lib/utils"
 import { EmptyState } from "@/components/shared/error-boundary"
 import { StrategyInspectorPanel } from "@/components/signals/strategy-inspector-panel"
@@ -59,6 +60,7 @@ export default function SignalsPage() {
   const [specialFilter, setSpecialFilter] = useState<SpecialFilter>("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedSignalId, setSelectedSignalId] = useState<number | null>(null)
+  const [exportError, setExportError] = useState<string | null>(null)
 
   const { data: signals, isLoading, isError, refetch, isFetching } = useSignals({
     marketType: marketFilter,
@@ -66,6 +68,7 @@ export default function SignalsPage() {
     direction: directionFilter,
     specialTag: specialFilter,
     searchQuery,
+    limit: SIGNAL_EXPORT_LIMIT,
   })
 
   const rows = useMemo(() => signals ?? [], [signals])
@@ -79,6 +82,32 @@ export default function SignalsPage() {
     buyCount: rows.filter((row) => row.signalType === "AL").length,
     sellCount: rows.filter((row) => row.signalType === "SAT").length,
   }
+  const exportDisabled = isLoading || isFetching || isError || rows.length === 0
+
+  function handleExport() {
+    if (exportDisabled) return
+    setExportError(null)
+    let objectUrl: string | null = null
+    let link: HTMLAnchorElement | null = null
+    try {
+      const file = new Blob([buildSignalCsv(rows)], { type: "text/csv;charset=utf-8" })
+      objectUrl = URL.createObjectURL(file)
+      link = document.createElement("a")
+      link.href = objectUrl
+      link.download = `rapot-sinyaller-${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(link)
+      link.click()
+    } catch {
+      setExportError("CSV dosyası indirilemedi. Lütfen tekrar deneyin.")
+    } finally {
+      link?.remove()
+      if (objectUrl) {
+        const completedUrl = objectUrl
+        // Let the browser consume the click before releasing the temporary URL.
+        window.setTimeout(() => URL.revokeObjectURL(completedUrl), 1000)
+      }
+    }
+  }
 
   return (
     <PageShell
@@ -91,7 +120,7 @@ export default function SignalsPage() {
             <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />
             Yenile
           </Button>
-          <Button type="button" variant="outline" size="sm" className="gap-1.5">
+          <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={handleExport} disabled={exportDisabled} aria-describedby="signal-export-scope">
             <Download className="h-3.5 w-3.5" />
             Dışa aktar
           </Button>
@@ -106,6 +135,11 @@ export default function SignalsPage() {
         ]}
         columnsClassName="grid-cols-3"
       />
+
+      <p id="signal-export-scope" className="text-xs text-muted-foreground">
+        Dışa aktarım, seçili filtreler için yüklenen en fazla {SIGNAL_EXPORT_LIMIT} kayıttan aramaya uyan ve ekranda görünen satırları içerir.
+      </p>
+      {exportError ? <p role="alert" className="text-xs text-loss">{exportError}</p> : null}
 
       <section className="border border-border bg-surface p-3">
         <div className="flex flex-wrap items-center gap-3">

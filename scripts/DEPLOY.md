@@ -100,6 +100,26 @@ The P1-6 operator allows 180 seconds for this startup observation, with status r
 bounded to seven seconds; it retains the separate 20-second API health request limit.
 This observation allowance is not a guarantee that startup finishes within 180 seconds.
 
+### Frontend-only releases on the current VPS
+
+For a change confined to frontend application code and release documentation, verify the
+exact source diff first. Backend code, Compose, lock files and build inputs must be unchanged.
+The P2-1 operator uses a source archive under `/opt/rapot/releases/<sha>` and the existing
+private `/etc/rapot` environment files plus `compose.images.yml` digest overrides. It pulls
+only the verified frontend digest, then runs Compose with the explicit project/environment/
+override files and `up -d --no-deps --no-build --pull never frontend`. It does not run
+initializers, migrations or restart API, bot, middleware or PostgreSQL.
+
+The `current` source symlink and frontend OCI revision can advance while backend images and
+`release.env`'s `RAPOT_RELEASE` remain at the previous backend SHA. Record
+`release_source_sha`, `frontend_source_sha`, `backend_source_sha` and both image digests
+separately; a single current symlink is not evidence that every service runs that revision.
+Before and after the rollout, compare protected container IDs, image IDs, start times,
+restart counts, environment file bytes and Nginx configuration. Preserve the prior frontend
+digest/source and private config backup for frontend-only rollback. Do not restore databases
+for a frontend failure. Local mocked interaction tests, external HTTPS/SSR checks and the
+unchanged backend health checks are separate acceptance evidence.
+
 ## Optional middleware
 
 Create `middleware/.env` or select `RAPOT_MIDDLEWARE_ENV_FILE`, outside Git:

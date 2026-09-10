@@ -106,6 +106,7 @@ export interface StoredWatchlistModel {
 }
 
 export interface AlarmEvaluationResult {
+    state: "hit" | "no_hit" | "no_data" | "unknown"
     triggered: boolean
     side: AlarmSide | null
     value: number | null
@@ -265,20 +266,18 @@ export const loadStoredWatchlists = (): StoredWatchlistModel[] => {
     }
 }
 
-const getLastFiniteValue = (values: number[]): number | null => {
-    for (let i = values.length - 1; i >= 0; i--) {
-        const value = values[i]
-        if (typeof value === "number" && Number.isFinite(value)) return value
-    }
-    return null
+const getLatestFiniteValue = (values: number[]): number | null => {
+    const value = values.at(-1)
+    return typeof value === "number" && Number.isFinite(value) ? value : null
 }
 
 export const evaluateWatchlistAlarmRule = (
     rule: WatchlistAlarmRule,
     candles: Candle[]
 ): AlarmEvaluationResult => {
-    if (!candles || candles.length === 0) {
+    if (Array.isArray(candles) && candles.length === 0) {
         return {
+            state: "no_data",
             triggered: false,
             side: null,
             value: null,
@@ -286,28 +285,38 @@ export const evaluateWatchlistAlarmRule = (
         }
     }
 
+    if (!Array.isArray(candles) || candles.some((candle) =>
+        !candle || typeof candle.time !== "string" || !Number.isFinite(Date.parse(candle.time)) ||
+        ![candle.open, candle.high, candle.low, candle.close, candle.volume].every(Number.isFinite) ||
+        candle.low <= 0 || candle.high < candle.low || candle.open < candle.low ||
+        candle.open > candle.high || candle.close < candle.low || candle.close > candle.high ||
+        candle.volume < 0
+    )) {
+        return { state: "unknown", triggered: false, side: null, value: null, detail: "Mum verisi geçersiz" }
+    }
+
     if (rule.indicator === "rsi") {
-        const latest = getLastFiniteValue(calculateRSI(candles, 14).map((item) => item.value))
-        if (latest === null) return { triggered: false, side: null, value: null, detail: "RSI hesaplanamadi" }
+        const latest = getLatestFiniteValue(calculateRSI(candles, 14).map((item) => item.value))
+        if (latest === null) return { state: "unknown", triggered: false, side: null, value: null, detail: "RSI hesaplanamadi" }
         if (latest <= rule.thresholds.rsiDipThreshold) {
-            return { triggered: true, side: "dip", value: latest, detail: `RSI <= ${rule.thresholds.rsiDipThreshold}` }
+            return { state: "hit", triggered: true, side: "dip", value: latest, detail: `RSI <= ${rule.thresholds.rsiDipThreshold}` }
         }
         if (latest >= rule.thresholds.rsiTopThreshold) {
-            return { triggered: true, side: "top", value: latest, detail: `RSI >= ${rule.thresholds.rsiTopThreshold}` }
+            return { state: "hit", triggered: true, side: "top", value: latest, detail: `RSI >= ${rule.thresholds.rsiTopThreshold}` }
         }
-        return { triggered: false, side: null, value: latest, detail: "RSI esik disi" }
+        return { state: "no_hit", triggered: false, side: null, value: latest, detail: "RSI esik disi" }
     }
 
     if (rule.indicator === "wr") {
-        const latest = getLastFiniteValue(calculateWilliamsR(candles, 14).map((item) => item.value))
-        if (latest === null) return { triggered: false, side: null, value: null, detail: "W%R hesaplanamadi" }
+        const latest = getLatestFiniteValue(calculateWilliamsR(candles, 14).map((item) => item.value))
+        if (latest === null) return { state: "unknown", triggered: false, side: null, value: null, detail: "W%R hesaplanamadi" }
         if (latest <= rule.thresholds.wrDipThreshold) {
-            return { triggered: true, side: "dip", value: latest, detail: `W%R <= ${rule.thresholds.wrDipThreshold}` }
+            return { state: "hit", triggered: true, side: "dip", value: latest, detail: `W%R <= ${rule.thresholds.wrDipThreshold}` }
         }
         if (latest >= rule.thresholds.wrTopThreshold) {
-            return { triggered: true, side: "top", value: latest, detail: `W%R >= ${rule.thresholds.wrTopThreshold}` }
+            return { state: "hit", triggered: true, side: "top", value: latest, detail: `W%R >= ${rule.thresholds.wrTopThreshold}` }
         }
-        return { triggered: false, side: null, value: latest, detail: "W%R esik disi" }
+        return { state: "no_hit", triggered: false, side: null, value: latest, detail: "W%R esik disi" }
     }
 
     if (rule.indicator === "combo") {
@@ -315,9 +324,12 @@ export const evaluateWatchlistAlarmRule = (
             minBuyScore: Math.max(1, Math.round(rule.thresholds.comboDipThreshold)),
             minSellScore: Math.max(1, Math.round(rule.thresholds.comboTopThreshold)),
         }).at(-1)
-        if (!latest) return { triggered: false, side: null, value: null, detail: "COMBO hesaplanamadi" }
+        if (!latest || ![latest.buyScore, latest.sellScore, ...Object.values(latest.details)].every(Number.isFinite)) {
+            return { state: "unknown", triggered: false, side: null, value: null, detail: "COMBO hesaplanamadi" }
+        }
         if (latest.buyScore >= rule.thresholds.comboDipThreshold && latest.signal === "AL") {
             return {
+                state: "hit",
                 triggered: true,
                 side: "dip",
                 value: latest.buyScore,
@@ -326,22 +338,26 @@ export const evaluateWatchlistAlarmRule = (
         }
         if (latest.sellScore >= rule.thresholds.comboTopThreshold && latest.signal === "SAT") {
             return {
+                state: "hit",
                 triggered: true,
                 side: "top",
                 value: latest.sellScore,
                 detail: `COMBO SAT skoru ${latest.sellScore.toFixed(0)} >= ${rule.thresholds.comboTopThreshold.toFixed(0)}`,
             }
         }
-        return { triggered: false, side: null, value: null, detail: "COMBO esik disi" }
+        return { state: "no_hit", triggered: false, side: null, value: null, detail: "COMBO esik disi" }
     }
 
     const latestHunter = calculateHunter(candles, {
         requiredDipScore: Math.max(1, Math.round(rule.thresholds.hunterDipThreshold)),
         requiredTopScore: Math.max(1, Math.round(rule.thresholds.hunterTopThreshold)),
     }).at(-1)
-    if (!latestHunter) return { triggered: false, side: null, value: null, detail: "HUNTER hesaplanamadi" }
+    if (!latestHunter || ![latestHunter.dipScore, latestHunter.topScore, ...Object.values(latestHunter.details)].every(Number.isFinite)) {
+        return { state: "unknown", triggered: false, side: null, value: null, detail: "HUNTER hesaplanamadi" }
+    }
     if (latestHunter.dipScore >= rule.thresholds.hunterDipThreshold && latestHunter.signal === "AL") {
         return {
+            state: "hit",
             triggered: true,
             side: "dip",
             value: latestHunter.dipScore,
@@ -350,11 +366,12 @@ export const evaluateWatchlistAlarmRule = (
     }
     if (latestHunter.topScore >= rule.thresholds.hunterTopThreshold && latestHunter.signal === "SAT") {
         return {
+            state: "hit",
             triggered: true,
             side: "top",
             value: latestHunter.topScore,
             detail: `HUNTER TEPE skoru ${latestHunter.topScore.toFixed(0)} >= ${rule.thresholds.hunterTopThreshold.toFixed(0)}`,
         }
     }
-    return { triggered: false, side: null, value: null, detail: "HUNTER esik disi" }
+    return { state: "no_hit", triggered: false, side: null, value: null, detail: "HUNTER esik disi" }
 }

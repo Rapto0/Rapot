@@ -85,6 +85,24 @@ try {
   assert.deepEqual(await proxied.json(), { service: 'api', path: '/auth/me?smoke=1', authorization: 'Bearer local-smoke' });
   const health = await localFetch(origin + '/health-api/health');
   assert.deepEqual(await health.json(), { service: 'bot-health', path: '/health' });
+  // Exercise Next's actual async searchParams contract, not just the page function.
+  for (const [query, symbol, market] of [
+    ['symbol=BTCUSDT&market=Kripto', 'BTCUSDT', 'Kripto'],
+    ['symbol=%20asels%20&market=bist', 'ASELS', 'BIST'],
+    ['symbol=ETHUSDT&symbol=THYAO&market=Kripto&market=BIST', 'ETHUSDT', 'Kripto'],
+    ['symbol=..%2Finvalid&market=Kripto', 'BTCUSDT', 'Kripto'],
+    ['', 'THYAO', 'BIST'],
+  ]) {
+    const chart = await localFetch(`${origin}/chart?${query}`);
+    assert.equal(chart.status, 200);
+    assert.ok((await chart.text()).includes(`aria-label="Sembol seç: ${symbol} (${market})"`), query);
+  }
+  const navigation = await localFetch(origin + '/chart?symbol=ETHUSDT&market=Kripto', { headers: { RSC: '1' } });
+  assert.equal(navigation.status, 200);
+  assert.match(navigation.headers.get('content-type'), /text\/x-component/);
+  const flight = await navigation.text();
+  assert.ok(flight.includes('"initialSymbol":"ETHUSDT"'));
+  assert.ok(flight.includes('"initialMarket":"Kripto"'));
   await new Promise((resolve, reject) => {
     const socket = net.connect(frontendPort, '127.0.0.1');
     socket.setTimeout(5000, () => socket.destroy(new Error('WebSocket proxy timeout')));
@@ -95,7 +113,7 @@ try {
       socket.destroy();
     });
   });
-  console.log('Standalone HTML/static assets, authenticated API proxy, bot health proxy and WebSocket upgrade passed.');
+  console.log('Standalone HTML/static assets, chart URL/Flight props, authenticated API proxy, bot health proxy and WebSocket upgrade passed.');
 } finally {
   // Close mock upstream sockets before waiting for Next's POSIX graceful shutdown.
   // Open upgraded connections can otherwise keep server.close() waiting forever.

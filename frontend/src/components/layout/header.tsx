@@ -19,7 +19,7 @@ function formatSpecialTag(tag: "BELES" | "COK_UCUZ" | "PAHALI" | "FAHIS_FIYAT" |
 }
 
 export function Header() {
-  const [currentTime, setCurrentTime] = useState<Date>(new Date())
+  const [currentTime, setCurrentTime] = useState<Date | null>(null)
   const [showNotifications, setShowNotifications] = useState(false)
   const [readSignalIds, setReadSignalIds] = useState<Set<number>>(() => {
     if (typeof window === "undefined") {
@@ -49,7 +49,9 @@ export function Header() {
   )
 
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000)
+    const updateClock = () => setCurrentTime(new Date())
+    updateClock()
+    const timer = setInterval(updateClock, 1000)
     return () => clearInterval(timer)
   }, [])
 
@@ -103,17 +105,17 @@ export function Header() {
           </div>
 
           <div className="mono-numbers text-xs text-muted-foreground">
-            {currentTime.toLocaleDateString("tr-TR", {
+            {currentTime?.toLocaleDateString("tr-TR", {
               day: "2-digit",
               month: "short",
               year: "numeric",
-            })}
+            }) ?? "--"}
             <span className="mx-2 text-ghost">|</span>
-            {currentTime.toLocaleTimeString("tr-TR", {
+            {currentTime?.toLocaleTimeString("tr-TR", {
               hour: "2-digit",
               minute: "2-digit",
               second: "2-digit",
-            })}
+            }) ?? "--"}
           </div>
 
           <div ref={panelRef} className="relative">

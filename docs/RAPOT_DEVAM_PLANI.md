@@ -4,11 +4,11 @@ Bu belge, 6 Eylül 2026 tarihli salt okunur proje incelemesinden çıkan işleri
 
 ## Kaldığımız nokta
 
-- **Son çalışma:** **P1-6 üretim ve dış kabulü tamamlandı.** Güncel uygulama kaynağı `2cf05a8413d560024bfb37cb8e932e0fad97a9fb`. Sağlık probe düzeltmesi, gerçek bot/PnL/ayarlar sözleşmeleri ve host Nginx IPv4 upstream düzeltmesi doğrulandı. Önceki üç başarısız deneme ve veri restore etmeden geri dönüşleri aşağıda korunuyor.
+- **Son çalışma:** **P2-1 yerel uygulama ve tarayıcı kabulü tamamlandı; CI ve frontend yayını bekleniyor.** Grafik URL, CSV, yerel alarm yarışları/sekme eşgüdümü ve header saat hydration düzeltildi. Üretimde halen `2cf05a8413d560024bfb37cb8e932e0fad97a9fb` çalışıyor; P1-6 yayın kaydı aşağıda korunuyor.
 - **Uygulama durumu:** P0 işleri, P1-1, P1-2, P1-4, P1-5, P1-6 ve P1-7 doğrulandı. Son tam paket **588/588 Python** (50,32 saniye), **52/52 frontend**, lint/typecheck/build; değişen Python dosyalarında Ruff temiz. P1-6 toplamında 46 yeni Python ve 29 frontend test durumu var. Mevcut UTC yollarından **874 deprecation warning** P2-3'te açık.
 - **P1-2 durumu — Doğrulandı:** **8f60f8e üretim geçişi ve [HTTPS](https://138.68.71.27) kabulü tamamlandı.** API, bot, frontend, middleware ve PG16 sağlıklı; veri korunumu, dış HTTPS/auth/WSS, yetkisiz webhook reddi ve sertifika yenileme dry-run testi geçti. Eski supervisor'lar devre dışı; özgün DB/checkout ve geri dönüş kaynakları korundu.
 - **Uzak doğrulama:** Dağıtılan `2cf05a8` için [CI 34521979155](https://github.com/Rapto0/Rapot/actions/runs/34521979155) ve [imaj yayını 34522034163](https://github.com/Rapto0/Rapot/actions/runs/34522034163) başarılı. Yayın 10 Eylül 20:23:37 UTC'de, beş servis/digest ve üç ek HTTPS health isteği 20:23:46 UTC'de doğrulandı. Son health süreleri 0,029–0,048 saniye. Eski `a513af9` release/config ve yedekler korunuyor. Sonraki yalnız-belge commit'i uygulama imajlarının kaynak SHA'sını değiştirmez.
-- **Sıradaki iş:** **P2-1 — dışa aktar / yerel alarm / grafik URL davranışı.** İlk somut dosya `frontend/src/app/chart/page.tsx`: Next.js 16 `searchParams` sözleşmesi ve sembol/piyasa normalizasyonu. Bu maddede yalnız ön inceleme yapıldı; uygulama başlamadı. Borsa/alarm dış kabulü beklenmiyor. P2-4 eşzamanlı ekran/heartbeat gecikmesi ayrıca açık; P1-6 kabulü bu performans işini tamamlanmış saymaz.
+- **Sıradaki iş:** **P2-1 exact-SHA CI/imaj ve yalnız frontend sunucu yayını.** Yerel son paket 95/95 frontend, lint, TypeScript production derlemesi ve standalone HTTP/RSC/WebSocket kontrollerinden geçti; gerçek tarayıcı kabulü tamamlandı. Borsa/alarm dış kabulü beklenmiyor. Yayın kapanınca P2-2 belgeler/wrapper göçü incelenecek; P2-4 eşzamanlı ekran/heartbeat gecikmesi ayrıca açık.
 - **Ertelenen dış kabul:** Gerçek TradingView alarm teslimi, ALL/FIRST/saat filtresi runtime kabulü ve sınırlı testnet emir testi tamamlanmış sayılmıyor. Hazır test araçları korunuyor; testnet onayı ve Webhook URL erişimi için artık yanıt beklenmiyor, bu işler kullanıcı yeniden seçtiğinde ele alınacak. Borsa emri gönderilmedi; geçici test servisleri kapalı.
 - **Başlangıç kaydı:** Bu belge ilk oluşturulduğunda yalnız belge değişmişti; sonraki uygulama değişiklikleri aşağıda ayrı kaydedildi.
 - **Seçilen geliştirme ortamı:** `.venv` / Python 3.12; Node 20.20.2 / npm 10.9.9. Yerelde Python 3.12.8 ile doğrulandı.
@@ -153,7 +153,7 @@ Kapsam tahminleri süre taahhüdü değildir: küçük birkaç dosya; orta bir �
 | P1-5 | Süreçler arası realtime ve scanner eşdeğerliği | Doğrulandı — yerel/CI ve a513af9 üretim kabulü tamam | Orta/büyük | P0-1, P1-2 |
 | P1-6 | PnL, bot durumu ve ayarlar ekranı | Doğrulandı — üretim ve dış kabul tamam | Orta | P0-1; backend ayar sözleşmesi ve P0-2 |
 | P1-7 | HUNTER kısa seride ATR hatası | Doğrulandı | Küçük/orta | P0-1 |
-| P2-1 | Dışa aktar, alarmlar ve grafik URL davranışı | Bekliyor | Orta | P0-1 |
+| P2-1 | Dışa aktar, alarmlar ve grafik URL davranışı | Yerel ve tarayıcı doğrulandı; CI/yayın bekliyor | Orta | P0-1 |
 | P2-2 | Belgeler ve wrapper göçünün kapanışı | Bekliyor | Küçük/orta | İlgili mimari kararlar; kaldırma için kullanım kanıtı |
 | P2-3 | Ruff, atıl kod ve araç tarama kapsamı | Bekliyor | Küçük/orta | P0-1 |
 | P2-4 | Eşzamanlı API yükünde realtime gecikmesi | Bekliyor — ilk üretim zaman aşımı kaydedildi | Orta | P1-5 |
@@ -647,7 +647,7 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 
 **Neden:** Sinyal dışa aktar düğmesinde işlem yok. Alarmlar açık sayfada çalışıyor. Chart searchParams kullanımı için Next runtime uyumluluk riski var; önceki typecheck başarısı bu davranışı kanıtlamıyor.
 
-**P1-6 sırasında salt okunur başlangıç incelemesi — uygulama yapılmadı:**
+**P1-6 sırasında salt okunur başlangıç incelemesi (aşağıdaki uygulamadan önce):**
 
 - `frontend/src/app/chart/page.tsx` parametreleri senkron nesne gibi okuyor; kurulu Next kaynak kodu Promise geçiriyor. Parametreli URL'nin varsayılan THYAO/BIST'e düşmesi koddan beklenen sonuç; gerçek tarayıcı kabulü henüz yapılmadı. **İlk başlanacak dosya bu:** Promise çözümleme ve symbol/market normalizasyonu. `advanced-chart.tsx` yeni initialSymbol/initialMarket değerlerini state'e zaten taşıyor; URL geçişi mekanizmasını baştan yazma. Doğrudan URL ve aynı sayfada geçiş, eksik/tekrarlı/geçersiz parametreler test edilmeli.
 - `signals/page.tsx` Dışa aktar düğmesinde `onClick` yok. Görünür filtre/arama sonucunun `rows` verisi kullanılabilir; en fazla yüklenen 300 satır olduğu açık olmalı, tüm arşiv gibi sunulmamalı. Türkçe/CSV kaçışları, filtre/arama, boş/hatalı veri ve spreadsheet formül enjeksiyonu sınırı ele alınmalı.
@@ -656,12 +656,30 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 
 **Dosyalar:** [signals page](../frontend/src/app/signals/page.tsx), [alarms page](../frontend/src/app/alarms/page.tsx), [watchlist alarms](../frontend/src/lib/watchlist-alarms.ts), [chart page](../frontend/src/app/chart/page.tsx).
 
+**P2-1 uygulaması (10 Eylül UTC / 11 Eylül TSİ; yerel kabul tamam, CI/yayın bekliyor):**
+
+- Chart sayfası Next'in Promise `searchParams` değerini bekliyor. Sembol trim/büyük harf/1–32 ASCII harf veya rakam kontrolünden geçiyor; boş veya geçersiz sözdizimi seçilen piyasada THYAO/BTCUSDT'ye düşüyor. Piyasa büyük/küçük harften bağımsız `Kripto`, diğer değerlerde BIST. Tekrarlı parametrelerde ilk değer kullanılıyor. Bu bir sembol kayıt servisi değil; sözdizimi geçerli fakat listelenmeyen sembol korunuyor. Var olan aynı sayfa prop→state geçişi korunuyor.
+- CSV, mevcut filtre/arama sonucunun görünen `rows` değerlerini aynı sırayla indiriyor. Yüklenen en fazla 300 kayıt sınırı ekranda açık; dışa aktar düğmesi yeni veri istemiyor. UTF-8 BOM, noktalı virgül ayracı, CRLF, Türkçe sütunlar/ondalık ve UTC tarih kullanılıyor. Metin hücrelerinde CSV kaçışı ve formül başlangıcına apostrof koruması; geçersiz sayı/tarih boş. Yükleme/yenileme/hata/boş sonuçta indirme engelleniyor, geçici URL bırakılıyor.
+- Yerel alarm monitor'ü ilk kontrol + yaklaşık 60 saniye kontrolünü yönetiyor. Aynı anda gelen manuel/periyodik tetikler aktif koşuma katılıyor; en fazla dört mum isteği ve istek başına 20 saniye sınırı var. Kural/liste değişmesi, silinmesi, kapanması veya sayfadan ayrılma eski koşumu iptal ediyor; iptali dikkate almayan adaptörün geç yanıtı yeni sonucu değiştiremiyor. Mum okuma adaptörüne opsiyonel `AbortSignal` eklendi.
+- Veri yok, bilinmiyor, hata, kısmi kontrol, kapalı, tetik var/yok durumları ayrıldı. Geçersiz OHLCV veya en son göstergenin hesaplanamaması eski bir geçerli değerle gizlenmiyor. Sayfanın yerel saklama ve yalnız açıkken çalışma sınırı ekranda yazıyor; kalıcı bildirim hizmeti eklenmedi. COMBO/HUNTER eşikleri değiştirilmedi; mevcut COMBO sıfır değer bulgusu P3-1'de açık.
+- Bağımsız inceleme, açık chart sekmesinin başka sekmede silinen/kapatılan alarmı eski state kaydıyla geri getirebildiğini gösterdi. Chart ve alarms artık kullanıcı niyetini güncel depoya uyguluyor; hydration/storage event yolu yalnız okuyor. Ekleme, açık/kapalı hedefi, silme, liste yeniden adlandırma/silme bu adaptöre bağlı. Bozuk/okunamayan kayıt üzerine boş dizi yazılmıyor; başarısız yazı ekranda başarılı gibi uygulanmıyor. Gecikmiş storage olayının eski `newValue` içeriği oynatılmıyor. localStorage için gerçek eşzamanlı yazımlarda işlem garantisi yok; son yazan davranışı sürüyor.
+- İlk derlenmiş tarayıcı kabulünde React `#418` metin hydration hatası görüldü. `Header` tarih/saatini ilk render'da `new Date()` ile üretmesi sunucu ve tarayıcıda farklı metne neden olabiliyor; bu satırlar `78f74e7b` (24 Şubat) kaynaklı. P2-1'in hatayı oluşturduğu iddia edilmiyor. Sabit ilk render ve effect sonrası saat güncellemesi bu runtime kabulü kapsamında ele alındı; son tarayıcı kontrolü bekleniyor.
+
+**İlk bütünleşik yerel doğrulama:** Node 20.20.2/npm 10.9.9 ile **93/93 frontend**, lint, TypeScript ve Next production build geçti. Gerçek Next standalone üzerinde beş chart URL/fallback örneği, RSC/Flight parametreleri, HTML/static asset, API yetki header proxy'si, bot health proxy'si ve WebSocket upgrade geçti. Bu sayım sonradan eklenen header saat testlerini henüz içermez.
+
+**İlk tarayıcı kabulü:** Yalnız sentetik GET servisli `127.0.0.1:64554` üzerinde doğrudan BTCUSDT/Kripto → aynı sayfa Next bağlantısıyla ETHUSDT/Kripto geçişi, iki sekmede kapalı/silinmiş kuralın geri gelmemesi, kontrol sırasında silme, düğme kilidi, boş veri/hata etiketleri ve boş aramada indirme engeli doğrulandı. Gerçek CSV dosyası bağımsız ayrıştırıldı: bir BTCUSDT satırı, 185 bayt, SHA256 `10ed1bf8738410c4c57ea5c49a0fd27f6324ce4f35f9e7377164c8362087015c`; BOM/ÇOK UCUZ/korunan skor/123,45/UTC tarih doğru. İndirme olayı bekleyen araç iki kez zaman aşımı verdi; iki gerçek indirilmiş dosya aynı hash ile doğrulandı. 140 mock isteğinin tümü GET; gerçek DB/broker çağrısı yok. Mevcut tarayıcı Binance halka açık kotasyon akışı ayrıca bağlandı; bu akış sentetik test verisi olarak sunulmadı. İki test sekmesi ve yerel servisler kapatıldı. İlk kanıtlar `runtime-data/p21-browser-first.json` ve `p21-browser-requests-first.json` içinde korunuyor. Header saat düzeltmesinden sonraki kabul aşağıda ayrıca kaydedilecek.
+
+**Dağıtım sınırı:** Bu değişiklik frontend kapsamındadır. Yeni kaynak arşivi ile frontend imajı yayımlanacak; backend kaynağı `2cf05a8` ve mevcut backend digest'i korunacak. Yalnız frontend `up --no-deps --no-build --pull never` uygulanacak; API/bot/middleware/PG container kimliği, başlangıcı ve restart sayısı ile ortam dosyaları/Nginx değişmediği kontrol edilecek. DB migration, restore, broker işlemi veya bot yeniden başlatması bu yayın için gerekli değil. Yayın/kabul sonucu henüz yazılmadı.
+
+**Header düzeltmesi sonrası son yerel kabul:** **95/95 frontend** (43 yeni test durumu), tüm frontend ESLint, Next 16.2.1 production build içindeki TypeScript ve standalone HTTP/static/RSC/auth proxy/health proxy/WS upgrade geçti. Önceki açık `tsc --noEmit --incremental false` kontrolü de geçmişti. Yeni saat testleri SSR ve tarayıcı için farklı an/zaman diliminde aynı `-- | --` başlangıcını, mount sonrası hemen saat dolmasını, saniyelik tick ve cleanup'ı doğruluyor. Son derleme ile `127.0.0.1:59447` tarayıcı kabulünde BTCUSDT/Kripto → aynı sayfada ETHUSDT/Kripto, ` asels /bist` → ASELS/BIST ve mount sonrası gerçek saat görüldü; hata konsolu boş. 23 mock isteğinin tümü GET; sekme ve test servisleri kapandı. Kanıt `runtime-data/p21-browser-final.json`. Bu tur Python/bağımlılık/Compose değişmedi; önceki 588 Python tabanının yeni SHA üzerinde tam CI kontrolü bekleniyor.
+
 **Kabul kriterleri:**
 
-- [ ] Dışa aktarma görünür filtrelerle uyumlu veri üretiyor veya desteklenmeyen işlem UI'dan kaldırılmış.
-- [ ] Alarmın sayfa açıkken çalışma sınırı UI'da anlaşılır; arka planda 7/24 hizmet istenirse ayrı kapsam ve iş olarak kaydedilmiş.
-- [ ] Grafik URL'sindeki symbol/market, doğrudan giriş ve sayfa geçişinde doğru uygulanıyor; geçersiz değer fallback'i test edilmiş.
-- [ ] İlgili UI davranışları ile lint/typecheck/build kontrolleri doğrulanmış.
+- [x] Dışa aktarma görünür filtrelerle uyumlu veri üretiyor veya desteklenmeyen işlem UI'dan kaldırılmış.
+- [x] Alarmın sayfa açıkken çalışma sınırı UI'da anlaşılır; arka planda 7/24 hizmet istenirse ayrı kapsam ve iş olarak kaydedilmiş.
+- [x] Grafik URL'sindeki symbol/market, doğrudan giriş ve sayfa geçişinde doğru uygulanıyor; geçersiz değer fallback'i test edilmiş.
+- [x] İlgili UI davranışları ile lint/typecheck/build kontrolleri doğrulanmış.
+- [ ] Exact-SHA CI/imaj yayını ve yalnız frontend üretim geçişi, korunan servisler ve dış HTTPS kabulü tamamlandı.
 
 ### P2-2 — Belgeler ve wrapper göçünün kapanışı
 
@@ -716,6 +734,8 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 **Neden:** Python, frontend ve Pine hesaplayıcıları ayrı implementasyonlar. Backtest kodunun varlığı performans/strateji doğruluğu kanıtı değil.
 
 **2026-09-09 kaynak bulgusu — henüz düzeltilmedi:** Pine `calcEma()` içindeki 536. satır döngüsünde `n == len`, `calcAtr()` içindeki 549. satır döngüsünde `n == len + 1` iken başlangıç indeksi son indeksi aşıyor; döngü geriye çalışıp ilk değeri fazladan güncelleyebiliyor. `getC/getH/getL` dizi dışı indekslerde gelişmekte olan mum değerine döndüğünden hesaplama sınırı etkileniyor. Bu mevcut bir ilk değer/ısınma sınırı bulgusudur, derleme hatası değildir; P1-3'te strateji değişikliği yapılmadı. Düzeltmeden önce tam sınır ve sınırın bir üstündeki geçmiş uzunluğu için EMA/ATR beklenen değerleri, kapanmış/gelişmekte olan mum ayrımıyla test edilmeli.
+
+**2026-09-10 P2-1 incelemesinde ağsız doğrulanan COMBO bulgusu — henüz düzeltilmedi:** `frontend/src/lib/indicators.ts::calculateCombo`, `rsi[i]?.value || 50` ve `wr[i]?.value || -50` ile geçerli sıfır değerini nötr değere çeviriyor. Tekrarlanabilir örnek: `i=0..39`, günlük ISO tarih, `open=high=low=close=100-i`, `volume=1`; gerçek son RSI `0`, W%R `-100`. `minBuyScore=4/minSellScore=4` ile COMBO sonucu `buyScore=3`, `signal=null`, details RSI `50`, MACD `-7`, CCI `-126,666…`. Dört alış koşulundan RSI koşulu bu yüzden kayboluyor. Yerel alarm ve grafiğin ortak hesaplayıcısını etkiler; P2-1 veri/yarış düzeltmesi bu strateji hatasını kapatmıyor. Sonlu sıfır/eksik/NaN ayrımı ve diğer hesaplayıcılarla aynı örnekte eşdeğerlik birlikte test edilmeli.
 
 **Dosyalar:** [backtest](../backtesting_system.py), [signals.py](../signals.py), [frontend indicators](../frontend/src/lib/indicators.ts), [Pine](../middleware/pine/combo_hunter_binance.pine).
 

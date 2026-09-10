@@ -73,13 +73,16 @@ import {
     ALARM_TIMEFRAME_OPTIONS,
     DEFAULT_ALARM_THRESHOLDS,
     createWatchlistAlarmRule,
-    loadWatchlistAlarmRules,
-    saveWatchlistAlarmRules,
     type AlarmIndicator,
     type AlarmThresholds,
     type AlarmTimeframe,
     type WatchlistAlarmRule,
 } from "@/lib/watchlist-alarms"
+import {
+    subscribeAlarmRuleStorage,
+    updateAlarmRuleStorage,
+    type AlarmRuleChange,
+} from "@/lib/alarm-rule-storage"
 
 // ==================== TYPES ====================
 
@@ -734,7 +737,6 @@ export function AdvancedChartPage({
     const [watchlistDialog, setWatchlistDialog] = useState<WatchlistDialogState>(null)
     const [serverClockLabel, setServerClockLabel] = useState("--")
     const [watchlistAlarmRules, setWatchlistAlarmRules] = useState<WatchlistAlarmRule[]>([])
-    const [watchlistAlarmRulesHydrated, setWatchlistAlarmRulesHydrated] = useState(false)
     const [alarmIndicatorDraft, setAlarmIndicatorDraft] = useState<AlarmIndicator>("rsi")
     const [alarmTimeframeDraft, setAlarmTimeframeDraft] = useState<AlarmTimeframe>("4h")
     const [alarmThresholdDraft, setAlarmThresholdDraft] = useState<AlarmThresholds>(() => ({
@@ -1079,7 +1081,6 @@ export function AdvancedChartPage({
     useEffect(() => {
         if (typeof window === "undefined") {
             setWatchlistsHydrated(true)
-            setWatchlistAlarmRulesHydrated(true)
             return
         }
 
@@ -1153,15 +1154,10 @@ export function AdvancedChartPage({
                 setActiveUtilityPanel(storedPanel)
             }
 
-            const restoredAlarmRules = loadWatchlistAlarmRules()
-            if (restoredAlarmRules.length > 0) {
-                setWatchlistAlarmRules(restoredAlarmRules)
-            }
         } catch (error) {
             console.error("Watchlist state could not be restored:", error)
         } finally {
             setWatchlistsHydrated(true)
-            setWatchlistAlarmRulesHydrated(true)
         }
     }, [])
 
@@ -1177,9 +1173,11 @@ export function AdvancedChartPage({
     }, [watchlists, activeWatchlistId, activeUtilityPanel, watchlistsHydrated])
 
     useEffect(() => {
-        if (!watchlistAlarmRulesHydrated || typeof window === "undefined") return
-        saveWatchlistAlarmRules(watchlistAlarmRules)
-    }, [watchlistAlarmRules, watchlistAlarmRulesHydrated])
+        return subscribeAlarmRuleStorage((result) => {
+            if (result.ok) setWatchlistAlarmRules(result.rules)
+            else setWatchlistNotice("Alarm kuralları tarayıcıdan okunamadı. Kaydedilmiş veriler değiştirilmedi.")
+        })
+    }, [])
 
     useEffect(() => {
         if (watchlists.length === 0) return
@@ -2447,6 +2445,16 @@ export function AdvancedChartPage({
         setWatchlistDialog(null)
     }, [])
 
+    const commitAlarmRuleChange = useCallback((change: AlarmRuleChange) => {
+        const result = updateAlarmRuleStorage(change)
+        if (!result.ok) {
+            showWatchlistToast("Alarm kuralları tarayıcıya kaydedilemedi. İşlem uygulanmadı.")
+            return false
+        }
+        setWatchlistAlarmRules(result.rules)
+        return true
+    }, [showWatchlistToast])
+
     const confirmWatchlistDialog = useCallback(() => {
         if (!watchlistDialog) return
 
@@ -2517,18 +2525,17 @@ export function AdvancedChartPage({
                 })
                 return
             }
+            if (!commitAlarmRuleChange({
+                type: "rename-watchlist",
+                watchlistId: watchlistDialog.watchlistId,
+                name: normalizedName,
+                updatedAt: new Date().toISOString(),
+            })) return
             setWatchlists((prev) =>
                 prev.map((watchlist) =>
                     watchlist.id === watchlistDialog.watchlistId
                         ? { ...watchlist, name: normalizedName }
                         : watchlist
-                )
-            )
-            setWatchlistAlarmRules((prev) =>
-                prev.map((rule) =>
-                    rule.watchlistId === watchlistDialog.watchlistId
-                        ? { ...rule, watchlistName: normalizedName, updatedAt: new Date().toISOString() }
-                        : rule
                 )
             )
             setShowWatchlistMenu(false)
@@ -2565,8 +2572,8 @@ export function AdvancedChartPage({
 
         if (watchlistDialog.type === "deleteWatchlist") {
             const fallback = watchlists.find((watchlist) => watchlist.id !== watchlistDialog.watchlistId)
+            if (!commitAlarmRuleChange({ type: "remove-watchlist", watchlistId: watchlistDialog.watchlistId })) return
             setWatchlists((prev) => prev.filter((watchlist) => watchlist.id !== watchlistDialog.watchlistId))
-            setWatchlistAlarmRules((prev) => prev.filter((rule) => rule.watchlistId !== watchlistDialog.watchlistId))
             if (fallback) {
                 setActiveWatchlistId(fallback.id)
             }
@@ -2605,6 +2612,7 @@ export function AdvancedChartPage({
         activeWatchlist,
         addToast,
         closeWatchlistDialog,
+        commitAlarmRuleChange,
         parseSymbolInput,
         showWatchlistToast,
         updateActiveWatchlist,
@@ -2630,29 +2638,28 @@ export function AdvancedChartPage({
             alarmTimeframeDraft,
             alarmThresholdDraft
         )
-        setWatchlistAlarmRules((prev) => [nextRule, ...prev])
+        if (!commitAlarmRuleChange({ type: "add", rule: nextRule })) return
         showWatchlistToast(`${activeWatchlist.name} için yeni alarm eklendi.`)
     }, [
         activeWatchlist,
         alarmIndicatorDraft,
         alarmTimeframeDraft,
         alarmThresholdDraft,
+        commitAlarmRuleChange,
         showWatchlistToast,
     ])
 
     const handleToggleAlarmRule = useCallback((ruleId: string) => {
-        setWatchlistAlarmRules((prev) =>
-            prev.map((rule) =>
-                rule.id === ruleId
-                    ? { ...rule, enabled: !rule.enabled, updatedAt: new Date().toISOString() }
-                    : rule
-            )
-        )
-    }, [])
+        const displayedRule = watchlistAlarmRules.find((rule) => rule.id === ruleId)
+        if (!displayedRule) return
+        commitAlarmRuleChange({
+            type: "set-enabled", id: ruleId, enabled: !displayedRule.enabled, updatedAt: new Date().toISOString(),
+        })
+    }, [commitAlarmRuleChange, watchlistAlarmRules])
 
     const handleRemoveAlarmRule = useCallback((ruleId: string) => {
-        setWatchlistAlarmRules((prev) => prev.filter((rule) => rule.id !== ruleId))
-    }, [])
+        commitAlarmRuleChange({ type: "remove", id: ruleId })
+    }, [commitAlarmRuleChange])
 
     const handleClearChartDrawings = useCallback(() => {
         setRulerDrawings([])
@@ -2703,6 +2710,7 @@ export function AdvancedChartPage({
                     <div className="flex items-center gap-4">
                         <div className="relative">
                             <button
+                                aria-label={`Sembol seç: ${symbol} (${marketType})`}
                                 onClick={() => setShowSymbolSearch(!showSymbolSearch)}
                                 className="flex items-center gap-2 px-4 py-2 rounded-sm bg-card/50 hover:bg-card border border-border/50 hover:border-primary/30 transition-all"
                             >

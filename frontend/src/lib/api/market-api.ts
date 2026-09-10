@@ -13,10 +13,13 @@ export async function fetchCandles(
     symbol: string,
     marketType: string = 'BIST',
     timeframe: string = '1d',
-    limit: number = 500
+    limit: number = 500,
+    options: { signal?: AbortSignal } = {}
 ): Promise<CandlesResponse> {
+    const params = new URLSearchParams({ market_type: marketType, timeframe, limit: String(limit) });
     return fetchApi<CandlesResponse>(
-        `${API_BASE_URL}/candles/${symbol}?market_type=${marketType}&timeframe=${timeframe}&limit=${limit}`
+        `${API_BASE_URL}/candles/${encodeURIComponent(symbol)}?${params}`,
+        options
     );
 }
 
