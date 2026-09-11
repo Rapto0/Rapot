@@ -161,6 +161,20 @@ with production schema checks and trading disabled, and serves frontend HTML/sta
 from the built container. The separate standalone proxy test uses local mock API/health
 servers, including a WebSocket upgrade.
 
+P2-3 enables Ruff lint/format for all tracked Python sources. Security artifacts contain
+Bandit source findings and pip-audit results for the exact active Python lock pins.
+Findings are explicitly report-only while triage is open; tool failures, incomplete scope
+and invalid reports fail CI. A successful workflow is not evidence of zero vulnerabilities.
+Check the security summary/artifact as well as the exact source SHA and workflow result.
+
+P2-3 changes UTC timestamp construction without changing the existing naive-UTC storage
+contract or database schema. It requires no manual migration/backfill. The rollout still
+requires a fresh verified backup. On the current space-constrained host, a bounded logical
+SQL gzip snapshot may be used only after an independent restore verifies integrity, schema,
+metadata and typed row-content fingerprints from the same source read transaction.
+Transport hashes and row counts alone do not establish a restorable backup. Existing data,
+archives and rollback images must be preserved; failed preparation does not permit rollout.
+
 These checks do not validate existing VPS data, the complete Compose network, production
 volume permissions, reverse proxy/TLS, or actual broker operations. Complete the cutover
 checks above on the authorized server before declaring deployment successful.

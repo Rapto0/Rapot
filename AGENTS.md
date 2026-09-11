@@ -1,6 +1,6 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-Kaynaklarla son karşılaştırma: **11 Eylül 2026 / P2-2**. İş sırası, kullanıcı
+Kaynaklarla son karşılaştırma: **11 Eylül 2026 / P2-3**. İş sırası, kullanıcı
 yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DEVAM_PLANI.md)
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 
@@ -66,7 +66,7 @@ Repo kökünde seçili .venv ile:
 
 ```powershell
 .venv/Scripts/python.exe -X utf8 -B -m pytest
-.venv/Scripts/python.exe -m pip check
+uv pip check --python .venv/Scripts/python.exe
 # Yalnız ilgili Python dosyalarında lint/format kontrolü:
 .venv/Scripts/python.exe -m ruff check <dosyalar>
 .venv/Scripts/python.exe -m ruff format --check <dosyalar>
@@ -90,8 +90,12 @@ npm run test:standalone
 ```
 
 `test:standalone` önceden build edilmiş çıktıyı yerel HTTP/WS mock'larıyla sınar.
-Tam repo Ruff borcu P2-3'te açık; CI Ruff yalnız değişen Python dosyalarını denetler.
-Security işindeki `|| true` nedeniyle yeşil CI, sıfır güvenlik bulgusu kanıtı değildir.
+`python -m scripts.ci_quality lint`, Git'in izlediği tüm Python kaynaklarında
+Ruff lint/format uygular; middleware ve testler dahildir. Ruff/pre-commit sınırları
+iç worktree, ortam/bağımlılık ve üretilmiş klasörleri dışarıda tutar.
+Bandit ve pip-audit bulguları açıkça report-only raporlanır; araç hatası, geçersiz
+rapor veya eksik kapsam CI'yi başarısız yapar. Yeşil CI sıfır güvenlik bulgusu değildir.
+Pip içermeyen uv ortamında bağımlılık kontrolü yukarıdaki `uv pip check` ile yapılır.
 
 ## Strateji terminolojisi
 
@@ -122,6 +126,10 @@ Ana SQLite: `db_session.init_db()` → create_all + uyumlu kolon/index ekleme;
 `middleware/infra/alembic/` revision zinciri; üretimde migration önce, startup
 revision kontrolü sonra gelir. [Migration politikası](docs/DB_MIGRATION_POLICY.md)
 iki yolun ayrıntısını ve eski taşıma aracının sınırlarını açıklar.
+
+Ana DB'nin saat dilimsiz UTC sözleşmesi `infrastructure.time.utc_now_naive`
+ile korunur: aware UTC saatinden yalnız tzinfo kaldırılır. Yerel saat kullanılmaz;
+değişiklik eski satırları dönüştürmez veya API tarih biçimlerini topluca değiştirmez.
 
 Ana API JWT kullanır; frontend token'ı yalnız sekme belleğinde tutar. Yönetici
 işleri admin ister; dashboard okuma endpointlerinin tamamı özel değildir.

@@ -18,6 +18,7 @@ from data_loader import (
     get_crypto_data,
     resample_market_data,
 )
+from infrastructure.time import utc_now_naive
 from isyatirim_ssl import ensure_isyatirim_ca_bundle
 from signals import calculate_combo_signal, calculate_hunter_signal
 
@@ -96,7 +97,7 @@ def get_bist_data_isyatirim_only(
         print(f"[WARN] {symbol}: Is Yatirim verisi normalize sonrasi bos kaldi.")
         return None
 
-    fetched_at = datetime.utcnow().isoformat()
+    fetched_at = utc_now_naive().isoformat()
     df.attrs["source_hint"] = "isyatirim"
     df.attrs["open_quality"] = open_quality
     df.attrs["fetched_at_iso"] = fetched_at

@@ -19,6 +19,9 @@ env/
 .venv/
 
 # IDE
+.claude/
+.codex/
+.agents/
 .vscode/
 .idea/
 *.swp

@@ -6,11 +6,10 @@ This module is used by scanners to avoid writing through legacy `database.py`.
 
 from __future__ import annotations
 
-from datetime import datetime
-
 from sqlalchemy.exc import IntegrityError
 
 from db_session import get_session
+from infrastructure.time import utc_now_naive
 from models import Signal
 
 
@@ -83,7 +82,7 @@ def set_signal_special_tag(
             return False
 
         if signal.created_at is not None and within_seconds > 0:
-            age_seconds = abs((datetime.utcnow() - signal.created_at).total_seconds())
+            age_seconds = abs((utc_now_naive() - signal.created_at).total_seconds())
             if age_seconds > within_seconds:
                 return False
 

@@ -14,6 +14,7 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 
+from infrastructure.time import utc_now_naive
 from logger import get_logger
 
 logger = get_logger(__name__)
@@ -140,7 +141,7 @@ def migrate_signals(dry_run: bool = False) -> int:
                     details=row["details"] or "",
                     created_at=datetime.fromisoformat(row["created_at"])
                     if row["created_at"]
-                    else datetime.utcnow(),
+                    else utc_now_naive(),
                 )
                 session.add(signal)
                 migrated += 1
@@ -201,7 +202,7 @@ def migrate_trades(dry_run: bool = False) -> int:
                     signal_id=row["signal_id"],
                     created_at=datetime.fromisoformat(row["created_at"])
                     if row["created_at"]
-                    else datetime.utcnow(),
+                    else utc_now_naive(),
                     closed_at=datetime.fromisoformat(row["closed_at"])
                     if row["closed_at"]
                     else None,
@@ -258,7 +259,7 @@ def migrate_scan_history(dry_run: bool = False) -> int:
                     duration_seconds=row["duration_seconds"] or 0.0,
                     created_at=datetime.fromisoformat(row["created_at"])
                     if row["created_at"]
-                    else datetime.utcnow(),
+                    else utc_now_naive(),
                 )
                 session.add(scan)
                 migrated += 1
@@ -310,7 +311,7 @@ def migrate_bot_stats(dry_run: bool = False) -> int:
                     stat_value=row["stat_value"],
                     updated_at=datetime.fromisoformat(row["updated_at"])
                     if row["updated_at"]
-                    else datetime.utcnow(),
+                    else utc_now_naive(),
                 )
                 session.add(stat)
                 migrated += 1

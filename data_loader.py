@@ -10,6 +10,7 @@ import pandas as pd
 from isyatirimhisse import fetch_stock_data
 
 from config import rate_limits
+from infrastructure.time import utc_now_naive
 from isyatirim_ssl import ensure_isyatirim_ca_bundle
 from logger import get_logger
 from settings import settings
@@ -190,7 +191,7 @@ def _fetch_bist_data_yfinance(symbol: str, start_date: str = "01-01-2015") -> pd
         df.attrs["source_hint"] = "yfinance_bist"
         df.attrs["open_quality"] = "provider"
         df.attrs["fetched_at_ts"] = fetched_at_ts
-        df.attrs["fetched_at_iso"] = datetime.utcnow().isoformat()
+        df.attrs["fetched_at_iso"] = utc_now_naive().isoformat()
         return df
     except Exception as e:
         _bist_yf_failure_cooldown_until[symbol_root] = now_ts + _YF_SHORT_COOLDOWN_SECONDS
@@ -677,7 +678,7 @@ def get_bist_data(symbol: str, start_date: str = "01-01-2015") -> pd.DataFrame |
             df.attrs["source_hint"] = "isyatirim"
             df.attrs["open_quality"] = "mapped" if discovered_open else "synthetic_fallback"
             df.attrs["fetched_at_ts"] = fetched_at_ts
-            df.attrs["fetched_at_iso"] = datetime.utcnow().isoformat()
+            df.attrs["fetched_at_iso"] = utc_now_naive().isoformat()
 
             # Başarılı olursa döngüden çık ve veriyi döndür
             return df
@@ -775,7 +776,7 @@ def get_crypto_data(symbol: str, start_str: str = "6 years ago") -> pd.DataFrame
         fetched_at_ts = time.time()
         df.attrs["source_hint"] = "binance"
         df.attrs["fetched_at_ts"] = fetched_at_ts
-        df.attrs["fetched_at_iso"] = datetime.utcnow().isoformat()
+        df.attrs["fetched_at_iso"] = utc_now_naive().isoformat()
         return df
     except Exception as e:
         logger.debug(f"Crypto data fetch error for {symbol}: {e}")

@@ -197,9 +197,13 @@ Commit mesajları için mevcut bağlamdaki tercih: tip: kısa Türkçe özet.
 
 ## Açık teknik sınırlar
 
-P2-3: Ruff/UTC uyarıları, araç tarama kapsamı ve atıl kod incelemesi.
-CI Ruff yalnız değişen Python dosyalarını denetler; security işindeki || true
-bulguları engelleyici yapmaz. P2-4: eşzamanlı API/WS ve ilk mum yükleme gecikmesi;
+P2-3 kaynak düzeltmeleri: tüm tracked Python'da Ruff lint/format, ortak
+`infrastructure.time.utc_now_naive` ile mevcut UTC-naive tarih sözleşmesi,
+kanıtlanan atıl frontend dosyalarının temizliği ve iç worktree'nin korunarak
+ana repository kapsamından ayrılması. Security araçları açık report-only bulgu
+üretir; araç/rapor/kapsam hataları CI'yi başarısız yapar. Güvenlik raporu açıklarının
+giderilmesi ayrı değerlendirme ister. Kabul ve yayın kanıtı devam planındadır.
+P2-4: eşzamanlı API/WS ve ilk mum yükleme gecikmesi;
 tek başarılı health isteği yük testinin yerine geçmez. P3-1: motor/backtest
 eşdeğerliği. P1-3: kullanıcı tarafından ertelenen dış alarm/emir kabulü.
 

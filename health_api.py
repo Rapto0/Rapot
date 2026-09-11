@@ -439,4 +439,4 @@ def start_health_server(host: str | None = None, port: int | None = None) -> thr
 
 if __name__ == "__main__":
     logger.info("Health API: http://localhost:5000")
-    app.run(debug=True, port=5000)
+    app.run(host="127.0.0.1", port=5000, debug=False, use_reloader=False)

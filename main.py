@@ -21,6 +21,7 @@ Kullanım:
 
 import signal
 import sys
+from contextlib import suppress
 
 from scheduler import start_bot
 
@@ -38,7 +39,5 @@ if __name__ == "__main__":
     # Komut satırından --async flag'i kontrol et
     use_async = "--async" in sys.argv
 
-    try:
+    with suppress(SystemExit):  # Temiz çıkış
         start_bot(use_async=use_async)  # Varsayılan: Sync (daha güvenilir)
-    except SystemExit:
-        pass  # Temiz çıkış

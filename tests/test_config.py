@@ -3,12 +3,9 @@ config.py için unit testler.
 Konfigürasyon değerlerinin doğruluğunu test eder.
 """
 
-import os
-import sys
+from dataclasses import FrozenInstanceError
 
 import pytest
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from config import (
     MIN_PERIODS,
@@ -35,7 +32,7 @@ class TestRateLimits:
     @pytest.mark.unit
     def test_rate_limits_immutable(self):
         """RateLimits frozen dataclass."""
-        with pytest.raises(Exception):
+        with pytest.raises(FrozenInstanceError):
             rate_limits.BIST_DELAY = 999
 
 
@@ -63,7 +60,7 @@ class TestMinPeriods:
 
         for tf in expected_timeframes:
             # En az bir eşleşme olmalı
-            found = any(tf in key for key in MIN_PERIODS.keys())
+            found = any(tf in key for key in MIN_PERIODS)
             assert found or tf in MIN_PERIODS, f"{tf} için min period bulunamadı"
 
     @pytest.mark.unit

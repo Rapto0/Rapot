@@ -1,3 +1,5 @@
+exclude: '(^|/)(\.claude|\.codex|\.agents|\.venv|venv|node_modules|\.next|\.turbo|runtime-data|runtime-logs|htmlcov|build|dist|out)/'
+
 repos:
   # Ruff - Python linter ve formatter
   - repo: https://github.com/astral-sh/ruff-pre-commit

@@ -13,13 +13,24 @@ keywords = ["trading", "bist", "crypto", "signals", "technical-analysis"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-exclude = [
-    ".git",
-    "__pycache__",
+extend-exclude = [
+    ".claude",
+    ".codex",
+    ".agents",
     "venv",
     ".venv",
-    "*.egg-info",
+    "node_modules",
+    ".next",
+    ".turbo",
+    "out",
+    "build",
+    "dist",
+    "runtime-data",
+    "runtime-logs",
+    "htmlcov",
 ]
+# Explicit paths from pre-commit/CLI must obey the same workspace boundaries.
+force-exclude = true
 
 [tool.ruff.lint]
 select = [

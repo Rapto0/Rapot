@@ -125,9 +125,14 @@ commit does not change the running application images.
   ```
 
 - Standalone checks require the build output and use local HTTP/WebSocket mocks.
-- See the [continuation plan](docs/RAPOT_DEVAM_PLANI.md) for dated results and open
-  work. CI Ruff checks changed Python files while P2-3 lint debt remains. The security
-  job tolerates scanner failures with `|| true`; green CI is not proof of zero findings.
+- `python -m scripts.ci_quality lint` checks all Git-tracked Python files, including
+  middleware and tests, with the workspace exclusions in `pyproject.toml`.
+- Security checks use pinned CI-only Bandit/pip-audit tools and publish JSON reports,
+  scope manifests and summaries. Findings are explicitly report-only; tool errors,
+  invalid reports or incomplete source/package coverage fail CI. This does not scan
+  npm, container OS packages or runtime configuration, and green CI is not proof of
+  zero security findings. See the [continuation plan](docs/RAPOT_DEVAM_PLANI.md) for
+  dated results and follow-up decisions.
 
 ## Security Notes
 

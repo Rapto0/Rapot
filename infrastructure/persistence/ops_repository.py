@@ -17,6 +17,7 @@ from sqlalchemy import func, or_, text
 from sqlalchemy.orm import aliased
 
 from db_session import get_session
+from infrastructure.time import utc_now_naive
 from logger import get_logger
 from models import BotStat, Order, ScanHistory, Signal, Trade
 from state_keys import (
@@ -143,7 +144,7 @@ def set_bot_stat_int(name: str, value: int) -> None:
 
 
 def increment_bot_stat_int(name: str, step: int = 1) -> int:
-    now = datetime.utcnow()
+    now = utc_now_naive()
     with get_session() as session:
         session.execute(
             text(
@@ -169,7 +170,7 @@ def acquire_distributed_lock(lock_name: str, owner: str, ttl_seconds: int = 900)
     """
     Acquire distributed lock backed by bot_stats table.
     """
-    now = datetime.utcnow()
+    now = utc_now_naive()
     expires_at = now + timedelta(seconds=max(1, int(ttl_seconds)))
     lock_key = _lock_stat_name(lock_name)
 
@@ -232,7 +233,7 @@ def get_distributed_lock_state(lock_name: str) -> dict[str, Any]:
     Return distributed lock state for observability endpoints.
     """
     lock_key = _lock_stat_name(lock_name)
-    now = datetime.utcnow()
+    now = utc_now_naive()
 
     with get_session() as session:
         row = session.query(BotStat).filter(BotStat.stat_name == lock_key).first()
@@ -296,7 +297,7 @@ def _build_special_tag_candidate_query(
     if strategy:
         query = query.filter(target.strategy == strategy)
     if since_hours is not None and since_hours > 0:
-        since_dt = datetime.utcnow() - timedelta(hours=since_hours)
+        since_dt = utc_now_naive() - timedelta(hours=since_hours)
         query = query.filter(target.created_at >= since_dt)
 
     for timeframe in required_timeframes:
@@ -486,7 +487,7 @@ def reconcile_active_orders_on_startup(stale_minutes: int = 180) -> dict[str, An
     - Marks stale active orders as STALE when they exceed stale_minutes.
     - Best-effort exchange check for crypto orders with Binance open-orders endpoint.
     """
-    now = datetime.utcnow()
+    now = utc_now_naive()
     stale_before = now - timedelta(minutes=max(1, int(stale_minutes)))
     summary: dict[str, Any] = {
         "checked": 0,

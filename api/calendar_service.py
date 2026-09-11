@@ -3,6 +3,7 @@ from typing import Any
 
 import requests
 
+from infrastructure.time import utc_now_naive
 from logger import get_logger
 from settings import settings
 
@@ -35,7 +36,7 @@ class CalendarService:
             to_date = (today + datetime.timedelta(days=7)).strftime("%Y-%m-%d")
 
         cache_key = f"{from_date}_{to_date}"
-        now = datetime.datetime.utcnow()
+        now = utc_now_naive()
         expires_at = self._cache_expiry.get(cache_key)
         if expires_at and cache_key in self._cache and now < expires_at:
             return self._cache[cache_key]

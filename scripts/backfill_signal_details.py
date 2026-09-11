@@ -18,9 +18,9 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from data_loader import get_bist_data, get_crypto_data, resample_market_data
-from signals import calculate_combo_signal, calculate_hunter_signal
-
+# Direct script execution needs the repository path before application imports.
+from data_loader import get_bist_data, get_crypto_data, resample_market_data  # noqa: E402
+from signals import calculate_combo_signal, calculate_hunter_signal  # noqa: E402
 
 DB_PATH = ROOT_DIR / "trading_bot.db"
 

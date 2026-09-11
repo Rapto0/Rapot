@@ -4,7 +4,6 @@ Sinyal, trade, tarama geçmişi ve bot istatistikleri için veritabanı modeller
 """
 
 import enum
-from datetime import datetime
 
 from sqlalchemy import (
     Column,
@@ -17,6 +16,8 @@ from sqlalchemy import (
     Text,
 )
 from sqlalchemy.orm import DeclarativeBase, relationship
+
+from infrastructure.time import utc_now_naive
 
 
 class Base(DeclarativeBase):
@@ -88,7 +89,7 @@ class Signal(Base):
         String(20), nullable=True, index=True
     )  # BELES, COK_UCUZ, PAHALI, FAHIS_FIYAT
     details = Column(Text)  # JSON string
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=utc_now_naive, index=True)
 
     # Relationship
     trades = relationship("Trade", back_populates="signal", lazy="dynamic")
@@ -137,7 +138,7 @@ class Trade(Base):
     pnl = Column(Float, default=0.0)
     status = Column(String(15), default="OPEN", index=True)  # OPEN, CLOSED, CANCELLED
     signal_id = Column(Integer, ForeignKey("signals.id"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utc_now_naive)
     closed_at = Column(DateTime, nullable=True)
 
     # Relationship
@@ -170,7 +171,7 @@ class Trade(Base):
         """Trade'i kapatır."""
         self.pnl = self.calculate_pnl(exit_price)
         self.status = "CLOSED"
-        self.closed_at = datetime.utcnow()
+        self.closed_at = utc_now_naive()
 
     def to_dict(self) -> dict:
         """Model'i dictionary'ye çevirir."""
@@ -212,8 +213,8 @@ class Order(Base):
     filled_quantity = Column(Float, nullable=False, default=0.0)
     avg_fill_price = Column(Float, nullable=True)
     raw_payload = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=utc_now_naive, index=True)
+    updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive, index=True)
     closed_at = Column(DateTime, nullable=True)
 
     __table_args__ = (Index("idx_orders_symbol_status", "symbol", "status"),)
@@ -263,7 +264,7 @@ class ScanHistory(Base):
     errors_count = Column(Integer, default=0)
     status = Column(String(12), default="unknown", server_default="unknown")
     duration_seconds = Column(Float, default=0.0)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=utc_now_naive, index=True)
 
     def __repr__(self) -> str:
         return (
@@ -298,7 +299,7 @@ class BotStat(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     stat_name = Column(String(50), nullable=False, unique=True, index=True)
     stat_value = Column(Text, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_at = Column(DateTime, default=utc_now_naive, onupdate=utc_now_naive)
 
     def __repr__(self) -> str:
         return f"<BotStat(name='{self.stat_name}', value='{self.stat_value}')>"
@@ -345,7 +346,7 @@ class AIAnalysis(Base):
     headline_count = Column(Integer)
     latency_ms = Column(Integer)
     error_code = Column(String(40))
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=utc_now_naive, index=True)
 
     # Relationship
     signal = relationship("Signal", backref="analyses")

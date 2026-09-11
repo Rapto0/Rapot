@@ -21,7 +21,7 @@ def test_scanners_do_not_import_api_realtime_directly():
             offenders.append(file_path.name)
 
     assert offenders == [], (
-        "Domain scanner modules must not import API transport directly. " f"Offenders: {offenders}"
+        f"Domain scanner modules must not import API transport directly. Offenders: {offenders}"
     )
 
 
@@ -73,7 +73,7 @@ def test_domain_modules_do_not_import_fastapi_layer():
             offenders.append(file_path.name)
 
     assert offenders == [], (
-        "Domain modules should not depend on FastAPI presentation layer. " f"Offenders: {offenders}"
+        f"Domain modules should not depend on FastAPI presentation layer. Offenders: {offenders}"
     )
 
 
@@ -107,7 +107,7 @@ def test_route_modules_do_not_access_orm_directly():
             offenders.append(str(file_path.relative_to(REPO_ROOT)))
 
     assert offenders == [], (
-        "API routes should delegate ORM access to services/repositories. " f"Offenders: {offenders}"
+        f"API routes should delegate ORM access to services/repositories. Offenders: {offenders}"
     )
 
 
@@ -125,8 +125,7 @@ def test_service_modules_do_not_open_db_sessions_directly():
                 offenders.append(str(file_path.relative_to(REPO_ROOT)))
 
     assert offenders == [], (
-        "Services should use repository helpers instead of direct sessions. "
-        f"Offenders: {offenders}"
+        f"Services should use repository helpers instead of direct sessions. Offenders: {offenders}"
     )
 
 
@@ -143,7 +142,7 @@ def test_route_modules_do_not_import_repositories_directly():
             offenders.append(str(file_path.relative_to(REPO_ROOT)))
 
     assert offenders == [], (
-        "API routes should access data via services, not repositories. " f"Offenders: {offenders}"
+        f"API routes should access data via services, not repositories. Offenders: {offenders}"
     )
 
 
@@ -162,8 +161,7 @@ def test_repository_modules_do_not_import_fastapi_layer():
                 offenders.append(str(file_path.relative_to(REPO_ROOT)))
 
     assert offenders == [], (
-        "Repository modules should not depend on HTTP/API transport layers. "
-        f"Offenders: {offenders}"
+        f"Repository modules should not depend on HTTP/API transport layers. Offenders: {offenders}"
     )
 
 
@@ -297,8 +295,7 @@ def test_runtime_modules_use_canonical_application_service_imports():
             offenders.append(str(file_path.relative_to(REPO_ROOT)))
 
     assert offenders == [], (
-        "Runtime API modules should import services from application layer. "
-        f"Offenders: {offenders}"
+        f"Runtime API modules should import services from application layer. Offenders: {offenders}"
     )
 
 
