@@ -173,6 +173,83 @@ The final plan/deploy documentation commit is recorded separately in
 That documentation publication requires its own successful exact-SHA CI and does not
 change the running application source, images, database or service lifecycle.
 
+## P1-G1 rollout evidence — 11 September 2026
+
+The dependency-security release **ccd61544ede603eb064d871a4ec797c5057307f4** was
+verified in production at **20:56:32 UTC**, replacing `bacbfab8` for API, bot,
+middleware and frontend. [CI 34641121926](https://github.com/Rapto0/Rapot/actions/runs/34641121926)
+and [image publication 34641767731](https://github.com/Rapto0/Rapot/actions/runs/34641767731)
+passed. The application source, configuration and acceptance record are retained in
+`/root/rapot-ops/20260911-p1g1/`; `deployment.json` has status `verified` and SHA256
+`f3d9444edf4484b4f42e81508b9425823f24b4af599af42218629e21f3a15fc2`.
+
+| Component | Immutable image reference |
+|---|---|
+| Backend | `ghcr.io/rapto0/rapot/backend@sha256:0a92fc448e73134d82450c277219d2db82776ec6c9d4aa36c5a6ed5b7665ee39` |
+| Frontend | `ghcr.io/rapto0/rapot/frontend@sha256:80145f4222058ef16e3dcc73a1f7dd002d07593d42db3c94dc57a73e76a5bda4` |
+
+Local and Linux CI ran **710 Python tests without warnings**; the exact **115-package**
+security inventory had zero known pip-audit advisories at the recorded scan. Bandit
+still had 15 MEDIUM and 1,534 LOW findings; security remains report-only. This is not
+an assertion that the operating-system image or application has no vulnerabilities.
+The patch replaced python-jose with PyJWT HS256/required expiry, removed the unused
+Streamlit branch and applied reviewed compatible dependency fixes. Schema, Compose
+topology and the Alembic chain were unchanged; no manual initializer, migration,
+backfill or production database restore was run.
+
+The user rejected a paid server upgrade. After durable private copies and repeated
+SHA/CRC/SQLite/ACL verification, the user's direct continuation authorized only the
+three named historical gzip server copies listed in `docs/RAPOT_DEVAM_PLANI.md`.
+Their removal is audited in
+`/root/rapot-ops/p1g1-cold-retirement-5e4659d7a3e64888ae7405e9062680a0/`.
+Observed free space increased by **606,547,968 bytes**. The six local files under
+`C:\Users\memet\RapotBackups\20260911-p1g1-cold`, P2-3/P1-6 server backups and all
+rollback images/releases were retained. This is no general cleanup authorization.
+
+A new fixed-read-transaction SQL gzip snapshot was independently restored locally:
+archive **135,547,494 bytes**, SHA256
+`0d3036738f5acc171eca64a996849e709afd1312c0ab80543426d06a361a5e5c`.
+Integrity, schema/pragmas and typed row fingerprints matched for all seven tables,
+including legacy `lost_and_found`; the restored file is **1,019,871,232 bytes**.
+The extra PostgreSQL custom dump is **59,240 bytes**, SHA256
+`599993412c9b28dd21a2a14ab81eb27106569fad0459d374842e778e01c5fa71`;
+its 66-line catalog was checked, but no independent PostgreSQL restore was performed.
+
+Verified OCI blob/diffID measurements budgeted the remaining image cost plus
+400 MiB reserve and 128 MiB growth allowance before each pull. Backend first shared
+six layers; frontend shared all 13 layers. Every capacity gate passed; no old image
+was pruned. Free space after acceptance was **724,676,608 bytes (~691 MiB)**.
+These are checkpoint measurements, not a continuously measured peak. The next rollout
+must recalculate available capacity; a paid upgrade remains unauthorized.
+
+All five containers were healthy with zero restarts. Main counts before/after were
+signals **1,733,137**, scan_history **6**, ai_analyses **26,393**, bot_stats **4** and
+trades/orders **0/0**. PostgreSQL identity/start time and **135/135/28/383** counts
+were unchanged. HTTPS health returned 200 in 0.047 s; `/`, `/signals`, `/alarms`
+and `/chart` returned HTML/200. SignalFeed/providers were ready, and the scheduler
+reached `running` after **47.298 s**. Separate Windows HTTPS API and bot probes each
+returned healthy/200 in 0.203 s. No new full-scan, interactive-browser or load
+acceptance is implied.
+
+The rollback-protected auth acceptance passed **13/13 cases**: readiness, anonymous
+and invalid-bearer 401 boundaries, unauthorized empty webhook 401 boundaries, and
+existing admin/user login and identity. Admin `logs?limit=0` reached 422 validation;
+the normal user received 403. Credentials/tokens stayed in RAM and were excluded
+from result logs; no account was created. Old jose-token compatibility remains a
+local/Linux test result, not a separately exercised live-session claim.
+Credentials/Nginx, DRY_RUN/trading=false/live=false and disabled AI were preserved.
+No testnet/live order or external AI/Telegram test was sent. P1-G1 is complete;
+P2-4 latency and the deferred TradingView/alarm/order acceptance remain open.
+
+The nine exact-code-CI report/provenance files were hash-verified under `security-reports/`;
+`security-publication.json` retains source/artifact identity independently of GitHub artifact
+retention. No runtime database or environment file was included.
+
+The final documentation commit/CI and canonical Git blob checksums are recorded
+separately in `documentation-release-record.json` and `documents-final/` under the
+same OPS directory. Publishing these two documents does not restart the application
+or alter images, configuration or databases.
+
 ## Optional middleware
 
 Create `middleware/.env` or select `RAPOT_MIDDLEWARE_ENV_FILE`, outside Git:
