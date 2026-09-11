@@ -120,6 +120,59 @@ digest/source and private config backup for frontend-only rollback. Do not resto
 for a frontend failure. Local mocked interaction tests, external HTTPS/SSR checks and the
 unchanged backend health checks are separate acceptance evidence.
 
+## P2-3 rollout evidence — 11 September 2026
+
+Application source `bacbfab814bb659f093a33733934b56f2bf5b19a` passed
+[CI 34636602751](https://github.com/Rapto0/Rapot/actions/runs/34636602751) and
+[image publication 34637100266](https://github.com/Rapto0/Rapot/actions/runs/34637100266).
+The full API/bot/frontend/middleware rollout was verified at **19:14:51 UTC**.
+All four application services now use that source; PostgreSQL was not recreated.
+
+| Image | Immutable registry digest |
+|---|---|
+| Backend | `sha256:18dcf104fd3e3e85d6d016c22d76a98e6dbf88ae4e0a9b60554803468d0c81b4` |
+| Frontend | `sha256:369674a790d86d84ee06e16edc050e2968d5928f511a31f666d5644ecfb65340` |
+
+Evidence is retained in `/root/rapot-ops/20260911-p23/`: source preparation,
+`deployment.json`, private configuration backups, and the independently verified
+`trading_bot.before.sql.gz`. The SQL gzip is **135,495,129 bytes** with SHA256
+`1ccfea7dbd37e632193e91d697a0fa80318fa251ad7d4e82149877376685d45c`.
+A fresh read-only SQLite transaction bound the schema, metadata, typed row fingerprints
+and SQL stream to one snapshot. Its independent private local restore passed integrity
+and logical comparison for all **7 tables**; the restored file is **1,019,465,728 bytes**.
+The physical size/hash differs from the source database and is not the comparison contract.
+The additional PostgreSQL dump is **59,240 bytes** and its archive catalog was checked;
+no independent PostgreSQL restore was performed in this rollout.
+
+The first operator attempt rejected only the nonexecuted `x-python.image` template tag
+comparison, before any pull or service change. Its three preparation records remain in
+`attempt-1/`; the narrowly corrected operator completed the second attempt. Source
+Compose, `db_session.py` and the entire Alembic chain were unchanged. No manual
+initializer, migration, backfill or database restore was executed.
+
+API startup preserved the six main application table counts; they also matched after
+bot startup. PostgreSQL container ID/start time and counts **135/135/28/383** were unchanged.
+All five services were healthy with restart count zero. HTTPS `/api/health` returned 200
+in **0.036 s**; `/`, `/signals`, `/alarms`, `/chart` returned HTML/200. The shared signal
+feed was ready, Binance/BIST providers reported started, and the scheduler reached its
+local `running` lifecycle after **43.781 s** of observation. This does not establish a
+completed fresh market scan, interactive browser acceptance, or a load benchmark.
+An independent HTTPS check from the local Windows host at **19:19:35 UTC** returned
+healthy/200 for API (**0.204 s**) and bot (**0.187 s**); these are separate observations.
+
+Credentials, Nginx and DRY_RUN/trading=false/live=false were preserved. No testnet/live
+orders or external AI/Telegram tests were sent. Old source trees, images and backups
+remain; free disk after acceptance was **884,736,000 bytes**. Recheck capacity before
+the next rollout. P1-G1 dependency-advisory triage and P2-4 concurrent-load latency remain
+open; security findings are report-only, with full reports retained.
+The nine exact-CI report/manifest/log files were copied and hash-verified under
+`security-reports/`, so advisory triage does not depend on GitHub's 14-day artifact retention.
+
+The final plan/deploy documentation commit is recorded separately in
+`documentation-release-record.json`, with canonical Git blob hashes under `documents-final/`.
+That documentation publication requires its own successful exact-SHA CI and does not
+change the running application source, images, database or service lifecycle.
+
 ## Optional middleware
 
 Create `middleware/.env` or select `RAPOT_MIDDLEWARE_ENV_FILE`, outside Git:
