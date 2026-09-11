@@ -6,6 +6,7 @@ from contextlib import closing
 from pathlib import Path
 
 import httpx
+import httpx2
 import pytest
 import requests
 from curl_cffi import Curl, CurlOpt
@@ -58,13 +59,14 @@ def test_database_and_price_cache_start_empty(case: str, test_sandbox: Path) -> 
         )
 
 
-@pytest.mark.parametrize("client", ["requests", "httpx", "curl", "socket", "dns"])
+@pytest.mark.parametrize("client", ["requests", "httpx", "httpx2", "curl", "socket", "dns"])
 def test_unmocked_network_fails_before_io(client: str) -> None:
     with pytest.raises(pytest.fail.Exception, match="External network access"):
         if client == "requests":
             requests.get("https://example.invalid")
-        elif client == "httpx":
-            with httpx.Client() as http:
+        elif client in ("httpx", "httpx2"):
+            library = httpx if client == "httpx" else httpx2
+            with library.Client() as http:
                 http.get("https://example.invalid")
         elif client == "curl":
             with closing(Curl()) as curl:
@@ -78,10 +80,11 @@ def test_unmocked_network_fails_before_io(client: str) -> None:
 
 
 @pytest.mark.asyncio
-async def test_async_network_is_blocked() -> None:
+@pytest.mark.parametrize("client", [httpx, httpx2], ids=["httpx", "httpx2"])
+async def test_async_network_is_blocked(client) -> None:
     import aiohttp
 
-    async with httpx.AsyncClient() as http:
+    async with client.AsyncClient() as http:
         with pytest.raises(pytest.fail.Exception, match="External network access"):
             await http.get("https://example.invalid")
     async with aiohttp.ClientSession() as http:
@@ -89,7 +92,8 @@ async def test_async_network_is_blocked() -> None:
             await http.get("https://example.invalid")
 
 
-def test_mock_transport_remains_usable() -> None:
-    transport = httpx.MockTransport(lambda _request: httpx.Response(200, json={"offline": True}))
-    with httpx.Client(transport=transport) as http:
+@pytest.mark.parametrize("client", [httpx, httpx2], ids=["httpx", "httpx2"])
+def test_mock_transport_remains_usable(client) -> None:
+    transport = client.MockTransport(lambda _request: client.Response(200, json={"offline": True}))
+    with client.Client(transport=transport) as http:
         assert http.get("https://example.invalid").json() == {"offline": True}

@@ -26,6 +26,7 @@ jobs:
           cache: 'pip'
           cache-dependency-path: |
             requirements.txt
+            requirements-security.txt
             requirements-dev.txt
             requirements-dev.lock
 
@@ -60,6 +61,7 @@ jobs:
           cache: 'pip'
           cache-dependency-path: |
             requirements.txt
+            requirements-security.txt
             requirements-dev.txt
             requirements-dev.lock
 
@@ -175,6 +177,10 @@ jobs:
             -e MW_WEBHOOK_AUTH_TOKEN=ci-test-webhook \
             otonom-analiz:${{ github.sha }} \
             python -c "import ai_evaluation; import infrastructure.compat.wrapper_telemetry; import api.main; import middleware.api.main"
+
+      - name: Record backend image size and layers for deployment capacity checks
+        run: |
+          docker image inspect otonom-analiz:${{ github.sha }} --format '{"size_bytes":{{.Size}},"layers":{{json .RootFS.Layers}}}'
 
       - name: Verify signal feed across processes without a network
         timeout-minutes: 2

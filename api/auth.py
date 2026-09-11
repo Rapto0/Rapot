@@ -9,9 +9,10 @@ Usage:
 import hashlib
 from datetime import UTC, datetime, timedelta
 
+import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
+from jwt.exceptions import InvalidTokenError
 from pydantic import BaseModel, Field
 
 from logger import get_logger
@@ -268,14 +269,15 @@ def verify_token(token: str) -> TokenData | None:
     """Validate JWT token and return token data."""
     try:
         payload = jwt.decode(
-            token, SECRET_KEY, algorithms=[ALGORITHM], options={"require_exp": True}
+            token, SECRET_KEY, algorithms=[ALGORITHM], options={"require": ["exp"]}
         )
-        username: str | None = payload.get("sub")
-        if username is None:
-            return None
-        return TokenData(username=username)
-    except JWTError:
+    except (InvalidTokenError, TypeError, OverflowError):
+        # Invalid numeric claims can fail int() outside PyJWT's token-error hierarchy.
         return None
+    username: str | None = payload.get("sub")
+    if username is None:
+        return None
+    return TokenData(username=username)
 
 
 # ==================== DEPENDENCIES ====================

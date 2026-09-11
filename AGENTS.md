@@ -53,7 +53,8 @@ gerekir; [takvim](docs/WRAPPER_DEPRECATION_SCHEDULE.md) otomatik silme emri değ
   **4.1.18**, Lightweight Charts **5.1.0**, Zustand **5.0.10**, React Query **5.90.19**.
 - Backend: FastAPI/Uvicorn, SQLAlchemy/Pydantic, pandas/NumPy/ta, python-binance,
   isyatirimhisse/yfinance, google-genai, python-telegram-bot, Flask, Alembic/psycopg.
-  `requirements.txt` sürüm aralıklarıdır; kesin geliştirme/CI çözümü
+  `requirements.txt` sürüm aralıklarını ve `requirements-security.txt` güvenlik
+  kısıtlarını kullanır; kesin geliştirme/CI çözümü
   `requirements-dev.lock`, araç tanımları `requirements-dev.txt` içindedir.
 - `ai_analyst.py` öncelikle `google.genai` kullanır. Eski `google.generativeai`
   fallback kodu kalmıştır; eski SDK güncel zorunlu bağımlılık değildir.
@@ -131,7 +132,9 @@ Ana DB'nin saat dilimsiz UTC sözleşmesi `infrastructure.time.utc_now_naive`
 ile korunur: aware UTC saatinden yalnız tzinfo kaldırılır. Yerel saat kullanılmaz;
 değişiklik eski satırları dönüştürmez veya API tarih biçimlerini topluca değiştirmez.
 
-Ana API JWT kullanır; frontend token'ı yalnız sekme belleğinde tutar. Yönetici
+Ana API PyJWT ile yalnız HS256 ve zorunlu `exp` kullanır; frontend token'ı yalnız
+sekme belleğinde tutar. TestClient için dev-only httpx2, SDK'lar için httpx
+korunur; kök test izolasyonu ikisinin de HTTP transport'unu engeller. Yönetici
 işleri admin ister; dashboard okuma endpointlerinin tamamı özel değildir.
 Middleware webhook token'ı ve X-Admin-Token yönetim kimliği ana JWT'den ayrıdır.
 [README erişim tablosu](README.md#security-notes) ve [middleware rehberi](middleware/README.md)

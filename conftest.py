@@ -81,6 +81,7 @@ def _isolate_environment() -> None:
 def _block_network() -> None:
     import aiohttp
     import httpx
+    import httpx2
     import requests
     from curl_cffi import AsyncCurl, Curl
 
@@ -117,8 +118,9 @@ def _block_network() -> None:
     _patch.setattr(requests.sessions.Session, "request", _deny_network)
     _patch.setattr(aiohttp.ClientSession, "_request", _deny_async_network)
     # Custom ASGI/Mock transports still work; only actual HTTP transports are denied.
-    _patch.setattr(httpx.HTTPTransport, "handle_request", _deny_network)
-    _patch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", _deny_async_network)
+    for client in (httpx, httpx2):
+        _patch.setattr(client.HTTPTransport, "handle_request", _deny_network)
+        _patch.setattr(client.AsyncHTTPTransport, "handle_async_request", _deny_async_network)
     # libcurl bypasses Python sockets (used by yfinance).
     _patch.setattr(Curl, "perform", _deny_network)
     _patch.setattr(AsyncCurl, "add_handle", _deny_network)

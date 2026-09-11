@@ -51,7 +51,12 @@ known limits are described in [the architecture context](docs/Codex.md).
 ## Dependencies
 
 Python 3.12 is selected by `.python-version`; `requirements-dev.lock` is the exact
-development/CI resolution, while `requirements.txt` contains runtime version ranges.
+development/CI resolution, while `requirements.txt` contains runtime version ranges
+and includes `requirements-security.txt` for reviewed transitive constraints.
+JWT authentication uses PyJWT with HS256. Streamlit is no longer a dependency;
+the supported dashboard is Next.js. Tests additionally use httpx2 for Starlette's
+TestClient; application SDKs still use httpx. Both transports are blocked from
+external I/O in the isolated test harness.
 The stack includes FastAPI, SQLAlchemy, pandas/NumPy/ta, python-binance,
 isyatirimhisse/yfinance, google-genai, python-telegram-bot, Flask, Alembic and psycopg.
 Gemini uses `google.genai` first; the old SDK is an optional code fallback.

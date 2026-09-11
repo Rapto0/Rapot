@@ -16,7 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install python dependencies
-COPY requirements.txt requirements-dev.lock ./
+COPY requirements.txt requirements-security.txt requirements-dev.lock ./
 RUN pip install --no-cache-dir -r requirements.txt -c requirements-dev.lock \
     && pip check
 
