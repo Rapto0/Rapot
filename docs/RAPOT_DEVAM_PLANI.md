@@ -4,11 +4,12 @@ Bu belge, 6 Eylül 2026 tarihli salt okunur proje incelemesinden çıkan işleri
 
 ## Kaldığımız nokta
 
-- **Son çalışma:** **P2-1 yerel, CI ve üretim kabulü tamamlandı.** Grafik URL, CSV, yerel alarm yarışları/sekme eşgüdümü ve header saat hydration düzeltildi. Üretim frontend kaynağı `db989155aaad22897e7333bfc11f4bbf78bc1e99`; backend kaynağı `2cf05a8413d560024bfb37cb8e932e0fad97a9fb`. Yalnız frontend değişti; API/bot/middleware/PG kimlikleri, başlangıçları ve restart sayıları korundu.
+- **Son çalışma:** **P2-2 belge ve wrapper kararları kaynak/yerel testlerle doğrulandı.** Ana/middleware DB yolları, HUNTER 15 puanı, güncel bağımlılıklar, gerçek import yönleri ve eski backlog durumları eşlendi. **12 wrapper korunuyor**; fiziksel kaldırma dış tüketici/süreç kanıtına bağlı ayrı karardır. P2-2 yalnız Markdown değiştirir. Çalışan frontend `db989155aaad22897e7333bfc11f4bbf78bc1e99`, backend `2cf05a8413d560024bfb37cb8e932e0fad97a9fb` olarak kalır.
 - **Uygulama durumu:** P0 işleri, P1-1, P1-2, P1-4, P1-5, P1-6, P1-7 ve P2-1 doğrulandı. Son yerel frontend paketi **95/95** (P2-1'de 43 yeni durum), lint/TypeScript production build/standalone HTTP-RSC-WS geçti. Önceki Python tabanı **588/588**; bu tur Python kodu değişmedi, yeni SHA'nın tam Python CI işi de başarılı. Önceki koşumun **874 UTC deprecation warning** kaydı P2-3'te açık.
 - **P1-2 durumu — Doğrulandı:** **8f60f8e üretim geçişi ve [HTTPS](https://138.68.71.27) kabulü tamamlandı.** API, bot, frontend, middleware ve PG16 sağlıklı; veri korunumu, dış HTTPS/auth/WSS, yetkisiz webhook reddi ve sertifika yenileme dry-run testi geçti. Eski supervisor'lar devre dışı; özgün DB/checkout ve geri dönüş kaynakları korundu.
 - **Uzak doğrulama:** Frontend `db98915` için [CI 34530618110](https://github.com/Rapto0/Rapot/actions/runs/34530618110) ve [imaj yayını 34530649980](https://github.com/Rapto0/Rapot/actions/runs/34530649980) başarılı. Frontend geçişi 10 Eylül 21:15:01 UTC'de; beş sağlıklı servis, restart0 ve üç ek HTTPS health isteği 21:16:48 UTC'de doğrulandı. Son health süreleri 0,018–0,046 saniye. Backend `2cf05a8` ve eski frontend/rollback/yedekler korunuyor. Sonraki yalnız-belge commit'i uygulama imajlarının kaynak SHA'sını değiştirmez.
-- **Sıradaki iş:** **P2-2 — belgeler ve wrapper göçünün kapanışı.** İlk adım AGENTS/README/Codex notları ile canonical import ve wrapper kullanımını gerçek kaynaklarla eşleştirmek. P2-4 eşzamanlı ekran/heartbeat ve mum yükleme gecikmesi ayrıca açık; P3-1'de COMBO sıfır-değer ve Pine EMA/ATR sınırları kayıtlı. Borsa/alarm dış kabulü beklenmiyor.
+- **P2-2 doğrulaması ve belge yayını:** Python 3.12.8'de üç ayrı hedefli koşum toplam **98/98** geçti (wrapper/boundary/read-model 37, DB/migration 30, sinyal/config 31); DB grubunda mevcut 10 UTC warning var. 11 Eylül 15:44:58 UTC salt okunur sunucu ön kontrolünde beş servis healthy/restart0, HTTPS API/bot health 200 (0,051/0,043 saniye). Bu yalnız belge commit'inin tam SHA/CI sonucu, Git blob SHA256'ları ve sunucuya aktarım sonrası korunma kanıtı `/root/rapot-ops/20260911-p22/release-record.json` içinde sürüm bazında tutulur. İmaj yayını, servis restart'ı veya migration bu belge yayınının parçası değildir.
+- **Sıradaki iş:** **P2-3 — Ruff, atıl kod ve araç tarama kapsamı.** İlk adım mevcut Ruff bulgularını tracked ana kaynaklarla sınırlı tekrar üretmek; `pyproject.toml`/CI tarama sınırı ile iç worktree gitlink'inin sahipliğini incelemek. İç worktree veya veri silinmeyecek. P2-4 eşzamanlı ekran/heartbeat ve mum yükleme gecikmesi ayrıca açık; P3-1'de COMBO sıfır-değer ve Pine EMA/ATR sınırları kayıtlı. Borsa/alarm dış kabulü beklenmiyor.
 - **Ertelenen dış kabul:** Gerçek TradingView alarm teslimi, ALL/FIRST/saat filtresi runtime kabulü ve sınırlı testnet emir testi tamamlanmış sayılmıyor. Hazır test araçları korunuyor; testnet onayı ve Webhook URL erişimi için artık yanıt beklenmiyor, bu işler kullanıcı yeniden seçtiğinde ele alınacak. Borsa emri gönderilmedi; geçici test servisleri kapalı.
 - **Başlangıç kaydı:** Bu belge ilk oluşturulduğunda yalnız belge değişmişti; sonraki uygulama değişiklikleri aşağıda ayrı kaydedildi.
 - **Seçilen geliştirme ortamı:** `.venv` / Python 3.12; Node 20.20.2 / npm 10.9.9. Yerelde Python 3.12.8 ile doğrulandı.
@@ -37,6 +38,8 @@ Kullanıcının ilk isteği yalnız inceleme ve raporlamaydı; dosya değişikli
 2. **Push**, grubun yerel tam testleri, değişen dosya lint'i ve frontend typecheck/build kontrolleri geçince CI doğrulamasını başlatır. 9 Eylül'de yerel Docker motoru açılamadığı için imaj ve geçici PostgreSQL kontrolü Linux CI'ye taşındı. **Sunucu deploy'u** için bu CI sonucu da başarılı olmalı; P0 işleri, P1-7 ve P1-2 dağıtım uyumu kapıları sağlanmalıdır. CI başlatmak için yapılan push sunucu deploy'u sayılmaz.
 3. Deploy öncesinde hedef sunucu/branch, çalışan sürüm ve yerel değişiklikler okunarak kontrol edilir. Deploy, doğrulanmış commit ile yapılır; ardından sunucu commit'i, süreçler ve sağlık kontrolleri doğrulanıp buraya kaydedilir. Başarısız adımın ardından yayın zinciri ilerletilmez.
 4. Bu düzen kapsamındaki commit/push/deploy için kullanıcıdan her seferinde tekrar onay istenmez. Erişim bilgisi gerçekten eksikse veya kapsam dışı veri işlemi gerekiyorsa yalnız o eksik nokta açıklanır.
+
+**Yalnız belge değişiklikleri:** Kaynak/bağlantı ve ilgili mevcut regression kontrolleri yapılır; tam SHA CI sonucu doğrulanır. Değişen belgeler Git blob'larından alınarak sunucuda sürümlü operator kaydına aktarılır ve SHA256 karşılaştırılır. Uygulama imajı/pointer/config veya veritabanı değiştirilmez, servis yeniden başlatılmaz. Son belge commit'inin kendisine referans döngüsü yaratmamak için tam commit/CI sonucu ve aktarım sonrası kabul, ilgili `/root/rapot-ops/<tarih-iş>/release-record.json` kaydında tutulur; yalnız push sunucuya belge aktarımı sayılmaz.
 
 **Mevcut mekanizma, koddan doğrulanan (P1-2 sonrası):** `.github/workflows/deploy.yml` release/manual tetiklemeli ve backend/frontend imajlarını tam commit SHA etiketiyle yayımlıyor; sunucu deploy'u yapmıyor. `scripts/deploy.ps1` temiz ağaç ve doğrulanmış tam SHA ister; isteğe bağlı push yapar, manuel sunucu komutlarını yazdırır, SSH çalıştırmaz. Repo içinde normal push'u sunucu deploy'una bağlayan bir workflow yok; sunucuda repo dışı otomasyon bulunup bulunmadığı henüz doğrulanmadı. Yalnız push yapılması deploy başarısı sayılmayacak.
 
@@ -154,7 +157,7 @@ Kapsam tahminleri süre taahhüdü değildir: küçük birkaç dosya; orta bir �
 | P1-6 | PnL, bot durumu ve ayarlar ekranı | Doğrulandı — üretim ve dış kabul tamam | Orta | P0-1; backend ayar sözleşmesi ve P0-2 |
 | P1-7 | HUNTER kısa seride ATR hatası | Doğrulandı | Küçük/orta | P0-1 |
 | P2-1 | Dışa aktar, alarmlar ve grafik URL davranışı | Doğrulandı — yerel/CI ve db98915 frontend üretim kabulü tamam | Orta | P0-1 |
-| P2-2 | Belgeler ve wrapper göçünün kapanışı | Bekliyor | Küçük/orta | İlgili mimari kararlar; kaldırma için kullanım kanıtı |
+| P2-2 | Belgeler ve wrapper göçünün kapanışı | Doğrulandı — kaynak/belge/98 hedefli test; 12 wrapper korunacak | Küçük/orta | Fiziksel kaldırma için dış tüketici ve süreç kanıtı ayrıca gerekli |
 | P2-3 | Ruff, atıl kod ve araç tarama kapsamı | Bekliyor | Küçük/orta | P0-1 |
 | P2-4 | Eşzamanlı API yükünde realtime gecikmesi | Bekliyor — ilk üretim zaman aşımı kaydedildi | Orta | P1-5 |
 | P3-1 | Backtest ve strateji eşdeğerliği | Bekliyor; Pine EMA/ATR ilk değer sınırı kaydedildi | Büyük | Emir/veri doğruluğu, P1-3, P1-4 |
@@ -689,16 +692,33 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 
 ### P2-2 — Belgeler ve wrapper göçünün kapanışı
 
+**Durum:** **Doğrulandı — 11 Eylül 2026.** Belge ve karar kapsamı kapandı; wrapper dosyalarını silme kapsamı açılmadı. Kaynak tabanı `ee49508`; çalışma sırasında uygulama, test, bağımlılık veya config kodu değiştirilmedi.
+
 **Neden:** HUNTER açıklaması, Alembic kapsamı ve bazı bağımlılık notları eski. Paketleme aşama 5 açık; kaldırma takviminde canonical handler da legacy listesinde.
 
 **Dosyalar:** [AGENTS.md](../AGENTS.md), [README](../README.md), [Codex bağlamı](Codex.md), [paketleme haritası](PACKAGING_REFACTOR_MAP.md), [wrapper takvimi](WRAPPER_DEPRECATION_SCHEDULE.md), [DB politikası](DB_MIGRATION_POLICY.md), [eski spot backlog](ALGOTRADING_SPOT_BACKLOG.md), [compat telemetry](../infrastructure/compat/wrapper_telemetry.py).
 
 **Kabul kriterleri:**
 
-- [ ] Ana SQLite migration yolu ile middleware Alembic yolu doğru ayrıldı; HUNTER 15 gösterge puanı ve güncel bağımlılıklar açıklandı.
-- [ ] Canonical import yolları ile compatibility wrapper listesi gerçek kodla eşleşiyor.
-- [ ] Wrapper kaldırma kararı tarih takvimine tek başına dayanmıyor; kullanım/import kanıtı ve regression kontrolleri var.
-- [ ] Eski backlog'lar bu planla çelişmiyor; uygulanmış maddeler sırf kutusu boş diye yeniden yapılmıyor.
+- [x] Ana SQLite migration yolu ile middleware Alembic yolu doğru ayrıldı; HUNTER 15 gösterge puanı ve güncel bağımlılıklar açıklandı.
+- [x] Canonical import yolları ile compatibility wrapper listesi gerçek kodla eşleşiyor.
+- [x] Wrapper kaldırma kararı tarih takvimine tek başına dayanmıyor; kullanım/import kanıtı ve regression kontrolleri var.
+- [x] Eski backlog'lar bu planla çelişmiyor; uygulanmış maddeler sırf kutusu boş diye yeniden yapılmıyor.
+
+**İnceleme ve düzeltme:**
+
+- AGENTS/README/Codex; Python 3.12, Node20.20.2/npm10.9.9, Next16.2.1/React19.2.3/TS5.9.3, `google-genai` ve lock/requirements ayrımıyla güncellendi. HUNTER'ın 15 koşul sayımı olduğu, `7/7` alanının puan/eşik anlamı, NaN ve sabit eşikler açıklandı; RSI ayrı zorunlu veto değil. COMBO CCI dahil dört gösterge, bilinen/bilinmeyen timeframe eşikleri ve fonksiyon içi sabitler belgede doğru ayrıldı.
+- Ana SQLite `db_session.init_db`/eklemeli kolon yolu ile ayrı PG16/Alembic `20260907_0006` yolu ayrıldı. `migrate_db.py` genel deploy adımı değil: sabit kaynak dosya, tekrar trade/history ekleme ve raw copy2/WAL yedek sınırları var. Eski “Alembic yok” yorumları yalnız ana SQLite kapsamına alındı; runtime dosyaları değiştirilmedi.
+- 211 tracked Python dosyası import edilmeden AST ile incelendi: telemetry kaydı yapan **12 wrapper**; runtime/script tarafında doğrudan legacy import bulunmadı. Test tüketicileri ve dinamik telemetry reload örnekleri haritada açıkça listelendi. Canonical `application.scanner.signal_handlers` kaldırma listesinden çıkarıldı, gerçek wrapper `scanner_side_effects` gösterildi.
+- Telemetry import/reload sayımıdır; süreç belleğinde yaşar, request/fonksiyon sayımı veya tüm deployment envanteri değildir. Boş snapshot dış tüketici yokluğunu kanıtlamaz. **Karar: 12 wrapper'ı koru**, yeni kodda canonical import kullan. Eski tarih metadata'sı otomatik silmez; fiziksel kaldırma için sürüm/süreç/gözlem penceresi/harici tüketici kanıtları ve dar regression/yayın/geri dönüş gerekir. Bu tur canlı telemetry çağrısı yapılmadı.
+- Spot backlog'un 20 ALG kimliği korunarak kod/izole kabul, kısmi özellik ve ertelenen dış kabul eşlemesi yazıldı. İki eski mimari planına tarihsel P kimlikleri ve kaynakta mevcut parçaların sınırları eklendi. Frontend README; ayarlar kapsamı, 300 yüklenmiş/görünür CSV satırı, RSI/WR/COMBO/HUNTER yerel alarmı, sayfa-açık sınırı ve sekme yarışlarını açıklar. Middleware README'deki eski “üretime uygulanmadı” ifadesi tarihli PG16/0006 kabulüyle düzeltildi.
+- Mimari bağlam, ortak SQLite SignalFeed → API WS/SSE → REST resync yolunu anlatır; süreç içi publisher'ın ayrı API sürecine doğrudan teslim yaptığı iddia edilmez. Manuel inspector, kaydetmeyen GET AI analizi ve Telegram yan etkili admin manuel tarama ayrı gösterildi. Ana dashboard ile middleware emir verisi ayrımı korunur.
+
+**Doğrulama:** Mevcut testlerde 37/37 wrapper/boundary/telemetry/read-model/handler, 30/30 ana DB/scan history/middleware schema gate/inventory migration, 31/31 signals/config; toplam **98/98**, üç ayrı izole koşum. DB grubunun mevcut **10 UTC deprecation warning** kaydı P2-3 borcu. Yerel belge hedefleri/anchor ve diff whitespace kontrol edildi. Yeni uygulama/test kodu yok; frontend kodu değişmediği için bu tur yerelde build tekrar edilmedi. Tam Python/frontend/build/PostgreSQL/container smoke kontrolleri belge commit'inin CI'sinde çalışır; sonuç tam SHA ile operator kaydına bağlanır.
+
+**Belge yayını:** Hedef `/root/rapot-ops/20260911-p22/`; Git blob'larından alınan Markdown snapshot'ları, SHA256 manifesti ve `release-record.json` kullanılır. Ön kontrol 11 Eylül 15:44:58 UTC: beş servis sağlıklı/restart0; API/bot HTTPS health 200. Kaynak pointer'ı db98915, frontend db98915/backend2cf05a8 imajları ve config hash'leri aktarım sonunda tekrar karşılaştırılır. Bu belgenin kendi commit/CI kimliği, kanıtın kendisine referans döngüsü oluşturmaması için ayrı operator kaydında tutulur. Yeni imaj, servis restart'ı, migration/backfill, emir veya dış AI/Telegram testi yapılmaz.
+
+**Açık kalan sınır:** Wrapper kaldırılması dış kullanım kanıtı gelmeden yapılmaz; bu, P2-2 belge kabulünün eksikliği değildir. P1-3 dış alarm/emir kabulü kullanıcı isteğiyle erteli, P2-3 lint/araç borcu, P2-4 yük/gecikme ve P3-1 motor sınırları açıktır.
 
 ### P2-3 — Ruff, atıl kod ve araç tarama kapsamı
 
@@ -857,6 +877,8 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 | 2026-09-10 | P1-6 | Yeniden doğrula → başlangıç ve proxy engellerini ayır | 2cf05a8 CI34521979155/imaj34522034163 geçti. r2 health0,051s geçti; 65s scheduler gözlemi doldu. r3 /api/scans502 nginx localhost→::1 bağlantı reddiyle eşleşti. İkisinde a513af9'a DB restore olmadan dönüş; 180s başlangıç penceresi11 ağsız senaryoda doğrulandı, host Nginx IPv4 hedefleri düzeltildi |
 | 2026-09-10 | P1-6 | Üretim → tarayıcı/WSS kabulü → Doğrulandı | r4 2cf05a8 üretimde, beş servis healthy/restart0; main kayıtları ve middleware135/135/28/383 korundu. Bot unknown→running46,766s gözlendi; health0,029–0,048s. Ayarlar/sağlık/işlemler UI ve ek UI yükü olmadan üç WSS kanalı geçti; ilk UI açıkken sonuçsuz heartbeat P2-4'e kaydedildi. Snapshot/config/ops kanıtları ve önceki sürümler korundu; DRY_RUN/false/false, emir yok |
 
+| 2026-09-11 | P2-2 | İncele → belgeleri düzelt → doğrula → karar kaydı | 12 Markdown dosyası eşlendi; 211 tracked Python AST/12 wrapper, 98/98 hedefli test. İki DB/migration yolu, HUNTER15, güncel bağımlılıklar, eski20ALG ve tarihselP numaraları düzeltildi. 12wrapper korunur; koşullu kaldırma kanıt kapıları var. Çalışan imaj/config/source korunarak Git blob belge yayını ve tamSHA CI kanıtı `/root/rapot-ops/20260911-p22/release-record.json` kaydında tutulur. Sıradaki P2-3; dış alarm/emir kabulü erteli |
+
 Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 
 - İş ID'si, tarih, aşama ve sonuç.
@@ -875,4 +897,4 @@ Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 4. Aktif işin bulgusunu ve bağımlılıklarını güncel kodda kontrol et. İncelemeyi baştan tekrarlamak yerine ilgili kanıttan devam et.
 5. İşin dört adımını tamamla veya engeli somutlaştır; ardından durum tablosu, günlük ve Kaldığımız nokta bölümünü güncelle.
 
-**P0-1–P0-4, P1-1, P1-2, P1-4, P1-5, P1-6 ve P1-7 tamamlandı. Üretim kaynağı2cf05a8; Python588/588, frontend52/52, lint/typecheck/build ve CI/imaj kontrolleri geçti. Dar health probe ve Nginx IPv4 düzeltmesi canlıda doğrulandı; botun gerçek running durumu, UI ve ek UI yükü olmadan WSS kabulü tamam. Önceki üç başarısız geçiş/rollback kaydı korunuyor. DRY_RUN/false/false; gerçek/testnet emir yok. P1-3 dış alarm/emir kabulü kullanıcı isteğiyle ertelendi. Sonraki kod işi P2-1, ilk dosya frontend/src/app/chart/page.tsx; P2-4 eşzamanlı yük/başlangıç gecikmesi ve P3-1 EMA/ATR sınırı açık.**
+**P0-1–P0-4, P1-1, P1-2, P1-4, P1-5, P1-6, P1-7, P2-1 ve P2-2 belge/karar kapsamı tamamlandı. Çalışan frontenddb98915/backend2cf05a8; önceki tam Python588/588, frontend95/95 kabulü korunuyor. P2-2 yalnız belge; 98/98 hedefli test, 12wrapper koruma kararı, tamSHA CI ve sunucu belge hash kanıtı operator kaydında. DRY_RUN/false/false; gerçek/testnet emir yok. P1-3 dış alarm/emir kabulü kullanıcı isteğiyle ertelendi. Sonraki iş P2-3: tracked ana kaynak Ruff bulguları, pyproject/CI tarama sınırı ve atıl kod kullanım kanıtı. İç worktree otomatik silinmeyecek; P2-4 eşzamanlı yük/başlangıç gecikmesi ve P3-1 COMBO/Pine sınırları açık.**

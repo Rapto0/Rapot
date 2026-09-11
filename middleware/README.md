@@ -303,7 +303,14 @@ an inventory scope. Migration `20260907_0006` records commission completeness/to
 widens price and quote accounting fields from six to twelve decimal places. Historical orders
 start with `commission_complete=false`; their fees are not guessed. The downgrades remove the
 new columns and indexes while retaining the historical rows.
-The migration has not been applied to the real database in this local change.
+The original local migration work did not apply these changes to production. Later,
+the P1-2 production cutover verified PostgreSQL 16 at `20260907_0006`; the separate
+P1-3 acceptance also exercised the complete chain on an empty PostgreSQL 16 database.
+See the dated evidence in [the continuation plan](../docs/RAPOT_DEVAM_PLANI.md) and
+the separate main-SQLite/middleware policy in [DB_MIGRATION_POLICY.md](../docs/DB_MIGRATION_POLICY.md).
+The September 11 P2-2 documentation update ran no production migration. Production
+remains `DRY_RUN` with trading/live disabled; actual TradingView delivery and
+testnet/live order acceptance are deferred at the user's request.
 
 ## Live Gate
 

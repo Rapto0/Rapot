@@ -1,5 +1,40 @@
 # Architecture Refactor Backlog
 
+## Güncel durum ve tarihsel iş numaraları — 11 Eylül 2026
+
+Bu dosya önceki mimari taslağı korur; güncel uygulama sırası ve kabul durumu
+[Rapot Devam Planı](RAPOT_DEVAM_PLANI.md) üzerinden takip edilir. Aşağıdaki `P0-*`,
+`P1-*`, `P2-*` numaraları **bu eski mimari planın numaralarıdır**; devam planındaki
+aynı numaralı işlerle aynı anlama gelmez. Örneğin buradaki `P2-2` read-model,
+güncel plandaki `P2-2` ise belge ve wrapper göçü işidir. Eski listeleri yeniden
+uygulanacak açık işler olarak okumayın.
+
+Kaynakta mevcut olan parçalar ve sınırları:
+
+- Eski `P0-1` / `P1-1`: [application/services](../application/services) ve
+  [infrastructure/repositories](../infrastructure/repositories) mevcut;
+  [api/main.py](../api/main.py) bunlara delegasyon yapıyor, fakat bazı endpoint ve
+  sağlayıcı işlemleri hâlâ bu dosyada. Bütün API'nin ince route katmanına taşındığı
+  iddia edilmiyor.
+- Eski `P0-2` / `P1-5`: [typed event](../domain/events/signal_domain_event.py) ve
+  [canonical handler](../application/scanner/signal_handlers.py) mevcut.
+  [Realtime bootstrap](../api/runtime/realtime_bootstrap.py) da ayrı (`P0-3`);
+  P1-5 güncellemesinden sonra süreçler arası sinyallerin kaynağı
+  [SQLite SignalFeed](../api/runtime/signal_feed.py). Eski publisher-register
+  önerisi, scanner belleğinden ayrı API sürecine doğrudan teslim garantisi değildir.
+- Eski `P1-2` / `P1-3` / `P1-4`: [MarketDataProvider adaptörü](../api/providers/market_data_provider.py),
+  [frontend API facade](../frontend/src/lib/api/client.ts) ve
+  [realtime modülleri](../frontend/src/lib/realtime) mevcut. Bu, bütün veri
+  sağlayıcılarının veya tüm sorumlulukların taşındığı anlamına gelmez.
+- Eski `P0-4` / `P0-5` / `P2-2` / `P2-3` / `P2-4`: boundary, contract ve
+  compatibility testleri; read-model uçları; domain/application/infrastructure
+  klasörleri mevcut. [Sprint planındaki durum notu](ARCHITECTURE_REFACTOR_SPRINT_PLAN.md)
+  bunların kapsamını ayırır. Güncel **P2-2** belge kapanışı wrapper'ları koruma
+  kararını ve koşullu kaldırma politikasını kaydeder; fiziksel kaldırma kabulü
+  değildir. Ölçülmüş gecikme/kapasite kabulü güncel **P2-4** altında açık kalır.
+
+## Korunan tarihsel taslak
+
 Bu doküman, mimari iyileştirmeleri uygulama önceliğine göre P0/P1/P2 olarak sınıflandırır ve önerilen implementasyon sırasını tanımlar.
 
 ## P0 (Kritik)

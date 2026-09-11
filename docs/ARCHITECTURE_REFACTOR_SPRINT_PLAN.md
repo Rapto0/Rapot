@@ -1,5 +1,34 @@
 # Architecture Refactor Sprint Plan
 
+## Güncel durum ve tarihsel iş numaraları — 11 Eylül 2026
+
+Bu sprintler [eski mimari backlog](ARCHITECTURE_REFACTOR_BACKLOG.md) numaralarını
+kullanır. Güncel öncelik ve kabul kaynağı [Rapot Devam Planı](RAPOT_DEVAM_PLANI.md);
+aynı `P2-*` numaraları bu iki planda farklı işleri anlatır. Aşağıdaki tarihsel
+adımların tamamını yeniden başlatmayın veya tüm sprintleri tamamlandı saymayın.
+
+- **Sprint A:** `/ops/read-model/overview` ve `/ops/read-model/scanner-feed`
+  [system routes](../api/routes/system_routes.py) içinde mevcut. Overview tek SQL
+  çağrısında birden çok alt sorgu, scanner-feed ise UNION ALL projection kullanır
+  ([repository](../infrastructure/repositories/system_repository.py)).
+  [Response sözleşmesi testleri](../tests/test_system_read_model.py) ve
+  [scan-history entegrasyon testleri](../tests/test_scan_history_repository.py)
+  var; bunlar üretim gecikmesi veya sorgu maliyeti bütçesini kanıtlamaz. Güncel
+  **P2-4** eşzamanlı yük ve gecikme işi açıktır.
+- **Sprint B:** [Mimari sınır testleri](../tests/test_architecture_boundaries.py)
+  route/service/repository ve canonical import kurallarını, ayrıca frontend'deki
+  doğrudan Binance URL kullanımını denetler. [CI](../.github/workflows/ci.yml)
+  bu dosyayı kapsayan `tests` paketini çalıştırır. Mevcut kaynak-temelli kontroller
+  genel amaçlı, eksiksiz bir import-graph denetimi olarak sunulmamalıdır.
+- **Sprint C:** [domain](../domain), [application](../application) ve
+  [infrastructure](../infrastructure) klasörleri,
+  [taşıma haritası](PACKAGING_REFACTOR_MAP.md) ve
+  [compatibility regresyonları](../tests/test_packaging_compat.py) mevcut.
+  Wrapper'ların kaldırılması ayrı kullanım kanıtı ve kabul ister;
+  [kaldırma takvimi](WRAPPER_DEPRECATION_SCHEDULE.md) ve güncel **P2-2** izlenir.
+
+## Korunan tarihsel sprint taslağı
+
 Bu plan, `ARCHITECTURE_REFACTOR_BACKLOG.md` icindeki `P2-2`, `P2-3`, `P2-4`
 basliklarini uygulanabilir sprint dilimlerine boler.
 
