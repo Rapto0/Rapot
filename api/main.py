@@ -721,7 +721,8 @@ async def get_signals(
     if special_tag is not None and normalized_special_tag is None:
         return []
 
-    signal_rows = list_signals_service(
+    signal_rows = await asyncio.to_thread(
+        list_signals_service,
         symbol=symbol,
         strategy=strategy,
         signal_type=signal_type,
@@ -737,7 +738,7 @@ async def get_signal(signal_id: int):
     """Belirli bir sinyali döndürür."""
     from application.services.signal_trade_service import get_signal_by_id
 
-    signal = get_signal_by_id(signal_id)
+    signal = await asyncio.to_thread(get_signal_by_id, signal_id)
     if not signal:
         raise HTTPException(status_code=404, detail="Sinyal bulunamadı")
     return SignalResponse(**signal)
@@ -758,7 +759,9 @@ async def get_trades(
     """
     from application.services.signal_trade_service import list_trades as list_trades_service
 
-    trade_rows = list_trades_service(symbol=symbol, status=status, limit=limit)
+    trade_rows = await asyncio.to_thread(
+        list_trades_service, symbol=symbol, status=status, limit=limit
+    )
     return [TradeResponse(**row) for row in trade_rows]
 
 
@@ -770,7 +773,7 @@ async def get_stats(request: Request):
     """
     from application.services.signal_trade_service import get_trade_stats_summary
 
-    stats = get_trade_stats_summary()
+    stats = await asyncio.to_thread(get_trade_stats_summary)
     return StatsResponse(**stats)
 
 

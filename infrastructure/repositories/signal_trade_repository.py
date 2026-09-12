@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import func
+from sqlalchemy import text
 
 
 def list_signals(
@@ -59,27 +59,32 @@ def list_trades(*, symbol: str | None, status: str | None, limit: int) -> list[A
 
 def get_trade_stats_aggregate() -> dict[str, int | float]:
     from db_session import get_session
-    from models import Signal, Trade
 
     with get_session() as session:
-        total_signals = int(session.query(Signal).count())
-        total_trades = int(session.query(Trade).count())
-        open_trades = int(session.query(Trade).filter(Trade.status == "OPEN").count())
-
-        total_pnl = (
-            session.query(func.sum(Trade.pnl)).filter(Trade.status == "CLOSED").scalar() or 0.0
-        )
-
-        closed_trades = int(session.query(Trade).filter(Trade.status == "CLOSED").count())
-        winning_trades = int(
-            session.query(Trade).filter(Trade.status == "CLOSED", Trade.pnl > 0).count()
+        row = (
+            session.execute(
+                text(
+                    """
+                    SELECT
+                        (SELECT COUNT(*) FROM signals) AS total_signals,
+                        (SELECT COUNT(*) FROM trades) AS total_trades,
+                        (SELECT COUNT(*) FROM trades WHERE status = 'OPEN') AS open_trades,
+                        (SELECT COALESCE(SUM(pnl), 0) FROM trades WHERE status = 'CLOSED') AS total_pnl,
+                        (SELECT COUNT(*) FROM trades WHERE status = 'CLOSED') AS closed_trades,
+                        (SELECT COUNT(*) FROM trades WHERE status = 'CLOSED' AND pnl > 0) AS winning_trades
+                    """
+                )
+            )
+            .mappings()
+            .first()
+            or {}
         )
 
     return {
-        "total_signals": total_signals,
-        "total_trades": total_trades,
-        "open_trades": open_trades,
-        "total_pnl": float(total_pnl),
-        "closed_trades": closed_trades,
-        "winning_trades": winning_trades,
+        "total_signals": int(row.get("total_signals") or 0),
+        "total_trades": int(row.get("total_trades") or 0),
+        "open_trades": int(row.get("open_trades") or 0),
+        "total_pnl": float(row.get("total_pnl") or 0.0),
+        "closed_trades": int(row.get("closed_trades") or 0),
+        "winning_trades": int(row.get("winning_trades") or 0),
     }

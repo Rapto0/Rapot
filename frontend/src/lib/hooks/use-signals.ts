@@ -15,10 +15,8 @@ export interface Signal {
 }
 
 const SPECIAL_NOTIFICATION_RULES = [
-    { strategy: 'HUNTER' as const, special_tag: 'BELES' as const },
-    { strategy: 'HUNTER' as const, special_tag: 'COK_UCUZ' as const },
-    { strategy: 'COMBO' as const, special_tag: 'BELES' as const },
-    { strategy: 'COMBO' as const, special_tag: 'COK_UCUZ' as const },
+    'BELES' as const,
+    'COK_UCUZ' as const,
 ];
 
 interface UseSignalsOptions {
@@ -98,18 +96,24 @@ export function useRecentSignals(limit: number = 5) {
     });
 }
 
+function isAllowedSpecialNotification(signal: Signal): boolean {
+    return (
+        (signal.strategy === 'COMBO' || signal.strategy === 'HUNTER') &&
+        (signal.specialTag === 'BELES' || signal.specialTag === 'COK_UCUZ')
+    )
+}
+
 export function useSpecialNotificationSignals(limit: number = 100) {
     return useQuery({
         queryKey: ['signals', 'special-notifications', limit],
         queryFn: async () => {
-            const perRuleLimit = Math.max(1, Math.ceil(limit / SPECIAL_NOTIFICATION_RULES.length));
+            const perTagLimit = Math.max(1, Math.ceil(limit / SPECIAL_NOTIFICATION_RULES.length));
 
             const responses = await Promise.all(
                 SPECIAL_NOTIFICATION_RULES.map((rule) =>
                     fetchSignals({
-                        strategy: rule.strategy,
-                        special_tag: rule.special_tag,
-                        limit: perRuleLimit,
+                        special_tag: rule,
+                        limit: perTagLimit,
                     })
                 )
             );
@@ -118,6 +122,7 @@ export function useSpecialNotificationSignals(limit: number = 100) {
             responses
                 .flat()
                 .map(transformSignal)
+                .filter(isAllowedSpecialNotification)
                 .forEach((signal) => {
                     deduped.set(signal.id, signal);
                 });
