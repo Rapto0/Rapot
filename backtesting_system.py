@@ -1,3 +1,4 @@
+import math
 import multiprocessing
 import traceback
 import warnings
@@ -8,11 +9,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from isyatirimhisse import fetch_stock_data
-from tqdm import tqdm
 
 from data_loader import (
     get_crypto_data,
@@ -110,18 +109,54 @@ def get_bist_data_isyatirim_only(
 # ============================================================
 @dataclass
 class TradingCosts:
-    """İşlem maliyetleri yapılandırması"""
+    """Tek yönlü, referans tutar üzerinden toplamsal backtest varsayımları.
 
-    bist_commission: float = 0.001  # %0.1 BIST komisyon (alım + satım)
-    crypto_commission: float = 0.001  # %0.1 Binance maker fee
-    bist_slippage: float = 0.0005  # %0.05 slippage (likidite kaybı)
-    crypto_slippage: float = 0.0003  # %0.03 kripto slippage
+    Komisyon ve kayma ayrı nakit maliyetleridir; gerçekleşme fiyatı modeli veya
+    güncel bir aracı kurum ücret tarifesi değildir.
+    """
+
+    bist_commission: float = 0.001
+    crypto_commission: float = 0.001
+    bist_slippage: float = 0.0005
+    crypto_slippage: float = 0.0003
+
+    def __post_init__(self) -> None:
+        self.get_components("BIST")
+        self.get_components("CRYPTO")
+
+    def get_components(self, market_type: str) -> tuple[float, float]:
+        """Değiştirilebilir ayarları her işlemden önce yeniden doğrula."""
+        if market_type == "BIST":
+            commission, slippage = self.bist_commission, self.bist_slippage
+        elif market_type == "CRYPTO":
+            commission, slippage = self.crypto_commission, self.crypto_slippage
+        else:
+            raise ValueError("market_type must be BIST or CRYPTO")
+        if not all(_finite_nonnegative(value) for value in (commission, slippage)):
+            raise ValueError("Cost rates must be finite and nonnegative")
+        if commission + slippage >= 1:
+            raise ValueError("Combined one-way cost rate must be below one")
+        return commission, slippage
 
     def get_total_cost(self, market_type: str) -> float:
         """Toplam işlem maliyeti (tek yön)"""
-        if market_type == "BIST":
-            return self.bist_commission + self.bist_slippage
-        return self.crypto_commission + self.crypto_slippage
+        return sum(self.get_components(market_type))
+
+
+def _finite_nonnegative(value: float) -> bool:
+    try:
+        return not isinstance(value, bool) and math.isfinite(value) and value >= 0
+    except (TypeError, ValueError, OverflowError):
+        return False
+
+
+def _valid_trade_input(price: float, date: datetime) -> bool:
+    return (
+        _finite_nonnegative(price)
+        and price > 0
+        and isinstance(date, datetime)
+        and not pd.isna(date)
+    )
 
 
 # Global trading costs instance
@@ -129,26 +164,50 @@ trading_costs = TradingCosts()
 
 
 class Lot:
-    """Tek bir alım işlemini temsil eder"""
+    """Tek alışın miktarı, referans fiyatı ve tüm alış maliyetleri."""
 
-    def __init__(self, symbol, shares, price, date, signal):
+    def __init__(
+        self,
+        symbol: str,
+        shares: float,
+        price: float,
+        date: datetime,
+        signal: str,
+        *,
+        commission: float = 0.0,
+        slippage: float = 0.0,
+    ) -> None:
         self.symbol = symbol
         self.shares = shares
         self.price = price
         self.date = date
         self.signal = signal
-        self.invested = shares * price
+        self.commission = commission
+        self.slippage = slippage
+        self.invested = shares * price + commission + slippage
 
 
 class Portfolio:
     """FIFO mantığıyla lot bazlı portföy yönetimi - Komisyon destekli"""
 
-    def __init__(self, initial_cash, market_type, trade_amount, costs: TradingCosts = None):
+    def __init__(
+        self,
+        initial_cash: float,
+        market_type: str,
+        trade_amount: float,
+        costs: TradingCosts | None = None,
+    ) -> None:
+        if not all(
+            _finite_nonnegative(value) and value > 0 for value in (initial_cash, trade_amount)
+        ):
+            raise ValueError("Initial cash and trade amount must be finite and positive")
         self.initial_cash = initial_cash
         self.cash = initial_cash
+        self._cash_compensation = 0.0
         self.market_type = market_type
         self.trade_amount = trade_amount
         self.costs = costs or trading_costs
+        self.costs.get_components(market_type)
 
         # Sembol bazlı lot kuyrukları (FIFO için)
         self.lots = {}  # {symbol: deque([Lot1, Lot2, ...])}
@@ -162,31 +221,70 @@ class Portfolio:
         # Portföy değeri takibi
         self.equity_curve = []
 
-        # Komisyon takibi
+        # Kayma komisyon değildir; iki gider ayrı izlenir.
         self.total_commission_paid = 0.0
+        self.total_slippage_cost = 0.0
 
-    def buy(self, symbol, price, date, signal_type):
-        """Yeni lot alımı - Komisyon dahil"""
+    @property
+    def total_transaction_cost(self) -> float:
+        return self.total_commission_paid + self.total_slippage_cost
 
-        # Komisyon + slippage hesapla
-        cost_rate = self.costs.get_total_cost(self.market_type)
-        effective_price = price * (1 + cost_rate)  # Slippage: daha yüksek fiyat
+    def _cash_after(self, amount: float) -> tuple[float, float]:
+        """Kahan toplamıyla çok sayıda kesirli nakit hareketinin hatasını sınırla."""
+        adjusted = amount - self._cash_compensation
+        balance = self.cash + adjusted
+        return balance, (balance - self.cash) - adjusted
 
-        # Komisyon dahil maliyet
-        shares = self.trade_amount / effective_price
+    def buy(self, symbol: str, price: float, date: datetime, signal_type: str) -> bool:
+        """Sabit bütçenin içinde referans tutar, komisyon ve kayma bulunur."""
+        if not isinstance(symbol, str) or not symbol.strip() or not _valid_trade_input(price, date):
+            return False
+        commission_rate, slippage_rate = self.costs.get_components(self.market_type)
+        cost_rate = commission_rate + slippage_rate
+        if not _finite_nonnegative(self.trade_amount) or self.trade_amount <= 0:
+            return False
+        if not _finite_nonnegative(self.cash):
+            return False
+        balance, compensation = self._cash_after(-self.trade_amount)
+        if balance < 0:
+            # Temsil artığı için ULP sınırını ayrıca mevcut bütçeye göre daralt.
+            tolerance = min(
+                8
+                * max(
+                    math.ulp(value) for value in (self.initial_cash, self.cash, self.trade_amount)
+                ),
+                self.trade_amount * 1e-12,
+            )
+            if balance < -tolerance:
+                return False
+            balance, compensation = 0.0, 0.0
+
+        shares = self.trade_amount / (price * (1 + cost_rate))
         gross_cost = shares * price
-        commission = gross_cost * cost_rate
-        actual_cost = gross_cost + commission
-
-        if self.cash < actual_cost:
+        commission = gross_cost * commission_rate
+        slippage = gross_cost * slippage_rate
+        if not all(_finite_nonnegative(value) and value > 0 for value in (shares, gross_cost)):
+            return False
+        # Bütçe doğrudan kullanılır; float çarpımındaki son bit nakdi eksiye indirmez.
+        actual_cost = self.trade_amount
+        new_lot = Lot(
+            symbol, shares, price, date, signal_type, commission=commission, slippage=slippage
+        )
+        new_lot.invested = actual_cost
+        if not all(
+            _finite_nonnegative(value)
+            for value in (
+                balance,
+                self.total_commission_paid + commission,
+                self.total_slippage_cost + slippage,
+            )
+        ):
             return False
 
         # Nakit düş
-        self.cash -= actual_cost
+        self.cash, self._cash_compensation = balance, compensation
         self.total_commission_paid += commission
-
-        # Yeni lot oluştur (orijinal fiyatla)
-        new_lot = Lot(symbol, shares, price, date, signal_type)
+        self.total_slippage_cost += slippage
 
         # Sembol için kuyruk yoksa oluştur
         if symbol not in self.lots:
@@ -205,6 +303,10 @@ class Portfolio:
                 "Miktar": round(shares, 6),
                 "Tutar": round(gross_cost, 2),
                 "Komisyon": round(commission, 2),
+                "Kayma Maliyeti": round(slippage, 2),
+                "Toplam İşlem Maliyeti": round(commission + slippage, 2),
+                "Maliyet Tabanı": round(actual_cost, 2),
+                "Nakit Akışı": round(-actual_cost, 2),
                 "Sinyal": signal_type,
                 "Kalan Nakit": round(self.cash, 2),
                 "Toplam Lot": len(self.lots[symbol]),
@@ -213,35 +315,57 @@ class Portfolio:
 
         return True
 
-    def sell(self, symbol, price, date, signal_type):
+    def sell(self, symbol: str, price: float, date: datetime, signal_type: str) -> bool:
         """En eski lot'u sat (FIFO) - Komisyon dahil"""
 
         # Sembol için lot var mı?
-        if symbol not in self.lots or len(self.lots[symbol]) == 0:
+        if (
+            not isinstance(symbol, str)
+            or not symbol.strip()
+            or not _valid_trade_input(price, date)
+            or not self.lots.get(symbol)
+        ):
             return False
 
-        # En eski lot'u al (FIFO)
-        oldest_lot = self.lots[symbol].popleft()
+        # Hesaplama/validasyon hatası FIFO kuyruğundan lot kaybettirmemeli.
+        oldest_lot = self.lots[symbol][0]
+        commission_rate, slippage_rate = self.costs.get_components(self.market_type)
+        try:
+            if date < oldest_lot.date:
+                return False
+            holding_days = (date - oldest_lot.date).days
+        except (TypeError, ValueError, OverflowError):
+            return False
 
-        # Komisyon + slippage hesapla
-        cost_rate = self.costs.get_total_cost(self.market_type)
-        _effective_price = price * (1 - cost_rate)  # Slippage: daha düşük fiyat
-
-        # Satış geliri (komisyon düşülmüş)
+        # İki gider de aynı referans tutardan düşülür; kayma ikinci kez fiyatlanmaz.
         gross_revenue = oldest_lot.shares * price
-        commission = gross_revenue * cost_rate
-        net_revenue = gross_revenue - commission
+        commission = gross_revenue * commission_rate
+        slippage = gross_revenue * slippage_rate
+        net_revenue = gross_revenue - commission - slippage
+        if not all(_finite_nonnegative(value) for value in (gross_revenue, net_revenue)):
+            return False
 
         # Kar/Zarar (komisyonlar dahil)
         profit = net_revenue - oldest_lot.invested
         profit_pct = (profit / oldest_lot.invested) * 100
-
-        # Holding period (gün)
-        holding_days = (date - oldest_lot.date).days
+        if not math.isfinite(profit) or not math.isfinite(profit_pct):
+            return False
+        balance, compensation = self._cash_after(net_revenue)
+        if not all(
+            _finite_nonnegative(value)
+            for value in (
+                balance,
+                self.total_commission_paid + commission,
+                self.total_slippage_cost + slippage,
+            )
+        ):
+            return False
 
         # Nakde ekle
-        self.cash += net_revenue
+        self.lots[symbol].popleft()
+        self.cash, self._cash_compensation = balance, compensation
         self.total_commission_paid += commission
+        self.total_slippage_cost += slippage
 
         # İşlemi kaydet
         self.all_trades.append(
@@ -253,7 +377,13 @@ class Portfolio:
                 "Miktar": round(oldest_lot.shares, 6),
                 "Tutar": round(gross_revenue, 2),
                 "Komisyon": round(commission, 2),
+                "Kayma Maliyeti": round(slippage, 2),
+                "Toplam İşlem Maliyeti": round(commission + slippage, 2),
                 "Net Tutar": round(net_revenue, 2),
+                "Nakit Akışı": round(net_revenue, 2),
+                "Maliyet Tabanı": round(oldest_lot.invested, 2),
+                "Alış Komisyonu": round(oldest_lot.commission, 2),
+                "Alış Kayma Maliyeti": round(oldest_lot.slippage, 2),
                 "Alış Fiyatı": round(oldest_lot.price, 4),
                 "Alış Tarihi": oldest_lot.date,
                 "Tutma Süresi (Gün)": holding_days,
@@ -330,7 +460,9 @@ class Portfolio:
         for symbol, lot_queue in self.lots.items():
             total_shares = sum(lot.shares for lot in lot_queue)
             total_invested = sum(lot.invested for lot in lot_queue)
-            avg_price = total_invested / total_shares if total_shares > 0 else 0
+            reference_value = sum(lot.shares * lot.price for lot in lot_queue)
+            avg_price = reference_value / total_shares if total_shares > 0 else 0
+            avg_cost = total_invested / total_shares if total_shares > 0 else 0
 
             summary.append(
                 {
@@ -339,6 +471,9 @@ class Portfolio:
                     "Toplam Miktar": round(total_shares, 6),
                     "Toplam Yatırım": round(total_invested, 2),
                     "Ortalama Fiyat": round(avg_price, 4),
+                    "Ortalama Maliyet": round(avg_cost, 4),
+                    "Alış Komisyonu": round(sum(lot.commission for lot in lot_queue), 2),
+                    "Alış Kayma Maliyeti": round(sum(lot.slippage for lot in lot_queue), 2),
                 }
             )
 
@@ -519,6 +654,7 @@ class BacktestEngine:
 
     def run_backtest(self, symbols_list, market_type, initial_cash, trade_amount):
         """Ana backtest"""
+        from tqdm import tqdm
 
         portfolio = Portfolio(initial_cash, market_type, trade_amount)
 
@@ -579,6 +715,9 @@ class BacktestEngine:
                     "Başlangıç Sermayesi",
                     "Güncel Nakit",
                     "Gerçekleşen Kar/Zarar",
+                    "Ödenen Komisyon",
+                    "Kayma Maliyeti",
+                    "Toplam İşlem Maliyeti",
                     "Getiri %",
                     "Toplam İşlem",
                     "Alım İşlemi",
@@ -590,6 +729,9 @@ class BacktestEngine:
                     f"{portfolio_bist.initial_cash:,.2f} TL",
                     f"{portfolio_bist.cash:,.2f} TL",
                     f"{bist_total_profit:,.2f} TL",
+                    f"{portfolio_bist.total_commission_paid:,.2f} TL",
+                    f"{portfolio_bist.total_slippage_cost:,.2f} TL",
+                    f"{portfolio_bist.total_transaction_cost:,.2f} TL",
                     f"{(bist_total_profit / portfolio_bist.initial_cash * 100):.2f}%",
                     len(portfolio_bist.all_trades),
                     len([t for t in portfolio_bist.all_trades if t["İşlem"] == "ALIM"]),
@@ -601,6 +743,9 @@ class BacktestEngine:
                     f"{portfolio_crypto.initial_cash:,.2f} USD",
                     f"{portfolio_crypto.cash:,.2f} USD",
                     f"{crypto_total_profit:,.2f} USD",
+                    f"{portfolio_crypto.total_commission_paid:,.2f} USD",
+                    f"{portfolio_crypto.total_slippage_cost:,.2f} USD",
+                    f"{portfolio_crypto.total_transaction_cost:,.2f} USD",
                     f"{(crypto_total_profit / portfolio_crypto.initial_cash * 100):.2f}%",
                     len(portfolio_crypto.all_trades),
                     len([t for t in portfolio_crypto.all_trades if t["İşlem"] == "ALIM"]),
@@ -718,6 +863,7 @@ class BacktestEngine:
 
     def plot_results(self, portfolio_bist, portfolio_crypto):
         """Görsel raporlar"""
+        import matplotlib.pyplot as plt
 
         fig = plt.figure(figsize=(18, 12))
         gs = fig.add_gridspec(3, 3, hspace=0.3, wspace=0.3)
@@ -873,6 +1019,8 @@ class BacktestEngine:
         print(f"  Güncel Nakit: {portfolio_bist.cash:,.2f} TL")
         print(f"  Gerçekleşen Kar/Zarar: {bist_stats['profit']:,.2f} TL")
         print(f"  Ödenen Komisyon: {portfolio_bist.total_commission_paid:,.2f} TL")
+        print(f"  Kayma Maliyeti: {portfolio_bist.total_slippage_cost:,.2f} TL")
+        print(f"  Toplam İşlem Maliyeti: {portfolio_bist.total_transaction_cost:,.2f} TL")
         print(f"  Toplam İşlem: {len(portfolio_bist.all_trades)}")
         print(f"  Tamamlanan İşlem: {bist_stats['trades']}")
         print(f"  Başarı Oranı: {bist_stats['win_rate']:.1f}%")
@@ -886,6 +1034,8 @@ class BacktestEngine:
         print(f"  Güncel Nakit: {portfolio_crypto.cash:,.2f} USD")
         print(f"  Gerçekleşen Kar/Zarar: {crypto_stats['profit']:,.2f} USD")
         print(f"  Ödenen Komisyon: {portfolio_crypto.total_commission_paid:,.2f} USD")
+        print(f"  Kayma Maliyeti: {portfolio_crypto.total_slippage_cost:,.2f} USD")
+        print(f"  Toplam İşlem Maliyeti: {portfolio_crypto.total_transaction_cost:,.2f} USD")
         print(f"  Toplam İşlem: {len(portfolio_crypto.all_trades)}")
         print(f"  Tamamlanan İşlem: {crypto_stats['trades']}")
         print(f"  Başarı Oranı: {crypto_stats['win_rate']:.1f}%")
@@ -1107,6 +1257,8 @@ def _run_symbol_backtest(args: tuple) -> dict[str, Any]:
                 "profit": total_profit,
                 "trades": len(portfolio.all_trades),
                 "commission_paid": portfolio.total_commission_paid,
+                "slippage_cost": portfolio.total_slippage_cost,
+                "transaction_cost": portfolio.total_transaction_cost,
             }
 
         return {"symbol": symbol, "success": False, "error": "İşlem yok"}
@@ -1130,6 +1282,8 @@ def run_parallel_backtest(
     Returns:
         Her sembol için sonuç listesi
     """
+    from tqdm import tqdm
+
     if max_workers is None:
         max_workers = min(multiprocessing.cpu_count(), 8)
 

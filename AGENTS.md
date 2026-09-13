@@ -1,6 +1,6 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-Kaynaklarla son karşılaştırma: **13 Eylül 2026 / P3-1 ikinci adım**. İş sırası, kullanıcı
+Kaynaklarla son karşılaştırma: **13 Eylül 2026 / P3-1 üçüncü adım**. İş sırası, kullanıcı
 yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DEVAM_PLANI.md)
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 
@@ -137,6 +137,16 @@ Pip içermeyen uv ortamında bağımlılık kontrolü yukarıdaki `uv pip check`
   derleme/runtime kabulü ayrıca açık. Gerçek Python/TS ölçümünün kapsamı ve
   varsayılan/formül farkları [karşılaştırma belgesinde](docs/STRATEGY_COMPARISON.md).
   Motorları topluca eşitleme kararı verilmedi; backtest işleri açık.
+
+`backtesting_system.py` ayrı CLI'dir; çalışan servis girişleri onu import etmez.
+P3-1 üçüncü adımında `Lot.invested` tüm alış giderlerini içerir; komisyon ve kayma
+ayrı izlenir. Eski referans tutar üzerinden toplamsal model ve tek en eski lotu
+tam satma FIFO sözleşmesi korunur. Nakit + açık maliyet tabanı = başlangıç +
+gerçekleşmiş PnL bağıntısı sentetik testlerle doğrulanır. Float/Kahan ve dar
+temsil toleransı Decimal defteri değildir. Tarih/yürütme/kronoloji/WFA işleri
+açıktır; [muhasebe belgesi](docs/BACKTEST_ACCOUNTING.md) sınırları açıklar.
+Matplotlib ve tqdm kilit ortamda yoktur; yalnız grafik/runner fonksiyonlarında
+yüklenir. Muhasebe testleri tam CLI veya grafik çalıştırmış sayılmaz.
 
 ## Veri, erişim ve dağıtım
 

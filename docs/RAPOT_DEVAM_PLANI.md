@@ -4,12 +4,13 @@ Bu belge, 6 Eylül 2026 tarihli salt okunur proje incelemesinden çıkan işleri
 
 ## Kaldığımız nokta
 
-- **Son çalışma:** **P3-1 ikinci adımın yerel kabulü tamamlandı:** sabit 7×80 mumda gerçek Python/TypeScript fark ölçümü ve Pine EMA/ATR devam döngüsü sınırı. **773 Python testi geçti / 1 isteğe bağlı performans testi atlandı**, uyarı yok; frontend **105/105**, lint/typecheck ve Ruff geçti. Ölçüm genel eşdeğerlik iddiası taşımıyor; değişmiş Pine kaynağının TradingView derleme/runtime kabulü açık. Frontend `967f137`, backend/Compose/current `279aa9f` çalışıyor. Bu adımın tam SHA/CI ve canonical kaynak/kanıt yayını `/root/rapot-ops/20260913-p31-indicators/release-record.json` ile ayrıca bağlanır; çalışan imaj veya DB değişikliği gerektirmez.
+- **Son çalışma:** **P3-1 üçüncü adımın yerel muhasebe kabulü tamamlandı:** alış komisyonu/kayması lot maliyetine dahil, giderler ayrı raporlanıyor, tekrarlı kesirli bütçe ve geçersiz girdilerde atomiklik düzeltildi. Yeni **57/57**, tam **830 Python testi geçti /1 isteğe bağlı performans testi atlandı**, uyarı yok. Referans tutara toplamsal maliyet ve tek eski lotu tam satma sözleşmesi korunur. CI ve canonical CLI kaynak/kanıt yayını ayrı kayda bağlanır; henüz tam backtest veya canlı hesap kabulü değildir.
 - **Uygulama durumu:** P0-1–P0-4, P1-1, P1-2, P1-4–P1-7, P1-G1, P2-1, P2-3 ve **P2-4 doğrulandı**; P2-2 belge/karar kapsamı tamam. İç worktree ve 12 wrapper koruma kararı değişmedi.
 - **P1-2 durumu — Doğrulandı:** **8f60f8e üretim geçişi ve [HTTPS](https://138.68.71.27) kabulü tamamlandı.** API, bot, frontend, middleware ve PG16 sağlıklı; veri korunumu, dış HTTPS/auth/WSS, yetkisiz webhook reddi ve sertifika yenileme dry-run testi geçti. Eski supervisor'lar devre dışı; özgün DB/checkout ve geri dönüş kaynakları korundu.
 - **Önceki sürümün uzak doğrulaması — 11 Eylül:** `ccd61544` için [CI 34641121926](https://github.com/Rapto0/Rapot/actions/runs/34641121926) ve [imaj yayını 34641767731](https://github.com/Rapto0/Rapot/actions/runs/34641767731) başarılı. Üretimde API health 47 ms/200; `/`, `/signals`, `/alarms`, `/chart` SSR 200. Beş servis healthy/restart0; SignalFeed hazır, Binance/BIST sağlayıcıları başlamış. Scheduler 47,298 saniyede unknown → running oldu. 1.733.137 sinyal, 6 tarama geçmişi, 26.393 AI kaydı ve diğer ana sayılar; PostgreSQL kimliği ve 135/135/28/383 sayıları korundu. DRY_RUN/false/false ve AI kapalı; dış Windows HTTPS API/bot kontrolleri ayrı ayrı 203 ms/200. Sonraki `aadde728` ve güncel `279aa9f` geçişlerinin 13 Eylül kanıtı P2-4 bölümündedir.
 - **P2-2 doğrulaması ve belge yayını:** Python 3.12.8'de üç ayrı hedefli koşum toplam **98/98** geçti (wrapper/boundary/read-model 37, DB/migration 30, sinyal/config 31); DB grubunda mevcut 10 UTC warning var. 11 Eylül 15:44:58 UTC salt okunur sunucu ön kontrolünde beş servis healthy/restart0, HTTPS API/bot health 200 (0,051/0,043 saniye). Bu yalnız belge commit'inin tam SHA/CI sonucu, Git blob SHA256'ları ve sunucuya aktarım sonrası korunma kanıtı `/root/rapot-ops/20260911-p22/release-record.json` içinde sürüm bazında tutulur. İmaj yayını, servis restart'ı veya migration bu belge yayınının parçası değildir.
-- **Aktif iş:** **P3-1 ikinci adımın kaynak/kanıt yayını; ardından alış maliyeti dahil backtest nakit–PnL muhasebesi.** Gerçek Python/TS ölçümü ve dar Pine kaynak regresyonu tamam; Pine'ın tamamının çalıştırılması veya üç motorun eşitliği doğrulanmış değil. Son uygulama geçişi hâlâ `/root/rapot-ops/20260913-p31-frontend/deployment.json`: frontend `967f137351290735d7e6ae556b4ad237c253677c`, backend/Compose/current `279aa9fea99b520e661b43f104a2bf4791893ac3`. İkinci adımın sürümlü kaynak kopyası TradingView'deki mevcut script/alarm kopyasını değiştirmez.
+- **Aktif iş:** **P3-1 üçüncü adımın CI/kaynak yayını ve ücretsiz kapasite engeli.** 10:46 UTC salt okunur ölçümde boş disk550.727.680B; sabit528MiB rezervin altında. Kalan7 eski kapalı sistem günlüğünden yedeği doğrulanmış tek dosya önerisi hazır; önceki dosya onayı bunu kapsamaz. Silme, imaj pull veya servis işlemi yapılmadı. Yayın tamamlanınca sıradaki kod işi sabit veri/start–end ve kapanmış mum yürütme sözleşmesidir. Frontend967/backend279 çalışıyor; yeni Pine dış kabulü ve borsa emirleri erteli kalır.
+- **P3-1 ikinci adımın yayın kapanışı:** `48be08e6d3717693e601c9f62c3e1b6665a8c85a`, [CI34749745272](https://github.com/Rapto0/Rapot/actions/runs/34749745272) beş job başarılı. 09:40:19 UTC'de 11 canonical kaynak/rapor dosyası488.483B ve12.462B kayıt sunucuda hash/gzip ile doğrulandı; `/root/rapot-ops/20260913-p31-indicators/release-record.json` SHA256 `426a3041f78c22ecb0328c260bbf956178af2be39262b8757522f88e207866b0`. Beş servis/config aynı, dış HTTPS200; frontend967/backend279 aynı kaldı. TradingView script/alarm kopyası değiştirilmedi.
 - **Ertelenen dış kabul:** Gerçek TradingView alarm teslimi, ALL/FIRST/saat filtresi runtime kabulü ve sınırlı testnet emir testi tamamlanmış sayılmıyor. Hazır test araçları korunuyor; testnet onayı ve Webhook URL erişimi için artık yanıt beklenmiyor, bu işler kullanıcı yeniden seçtiğinde ele alınacak. Borsa emri gönderilmedi; geçici test servisleri kapalı.
 - **Başlangıç kaydı:** Bu belge ilk oluşturulduğunda yalnız belge değişmişti; sonraki uygulama değişiklikleri aşağıda ayrı kaydedildi.
 - **Seçilen geliştirme ortamı:** `.venv` / Python 3.12; Node 20.20.2 / npm 10.9.9. Yerelde Python 3.12.8 ile doğrulandı.
@@ -166,7 +167,7 @@ Kapsam tahminleri süre taahhüdü değildir: küçük birkaç dosya; orta bir �
 | P2-4 | Eşzamanlı API yükünde realtime gecikmesi | Doğrulandı: 279aa9f, 735 Python testi, büyük veri ölçümü, CI ve üretimde 24 REST / 3 WSS kabulü | Orta | P1-5 |
 | P0-G1 | Standalone sağlık sunucusu debug varsayılanını kapat | Doğrulandı — loopback/debug/reloader düzeltmesi P2-3 ile üretimde; yerel/CI HIGH=0 | Küçük | P2-3 raporu ve entrypoint kontrolü |
 | P1-G1 | Kilitli Python bağımlılığı advisory incelemesi | Doğrulandı — 710/710, sıfır dependency bulgusu; CI/imaj/üretim ve auth13/13 geçti | Orta | P2-3 raporu; uygulama/test bağımlılığı ayrımı |
-| P3-1 | Backtest ve strateji eşdeğerliği | İlk COMBO üretimde; Python/TS ölçümü ve Pine sınırı yerelde doğrulandı (773/skip1); yeni Pine dış kabulü ve backtest muhasebe/zaman işleri açık | Büyük | Emir/veri doğruluğu, P1-3, P1-4 |
+| P3-1 | Backtest ve strateji eşdeğerliği | COMBO üretimde; motor/Pine kaynak yayını tamam; muhasebe57/tam830-skip1 yerelde doğrulandı. Üçüncü adım kaynak yayını kapasiteye bağlı; Pine dış kabulü, tarih/kronoloji/WFA açık | Büyük | Emir/veri doğruluğu, P1-3, P1-4 |
 | P3-2 | Backup branch tasarım değerlendirmesi | Bekliyor | Küçük inceleme | Tasarım tercihi |
 
 **Önerilen sıra:** Başlangıç sırası P0-1 → P0-2 → P0-3 → P0-4, ardından P1-1/P1-2/P1-3 idi. P1-G1 ve P2-4 tamamlandı; güncel sıra **P3-1 → P3-2**; P1-3 dış kabulü kullanıcı yeniden seçene kadar ertelidir.
@@ -1046,6 +1047,78 @@ Sonraki yerel iş `backtesting_system.py::Lot` ve `Portfolio` için alış maliy
 dahil nakit–PnL, komisyon ve kayma muhasebesini aynı fiyat alış/satış ve kısmi
 satış örnekleriyle doğrulamaktır; sonrasında tarih sınırları ve kronoloji gelir.
 
+**13 Eylül üçüncü adım — muhasebe yerel kabulü:**
+
+- İki gerçek eski-kod regresyonu: %1 komisyon/%2 kayma/1.030 bütçeyle lot
+  maliyeti1.000 yerine1.030 olmalı; aynı100 fiyatından alış/satışta PnL−30
+  yerine nakit farkıyla aynı−60 olmalı. `p31-accounting-red.log` iki assertion
+  hatasını kaydeder; yalnız import engelini açan lazyimport değişimleri bu RED'de
+  vardır, eski muhasebe hesapları korunmuştu.
+- `Lot` alış komisyonu ve kaymasını saklar, `invested` tüm maliyet olur.
+  Mevcut `q = bütçe / (referans fiyat × (1+c+s))` modeli korunur; komisyon
+  veya kayma iki kez fiyatlanmaz. Satış PnL'si net gelirden bu tabanı çıkarır.
+  Kısmi-lot API eklenmedi; FIFO hâlâ tek eski lotun tamamını kapatır.
+- `total_commission_paid` yalnız komisyon; `total_slippage_cost` kayma;
+  `total_transaction_cost` toplam. İşlem/Excel/konsol/worker maliyet alanları
+  güncellendi. Açık pozisyonun `Ortalama Fiyat` alanı referans ortalamasını
+  korur, `Ortalama Maliyet` giderler dahil değeri gösterir. Satış kaydındaki
+  alış giderleri açıklamadır, yeniden nakitten düşülmez.
+- Bağımsız inceleme kesirli bütçe ve hashlenemeyen sembolde ek hatalar buldu.
+  Genişletilmiş RED9 hata/6 başarı; 42 temel test bu ikinci RED'de seçilmedi.
+  Nakit Kahan toplaması ve dokümanda tanımlı ULP/göreli sınırla izlenir;
+  son temsil artığı clamp edilir. 10×100,08 ve1.000×0,1 testleri geçer;
+  sıradan/sub-penny/büyük başlangıç sonrası yetersizlik ve yeni fazladan alış
+  reddedilir. Çok büyük sayılarda float toleransı nominal olarak büyüyebilir;
+  sınırsız parasal doğruluk iddiası yoktur.
+- Sembol/fiyat/tarih, sermaye/bütçe ve maliyet oranları doğrulanır; negatif,
+  NaN/sonsuz ve geçersiz birleşik oranlar muhasebeye geçmez. Satış hesaplaması
+  ve tarih farkı doğrulanmadan FIFO lotu çıkarılmaz. Geçerli oran değişiminde
+  eski lotun alış maliyetleri sabit kalır, yeni satış güncel oranı kullanır.
+- Gerçek muhasebe modülünün importunu engelleyen matplotlib ve tqdm kilitli
+  ortamda yoktu; kullanıldıkları grafik/runner fonksiyonlarına taşındı.
+  Bağımlılık eklenmedi; tam CLI/grafik çalıştırılmadı. Yeni testler legacy
+  modül importunun warning filtresini test dışına taşırmaz.
+- **57/57 hedefli**, coverage açık tam **830 geçti /1 isteğe bağlı performans
+  testi atlandı**, **uyarı yok**, 97,14sn. Elle hesaplanan FIFO/iki fiyat/çoklu
+  sembol/açık taban/fee-only/slip-only/zero-cost/ham hassasiyet ve durum korunumu
+  geçti. Excel sayfalarının DataFrame çıktısı, konsol ve stub provider/engine
+  kullanan worker sonucu kontrol edildi; gerçek Excel/PNG veya ağ üretilmedi.
+  Frontend kaynakları değişmedi; yerelde aynı frontend paketi tekrar koşulmadı,
+  exact-source CI frontend/build/standalone/Docker kontrollerini de çalıştırır.
+
+Test ve sınır ayrıntıları [BACKTEST_ACCOUNTING.md](BACKTEST_ACCOUNTING.md) içinde.
+Yerel kanıtlar `runtime-data/p31-accounting-final-green.log`,
+`p31-accounting-full-python.log`, `p31-accounting-review-red-expanded.txt`;
+canonical kaynak hash'leri ve test sonuçları küçük
+`p31-accounting-local-acceptance.json` kaydına bağlanır.
+
+**Üçüncü adım yayın sınırı / kapasite önerisi:** Çalışan servisler bu CLI modülünü
+import etmez. Beş canonical kaynak/test/belge ve küçük kabul JSON'u için yeni
+`/root/rapot-ops/20260913-p31-accounting/` hedefi hazırlanır; tamSHA/CI ve
+hash/servis/HTTPS kabulü olmadan yayına geçilmez. Bu, tam çalıştırılabilir release
+veya container içindeki CLI kopyasının güncellenmesi değildir. İmaj, pointer,
+config, DB, migration ve servis lifecycle işlemi gerektirmez.
+
+10:46:04 UTC'de boş disk550.727.680B; 528MiB rezerv + geçici payload/kayıt için
+yaklaşık3,84MB eksik. Boyut son committen tekrar hesaplanır. Kalan7 eski
+günlük aynı75.501.568B ayrılmış alanı kullanıyor; en eskisi seçildi:
+
+`/var/log/journal/f17d1cd4476dd2156e8df9fc69737fc6/system@9785d360ea1d4cce9ab534627a929905-00000000006542e6-000658e4eb55aed7.journal`
+
+Aday14 Ağustos arşivi, ARCHIVED, inode516960/dev64513/nlink1; SHA256
+`4c736d72fd66ff866165aef4550026013fe0c23c88348df8851c724f3edd3708`.
+131 süreç/1.223FD/11.350 maps taramasında aday ve diğer altı dosyada kullanım
+yok. Özel bilgisayar arşivi
+`C:\Users\memet\RapotBackups\20260913-p24-journal\archived-system-journals-before-20260901.tar.gz`
+162.537.514B, SHA256 `7bcc55781fec5e9b863bae157d39310cb8c7a69c8cdb244ec429f9519555adcc`;
+tam SHA/gzipCRC/12 üye hash'i/manifest ve özel ACL yeniden doğrulandı.
+Öneri `runtime-data/p31-accounting-one-journal-removal-proposal.json`, SHA256
+`92819e1323671aaab582eea895b334bade60525aa41afd4ec37da58afee67d8d`.
+Bu taslak hazırlık kaydıdır: **yeni silme onayı yok, silme veya yayın yapılmadı**.
+Önceki4+1 dosya onayı bu dosyayı kapsamaz. Tek dosya teorik olarak yeterli;
+diğer altı eski günlük, yeni/etkin günlükler, veriler, imajlar ve özel yedek
+korunur. Ücretli yükseltme veya rezervi düşürme önerilmez.
+
 **Kabul kriterleri:**
 
 - [ ] Aynı örnek veri, zaman dilimi ve kapanmış/açık mum kurallarıyla hesaplayıcı farkları ölçüldü.
@@ -1178,6 +1251,10 @@ satış örnekleriyle doğrulamaktır; sonrasında tarih sınırları ve kronolo
 
 | 2026-09-13 | P3-1 ikinci adım | İncele → düzelt → doğrula → belgeyi güncelle | Gerçek Python/TS sentetik ölçümü; iki Pine continuation guard'ı. 773 Python/skip1 uyarısız, frontend105 ve lint/typecheck geçti; Pine eski kaynak10hata→yeni30+22geçti. Üretim frontend967/backend279 korunur; kaynak/kanıt yayını tamSHA/CI ve ayrı release-record ile bağlanır. Yeni Pine dış kabulü ile muhasebe/zaman/backtest işleri açık |
 
+| 2026-09-13 | P3-1 ikinci adım | CI → canonical kaynak yayını → Doğrulandı | 48be08e, CI34749745272; 11 dosya488.483B +12.462B kayıt hash/gzip/HTTPS ile doğrulandı. Beş servis/config aynı; container/DB/Pine dış kopyası değiştirilmedi. Kaynak kabulü indicators/release-record.json içinde |
+
+| 2026-09-13 | P3-1 üçüncü adım | İncele → düzelt → doğrula → kapasite önerisi | Alış maliyeti dahil FIFO PnL, ayrı komisyon/kayma, input atomikliği ve kesirli nakit sınırı; 57 hedefli/tam830-skip1 uyarısız. CLI test/provider çalışması yok. Yeni tek arşiv dosyası önerisinin yedeği doğrulandı; 528MiB altında disk nedeniyle kaynak yayını ve yeni silme onayı açık |
+
 Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 
 - İş ID'si, tarih, aşama ve sonuç.
@@ -1196,4 +1273,4 @@ Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 4. Aktif işin bulgusunu ve bağımlılıklarını güncel kodda kontrol et. İncelemeyi baştan tekrarlamak yerine ilgili kanıttan devam et.
 5. İşin dört adımını tamamla veya engeli somutlaştır; ardından durum tablosu, günlük ve Kaldığımız nokta bölümünü güncelle.
 
-**P3-1 ikinci adımın yerel ölçüm/Pine sınır kabulü tamam: Python773/skip1 uyarısız, frontend105. TamSHA/CI ve kaynak/kanıt aktarımı ayrı indicators/release-record kaydında tutulur; çalışan frontend967/backend279 değişmez. Yeni Pine'ın TradingView derleme/runtime kabulü ve üç motorun ortak açık/kapalı mum eşdeğerliği açık; sıradaki yerel kod işi backtest alış maliyeti dahil nakit–PnL muhasebesi. Ücretli yükseltme ile gerçek TradingView alarm/testnet/emir kabulü kapsam dışında.**
+**P3-1 üçüncü adım yerelde doğrulandı: muhasebe57/tam830-skip1 uyarısız. Aktif kapanış CI + canonical CLI kaynak yayını; 528MiB rezervin altındaki disk için yedeği doğrulanmış tek eski günlük önerisi yeni onay gerektiriyor. Henüz silme/yayın yok; frontend967/backend279 aynı. Yayından sonra sıradaki kod işi sabit veri/start–end ve kapanmış mum yürütme sözleşmesi. Yeni Pine dış kabulü, kronoloji/WFA ve tüm P3 açık; ücretli yükseltme ve gerçek/testnet emirleri kapsam dışında.**
