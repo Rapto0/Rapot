@@ -291,6 +291,53 @@ overlap and socket cleanup; do not raise thresholds to conceal a failed run.
 The current final deployment result is recorded in the continuation plan and the
 versioned operator evidence, rather than inferred from published images.
 
+### Verified index rollout — 13 September 2026
+
+Source `279aa9fea99b520e661b43f104a2bf4791893ac3` passed
+[CI 34745255161](https://github.com/Rapto0/Rapot/actions/runs/34745255161) and
+[image publication 34745419330](https://github.com/Rapto0/Rapot/actions/runs/34745419330).
+The deployment was verified at **07:44:25 UTC**, followed by successful bounded
+concurrent-read acceptance at **07:45:19 UTC**. Evidence belongs to
+`/root/rapot-ops/20260913-p24-index/`; local result copies are
+`runtime-data/p24-index-deployment.json` and
+`runtime-data/p24-index-production-read-acceptance.json`.
+Backend digest is `sha256:9be0fdb6097f52bf97730f44c86d28c24e2c0cea1fe181e7e8fd668177fdb034`;
+frontend digest is `sha256:e1e3702c591dd7f94793d93e0f1015310013a3233a0430087084db9d79327972`.
+
+The fresh **07:24:47 UTC** SQLite snapshot streamed directly to private offhost
+storage: **136,013,613 bytes**, SHA256
+`2e7eb8f3b6765be5451333a3c4e494551661cb2964184065d221ed9f0eb299d6`.
+Independent full restore and comparison passed in **69.66 s**; no SQLite archive
+was retained on the VPS. The source archive was size/hash/CRC checked in bounded
+RAM before extraction. Every capacity gate retained the 400 MiB reserve,
+128 MiB growth margin and, until schema verification, a 16 MiB index-build allowance.
+Final deployment free space was **580,993,024 bytes**. These are checkpoint
+observations; neither a continuous disk peak nor future rollout capacity is implied.
+
+Only `idx_signals_special_tag_created` was added to the main schema. Before/after
+counts remained signals **1,740,288**, trades/orders **0/0**, scan_history **13**,
+ai_analyses **26,393** and bot_stats **5**. PostgreSQL container identity and
+**135/135/28/383** counts were preserved. All five containers were healthy with
+zero restarts; HTTPS/SSR, feed/provider readiness, scheduler and **13/13 auth cases**
+passed. Credentials/Nginx, disabled AI and DRY_RUN/trading=false/live=false were
+preserved. Previous images, source, backups and the compatible rollback path remain.
+
+The unchanged production bounds passed for **24 measured REST reads and three
+signals WSS connections**. Nearest-rank p95 values were health **313 ms**,
+BELES/COK_UCUZ **594/469 ms**, stats **2,438 ms**, WSS opening **516 ms**, and
+protocol ping/pong **63 ms** across 162 samples. All three application heartbeats
+arrived about 30 s after opening; one overlapped a REST read. All three test sockets
+closed, signals-channel counts returned **1 → 1**, and runtime source/container/config
+identity was unchanged. Initial failures remain separate evidence. These three
+samples per REST route close the defined P2-4 smoke acceptance, not a production
+SLA, continuous signal-delivery guarantee or full browser/load test. No testnet/live
+order, actual TradingView alert delivery or external AI/Telegram test was performed;
+those deferred checks and P3 work remain separate.
+
+Record the final documentation commit/CI and canonical blob hashes separately
+in this OPS directory's `documentation-release-record.json`. Documentation-only
+publication does not rebuild images, restart services or change the database.
+
 ## Optional middleware
 
 Create `middleware/.env` or select `RAPOT_MIDDLEWARE_ENV_FILE`, outside Git:

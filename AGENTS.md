@@ -1,6 +1,6 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-Kaynaklarla son karşılaştırma: **11 Eylül 2026 / P2-3**. İş sırası, kullanıcı
+Kaynaklarla son karşılaştırma: **13 Eylül 2026 / P2-4**. İş sırası, kullanıcı
 yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DEVAM_PLANI.md)
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 
@@ -127,6 +127,13 @@ Ana SQLite: `db_session.init_db()` → create_all + uyumlu kolon/index ekleme;
 `middleware/infra/alembic/` revision zinciri; üretimde migration önce, startup
 revision kontrolü sonra gelir. [Migration politikası](docs/DB_MIGRATION_POLICY.md)
 iki yolun ayrıntısını ve eski taşıma aracının sınırlarını açıklar.
+
+P2-4, ana SQLite'a yalnız etiketi NULL olmayan kayıtları kapsayan
+`idx_signals_special_tag_created(special_tag, created_at)` kısmi indeksini ekler.
+Yeni DB'de metadata, mevcut DB'de `init_db()` bu indeksi oluşturur; başlangıç
+sırasında disk/WAL alanı bütçelenmelidir. Kod geri dönüşü uyumlu indeksi korur;
+üretim verisini geri yüklemez veya indeksi otomatik kaldırmaz. Eşit `created_at`
+değerlerinde liste sırası ve LIMIT sınırındaki seçim deterministik değildir.
 
 Ana DB'nin saat dilimsiz UTC sözleşmesi `infrastructure.time.utc_now_naive`
 ile korunur: aware UTC saatinden yalnız tzinfo kaldırılır. Yerel saat kullanılmaz;
