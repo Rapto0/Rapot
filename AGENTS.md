@@ -120,8 +120,9 @@ Pip içermeyen uv ortamında bağımlılık kontrolü yukarıdaki `uv pip check`
 - HUNTER kısa ATR serisi P1-7'de düzeltildi. P3-1'in ilk adımında frontend
   `calculateCombo` geçerli sıfırı korur; eksik, NaN ve sonsuz göstergeler puan
   üretmez. Eşikler, 26 mum koşulu ve AL sonrası SAT önceliği değişmedi. Altı yeni
-  regresyonla 105 frontend testi, CI ve imaj yayını geçti; üretim frontend geçişi
-  devam planındaki tek eski günlük için yeni silme onayını bekliyor.
+  regresyonla 105 frontend testi, CI ve imaj yayını geçti. Üretimde frontend
+  `967f137`, backend/Compose/current `279aa9f`; yalnız frontend yenilendi.
+  Tek günlük temizliği ve uygulama kabulü devam planında ayrı kayıtlardır.
   Hesaplayıcı yeterli sonlu göstergeyle puan üretebilir; yerel alarm son kaydın tüm
   göstergeleri sonlu değilse `unknown` döndürür. Pine EMA/ATR başlangıç sınırları,
   motor farkları ve backtest işleri P3-1'de açık; üç motor tam eşdeğer sayılmaz.

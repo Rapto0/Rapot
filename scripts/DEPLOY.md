@@ -338,15 +338,16 @@ Record the final documentation commit/CI and canonical blob hashes separately
 in this OPS directory's `documentation-release-record.json`. Documentation-only
 publication does not rebuild images, restart services or change the database.
 
-## Frontend-only component rollout — P3-1 first step, pending
+## Frontend-only component rollout — P3-1 first step, verified
 
 The first P3-1 COMBO change preserves measured zero and excludes unavailable or
 non-finite components from voting. Six new regressions and **105 frontend tests**
 passed locally. Source `967f137351290735d7e6ae556b4ad237c253677c` passed
 [CI 34746909758](https://github.com/Rapto0/Rapot/actions/runs/34746909758) and
 [image publication 34747132287](https://github.com/Rapto0/Rapot/actions/runs/34747132287).
-Production acceptance is pending. This completes the tested COMBO fix, not P3-1 strategy equivalence,
-Pine boundaries or backtest work.
+The bounded frontend production rollout passed on 13 September at 08:59:10 UTC.
+This completes the first COMBO fix; P3-1 strategy equivalence, Pine boundaries and
+backtest work remain open.
 
 A component-only rollout may avoid uploading another full source archive only
 after the exact Git diff is restricted to reviewed frontend files and documentation,
@@ -383,22 +384,45 @@ The published frontend digest is
 Its first 11 layers are shared; the remaining two require **19,369,458 B** compressed,
 **65,929,216 B** conservative unpacked allocation and **13,140 B** metadata.
 With the fixed reserves and 2 MiB evidence budget, free space must exceed
-**641,057,094 B**. The later host observation was **578,150,400 B**: roughly 60 MiB
-more is needed. No image was pulled and no production service was changed.
+**641,057,094 B**. The predeployment observation was **578,150,400 B**: roughly
+60 MiB more was needed at that time. Those measurements and the initial no-pull
+state are historical; the approved cleanup and actual rollout follow below.
 
-One backed-up, unused ARCHIVED system journal can potentially reclaim **75,501,568 B**.
+The one-file predeployment proposal identified an unused, backed-up ARCHIVED system
+journal with **75,501,568 B** allocated.
 The exact path/hash and private archive verification are in the continuation plan
 and `runtime-data/p31-one-journal-removal-proposal.json`, SHA256
 `9f88d6e7c18307c3dcd080ecedd9b4f6c38a1c3fb299b60255f2a1b0ddf64e65`.
-This one-file proposal awaits new explicit approval; the previous four-file approval
-does not cover it. Do not delete the second candidate or any database/image/release.
-Recheck backup, file identity/state/use, protected runtime and fresh capacity after
-approval and before removal. Preserve the private archive and audit the exact unlink.
-After verified publication, this preparation, its final document SHA/CI and canonical
-blob hashes will be recorded under
+The earlier four-file approval did not cover this proposal. The user subsequently
+answered the exact one-file question with a direct continuation instruction; that
+new scoped approval and fresh backup/file/use/runtime checks were recorded before
+removal. Only that journal was removed at 08:52:55 UTC; the other seven archived
+journals and private backup remain. No further deletion is authorized.
+Preparation commit `5c7c47c`, successful CI `34747715788`, and canonical blob hashes
+were recorded under
 `/root/rapot-ops/20260913-p31-preflight/release-record.json`; that record is not
 a successful deployment. The component rollout uses a separate
 `/root/rapot-ops/20260913-p31-frontend/` operation record.
+
+The actual rollout receipt is `deployment.json` in that component operator directory.
+It records frontend `967f137` and backend/Compose/current `279aa9f` separately.
+Only the frontend image override changed; four protected containers and fixed
+environment/Nginx hashes stayed identical. Eight health/SSR GETs passed. Final
+free space was **562,618,368 B**, above the unchanged 528 MiB reserve.
+The canonical source/capacity proofs were hardlinked from the private preflight
+directory; only the **34,902 B** pinned operator was uploaded again. These two
+proof files are immutable and must not be edited through either link.
+
+The exact cleanup receipt is `one-journal-removal-result.json` in the preflight
+directory. External HTTPS chart/RSC/static-file delivery is recorded separately
+in `p31-frontend-public-acceptance.json`: 16 GETs passed at 09:01:55 UTC, including
+chart/alarms HTML, ETHUSDT/Kripto RSC props, and 12 JS + 1 CSS files sampled from
+the discovered 15 JS + 1 CSS inventory (868,343 B total). It does not assert browser
+worker execution
+or an exchange/TradingView acceptance test. Final three-document Git SHA/CI, blob
+hashes and publication checks belong in the component directory
+`documentation-release-record.json`. Documentation publication performs no
+application restart, image build, migration or further deletion.
 
 ## Optional middleware
 
