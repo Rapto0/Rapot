@@ -137,6 +137,121 @@ test('COMBO/HUNTER retain score and signal requirements and reject unavailable c
   }
 });
 
+test('real COMBO preserves RSI zero and produces a four-vote buy alarm', () => {
+  const falling = candles(40, -1);
+  assert.equal(indicators.calculateRSI(falling).at(-1).value, 0);
+  const latest = indicators.calculateCombo(falling, { minBuyScore: 4 }).at(-1);
+  assert.equal(latest.details.rsi, 0);
+  assert.equal(latest.buyScore, 4);
+  assert.equal(latest.sellScore, 0);
+  assert.equal(latest.signal, 'AL');
+  const selected = rule({ indicator: 'combo', thresholds: {
+    ...alarms.DEFAULT_ALARM_THRESHOLDS, comboDipThreshold: 4,
+  } });
+  const result = alarms.evaluateWatchlistAlarmRule(selected, falling);
+  assert.equal(result.state, 'hit');
+  assert.equal(result.triggered, true);
+  assert.equal(result.side, 'dip');
+  assert.equal(result.value, 4);
+});
+
+test('real COMBO preserves Williams zero and produces a three-vote sell alarm', () => {
+  const rising = candles(40, 1).map(candle => ({ ...candle, close: candle.high }));
+  const measuredWr = indicators.calculateWilliamsR(rising).at(-1).value;
+  assert.ok(measuredWr === 0);
+  const latest = indicators.calculateCombo(rising, { minSellScore: 3 }).at(-1);
+  assert.equal(latest.details.wr, measuredWr);
+  assert.equal(latest.buyScore, 0);
+  assert.equal(latest.sellScore, 3);
+  assert.equal(latest.signal, 'SAT');
+  const selected = rule({ indicator: 'combo', thresholds: {
+    ...alarms.DEFAULT_ALARM_THRESHOLDS, comboTopThreshold: 3,
+  } });
+  const result = alarms.evaluateWatchlistAlarmRule(selected, rising);
+  assert.equal(result.state, 'hit');
+  assert.equal(result.triggered, true);
+  assert.equal(result.side, 'top');
+  assert.equal(result.value, 3);
+});
+
+test('real COMBO unavailable warmup values cannot create votes under custom thresholds', () => {
+  const series = indicators.calculateCombo(noHit, {
+    rsiBuyThreshold: 60, wrBuyThreshold: -40, cciBuyThreshold: 10, minBuyScore: 3,
+  });
+  assert.equal(series.length, noHit.length);
+  const first = series[0];
+  assert.equal(first.buyScore, 0);
+  assert.equal(first.sellScore, 0);
+  assert.equal(first.signal, null);
+  for (const name of ['rsi', 'wr', 'cci']) assert.ok(Number.isNaN(first.details[name]));
+  // Once measured, the same thresholds may legitimately count the finite flat values.
+  const latest = series.at(-1);
+  assert.equal(latest.details.cci, 0);
+  assert.equal(latest.buyScore, 3);
+  assert.equal(latest.signal, 'AL');
+});
+
+test('real COMBO finite flat values remain neutral at the 26-bar boundary and later', () => {
+  for (const count of [26, 40]) {
+    const flat = candles(count);
+    const series = indicators.calculateCombo(flat);
+    assert.equal(series.length, count);
+    const latest = series.at(-1);
+    assert.equal(latest.details.macd, 0);
+    assert.equal(latest.details.cci, 0);
+    assert.equal(latest.details.rsi, 50);
+    assert.equal(latest.details.wr, -50);
+    assert.equal(latest.buyScore, 0);
+    assert.equal(latest.sellScore, 0);
+    assert.equal(latest.signal, null);
+    const result = alarms.evaluateWatchlistAlarmRule(rule({ indicator: 'combo' }), flat);
+    assert.equal(result.state, 'no_hit');
+    assert.equal(result.triggered, false);
+  }
+});
+
+test('real COMBO retains derived NaN so finite-input overflow is an unknown alarm', () => {
+  const overflow = candles().map(candle => ({
+    ...candle, open: 1e308, close: 1e308, high: 1.1e308, low: 9e307,
+  }));
+  assert.ok(overflow.every(candle =>
+    [candle.open, candle.high, candle.low, candle.close, candle.volume].every(Number.isFinite)));
+  assert.ok(Number.isNaN(indicators.calculateMACD(overflow).at(-1).macd));
+  assert.ok(Number.isNaN(indicators.calculateCCI(overflow).at(-1).value));
+  const latest = indicators.calculateCombo(overflow).at(-1);
+  assert.ok(Number.isNaN(latest.details.macd));
+  assert.ok(Number.isNaN(latest.details.cci));
+  assert.equal(latest.buyScore, 0);
+  assert.equal(latest.sellScore, 0);
+  assert.equal(latest.signal, null);
+  const result = alarms.evaluateWatchlistAlarmRule(rule({ indicator: 'combo' }), overflow);
+  assert.equal(result.state, 'unknown');
+  assert.equal(result.triggered, false);
+  assert.equal(result.value, null);
+});
+
+test('real COMBO never awards a buy vote to negative Infinity at 26 bars', () => {
+  const overflow = candles(26).map(candle => ({
+    ...candle, open: 1e307, close: 1e307, high: 1.1e307, low: 9e306,
+  }));
+  assert.ok(overflow.every(candle =>
+    [candle.open, candle.high, candle.low, candle.close, candle.volume].every(Number.isFinite)));
+  assert.equal(indicators.calculateMACD(overflow).at(-1).macd, -Infinity);
+  const series = indicators.calculateCombo(overflow, { minBuyScore: 1 });
+  assert.equal(series.length, 26);
+  const latest = series.at(-1);
+  assert.equal(latest.details.macd, -Infinity);
+  assert.equal(latest.buyScore, 0);
+  assert.equal(latest.sellScore, 0);
+  assert.equal(latest.signal, null);
+  const selected = rule({ indicator: 'combo', thresholds: {
+    ...alarms.DEFAULT_ALARM_THRESHOLDS, comboDipThreshold: 1,
+  } });
+  const result = alarms.evaluateWatchlistAlarmRule(selected, overflow);
+  assert.equal(result.state, 'unknown');
+  assert.equal(result.triggered, false);
+});
+
 test('manual and 60-second triggers share one active pass with at most four reads', async () => {
   const requests = [];
   const fixture = monitorFixture((row, _rule, signal) => {

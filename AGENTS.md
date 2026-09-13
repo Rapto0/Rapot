@@ -1,6 +1,6 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-Kaynaklarla son karşılaştırma: **13 Eylül 2026 / P2-4**. İş sırası, kullanıcı
+Kaynaklarla son karşılaştırma: **13 Eylül 2026 / P3-1 ilk adım**. İş sırası, kullanıcı
 yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DEVAM_PLANI.md)
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 
@@ -117,8 +117,13 @@ Pip içermeyen uv ortamında bağımlılık kontrolü yukarıdaki `uv pip check`
 - `config.py` eşik tanımları içerse de `signals.py` yalnız MIN_PERIODS'i
   ithal eder; eşikler hesaplayıcı fonksiyonlarda sabittir. Yalnız config
   değiştirerek strateji değiştiği varsayılmaz.
-- HUNTER kısa ATR serisi P1-7'de düzeltildi. COMBO sıfır değer fallback'i ve
-  Pine EMA/ATR başlangıç sınırları P3-1'de açık; üç motor tam eşdeğer sayılmaz.
+- HUNTER kısa ATR serisi P1-7'de düzeltildi. P3-1'in ilk adımında frontend
+  `calculateCombo` geçerli sıfırı korur; eksik, NaN ve sonsuz göstergeler puan
+  üretmez. Eşikler, 26 mum koşulu ve AL sonrası SAT önceliği değişmedi. Altı yeni
+  regresyonla 105 frontend testi yerelde geçti; bu adımın CI/yayın kabulü bekliyor.
+  Hesaplayıcı yeterli sonlu göstergeyle puan üretebilir; yerel alarm son kaydın tüm
+  göstergeleri sonlu değilse `unknown` döndürür. Pine EMA/ATR başlangıç sınırları,
+  motor farkları ve backtest işleri P3-1'de açık; üç motor tam eşdeğer sayılmaz.
 
 ## Veri, erişim ve dağıtım
 

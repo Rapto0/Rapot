@@ -269,22 +269,23 @@ export function calculateCombo(
         let buyScore = 0
         let sellScore = 0
 
-        const macdVal = macd[i]?.macd || 0
-        const rsiVal = rsi[i]?.value || 50
-        const wrVal = wr[i]?.value || -50
-        const cciVal = cci[i]?.value || 0
+        // Zero is a measured value; unavailable components must not create votes.
+        const macdVal = macd[i]?.macd ?? NaN
+        const rsiVal = rsi[i]?.value ?? NaN
+        const wrVal = wr[i]?.value ?? NaN
+        const cciVal = cci[i]?.value ?? NaN
 
         // Buy conditions
-        if (!isNaN(macdVal) && macdVal < 0) buyScore++
-        if (!isNaN(rsiVal) && rsiVal < cfg.rsiBuyThreshold) buyScore++
-        if (!isNaN(wrVal) && wrVal < cfg.wrBuyThreshold) buyScore++
-        if (!isNaN(cciVal) && cciVal < cfg.cciBuyThreshold) buyScore++
+        if (Number.isFinite(macdVal) && macdVal < 0) buyScore++
+        if (Number.isFinite(rsiVal) && rsiVal < cfg.rsiBuyThreshold) buyScore++
+        if (Number.isFinite(wrVal) && wrVal < cfg.wrBuyThreshold) buyScore++
+        if (Number.isFinite(cciVal) && cciVal < cfg.cciBuyThreshold) buyScore++
 
         // Sell conditions
-        if (!isNaN(macdVal) && macdVal > 0) sellScore++
-        if (!isNaN(rsiVal) && rsiVal > cfg.rsiSellThreshold) sellScore++
-        if (!isNaN(wrVal) && wrVal > cfg.wrSellThreshold) sellScore++
-        if (!isNaN(cciVal) && cciVal > cfg.cciSellThreshold) sellScore++
+        if (Number.isFinite(macdVal) && macdVal > 0) sellScore++
+        if (Number.isFinite(rsiVal) && rsiVal > cfg.rsiSellThreshold) sellScore++
+        if (Number.isFinite(wrVal) && wrVal > cfg.wrSellThreshold) sellScore++
+        if (Number.isFinite(cciVal) && cciVal > cfg.cciSellThreshold) sellScore++
 
         let signal: 'AL' | 'SAT' | null = null
         if (buyScore >= cfg.minBuyScore) signal = 'AL'

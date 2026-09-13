@@ -338,6 +338,44 @@ Record the final documentation commit/CI and canonical blob hashes separately
 in this OPS directory's `documentation-release-record.json`. Documentation-only
 publication does not rebuild images, restart services or change the database.
 
+## Frontend-only component rollout — P3-1 first step, pending
+
+The first P3-1 COMBO change preserves measured zero and excludes unavailable or
+non-finite components from voting. Six new regressions and **105 frontend tests**
+passed locally; exact-source CI, image publication and production acceptance are
+pending. This completes only the local COMBO fix, not P3-1 strategy equivalence,
+Pine boundaries or backtest work.
+
+A component-only rollout may avoid uploading another full source archive only
+after the exact Git diff is restricted to reviewed frontend files and documentation,
+with build/dependency inputs, backend code, schemas and Compose unchanged. Retain
+the current `279aa9fea99b520e661b43f104a2bf4791893ac3` Compose source,
+`/opt/rapot/current`, `RAPOT_RELEASE` and all backend image selections. Record the
+frontend revision separately in a canonical component manifest: base/new source
+SHAs, reviewed paths and Git file hashes, exact successful CI/publication runs,
+and the immutable frontend image digest with matching OCI source identity.
+Verify these against the deployed base and candidate image before cutover; do not
+describe the mixed component revisions as a whole-stack source upgrade.
+
+Measure pending compressed layers, unpacked allocations and metadata against
+fresh disk capacity before each pull; retain the **400 MiB reserve + 128 MiB growth
+allowance** without weakening either. Keep the previous frontend image and exact
+selection for rollback. Replace only the frontend digest in the image override,
+verify resolved Compose differs only there, and start only `frontend` with
+`up -d --no-deps --no-build --pull never` using the retained Compose source.
+This path runs no DB initializer, migration or backup restore and does not restart
+API, bot, middleware or PostgreSQL. Their container IDs, images, start times and
+restart counts, plus credential/release environment and Nginx hashes, must remain
+unchanged. Preserve every existing backup and rollback image; the component
+manifest alternative does not authorize pruning or a paid capacity increase.
+
+Accept the exact frontend image through HTTPS/SSR, assets and the relevant
+COMBO/worker/local-alarm checks, then verify protected services and configuration
+again. On failure, restore only the previous frontend selection and verify it is
+healthy. Record source/image identity, checks, capacity and result in versioned
+operator evidence. No actual alarm delivery, exchange order or full P3-1 completion
+is implied by this frontend acceptance.
+
 ## Optional middleware
 
 Create `middleware/.env` or select `RAPOT_MIDDLEWARE_ENV_FILE`, outside Git:
