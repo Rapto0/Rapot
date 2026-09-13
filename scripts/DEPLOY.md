@@ -342,8 +342,10 @@ publication does not rebuild images, restart services or change the database.
 
 The first P3-1 COMBO change preserves measured zero and excludes unavailable or
 non-finite components from voting. Six new regressions and **105 frontend tests**
-passed locally; exact-source CI, image publication and production acceptance are
-pending. This completes only the local COMBO fix, not P3-1 strategy equivalence,
+passed locally. Source `967f137351290735d7e6ae556b4ad237c253677c` passed
+[CI 34746909758](https://github.com/Rapto0/Rapot/actions/runs/34746909758) and
+[image publication 34747132287](https://github.com/Rapto0/Rapot/actions/runs/34747132287).
+Production acceptance is pending. This completes the tested COMBO fix, not P3-1 strategy equivalence,
 Pine boundaries or backtest work.
 
 A component-only rollout may avoid uploading another full source archive only
@@ -375,6 +377,28 @@ again. On failure, restore only the previous frontend selection and verify it is
 healthy. Record source/image identity, checks, capacity and result in versioned
 operator evidence. No actual alarm delivery, exchange order or full P3-1 completion
 is implied by this frontend acceptance.
+
+The published frontend digest is
+`sha256:9b9fd4dda8a62adb568dbce71b5eda8111c2c583d6130de6db07efa280512f3b`.
+Its first 11 layers are shared; the remaining two require **19,369,458 B** compressed,
+**65,929,216 B** conservative unpacked allocation and **13,140 B** metadata.
+With the fixed reserves and 2 MiB evidence budget, free space must exceed
+**641,057,094 B**. The later host observation was **578,150,400 B**: roughly 60 MiB
+more is needed. No image was pulled and no production service was changed.
+
+One backed-up, unused ARCHIVED system journal can potentially reclaim **75,501,568 B**.
+The exact path/hash and private archive verification are in the continuation plan
+and `runtime-data/p31-one-journal-removal-proposal.json`, SHA256
+`9f88d6e7c18307c3dcd080ecedd9b4f6c38a1c3fb299b60255f2a1b0ddf64e65`.
+This one-file proposal awaits new explicit approval; the previous four-file approval
+does not cover it. Do not delete the second candidate or any database/image/release.
+Recheck backup, file identity/state/use, protected runtime and fresh capacity after
+approval and before removal. Preserve the private archive and audit the exact unlink.
+After verified publication, this preparation, its final document SHA/CI and canonical
+blob hashes will be recorded under
+`/root/rapot-ops/20260913-p31-preflight/release-record.json`; that record is not
+a successful deployment. The component rollout uses a separate
+`/root/rapot-ops/20260913-p31-frontend/` operation record.
 
 ## Optional middleware
 
