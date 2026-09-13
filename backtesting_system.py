@@ -1,12 +1,13 @@
 import math
 import multiprocessing
+import re
 import traceback
 import warnings
 from collections import deque
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from contextlib import suppress
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 import numpy as np
@@ -503,9 +504,103 @@ class BacktestEngine:
         "ME": 8,  # Aylık: 8 ay (ÖNCEKİ: 20 ay - ÇOK UZUNDU!)
     }
 
-    def __init__(self, start_date="2006-01-01", end_date=None):
-        self.start_date = start_date
-        self.end_date = end_date or datetime.now().strftime("%Y-%m-%d")
+    def __init__(
+        self,
+        start_date: str | date | None = "2006-01-01",
+        end_date: str | date | None = None,
+        *,
+        as_of: str | datetime | None = None,
+    ) -> None:
+        self.start_date = self._date_bound(start_date, "start_date")
+        self.end_date = self._date_bound(end_date, "end_date")
+        if (
+            self.start_date is not None
+            and self.end_date is not None
+            and self.start_date > self.end_date
+        ):
+            raise ValueError("start_date must not be after end_date")
+        self.as_of = self._as_utc(as_of)
+
+    @staticmethod
+    def _date_bound(value: str | date | None, name: str) -> pd.Timestamp | None:
+        if value is None:
+            return None
+        if not isinstance(value, (str, date)) or (
+            isinstance(value, str) and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value)
+        ):
+            raise ValueError(f"{name} must be a date without a time zone or time of day")
+        try:
+            stamp = pd.Timestamp(value)
+            if pd.isna(stamp) or stamp.tzinfo is not None or stamp != stamp.normalize():
+                raise ValueError("Not a calendar date")
+        except (TypeError, ValueError, OverflowError) as error:
+            raise ValueError(f"Invalid {name}") from error
+        return stamp
+
+    @staticmethod
+    def _as_utc(value: str | datetime | None) -> pd.Timestamp:
+        if value is None:
+            return pd.Timestamp.now(tz="UTC")
+        try:
+            if not isinstance(value, (str, datetime)):
+                raise ValueError("Not a timestamp")
+            stamp = pd.Timestamp(value)
+            if pd.isna(stamp) or stamp.tzinfo is None:
+                raise ValueError("A time zone is required")
+            return stamp.tz_convert("UTC")
+        except (TypeError, ValueError, OverflowError) as error:
+            raise ValueError("as_of must be a valid timezone-aware timestamp") from error
+
+    def _prepare_daily_data(self, data: pd.DataFrame, market_type: str) -> pd.DataFrame:
+        """Validate a copied daily feed before any portfolio mutation.
+
+        Midnight after the labelled market day is a conservative closure bound;
+        this deliberately excludes today's open even when it already occurred.
+        """
+        required = ["Open", "High", "Low", "Close", "Volume"]
+        if not isinstance(data, pd.DataFrame):
+            raise ValueError("data must be a daily OHLCV DataFrame")
+        if not data.columns.is_unique or any(column not in data.columns for column in required):
+            raise ValueError("Daily OHLCV columns must be present and unique")
+        if not isinstance(data.index, pd.DatetimeIndex) or data.index.hasnans:
+            raise ValueError("Daily data requires a DatetimeIndex without NaT")
+        zone = "Europe/Istanbul" if market_type == "BIST" else "UTC"
+        index = data.index
+        if index.tz is not None:
+            index = index.tz_convert(zone).tz_localize(None)
+        if not index.is_unique or not index.equals(index.normalize()):
+            raise ValueError("Daily timestamps must be unique market-calendar midnights")
+        if data.attrs.get("open_quality") not in (None, "provider"):
+            raise ValueError("next_open requires genuine Open prices; proxy/unknown open_quality")
+
+        work = data.loc[:, required].copy(deep=True)
+        work.index = index
+        work = work.sort_index()
+        # Add a calendar day before localization, so DST days need not last 24 hours.
+        closed_at = (work.index + pd.Timedelta(days=1)).tz_localize(zone).tz_convert("UTC")
+        admitted = closed_at <= self.as_of
+        if self.end_date is not None:
+            admitted &= work.index <= self.end_date
+        work = work.loc[admitted].copy()
+
+        for column in required:
+            values = work[column]
+            if (
+                not pd.api.types.is_numeric_dtype(values)
+                or pd.api.types.is_bool_dtype(values)
+                or pd.api.types.is_complex_dtype(values)
+            ):
+                raise ValueError(f"{column} must contain real numeric values")
+        values = work.to_numpy(dtype=float, na_value=np.nan)
+        if not np.isfinite(values).all() or (values[:, :4] <= 0).any():
+            raise ValueError("OHLC prices must be finite and positive; volume must be finite")
+        if (values[:, 4] < 0).any():
+            raise ValueError("Volume must be nonnegative")
+        if (work["High"] < work[["Open", "Close", "Low"]].max(axis=1)).any() or (
+            work["Low"] > work[["Open", "Close", "High"]].min(axis=1)
+        ).any():
+            raise ValueError("OHLC high/low bounds are inconsistent")
+        return work.astype(float)
 
     def check_signals(self, df_daily, market_type, strategy="combo"):
         """Sinyal kontrolü"""
@@ -552,104 +647,77 @@ class BacktestEngine:
 
         return signals
 
-    def run_single_symbol(self, symbol, market_type, portfolio, pbar=None):
-        """Tek sembol için backtest"""
+    def run_single_symbol(
+        self,
+        symbol: str,
+        market_type: str,
+        portfolio: Portfolio,
+        pbar: Any = None,
+        *,
+        data: pd.DataFrame | None = None,
+    ) -> bool | None:
+        """Execute prior closed-day signals at the next observed day's genuine Open.
 
-        # Veri çek - TÜM geçmiş veriyi al
-        if market_type == "BIST":
-            df = get_bist_data_isyatirim_only(symbol, start_date="01-01-2006")
-        else:
-            # Crypto için daha uzun süre - en az 8 yıl
-            df = get_crypto_data(symbol, start_str="8 years ago")
-
-        if df is None:
-            print(f"\n⚠️  {symbol}: Veri çekilemedi (None döndü)")
+        The supplied-data path never calls a provider. All eligible OHLCV rows
+        are validated before a trade; dates are market-day labels, not fill times.
+        """
+        if market_type not in ("BIST", "CRYPTO") or portfolio.market_type != market_type:
+            raise ValueError("market_type must match the BIST/CRYPTO portfolio")
+        if not isinstance(symbol, str) or not symbol.strip():
+            raise ValueError("symbol must be a nonempty string")
+        if data is None:
+            if market_type == "BIST":
+                data = get_bist_data_isyatirim_only(symbol, start_date="01-01-2006")
+            else:
+                data = get_crypto_data(symbol, start_str="8 years ago")
+            if data is None:
+                print(f"[WARN] {symbol}: Veri cekilemedi")
+                return None
+        frame = self._prepare_daily_data(data, market_type)
+        # Preserve the historical minimum and signal warm-up. Future rows outside
+        # end_date/as_of cannot make an otherwise ineligible input pass this gate.
+        if len(frame) < 120:
+            print(f"[WARN] {symbol}: En az 120 uygun kapanmis gunluk mum gerekli")
             return None
-
-        if len(df) < 30:
-            print(f"\n⚠️  {symbol}: Yetersiz veri ({len(df)} gün)")
+        execution_start = 61  # First signal has rows 0..60; execute at row 61 Open.
+        if self.start_date is not None:
+            execution_start = max(execution_start, int(frame.index.searchsorted(self.start_date)))
+        if execution_start >= len(frame):
+            print(f"[WARN] {symbol}: Baslangic uygun veri araliginin disinda")
             return None
-
         print(
-            f"\n✓ {symbol}: {len(df)} günlük veri çekildi (İlk: {df.index[0].date()}, Son: {df.index[-1].date()})"
+            f"[INFO] {symbol}: next_open, {frame.index[execution_start].date()}"
+            f" -> {frame.index[-1].date()}, as_of={self.as_of.isoformat()}"
         )
-
-        # ============================================================
-        # DÜZELTME: Minimum gün kontrolü azaltıldı
-        # ============================================================
-        min_days_required = 120  # ~4 ay
-
-        if len(df) < min_days_required:
-            print(
-                f"⚠️  {symbol}: Backtest için yetersiz veri ({len(df)} gün, min {min_days_required} gerekli)"
-            )
-            return None
-
-        # ============================================================
-        # DÜZELTME: Warm-up süresi azaltıldı
-        # ============================================================
-        warmup_days = 60  # ~2 ay
-        backtest_start_idx = warmup_days
-
-        # Eğer kullanıcı özel bir start_date verdiyse onu kullan
-        if self.start_date:
-            user_start_idx = df.index.searchsorted(pd.Timestamp(self.start_date))
-            if user_start_idx >= warmup_days:
-                backtest_start_idx = user_start_idx
-            elif user_start_idx > 0:
-                # Kullanıcı tarihi çok erken, minimum warm-up'tan başla
-                backtest_start_idx = warmup_days
-                print(
-                    f"  → Kullanıcı tarihi ({self.start_date}) erken, warm-up sonrası {df.index[backtest_start_idx].date()} tarihinden başlatılıyor"
-                )
-
-        print(
-            f"  → Backtest başlangıcı: İndeks {backtest_start_idx} (Tarih: {df.index[backtest_start_idx].date()})"
-        )
-
-        if backtest_start_idx >= len(df):
-            print(f"⚠️  {symbol}: Backtest başlangıç tarihi veri aralığının dışında")
-            return None
-
         if pbar:
             with suppress(Exception):
                 pbar.set_postfix({"Islenen": symbol})
 
-        # ============================================================
-        # DÜZELTME: Döngü artık backtest_start_idx'ten başlıyor!
-        # ÖNCEKİ: for i in range(30, len(df))  ← backtest_start_idx kullanılmıyordu!
-        # ============================================================
-        for i in range(backtest_start_idx, len(df)):
-            current_date = df.index[i]
-            current_price = df["Close"].iloc[i]
-
-            # Geçmiş veri
-            historical_data = df.iloc[: i + 1].copy()
-            df_daily = resample_market_data(historical_data, "1D", market_type)
-
-            if df_daily is None or len(df_daily) < 14:
-                continue
-
-            # Her iki stratejiyi test et
-            for strategy in ["combo", "hunter"]:
-                signals = self.check_signals(df_daily, market_type, strategy)
-                strategy_name = strategy.upper()
-
-                # ALIM SİGNALLERİ
-                if signals["buy"]["cok_ucuz"]:
-                    portfolio.buy(symbol, current_price, current_date, f"{strategy_name}: ÇOK UCUZ")
-
-                if signals["buy"]["beles"]:
-                    portfolio.buy(symbol, current_price, current_date, f"{strategy_name}: BELEŞ")
-
-                # SATIM SİGNALLERİ (lot varsa sat)
-                if signals["sell"]["pahali"]:
-                    portfolio.sell(symbol, current_price, current_date, f"{strategy_name}: PAHALI")
-
-            # Her 10 günde bir portföy değerini kaydet
-            if i % 10 == 0:
-                portfolio.record_equity(current_date, {symbol: current_price})
-
+        for i in range(execution_start, len(frame)):
+            execution_date = frame.index[i]
+            signal_date = frame.index[i - 1]
+            execution_price = float(frame["Open"].iloc[i])
+            # Only already closed daily observations reach either calculator.
+            # Its weekly/monthly aggregate may still be a developing HTF candle.
+            history = frame.iloc[:i].copy(deep=True)
+            for strategy in ("combo", "hunter"):
+                signals = self.check_signals(history.copy(deep=True), market_type, strategy)
+                actions = (
+                    (signals["buy"]["cok_ucuz"], portfolio.buy, "ÇOK UCUZ"),
+                    (signals["buy"]["beles"], portfolio.buy, "BELEŞ"),
+                    (signals["sell"]["pahali"], portfolio.sell, "PAHALI"),
+                )
+                for active, operation, label in actions:
+                    if active and operation(
+                        symbol, execution_price, execution_date, f"{strategy.upper()}: {label}"
+                    ):
+                        portfolio.all_trades[-1].update(
+                            {"Sinyal Tarihi": signal_date, "Yürütme Modeli": "next_open"}
+                        )
+            # These are end-of-day marks, after Open execution. The final eligible
+            # date is always represented; multi-symbol marking remains separate work.
+            if i % 10 == 0 or i == len(frame) - 1:
+                portfolio.record_equity(execution_date, {symbol: float(frame["Close"].iloc[i])})
         return True
 
     def run_backtest(self, symbols_list, market_type, initial_cash, trade_amount):
@@ -1228,24 +1296,20 @@ def _run_symbol_backtest(args: tuple) -> dict[str, Any]:
     Tek sembol için backtest (multiprocessing worker)
     Not: Bu fonksiyon modül seviyesinde olmalı (pickle için)
     """
-    symbol, market_type, start_date, trade_amount = args
+    if len(args) == 4:
+        symbol, market_type, start_date, trade_amount = args
+        end_date, as_of = None, None
+    elif len(args) == 6:
+        symbol, market_type, start_date, trade_amount, end_date, as_of = args
+    else:
+        raise ValueError("A backtest worker requires 4 legacy or 6 bounded arguments")
 
     try:
         # Engine oluştur (her worker için ayrı)
-        engine = BacktestEngine(start_date=start_date)
+        engine = BacktestEngine(start_date=start_date, end_date=end_date, as_of=as_of)
+        initial_cash = 100000 if market_type == "BIST" else 20000
 
-        # Sadece trade sayısı ve kar/zarar döndür (hafıza optimizasyonu)
-        if market_type == "BIST":
-            df = get_bist_data_isyatirim_only(symbol, start_date="01-01-2006")
-            initial_cash = 100000
-        else:
-            df = get_crypto_data(symbol, start_str="8 years ago")
-            initial_cash = 20000
-
-        if df is None or len(df) < 120:
-            return {"symbol": symbol, "success": False, "error": "Yetersiz veri"}
-
-        # Mini portfolio ile test
+        # The engine owns the one provider read and validates that same snapshot.
         portfolio = Portfolio(initial_cash, market_type, trade_amount)
         result = engine.run_single_symbol(symbol, market_type, portfolio)
 
@@ -1268,7 +1332,13 @@ def _run_symbol_backtest(args: tuple) -> dict[str, Any]:
 
 
 def run_parallel_backtest(
-    symbols: list[str], market_type: str, start_date: str = "2006-01-01", max_workers: int = None
+    symbols: list[str],
+    market_type: str,
+    start_date: str = "2006-01-01",
+    max_workers: int | None = None,
+    *,
+    end_date: str | date | None = None,
+    as_of: str | datetime | None = None,
 ) -> list[dict[str, Any]]:
     """
     Paralel backtest çalıştır
@@ -1278,10 +1348,15 @@ def run_parallel_backtest(
         market_type: BIST veya CRYPTO
         start_date: Başlangıç tarihi
         max_workers: Maksimum worker sayısı (None = CPU sayısı)
+        end_date: Son işlem günü (dahil)
+        as_of: Tüm worker'lar için sabit, saat dilimli kapanış sınırı
 
     Returns:
         Her sembol için sonuç listesi
     """
+    if market_type not in ("BIST", "CRYPTO"):
+        raise ValueError("market_type must be BIST or CRYPTO")
+    bounds = BacktestEngine(start_date=start_date, end_date=end_date, as_of=as_of)
     from tqdm import tqdm
 
     if max_workers is None:
@@ -1290,7 +1365,10 @@ def run_parallel_backtest(
     trade_amount = 1000 if market_type == "BIST" else 100
 
     # Worker argümanları hazırla
-    args_list = [(sym, market_type, start_date, trade_amount) for sym in symbols]
+    args_list = [
+        (sym, market_type, bounds.start_date, trade_amount, bounds.end_date, bounds.as_of)
+        for sym in symbols
+    ]
 
     results = []
 

@@ -4,12 +4,12 @@ Bu belge, 6 Eylül 2026 tarihli salt okunur proje incelemesinden çıkan işleri
 
 ## Kaldığımız nokta
 
-- **Son çalışma:** **P3-1 üçüncü adımın muhasebe kodu, CI ve kaynak yayını doğrulandı.** `7787fc17c47ece30b09ab8aedd26366a18dd8d01`; CI34752893586 beş kontrol başarılı, Python830/skip1 ve frontend105 geçti. Alış komisyonu/kayması lot maliyetinde, giderler ayrı; referans tutara toplamsal maliyet ve tek eski lotu tam satma sözleşmesi korunuyor. Kullanıcının yeni tek dosya onayıyla kapasite geri kazanıldı; 11:32:29 UTC’de altı kaynak/kanıt dosyası sunucuda doğrulandı. Bu tam backtest veya canlı hesap kabulü değildir.
+- **Son çalışma:** **P3-1 dördüncü adım yerelde doğrulandı:** sabit günlük OHLCV girdisi, dahil start/end işlem sınırları, tek UTC as_of ve önceki kapanmış günlük sinyalden sonraki gerçek Open yürütmesi. Yeni48/48, tam878 Python testi geçti /1 isteğe bağlı performans testi atlandı, uyarı yok. BIST Close/AOF proxy açılışı reddedilir; günlük prefix içindeki gelişen HTF politikası korunur. Tam CLI, canlı veri ve emir kabulü değildir.
 - **Uygulama durumu:** P0-1–P0-4, P1-1, P1-2, P1-4–P1-7, P1-G1, P2-1, P2-3 ve **P2-4 doğrulandı**; P2-2 belge/karar kapsamı tamam. İç worktree ve 12 wrapper koruma kararı değişmedi.
 - **P1-2 durumu — Doğrulandı:** **8f60f8e üretim geçişi ve [HTTPS](https://138.68.71.27) kabulü tamamlandı.** API, bot, frontend, middleware ve PG16 sağlıklı; veri korunumu, dış HTTPS/auth/WSS, yetkisiz webhook reddi ve sertifika yenileme dry-run testi geçti. Eski supervisor'lar devre dışı; özgün DB/checkout ve geri dönüş kaynakları korundu.
 - **Önceki sürümün uzak doğrulaması — 11 Eylül:** `ccd61544` için [CI 34641121926](https://github.com/Rapto0/Rapot/actions/runs/34641121926) ve [imaj yayını 34641767731](https://github.com/Rapto0/Rapot/actions/runs/34641767731) başarılı. Üretimde API health 47 ms/200; `/`, `/signals`, `/alarms`, `/chart` SSR 200. Beş servis healthy/restart0; SignalFeed hazır, Binance/BIST sağlayıcıları başlamış. Scheduler 47,298 saniyede unknown → running oldu. 1.733.137 sinyal, 6 tarama geçmişi, 26.393 AI kaydı ve diğer ana sayılar; PostgreSQL kimliği ve 135/135/28/383 sayıları korundu. DRY_RUN/false/false ve AI kapalı; dış Windows HTTPS API/bot kontrolleri ayrı ayrı 203 ms/200. Sonraki `aadde728` ve güncel `279aa9f` geçişlerinin 13 Eylül kanıtı P2-4 bölümündedir.
 - **P2-2 doğrulaması ve belge yayını:** Python 3.12.8'de üç ayrı hedefli koşum toplam **98/98** geçti (wrapper/boundary/read-model 37, DB/migration 30, sinyal/config 31); DB grubunda mevcut 10 UTC warning var. 11 Eylül 15:44:58 UTC salt okunur sunucu ön kontrolünde beş servis healthy/restart0, HTTPS API/bot health 200 (0,051/0,043 saniye). Bu yalnız belge commit'inin tam SHA/CI sonucu, Git blob SHA256'ları ve sunucuya aktarım sonrası korunma kanıtı `/root/rapot-ops/20260911-p22/release-record.json` içinde sürüm bazında tutulur. İmaj yayını, servis restart'ı veya migration bu belge yayınının parçası değildir.
-- **Aktif iş:** Üçüncü adımın temizlik ve kaynak aktarımı kapandı; bu kapanış belgesinin tam SHA/CI ve sunucu aktarımı ayrı release kaydına bağlanır. Sıradaki kod işi **P3-1 dördüncü adım: sabit günlük veri, başlangıç–bitiş sınırları ve kapanmış mum yürütme sözleşmesi**. Salt okunur ön inceleme ve kabul örnekleri aşağıda; henüz uygulanmadı. Son kaynak kontrolünde boş alan622.800.896B (yaklaşık594MiB), frontend967/backend279 aynı ve sağlıklı; yeni Pine dış kabulü ve borsa emirleri erteli.
+- **Aktif iş:** P3-1 dördüncü adımın CI ve canonical CLI kaynak/kanıt yayını. Bu commitin tam SHA/CI, altı dosyanın hashleri ve son sunucu kabulü `/root/rapot-ops/20260913-p31-execution/release-record.json` kaydına bağlanır. 11:44 UTC salt okunur kontrolde621.817.856B boş alan; frontend967/backend279 kimliği ve beş servis sağlığı aynı. Yayın öncesi sabit528MiB rezerv tekrar ölçülür. Sonraki kod işi çoklu sembolde ortak nakdin tarih sırasıyla yürütülmesi ve tutarlı portföy fiyatlamasıdır. Benchmark/WFA, yeni Pine dış kabulü ve borsa emirleri açık/erteli kalır.
 - **P3-1 ikinci adımın yayın kapanışı:** `48be08e6d3717693e601c9f62c3e1b6665a8c85a`, [CI34749745272](https://github.com/Rapto0/Rapot/actions/runs/34749745272) beş job başarılı. 09:40:19 UTC'de 11 canonical kaynak/rapor dosyası488.483B ve12.462B kayıt sunucuda hash/gzip ile doğrulandı; `/root/rapot-ops/20260913-p31-indicators/release-record.json` SHA256 `426a3041f78c22ecb0328c260bbf956178af2be39262b8757522f88e207866b0`. Beş servis/config aynı, dış HTTPS200; frontend967/backend279 aynı kaldı. TradingView script/alarm kopyası değiştirilmedi.
 - **Ertelenen dış kabul:** Gerçek TradingView alarm teslimi, ALL/FIRST/saat filtresi runtime kabulü ve sınırlı testnet emir testi tamamlanmış sayılmıyor. Hazır test araçları korunuyor; testnet onayı ve Webhook URL erişimi için artık yanıt beklenmiyor, bu işler kullanıcı yeniden seçtiğinde ele alınacak. Borsa emri gönderilmedi; geçici test servisleri kapalı.
 - **Başlangıç kaydı:** Bu belge ilk oluşturulduğunda yalnız belge değişmişti; sonraki uygulama değişiklikleri aşağıda ayrı kaydedildi.
@@ -168,7 +168,7 @@ Kapsam tahminleri süre taahhüdü değildir: küçük birkaç dosya; orta bir �
 | P2-4 | Eşzamanlı API yükünde realtime gecikmesi | Doğrulandı: 279aa9f, 735 Python testi, büyük veri ölçümü, CI ve üretimde 24 REST / 3 WSS kabulü | Orta | P1-5 |
 | P0-G1 | Standalone sağlık sunucusu debug varsayılanını kapat | Doğrulandı — loopback/debug/reloader düzeltmesi P2-3 ile üretimde; yerel/CI HIGH=0 | Küçük | P2-3 raporu ve entrypoint kontrolü |
 | P1-G1 | Kilitli Python bağımlılığı advisory incelemesi | Doğrulandı — 710/710, sıfır dependency bulgusu; CI/imaj/üretim ve auth13/13 geçti | Orta | P2-3 raporu; uygulama/test bağımlılığı ayrımı |
-| P3-1 | Backtest ve strateji eşdeğerliği | COMBO üretimde; motor/Pine kaynak yayını tamam; muhasebe57/tam830-skip1 yerelde doğrulandı. Üçüncü adım kaynak yayını kapasiteye bağlı; Pine dış kabulü, tarih/kronoloji/WFA açık | Büyük | Emir/veri doğruluğu, P1-3, P1-4 |
+| P3-1 | Backtest ve strateji eşdeğerliği | COMBO üretimde; motor/Pine ve FIFO kaynak kabulü tamam. Günlük yürütme48/tam878-skip1 yerelde doğrulandı; CI/kaynak kabulü ayrı kayda bağlanır. Ortak nakit kronolojisi/fiyatlama, benchmark/WFA ve Pine dış kabulü açık | Büyük | Emir/veri doğruluğu, P1-3, P1-4 |
 | P3-2 | Backup branch tasarım değerlendirmesi | Bekliyor | Küçük inceleme | Tasarım tercihi |
 
 **Önerilen sıra:** Başlangıç sırası P0-1 → P0-2 → P0-3 → P0-4, ardından P1-1/P1-2/P1-3 idi. P1-G1 ve P2-4 tamamlandı; güncel sıra **P3-1 → P3-2**; P1-3 dış kabulü kullanıcı yeniden seçene kadar ertelidir.
@@ -1160,7 +1160,7 @@ korunur. Ücretli yükseltme veya rezervi düşürme önerilmez.
   `/root/rapot-ops/20260913-p31-accounting-closure/release-record.json` içinde
   tutulur; yukarıdaki iki değişmez uzak kabul kaydının tam hash'lerine bağlanır.
 
-**Dördüncü adımın salt okunur hazırlığı — henüz uygulanmadı:**
+**Dördüncü adımın salt okunur hazırlığı — tarihsel inceleme:**
 
 - `BacktestEngine.end_date` yürütmede kullanılmıyor. `run_single_symbol`,
   başlangıç indeksinin veri dışında olup olmadığını kontrol etmeden bu indeksi
@@ -1191,6 +1191,65 @@ korunur. Ücretli yükseltme veya rezervi düşürme önerilmez.
 - [ ] Aynı örnek veri, zaman dilimi ve kapanmış/açık mum kurallarıyla hesaplayıcı farkları ölçüldü.
 - [ ] Komisyon, kayma, veri kaynağı ve ileriye bakış etkileri kontrol edildi; sonuçlar tekrarlanabilir.
 - [ ] Bilinçli strateji farkları belgeli; performans raporu canlı kazanç garantisi olarak sunulmuyor.
+
+**13 Eylül dördüncü adım — günlük yürütme yerel kabulü:**
+
+- Eski kaynağın iki RED testi: `end_date=2020-04-30` sonrasında işlem/equity
+  üretmesi ve start veri dışındayken log satırında indeks taşması.
+  `runtime-data/p31-execution-red.log` SHA256
+  `547e998c5378940114b13ff6624d577f17d95d47e4f57d7293b9df74cb7d3389`.
+- `BacktestEngine` strict tarih sınırları ve bir kez sabitlenen saat dilimli
+  `as_of` kullanır. `run_single_symbol(..., data=frame)` sağlayıcıya gitmez;
+  girdi kopyalanır/sıralanır, gün etiketi ve sütun tekilliği, sayısal OHLCV ve
+  gerçek Open kalitesi ilk işlemden önce doğrulanır. Start/end işlem gününe
+  dahil uygulanır; start öncesi ısınma geçmişi korunur. Bitiş ve kapanış kesmesi,
+  minimum120 satır şartından önce yapılır; sınır dışı başlangıç güvenle döner.
+- Piyasa takvimindeki sonraki gece yarısı konservatif gün kapanışıdır: kripto
+  UTC, BIST Europe/Istanbul. Takvim günü tz eklemeden önce ilerletilir;
+  2015 DST sınırı test edildi. Bugünkü açılış da henüz kapalı gün sayılmadığı
+  için dışarıda kalır. BIST seans saati/tatil takvimi eklenmedi.
+- Önceki kapanmış günlük prefix'te hesaplanan sinyal, sonraki mevcut mumun
+  gerçek Open fiyatında yürütülür. İlk sinyal indeksi60, ilk işlem indeksi61;
+  sonraki mum bitiş dışındaysa veya yoksa işlem oluşmaz. İşlem kaydına
+  `Sinyal Tarihi` ve `Yürütme Modeli=next_open` eklenir. Equity kaynak satır
+  indeksi10'un katında ve son uygun günde Close ile gün sonu değeri olarak
+  kaydedilir. Aynı Open'da COMBO/HUNTER ve çoklu eylem sırası korunur.
+- Close/AOF/synthetic/mapped/bilinmeyen Open metadata reddedilir. Yalnız
+  eksik/None veya `provider` kabul edilir; eksik metadata çağıranın gerçek
+  açılış sağlama sözleşmesidir. Mevcut İş Yatırım adaptörü proxy üretirse bu
+  BIST veri kümesi için sonuç yerine açık hata alınır. Sessiz fiyat fallback'i
+  veya canlı sağlayıcı doğrulaması yapılmadı.
+- Haftalık/aylık gelişen grup, kapanmış günlük prefix'ten hesaplanmaya devam
+  eder. Bu bütün HTF mumlarının kapandığı anlamına gelmez. Sabit DataFrame,
+  sabit sınırlar ve aynı hesaplayıcı/maliyet sürümleri tekrarlanabilir yoludur;
+  `as_of` sağlayıcı revizyonunu veya göreli indirme başlangıcını dondurmaz.
+- Worker aynı veriyi iki kez çekmez. Dört elemanlı eski çağrı korunur; altı
+  elemanlı çağrı end/as_of taşır. Paralel dispatch bir kapanış anını bütün
+  worker'lara verir. Toplu sabit DataFrame API'si ve ortak nakit kronolojisi
+  bu adımda uygulanmadı.
+- **48/48 yeni test**, **878 geçti /1 isteğe bağlı performans testi atlandı**,
+  **uyarı yok**, tam paket100,53sn. Gerçek yürütme + stub sinyalle FIFO oracle:
+  bütçe1.030/Open100/q10; sonraki SELL Open110/net1.067; cash2.097/PnL37,
+  komisyon21/kayma42. Gap senaryosu 1 Mart sinyali → 3 Mart Open500; Close999
+  işleme taşınmadı. Cutoff dışı NaN, kaynak değişmezliği, UTC/İstanbul,
+  Openproxy, yapı/fiyat hatalarında portföy korunumu ve tek worker fetch geçti.
+  Güncel yeni testler `tests/test_backtest_execution.py`; 57 muhasebe testi
+  tam pakette korunuyor. Gerçek CLI/provider/Excel/grafik/emir çalıştırılmadı.
+- Ayrıntılar [BACKTEST_EXECUTION.md](BACKTEST_EXECUTION.md) içinde. Yerel
+  sonuçlar `runtime-data/p31-execution-green.log` ve
+  `p31-execution-full-python.log`; canonical kaynak hashleri ve sayılar
+  `p31-execution-local-acceptance.json` kaydına bağlanır. Beş Git blob'u ve bu
+  küçük JSON, exact-source CI sonrası yeni execution ops dizinine yayımlanır.
+  Bu kaynak/kanıt aktarımı, container içindeki CLI kopyasını veya çalışan
+  uygulama imajını değiştirmez. Sabit528MiB rezerv ve2MiB bütçe korunur.
+
+**Önceki kapanış belgesinin son kabulü:** `905d1a1470b0d67ece11cfdbf0cc2b5ae64b89fe`,
+[CI34754812887](https://github.com/Rapto0/Rapot/actions/runs/34754812887) beş kontrol
+başarılı; 11:40:13 UTC'de263.569B belge ve9.054B kabul kaydı doğrulandı.
+`/root/rapot-ops/20260913-p31-accounting-closure/release-record.json` SHA256
+`ccb3876eff4382315cdc8facc3b7a54dcb3794cc88d7c68efd65801e488d62b2`.
+Son boş alan622.018.560B, beş servis/config ve frontend967/backend279 aynıydı.
+Üçüncü adımın kapasite veya belge yayını için yanıt/iş beklenmiyor.
 
 ### P3-2 — Backup branch tasarım değerlendirmesi
 
@@ -1324,6 +1383,8 @@ korunur. Ücretli yükseltme veya rezervi düşürme önerilmez.
 
 | 2026-09-13 | P3-1 üçüncü adım | Yeni onay → tek günlük temizliği → kaynak kabulü | Final öneri60405933 ve yeni yetki eb212130; yedek yeniden doğrulandı, yalnız tek ARCHIVED günlük kaldırıldı. Kod7787fc1/CI34752893586 başarılı, altı kaynak/kanıt dosyası aktarıldı. Beş servis/config aynı, HTTPS200, son622.800.896B boş alan. Adım4 yalnız salt okunur incelendi; kodu başlamadı, tüm P3 ve dış kabul açık |
 
+| 2026-09-13 | P3-1 dördüncü adım | İncele → düzelt → yerel doğrula | İki eski RED; sabit günlük veri, dahil start/end, UTC as_of, konservatif kapanış ve sonraki gerçek Open yürütmesi. 48 yeni/tam878-skip1 uyarısız; FIFO/gap/cutoff/DST/input atomikliği/worker tekfetch geçti. Gelişen HTF politikası ve maliyet modeli korundu; ortak nakit kronolojisi/WFA açık. CI ve kaynak yayını ayrı execution release kaydına bağlanır |
+
 Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 
 - İş ID'si, tarih, aşama ve sonuç.
@@ -1342,4 +1403,4 @@ Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 4. Aktif işin bulgusunu ve bağımlılıklarını güncel kodda kontrol et. İncelemeyi baştan tekrarlamak yerine ilgili kanıttan devam et.
 5. İşin dört adımını tamamla veya engeli somutlaştır; ardından durum tablosu, günlük ve Kaldığımız nokta bölümünü güncelle.
 
-**P3-1 üçüncü adım: kod7787fc1, CI34752893586 ve altı dosyalık kaynak yayını doğrulandı. Yeni açık onayla yalnız bir eski günlük kaldırıldı; özel yedek ve diğer altı günlük korundu. Kaynak kabulü sonunda622.800.896B boş alan, frontend967/backend279 aynı ve sağlıklı. Bu kapanış belgesinin kendi SHA/CI ve aktarım kabulü ayrı release kaydındadır. Sonraki kod işi sabit veri/start–end ve kapanmış mum yürütme sözleşmesi; ön inceleme hazır, uygulama başlamadı. Yeni Pine dış kabulü, kronoloji/WFA ve tüm P3 açık; ücretli yükseltme ve gerçek/testnet emirleri kapsam dışında.**
+**P3-1 dördüncü adım yerelde doğrulandı: sabit veri/start–end/as_of, önceki kapanmış günlük sinyalden next_open yürütmesi; yeni48/tam878-skip1 uyarısız. Aktif kapanış CI + canonical CLI kaynak yayını, kendi SHA/CI ve son kabulü execution/release-record.json kaydında tutulur. Muhasebe ve önceki tek günlük temizliği kapandı; ek silme veya ücretli yükseltme yetkisi yok. Frontend967/backend279 aynı. Sıradaki iş ortak nakit kronolojisi ve tutarlı çoklu sembol fiyatlama; benchmark/WFA, yeni Pine dış kabulü ve tüm P3 açık, gerçek/testnet emirleri erteli.**

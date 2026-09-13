@@ -1,6 +1,6 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-Kaynaklarla son karşılaştırma: **13 Eylül 2026 / P3-1 üçüncü adım**. İş sırası, kullanıcı
+Kaynaklarla son karşılaştırma: **13 Eylül 2026 / P3-1 dördüncü adım**. İş sırası, kullanıcı
 yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DEVAM_PLANI.md)
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 
@@ -143,10 +143,24 @@ P3-1 üçüncü adımında `Lot.invested` tüm alış giderlerini içerir; komis
 ayrı izlenir. Eski referans tutar üzerinden toplamsal model ve tek en eski lotu
 tam satma FIFO sözleşmesi korunur. Nakit + açık maliyet tabanı = başlangıç +
 gerçekleşmiş PnL bağıntısı sentetik testlerle doğrulanır. Float/Kahan ve dar
-temsil toleransı Decimal defteri değildir. Tarih/yürütme/kronoloji/WFA işleri
-açıktır; [muhasebe belgesi](docs/BACKTEST_ACCOUNTING.md) sınırları açıklar.
+temsil toleransı Decimal defteri değildir;
+[muhasebe belgesi](docs/BACKTEST_ACCOUNTING.md) sınırları açıklar.
 Matplotlib ve tqdm kilit ortamda yoktur; yalnız grafik/runner fonksiyonlarında
 yüklenir. Muhasebe testleri tam CLI veya grafik çalıştırmış sayılmaz.
+
+P3-1 dördüncü adımında `BacktestEngine(..., as_of=...)` kapanış anını bir kez
+sabitler; açıkça verilen an saat dilimli olmalıdır. `run_single_symbol(...,
+data=frame)` sabit günlük OHLCV'yi kopyalayıp doğrular ve sağlayıcıya gitmez.
+Start/end dahil işlem günü sınırlarıdır; önceki geçmiş ısınmada korunur.
+Önceki kapanmış günlük prefix'in sinyali sonraki mevcut mumun gerçek Open
+fiyatında yürütülür. Hem sinyal hem işlem satırı, piyasa takviminde sonraki
+gece yarısına ulaşmış olmalıdır; bugünkü Open muhafazakâr biçimde dışlanır.
+BIST Close/AOF proxy açılışı ve bilinmeyen `open_quality` reddedilir; yalnız
+eksik/None veya `provider` metadata kabul edilir. 120 uygun satır ve ilk sinyal
+indeksi60 korunur; en erken işlem indeksi61'dir. Günlük prefix'ten gelişen HTF
+politikası değişmez. Paralel worker bir kez veri okur ve ortak `as_of` alır.
+Çoklu sembol nakit kronolojisi/fiyatlama, benchmark/WFA ve tam CLI kabulü hâlâ
+açıktır; [yürütme sözleşmesi](docs/BACKTEST_EXECUTION.md) kapsamı açıklar.
 
 ## Veri, erişim ve dağıtım
 
