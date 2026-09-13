@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { fetchSignals, transformSignal, type SignalsParams } from '@/lib/api/client';
+import { fetchSignals, transformSignal, type ApiSignal, type SignalsParams } from '@/lib/api/client';
 
 export interface Signal {
     id: number;
@@ -96,11 +96,11 @@ export function useRecentSignals(limit: number = 5) {
     });
 }
 
-function isAllowedSpecialNotification(signal: Signal): boolean {
+function isAllowedSpecialNotification(signal: ApiSignal): boolean {
     return (
         (signal.strategy === 'COMBO' || signal.strategy === 'HUNTER') &&
-        (signal.specialTag === 'BELES' || signal.specialTag === 'COK_UCUZ')
-    )
+        (signal.special_tag === 'BELES' || signal.special_tag === 'COK_UCUZ')
+    );
 }
 
 export function useSpecialNotificationSignals(limit: number = 100) {
@@ -121,8 +121,8 @@ export function useSpecialNotificationSignals(limit: number = 100) {
             const deduped = new Map<number, Signal>();
             responses
                 .flat()
-                .map(transformSignal)
                 .filter(isAllowedSpecialNotification)
+                .map(transformSignal)
                 .forEach((signal) => {
                     deduped.set(signal.id, signal);
                 });
