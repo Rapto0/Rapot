@@ -1,6 +1,6 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-Kaynaklarla son karşılaştırma: **13 Eylül 2026 / P3-1 ilk adım**. İş sırası, kullanıcı
+Kaynaklarla son karşılaştırma: **13 Eylül 2026 / P3-1 ikinci adım**. İş sırası, kullanıcı
 yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DEVAM_PLANI.md)
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 
@@ -78,6 +78,13 @@ uv pip check --python .venv/Scripts/python.exe
 kullanır, HTTP/socket/curl ağını engeller. Bu izolasyon normal API/bot başlatma
 komutlarını veya keyfi native subprocess'leri kapsamaz.
 
+Tam pytest paketindeki `tests/test_strategy_comparison.py` ayrıca Node 20 ve
+`frontend` içinde `npm ci` ile kurulmuş TypeScript'i gerektirir. Node PATH'te
+değilse `NODE_BINARY` tam yürütücü yolunu seçer. Adaptör yalnız sabit sentetik
+fixture ve gerçek gösterge kaynağını okur; ağ/uygulama servisi başlatmaz.
+İsteğe bağlı `RAPOT_STRATEGY_REPORT` mutlak JSON yolu ölçüm kanıtını üretir;
+CI iki runtime'ı kurar ve raporu artifact olarak saklar.
+
 Seçili Node/npm ile frontend klasöründe:
 
 ```powershell
@@ -124,8 +131,12 @@ Pip içermeyen uv ortamında bağımlılık kontrolü yukarıdaki `uv pip check`
   `967f137`, backend/Compose/current `279aa9f`; yalnız frontend yenilendi.
   Tek günlük temizliği ve uygulama kabulü devam planında ayrı kayıtlardır.
   Hesaplayıcı yeterli sonlu göstergeyle puan üretebilir; yerel alarm son kaydın tüm
-  göstergeleri sonlu değilse `unknown` döndürür. Pine EMA/ATR başlangıç sınırları,
-  motor farkları ve backtest işleri P3-1'de açık; üç motor tam eşdeğer sayılmaz.
+  göstergeleri sonlu değilse `unknown` döndürür. P3-1 ikinci adımında özel Pine
+  EMA/ATR devam döngüleri yalnız seed sonrasında çalışacak biçimde sınırlandı;
+  kaynak alt kümesi sayısal testi TradingView derleyicisi değildir. Güncel Pine
+  derleme/runtime kabulü ayrıca açık. Gerçek Python/TS ölçümünün kapsamı ve
+  varsayılan/formül farkları [karşılaştırma belgesinde](docs/STRATEGY_COMPARISON.md).
+  Motorları topluca eşitleme kararı verilmedi; backtest işleri açık.
 
 ## Veri, erişim ve dağıtım
 

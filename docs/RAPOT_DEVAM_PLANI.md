@@ -4,12 +4,12 @@ Bu belge, 6 Eylül 2026 tarihli salt okunur proje incelemesinden çıkan işleri
 
 ## Kaldığımız nokta
 
-- **Son çalışma:** **P3-1 ilk COMBO düzeltmesi üretimde doğrulandı.** Frontend `967f137`, backend/Compose/current `279aa9f`. Altı yeni regresyonla **105/105** frontend testi, lint/type/build/standalone ve exact-source CI/imaj yayını geçti. Yeni onayla yalnız bir eski günlük kaldırıldı (~72 MiB); ardından yalnız frontend yenilendi. Sekiz HTTP/SSR ve dış HTML/RSC/13 statik dosya kontrolü geçti; diğer dört servis ve ayarlar korundu. Tüm P3-1, Pine/motor eşdeğerliği ve backtest işleri açık.
+- **Son çalışma:** **P3-1 ikinci adımın yerel kabulü tamamlandı:** sabit 7×80 mumda gerçek Python/TypeScript fark ölçümü ve Pine EMA/ATR devam döngüsü sınırı. **773 Python testi geçti / 1 isteğe bağlı performans testi atlandı**, uyarı yok; frontend **105/105**, lint/typecheck ve Ruff geçti. Ölçüm genel eşdeğerlik iddiası taşımıyor; değişmiş Pine kaynağının TradingView derleme/runtime kabulü açık. Frontend `967f137`, backend/Compose/current `279aa9f` çalışıyor. Bu adımın tam SHA/CI ve canonical kaynak/kanıt yayını `/root/rapot-ops/20260913-p31-indicators/release-record.json` ile ayrıca bağlanır; çalışan imaj veya DB değişikliği gerektirmez.
 - **Uygulama durumu:** P0-1–P0-4, P1-1, P1-2, P1-4–P1-7, P1-G1, P2-1, P2-3 ve **P2-4 doğrulandı**; P2-2 belge/karar kapsamı tamam. İç worktree ve 12 wrapper koruma kararı değişmedi.
 - **P1-2 durumu — Doğrulandı:** **8f60f8e üretim geçişi ve [HTTPS](https://138.68.71.27) kabulü tamamlandı.** API, bot, frontend, middleware ve PG16 sağlıklı; veri korunumu, dış HTTPS/auth/WSS, yetkisiz webhook reddi ve sertifika yenileme dry-run testi geçti. Eski supervisor'lar devre dışı; özgün DB/checkout ve geri dönüş kaynakları korundu.
 - **Önceki sürümün uzak doğrulaması — 11 Eylül:** `ccd61544` için [CI 34641121926](https://github.com/Rapto0/Rapot/actions/runs/34641121926) ve [imaj yayını 34641767731](https://github.com/Rapto0/Rapot/actions/runs/34641767731) başarılı. Üretimde API health 47 ms/200; `/`, `/signals`, `/alarms`, `/chart` SSR 200. Beş servis healthy/restart0; SignalFeed hazır, Binance/BIST sağlayıcıları başlamış. Scheduler 47,298 saniyede unknown → running oldu. 1.733.137 sinyal, 6 tarama geçmişi, 26.393 AI kaydı ve diğer ana sayılar; PostgreSQL kimliği ve 135/135/28/383 sayıları korundu. DRY_RUN/false/false ve AI kapalı; dış Windows HTTPS API/bot kontrolleri ayrı ayrı 203 ms/200. Sonraki `aadde728` ve güncel `279aa9f` geçişlerinin 13 Eylül kanıtı P2-4 bölümündedir.
 - **P2-2 doğrulaması ve belge yayını:** Python 3.12.8'de üç ayrı hedefli koşum toplam **98/98** geçti (wrapper/boundary/read-model 37, DB/migration 30, sinyal/config 31); DB grubunda mevcut 10 UTC warning var. 11 Eylül 15:44:58 UTC salt okunur sunucu ön kontrolünde beş servis healthy/restart0, HTTPS API/bot health 200 (0,051/0,043 saniye). Bu yalnız belge commit'inin tam SHA/CI sonucu, Git blob SHA256'ları ve sunucuya aktarım sonrası korunma kanıtı `/root/rapot-ops/20260911-p22/release-record.json` içinde sürüm bazında tutulur. İmaj yayını, servis restart'ı veya migration bu belge yayınının parçası değildir.
-- **Aktif iş:** **P3-1 sabit OHLCV örnekleriyle Python/TypeScript/Pine fark ölçümü ve Pine EMA/ATR sınırları.** İlk COMBO adımı `967f137351290735d7e6ae556b4ad237c253677c`, CI **34746909758** ve imaj **34747132287** ile üretimde. Backend ve Compose/current kaynağı `279aa9fea99b520e661b43f104a2bf4791893ac3` olarak kaldı. Son uygulama kaydı `/root/rapot-ops/20260913-p31-frontend/deployment.json`; hazırlık ve tek günlük temizliği ayrı `/root/rapot-ops/20260913-p31-preflight/` kayıtlarında. Son belge SHA/CI ve aktarım doğrulaması frontend operator dizinindeki `documentation-release-record.json` içinde tutulur.
+- **Aktif iş:** **P3-1 ikinci adımın kaynak/kanıt yayını; ardından alış maliyeti dahil backtest nakit–PnL muhasebesi.** Gerçek Python/TS ölçümü ve dar Pine kaynak regresyonu tamam; Pine'ın tamamının çalıştırılması veya üç motorun eşitliği doğrulanmış değil. Son uygulama geçişi hâlâ `/root/rapot-ops/20260913-p31-frontend/deployment.json`: frontend `967f137351290735d7e6ae556b4ad237c253677c`, backend/Compose/current `279aa9fea99b520e661b43f104a2bf4791893ac3`. İkinci adımın sürümlü kaynak kopyası TradingView'deki mevcut script/alarm kopyasını değiştirmez.
 - **Ertelenen dış kabul:** Gerçek TradingView alarm teslimi, ALL/FIRST/saat filtresi runtime kabulü ve sınırlı testnet emir testi tamamlanmış sayılmıyor. Hazır test araçları korunuyor; testnet onayı ve Webhook URL erişimi için artık yanıt beklenmiyor, bu işler kullanıcı yeniden seçtiğinde ele alınacak. Borsa emri gönderilmedi; geçici test servisleri kapalı.
 - **Başlangıç kaydı:** Bu belge ilk oluşturulduğunda yalnız belge değişmişti; sonraki uygulama değişiklikleri aşağıda ayrı kaydedildi.
 - **Seçilen geliştirme ortamı:** `.venv` / Python 3.12; Node 20.20.2 / npm 10.9.9. Yerelde Python 3.12.8 ile doğrulandı.
@@ -166,7 +166,7 @@ Kapsam tahminleri süre taahhüdü değildir: küçük birkaç dosya; orta bir �
 | P2-4 | Eşzamanlı API yükünde realtime gecikmesi | Doğrulandı: 279aa9f, 735 Python testi, büyük veri ölçümü, CI ve üretimde 24 REST / 3 WSS kabulü | Orta | P1-5 |
 | P0-G1 | Standalone sağlık sunucusu debug varsayılanını kapat | Doğrulandı — loopback/debug/reloader düzeltmesi P2-3 ile üretimde; yerel/CI HIGH=0 | Küçük | P2-3 raporu ve entrypoint kontrolü |
 | P1-G1 | Kilitli Python bağımlılığı advisory incelemesi | Doğrulandı — 710/710, sıfır dependency bulgusu; CI/imaj/üretim ve auth13/13 geçti | Orta | P2-3 raporu; uygulama/test bağımlılığı ayrımı |
-| P3-1 | Backtest ve strateji eşdeğerliği | İlk COMBO adımı 105 test/CI/imaj ve frontend967 üretim kabulüyle doğrulandı; motor/Pine ve backtest işleri açık | Büyük | Emir/veri doğruluğu, P1-3, P1-4 |
+| P3-1 | Backtest ve strateji eşdeğerliği | İlk COMBO üretimde; Python/TS ölçümü ve Pine sınırı yerelde doğrulandı (773/skip1); yeni Pine dış kabulü ve backtest muhasebe/zaman işleri açık | Büyük | Emir/veri doğruluğu, P1-3, P1-4 |
 | P3-2 | Backup branch tasarım değerlendirmesi | Bekliyor | Küçük inceleme | Tasarım tercihi |
 
 **Önerilen sıra:** Başlangıç sırası P0-1 → P0-2 → P0-3 → P0-4, ardından P1-1/P1-2/P1-3 idi. P1-G1 ve P2-4 tamamlandı; güncel sıra **P3-1 → P3-2**; P1-3 dış kabulü kullanıcı yeniden seçene kadar ertelidir.
@@ -222,6 +222,7 @@ uv venv --python 3.12 .venv
 uv pip sync --python .venv/Scripts/python.exe requirements-dev.lock
 uv pip check --python .venv/Scripts/python.exe
 
+# Önce aşağıdaki Node 20 / frontend npm ci kurulumu da hazır olmalı.
 # Her iki test dizinini toplar; .env veya gerçek servis gerekmez:
 .venv/Scripts/python.exe -X utf8 -B -m pytest
 .venv/Scripts/python.exe -X utf8 -B -m pytest --cov=. --cov-report=xml
@@ -232,6 +233,13 @@ uv pip check --python .venv/Scripts/python.exe
 ```
 
 Linux/macOS'ta aynı komutlarda yorumlayıcı yolu `.venv/bin/python` olur. CI temiz ortamda `python -m pip install -r requirements-dev.lock` ve `python -m pip check` kullanır. CI Python sürümünü `.python-version` dosyasından okur.
+
+P3-1 ikinci adımından itibaren tam pytest, gerçek Python/TypeScript gösterge
+karşılaştırmasını da içerir: Node 20 ve frontend kilit bağımlılıkları gerekir.
+PATH farklı bir Node sürümünü gösteriyorsa `NODE_BINARY` değişkenine Node 20
+yürütücüsünün tam yolunu ver. Bu kontrol sessizce atlanmaz. İsteğe bağlı
+`RAPOT_STRATEGY_REPORT` mutlak JSON yoluyla sentetik ölçüm kanıtı yazılır;
+[karşılaştırma belgesi](STRATEGY_COMPARISON.md) kapsamı ve komutu açıklar.
 
 Frontend için `.nvmrc` dosyalarındaki Node 20.20.2 ve `packageManager` alanındaki npm 10.9.9 kullanılır. Bu ortam seçildikten sonra `frontend` klasöründe:
 
@@ -984,6 +992,59 @@ Somut öneri `runtime-data/p31-one-journal-removal-proposal.json`, SHA256 `9f88d
 
 **Uygulama sırası:** (1) COMBO sonlu sıfır/eksik ayrımı ve alarm regresyonu; (2) sabit OHLCV fixture'leriyle Python/TS/Pine fark ölçümü ve Pine döngü sınırları; (3) alış maliyeti dahil nakit–PnL ve ayrı komisyon/kayma muhasebesi; (4) sabit veri girdisi/start–end ve kapanmış mum yürütme sözleşmesi; (5) çoklu sembolü kronolojik portföyde işleme/değerleme; (6) WalkForward'ı gerçek strateji testiyle tamamlama veya mevcut buy-and-hold analizi olarak doğru adlandırma. EMA/RSI başlangıcı, CMO yaklaşımı, standart sapma ddof, Keltner ATR ve HUNTER eşik eşitliği motorlar arasında farklıdır; otomatik eşitleme kararı verilmedi.
 
+**13 Eylül ikinci adım — incele → düzelt → doğrula:**
+
+- `tests/fixtures/strategy_ohlcv.json` yedi sabit 80 mumluk sentetik veri dizisi,
+  20 başlangıç uzunluğu içerir. `tests/test_strategy_comparison.py` gerçek Python
+  public fonksiyonlarını çağırır; `frontend/tests/strategy-export.mjs` gerçek TS
+  kaynağını çalıştırır. Public çıktı/gate, NaN/sonsuz/sonlu ham değer, puan ve karar
+  ayrı sayılır. 1D/ME aynı tamamlanmış diziye uygulanan puan politikasıdır;
+  aylık resampling veya canlı/açık mum kabulü değildir.
+- 560 Python +840 TS gözlemi; geçmişin gelecek veriden etkilenmemesi için
+  2.527 Python bileşen +210 TS satır karşılaştırması geçti. Varsayılan TS ile
+  Python1D arasında, ikisinde public çıktı olan 21'er gözlemde COMBO2/HUNTER3
+  karar farkı var. Puan/BOP politikaları eşleştirildiğinde bu örneklerde nihai
+  karar farkı0; ham gösterge ve puan farkları sürüyor. Sonuç genellenmez;
+  [ayrıntılı tablo ve formül farkları](STRATEGY_COMPARISON.md) kaydedildi.
+- Pine `calcEma` devamına `n > len`, `calcAtr` devamına `n > len + 1` eklendi.
+  Başlangıç penceresinde aşağı sayan döngünün gelişen mumu iki kez daha
+  güncellemesi engellendi. Elle hesaplanan EMA3:27,5→20; ATR3:145/27→13/3.
+  Sonraki mum sonuçları30 ve32/9 aynı. Formül, eşik, HTF toplaması ve alarm
+  kapıları değişmedi. Gerçek iki fonksiyon gövdesinin dar AST yorumu eski
+  kaynakta10 hata/20 başarı, düzeltme sonrası30/30 verdi; mevcut22 Pine
+  sözleşmesiyle52/52 geçti. Pine derleyicisi/native `ta.*` testi değildir.
+- Tam Python paketi coverage açık **773 geçti /1 atlandı**, **uyarı yok**,
+  97,97 sn; atlanan mevcut isteğe bağlı büyük veri performans ölçümüdür.
+  Yeni ölçüm8 ve Pine30 test ekler. Frontend105/105, önbelleksiz ESLint,
+  incremental kapalı TypeScript, iki yeni Python dosyasında Ruff lint/format
+  geçti. CI kalite araçlarının33 testi de geçti. Node20.20.2/npm10.9.9,
+  Python3.12.8; bağımlılık veya Python/TS üretim formülü değişmedi.
+- CI Python job'ına seçili Node/npm ve kilit frontend kurulumu eklendi.
+  `RAPOT_STRATEGY_REPORT` için parent oluşturulur; kaynak/fixture metin hash'leri
+  CRLF→LF normalize edilir. CI raporu `strategy-comparison-<SHA>` artifact'inde
+  14 gün saklar. Yerel raw rapor `runtime-data/p31-strategy-comparison.json`,
+  SHA256 `5f9f924dc72d77dcfa12c6999cc5c5b71e9775ff051b51f1051c35b06f4201c6`.
+  Tam test logu `p31-indicator-full-python.log`; Pine RED/GREEN logları
+  `p31-pine-boundaries-red.log` ve `p31-pine-boundaries-green.log`.
+
+**İkinci adım yayın kapsamı:** Uygulama girişlerinde Pine/test dosyalarını yükleyen
+bir yol bulunmadı; frontend standalone çıktısı test adaptörünü içermiyor.
+Bu nedenle bu adım, on allowlist canonical Git dosyası ve sıkıştırılmış sentetik
+raporun yeni `/root/rapot-ops/20260913-p31-indicators/` dizinine aktarımıdır.
+Tam kaynak SHA'sında başarılı CI (build/standalone/Docker dahil) ve Git blob
+hash'leri yayın önkoşuludur. Raw/gzip rapor hash/boyutları, öncesi/sonrası beş
+container kimliği, env/Compose/Nginx hash'leri, HTTPS sağlık ve boş disk kanıtı
+`release-record.json` içinde tutulur. Toplam2MiB aktarım bütçesi ve528MiB disk
+rezervi korunur; imaj yayını/pull, pointer değişikliği, migration, DB işlemi,
+servis restart'ı veya dosya silme yapılmaz. Bu kaynak yayını TradingView'deki
+script veya çalışan alarm kopyasını güncellemiş sayılmaz.
+
+**Açık kalan / sonraki somut adım:** Yeni Pine kaynağının TradingView derleme ve
+runtime kabulü açık; eski9–10 Eylül kullanıcı kabulü yeni kaynağa taşınmadı.
+Tüm motorların canlı/açık mum ve ortak zaman dilimi kabulü tamamlanmış değil.
+Sonraki yerel iş `backtesting_system.py::Lot` ve `Portfolio` için alış maliyeti
+dahil nakit–PnL, komisyon ve kayma muhasebesini aynı fiyat alış/satış ve kısmi
+satış örnekleriyle doğrulamaktır; sonrasında tarih sınırları ve kronoloji gelir.
 
 **Kabul kriterleri:**
 
@@ -1115,6 +1176,8 @@ Somut öneri `runtime-data/p31-one-journal-removal-proposal.json`, SHA256 `9f88d
 
 | 2026-09-13 | P3-1 ilk adım | Yeni onay → tek günlük temizliği → frontend deploy kabulü | Tek ARCHIVED günlük kaldırıldı, özel yedek ve diğer yedi günlük korundu. Frontend967 üretimde; backend/Compose279 ve dört servis aynı. Sekiz GET/SSR200 ve dış16GET/13asset geçti; son boş alan562.618.368B; tüm P3 açık |
 
+| 2026-09-13 | P3-1 ikinci adım | İncele → düzelt → doğrula → belgeyi güncelle | Gerçek Python/TS sentetik ölçümü; iki Pine continuation guard'ı. 773 Python/skip1 uyarısız, frontend105 ve lint/typecheck geçti; Pine eski kaynak10hata→yeni30+22geçti. Üretim frontend967/backend279 korunur; kaynak/kanıt yayını tamSHA/CI ve ayrı release-record ile bağlanır. Yeni Pine dış kabulü ile muhasebe/zaman/backtest işleri açık |
+
 Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 
 - İş ID'si, tarih, aşama ve sonuç.
@@ -1133,4 +1196,4 @@ Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 4. Aktif işin bulgusunu ve bağımlılıklarını güncel kodda kontrol et. İncelemeyi baştan tekrarlamak yerine ilgili kanıttan devam et.
 5. İşin dört adımını tamamla veya engeli somutlaştır; ardından durum tablosu, günlük ve Kaldığımız nokta bölümünü güncelle.
 
-**P3-1 ilk COMBO düzeltmesi üretimde: frontend `967f137`, backend/Compose/current `279aa9f`. 105 test, lint/type/build/standalone, CI/imaj ve frontend HTTP/SSR kabulü geçti. Yeni onaylı tek günlük kaldırıldı; diğer dosyalar ve arşiv yedeği korundu. Sonraki kod adımı motor fark ölçümü ve Pine EMA/ATR sınırları; tüm P3 tamamlanmış değil. Ücretli yükseltme ile gerçek TradingView alarm/testnet/emir kabulü kapsam dışında.**
+**P3-1 ikinci adımın yerel ölçüm/Pine sınır kabulü tamam: Python773/skip1 uyarısız, frontend105. TamSHA/CI ve kaynak/kanıt aktarımı ayrı indicators/release-record kaydında tutulur; çalışan frontend967/backend279 değişmez. Yeni Pine'ın TradingView derleme/runtime kabulü ve üç motorun ortak açık/kapalı mum eşdeğerliği açık; sıradaki yerel kod işi backtest alış maliyeti dahil nakit–PnL muhasebesi. Ücretli yükseltme ile gerçek TradingView alarm/testnet/emir kabulü kapsam dışında.**

@@ -533,8 +533,9 @@ calcEma(HtfBar htf, int len) =>
             s += htf.getC(i)
         result := s / len
         float k = 2.0 / (len + 1)
-        for i = len to n - 1
-            result := htf.getC(i) * k + result * (1.0 - k)
+        if n > len
+            for i = len to n - 1
+                result := htf.getC(i) * k + result * (1.0 - k)
     result
 
 calcAtr(HtfBar htf, int len) =>
@@ -546,9 +547,10 @@ calcAtr(HtfBar htf, int len) =>
             float tr_ = math.max(htf.getH(i) - htf.getL(i), math.max(math.abs(htf.getH(i) - htf.getC(i - 1)), math.abs(htf.getL(i) - htf.getC(i - 1))))
             s += tr_
         result := s / len
-        for i = len + 1 to n - 1
-            float tr_ = math.max(htf.getH(i) - htf.getL(i), math.max(math.abs(htf.getH(i) - htf.getC(i - 1)), math.abs(htf.getL(i) - htf.getC(i - 1))))
-            result := (result * (len - 1) + tr_) / len
+        if n > len + 1
+            for i = len + 1 to n - 1
+                float tr_ = math.max(htf.getH(i) - htf.getL(i), math.max(math.abs(htf.getH(i) - htf.getC(i - 1)), math.abs(htf.getL(i) - htf.getC(i - 1))))
+                result := (result * (len - 1) + tr_) / len
     result
 
 calcKpb(HtfBar htf, int emaLen, int atrLen, float mult) =>

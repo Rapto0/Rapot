@@ -124,6 +124,23 @@ BTCUSDT.P/1D ve BTCUSDT/Heikin Ashi/1D için `Grafik Engelli`, standart
 BTCUSDT/1D/Kripto 24/7 için `TF OK` ve `Alert Acik` gördüğünü bildirdi.
 Bu gözlemler gerçek HTTP alarm teslimini kanıtlamaz.
 
+13 Eylül P3-1 değişikliği, özel `calcEma` ve `calcAtr` devam döngülerini
+başlangıç penceresinden sonra yeni mum bulunması koşuluna bağladı. Eski kaynakta
+EMA `n == len` ve ATR `n == len + 1` durumunda aşağı yönlü döngü iki fazladan
+güncelleme yapıyordu. Yeni 30 sayısal/izin listesi kontrolü ve mevcut 22 kaynak
+sözleşmesi testi geçti; 9–10 Eylül kullanıcı kabulü bu değişmiş kaynağı kapsamaz.
+Yeni kaynağın TradingView derlemesi/yürütmesi henüz doğrulanmadı.
+[Farklar ve test sınırları](../../docs/STRATEGY_COMPARISON.md).
+
+```powershell
+.venv\Scripts\python.exe -X utf8 -B -m pytest middleware/tests/test_pine_indicator_boundaries.py middleware/tests/test_pine_contract.py -q
+```
+
+Sayısal test gerçek iki fonksiyon gövdesinin dar aritmetik alt kümesini yorumlar;
+genel Pine motoru veya native `ta.*` uygulaması değildir. `HtfBar.total()` kapalı
+mumlara gelişmekte olan mumu ekler. Mevcut grafik mumunun kapanışını kontrol eden
+`confirmClose`/`watchlistIntrabar`, üst zaman dilimindeki bu mumu çıkarmaz.
+
 Ayrı VPS PostgreSQL/kapsamında operatörün sentetik payload'uyla HTTPS/query-token,
 iki simülasyon BUY → iki FIFO SELL ve restart öncesi/sonrası birebir tekrar
 kabulü geçti; üretim kayıt sayıları değişmedi. Bu alıcı `DRY_RUN` ve boş Binance
