@@ -4,12 +4,12 @@ Bu belge, 6 Eylül 2026 tarihli salt okunur proje incelemesinden çıkan işleri
 
 ## Kaldığımız nokta
 
-- **Son çalışma:** **P3-1 üçüncü adımın yerel muhasebe kabulü tamamlandı:** alış komisyonu/kayması lot maliyetine dahil, giderler ayrı raporlanıyor, tekrarlı kesirli bütçe ve geçersiz girdilerde atomiklik düzeltildi. Yeni **57/57**, tam **830 Python testi geçti /1 isteğe bağlı performans testi atlandı**, uyarı yok. Referans tutara toplamsal maliyet ve tek eski lotu tam satma sözleşmesi korunur. CI ve canonical CLI kaynak/kanıt yayını ayrı kayda bağlanır; henüz tam backtest veya canlı hesap kabulü değildir.
+- **Son çalışma:** **P3-1 üçüncü adımın muhasebe kodu, CI ve kaynak yayını doğrulandı.** `7787fc17c47ece30b09ab8aedd26366a18dd8d01`; CI34752893586 beş kontrol başarılı, Python830/skip1 ve frontend105 geçti. Alış komisyonu/kayması lot maliyetinde, giderler ayrı; referans tutara toplamsal maliyet ve tek eski lotu tam satma sözleşmesi korunuyor. Kullanıcının yeni tek dosya onayıyla kapasite geri kazanıldı; 11:32:29 UTC’de altı kaynak/kanıt dosyası sunucuda doğrulandı. Bu tam backtest veya canlı hesap kabulü değildir.
 - **Uygulama durumu:** P0-1–P0-4, P1-1, P1-2, P1-4–P1-7, P1-G1, P2-1, P2-3 ve **P2-4 doğrulandı**; P2-2 belge/karar kapsamı tamam. İç worktree ve 12 wrapper koruma kararı değişmedi.
 - **P1-2 durumu — Doğrulandı:** **8f60f8e üretim geçişi ve [HTTPS](https://138.68.71.27) kabulü tamamlandı.** API, bot, frontend, middleware ve PG16 sağlıklı; veri korunumu, dış HTTPS/auth/WSS, yetkisiz webhook reddi ve sertifika yenileme dry-run testi geçti. Eski supervisor'lar devre dışı; özgün DB/checkout ve geri dönüş kaynakları korundu.
 - **Önceki sürümün uzak doğrulaması — 11 Eylül:** `ccd61544` için [CI 34641121926](https://github.com/Rapto0/Rapot/actions/runs/34641121926) ve [imaj yayını 34641767731](https://github.com/Rapto0/Rapot/actions/runs/34641767731) başarılı. Üretimde API health 47 ms/200; `/`, `/signals`, `/alarms`, `/chart` SSR 200. Beş servis healthy/restart0; SignalFeed hazır, Binance/BIST sağlayıcıları başlamış. Scheduler 47,298 saniyede unknown → running oldu. 1.733.137 sinyal, 6 tarama geçmişi, 26.393 AI kaydı ve diğer ana sayılar; PostgreSQL kimliği ve 135/135/28/383 sayıları korundu. DRY_RUN/false/false ve AI kapalı; dış Windows HTTPS API/bot kontrolleri ayrı ayrı 203 ms/200. Sonraki `aadde728` ve güncel `279aa9f` geçişlerinin 13 Eylül kanıtı P2-4 bölümündedir.
 - **P2-2 doğrulaması ve belge yayını:** Python 3.12.8'de üç ayrı hedefli koşum toplam **98/98** geçti (wrapper/boundary/read-model 37, DB/migration 30, sinyal/config 31); DB grubunda mevcut 10 UTC warning var. 11 Eylül 15:44:58 UTC salt okunur sunucu ön kontrolünde beş servis healthy/restart0, HTTPS API/bot health 200 (0,051/0,043 saniye). Bu yalnız belge commit'inin tam SHA/CI sonucu, Git blob SHA256'ları ve sunucuya aktarım sonrası korunma kanıtı `/root/rapot-ops/20260911-p22/release-record.json` içinde sürüm bazında tutulur. İmaj yayını, servis restart'ı veya migration bu belge yayınının parçası değildir.
-- **Aktif iş:** **P3-1 üçüncü adımın CI/kaynak yayını ve ücretsiz kapasite engeli.** 10:46 UTC salt okunur ölçümde boş disk550.727.680B; sabit528MiB rezervin altında. Kalan7 eski kapalı sistem günlüğünden yedeği doğrulanmış tek dosya önerisi hazır; önceki dosya onayı bunu kapsamaz. Silme, imaj pull veya servis işlemi yapılmadı. Yayın tamamlanınca sıradaki kod işi sabit veri/start–end ve kapanmış mum yürütme sözleşmesidir. Frontend967/backend279 çalışıyor; yeni Pine dış kabulü ve borsa emirleri erteli kalır.
+- **Aktif iş:** Üçüncü adımın temizlik ve kaynak aktarımı kapandı; bu kapanış belgesinin tam SHA/CI ve sunucu aktarımı ayrı release kaydına bağlanır. Sıradaki kod işi **P3-1 dördüncü adım: sabit günlük veri, başlangıç–bitiş sınırları ve kapanmış mum yürütme sözleşmesi**. Salt okunur ön inceleme ve kabul örnekleri aşağıda; henüz uygulanmadı. Son kaynak kontrolünde boş alan622.800.896B (yaklaşık594MiB), frontend967/backend279 aynı ve sağlıklı; yeni Pine dış kabulü ve borsa emirleri erteli.
 - **P3-1 ikinci adımın yayın kapanışı:** `48be08e6d3717693e601c9f62c3e1b6665a8c85a`, [CI34749745272](https://github.com/Rapto0/Rapot/actions/runs/34749745272) beş job başarılı. 09:40:19 UTC'de 11 canonical kaynak/rapor dosyası488.483B ve12.462B kayıt sunucuda hash/gzip ile doğrulandı; `/root/rapot-ops/20260913-p31-indicators/release-record.json` SHA256 `426a3041f78c22ecb0328c260bbf956178af2be39262b8757522f88e207866b0`. Beş servis/config aynı, dış HTTPS200; frontend967/backend279 aynı kaldı. TradingView script/alarm kopyası değiştirilmedi.
 - **Ertelenen dış kabul:** Gerçek TradingView alarm teslimi, ALL/FIRST/saat filtresi runtime kabulü ve sınırlı testnet emir testi tamamlanmış sayılmıyor. Hazır test araçları korunuyor; testnet onayı ve Webhook URL erişimi için artık yanıt beklenmiyor, bu işler kullanıcı yeniden seçtiğinde ele alınacak. Borsa emri gönderilmedi; geçici test servisleri kapalı.
 - **Başlangıç kaydı:** Bu belge ilk oluşturulduğunda yalnız belge değişmişti; sonraki uygulama değişiklikleri aşağıda ayrı kaydedildi.
@@ -32,6 +32,7 @@ Kullanıcının ilk isteği yalnız inceleme ve raporlamaydı; dosya değişikli
 - Kullanıcı 2026-09-13'te dört eski kapalı sistem günlüğünün somut kaldırma önerisine **“Eğer projemiz aksamayacaksa silinmesi gerekenleri sil ve kaldığın yerden devam et”** yanıtını verdi. Bu onay, `four-file-removal-proposal.json` içindeki yalnız dört sunucu dosyasını kapsar (öneri SHA256 `3934235b2e80c856313975f073a019a238276f91e5046605785f7a6d51d7fd98`). Özel bilgisayar arşivi, tüm üye hash'leri/CRC/ACL ve sunucu dosyalarının sabit kimliği, ARCHIVED durumu ve kullanılmadığı yeniden doğrulanmadan silme yapılmaz. Uygulama/veritabanı dosyaları, diğer sekiz yedeklenmiş günlük, diğer yedek/imaj/release'ler ve ücretli kapasite artışı bu onayın kapsamında değildir. Günlük temizliği servis restart'ı gerektirmez; önceden yetkilendirilmiş uygulama geçişinin kısa kesinti gerektirebileceği ayrıca açıklandı.
 - Kullanıcı 2026-09-13'te, aşağıdaki tek eski günlük dosyasını kaldırıp frontend dağıtımını tamamlama sorusuna **“Kaldığın yerden deavm et”** yanıtını verdi. Bu doğrudan yanıt, yalnız `p31-one-journal-removal-proposal.json` önerisindeki tek dosyanın onayı olarak yorumlandı ve işlem öncesinde kullanıcıya açıklandı. Yeni onay kaydı 08:52:50 UTC'de, öneri SHA256 `9f88d6e7c18307c3dcd080ecedd9b4f6c38a1c3fb299b60255f2a1b0ddf64e65` ve tam hedef yoluyla bağlandı. Diğer yedi arşiv günlüğü, yedekler, imajlar, veriler ve ücretli yükseltme bu onaya dahil değildir.
 - Belgenin varlığı; bağımlılık kurulumu, kod/konfigürasyon değişikliği, migration, commit/push, deploy, servis başlatma, testnet emri veya gerçek emir için kendi başına yetki oluşturmaz.
+- Kullanıcı 2026-09-13'te muhasebe kaynak yayını için önerilen tek ek eski günlüğün kaldırılması sorusuna **“Kaldığın yerden devam et”** yanıtını verdi. Bu doğrudan yanıt yalnız `p31-accounting-one-journal-removal-proposal-final.json` içindeki dosya için onay olarak yorumlandı ve işlem öncesinde açıklandı. Öneri SHA256 `6040593375bfbbc127b334e4cccc8346c5ee49222b81c4083e2b8f2dd10f5407`; yeni yetki kaydı SHA256 `eb2121308c7b99a6ce1841e35914b56db4fd9d2a358dc3d391ce782f2d9d414c`. Kayıttaki 11:22:36 UTC, yanıt okunduktan sonraki kayıt zamanıdır. Diğer altı eski günlük ve özel yedek korunur; ücretli yükseltme veya borsa emri yetkisi eklenmez. Disk zaten yayın rezervinin altında olduğundan yalnız bu kurtarma temizliği için sınırlı audit kaydı yazılır; 528 MiB yayın rezervi düşürülmez ve aktarım öncesinde gerçek boş alan ayrıca doğrulanır.
 - Sonraki kullanıcı talimatıyla kapsam değişirse bu kayıt güncellenir. Daha önce açıkça verilmiş yetki tekrar sorulmaz.
 - Gerçek hesap, üretim veritabanı ve VPS üzerinde yapılan işlemler yerel geliştirme/test işlemlerinden ayrı kaydedilir.
 - Deploy yetkisi, gerçek/testnet emir gönderme, veri silme, force-push veya sunucudaki bilinmeyen yerel değişiklikleri ezme yetkisi olarak yorumlanmaz.
@@ -1092,7 +1093,7 @@ Yerel kanıtlar `runtime-data/p31-accounting-final-green.log`,
 canonical kaynak hash'leri ve test sonuçları küçük
 `p31-accounting-local-acceptance.json` kaydına bağlanır.
 
-**Üçüncü adım yayın sınırı / kapasite önerisi:** Çalışan servisler bu CLI modülünü
+**Üçüncü adım yayın sınırı / kapasite önerisi — tarihsel hazırlık:** Çalışan servisler bu CLI modülünü
 import etmez. Beş canonical kaynak/test/belge ve küçük kabul JSON'u için yeni
 `/root/rapot-ops/20260913-p31-accounting/` hedefi hazırlanır; tamSHA/CI ve
 hash/servis/HTTPS kabulü olmadan yayına geçilmez. Bu, tam çalıştırılabilir release
@@ -1118,6 +1119,72 @@ Bu taslak hazırlık kaydıdır: **yeni silme onayı yok, silme veya yayın yap�
 Önceki4+1 dosya onayı bu dosyayı kapsamaz. Tek dosya teorik olarak yeterli;
 diğer altı eski günlük, yeni/etkin günlükler, veriler, imajlar ve özel yedek
 korunur. Ücretli yükseltme veya rezervi düşürme önerilmez.
+
+**Üçüncü adımın CI, temizlik ve kaynak yayın kabulü — 13 Eylül:**
+
+- Kod `7787fc17c47ece30b09ab8aedd26366a18dd8d01` main'e push edildi.
+  [CI34752893586](https://github.com/Rapto0/Rapot/actions/runs/34752893586)
+  beş kontrol başarılı: Python830/skip1, frontend105, lint/type/build/standalone
+  ve Docker. Python uyarısız; frontend build cache uyarısı performans bilgisidir.
+  Security job report-only bulgu politikasını korur; başarı sıfır bulgu demek değildir.
+- Son soru ve yeni devam yanıtı, yukarıdaki tek tam yola ve final öneri hash'ine
+  bağlandı. 14 ağsız temizlik testi ve bağımsız kaynak incelemesi geçti.
+  Gerçek çalıştırma öncesinde özel arşivin SHA/gzipCRC/12 üye hash'i/manifest ve
+  ACL'i yeniden doğrulandı; adayın stat/hash/ARCHIVED kimliği ve açık FD/maps
+  kullanımı kontrol edildi. Yalnız bu dosya 11:32:21 UTC'de kaldırıldı.
+- Ayrılmış alan75.501.568B; gerçek boş alan **547.848.192 → 623.267.840B**,
+  net kazanç75.419.648B. Küçük audit ve eşzamanlı yazımlar farkı açıklar.
+  Diğer altı eski günlük, özel arşiv, beş container, Nginx/journald süreçleri
+  ve config/current kimlikleri korundu; HTTPS API/bot200, servis restart'ı yok.
+  Disk önceden528MiB altında olduğundan yalnız kurtarma audit'i için128KiB
+  ve16KiB dizin payı bütçelendi; temizlik sonrası gerçek rezerv geri kazanıldı.
+  Yayının528MiB sınırı değiştirilmedi.
+- Uzak temizlik kaydı:
+  `/root/rapot-ops/20260913-p31-accounting-cleanup/removal-result.json`, SHA256
+  `cc80f664735f3ddd6993bfeebfa5f6670fea2a524b6a0cb791d1cb07706228e4`.
+  Yerel ham-byte kopyası `runtime-data/p31-accounting-cleanup-remote-receipt.json`;
+  araç çıktısının yerel JSON'u ayrı `p31-accounting-journal-removal-result.json`.
+- 11:32:29 UTC'de beş canonical Git blob'u ve889B kabul JSON'u, toplam
+  **352.918B**, yeni `/root/rapot-ops/20260913-p31-accounting/` dizinine aktarıldı.
+  Dosyalar600/dizin700; altı dosyanın boyut/hash kontrolü geçti. Kaynak yayını
+  26 ağsız kontrolle ve mevcut exact-source CI ile doğrulandı.
+  Uzak `release-record.json`10.920B, SHA256
+  `1f11263ec5d3251e40b77a53d0caf7d20ed5d142d13b68644c32b1fa62814f4c`;
+  yerel ham-byte kopyası `runtime-data/p31-accounting-source-remote-receipt.json`.
+- Aktarım sonrası yeniden okunan dosya hash'leri ve Windows'tan sertifika
+  doğrulamalı iki HTTPS sağlık isteği geçti. Boş alan622.800.896B; tüm servis,
+  config ve current kimlikleri aynı. Container içindeki CLI kopyası, uygulama
+  imajları, DB veya pointer güncellenmedi; CLI veya borsa emri çalıştırılmadı.
+- Bu tek belge güncellemesinin kendi commit/CI ve aktarım kabulü, döngüsel
+  commit referansı oluşturmadan
+  `/root/rapot-ops/20260913-p31-accounting-closure/release-record.json` içinde
+  tutulur; yukarıdaki iki değişmez uzak kabul kaydının tam hash'lerine bağlanır.
+
+**Dördüncü adımın salt okunur hazırlığı — henüz uygulanmadı:**
+
+- `BacktestEngine.end_date` yürütmede kullanılmıyor. `run_single_symbol`,
+  başlangıç indeksinin veri dışında olup olmadığını kontrol etmeden bu indeksi
+  log satırında okuyor. Ham tarihler yürütmeden önce sıralı/tekil doğrulanmıyor.
+- Mevcut sinyal günlük kapanışı içeriyor ve aynı kapanış fiyatında işlem yapıyor.
+  Sonraki gerçek açılışta yürütme seçilirse `Open` kalitesi doğrulanmalı:
+  BIST sağlayıcısının `close_proxy`/`aof_proxy` değeri gerçek açılış değildir.
+- En küçük önerilen kapsam: sağlayıcıdan bağımsız sabit günlük OHLCV girdisi,
+  değiştirilmeyen çağıran DataFrame'i, doğrulanan tarih/OHLCV, başlangıç–bitiş
+  sınırları, sabit `as_of` ve açık günlük mumun dışlanması. Örtük BIST seans
+  saati varsayılmayacak. Paralel worker'ın aynı veriyi iki kez çekmesi de
+  sabit girdi yoluna bağlanmalı.
+- Haftalık/aylık son grup, geçmiş günlük prefix'ten hesaplanan gelişen mumdur;
+  bu tek başına gelecek veri sızıntısı değildir. Tüm HTF mumlarını yalnız
+  kapanmış hâlde kullanmak ayrıca strateji davranışını değiştirir. Grup indeksi
+  ilk işlem günüdür; `index <= cutoff` veya koşulsuz son satırı silmek doğru
+  kapanış filtresi sayılmaz. Bu politika uygulama öncesinde açıkça seçilmeli.
+- Sentetik kabul: bitiş sonrası aşırı satırlar eski işlemleri değiştirmemeli;
+  sınır dışı başlangıç hata vermemeli; sırasız girdi aynı sonucu üretmeli;
+  mükerrer/NaT ve sahte açılış reddedilmeli; sabit girdi sağlayıcıya gitmemeli.
+  Sonraki açılış seçilirse `Open=200 / Close=999` örneğinde işlem fiyatı 200
+  olmalı, sonraki mum bitiş dışındaysa emir oluşmamalı. Mevcut FIFO maliyet
+  korunum testleri korunmalı. Çoklu sembol ortak nakit kronolojisi ve WFA,
+  bu ilk yürütme düzeltmesinden sonraki ayrı işlerdir.
 
 **Kabul kriterleri:**
 
@@ -1255,6 +1322,8 @@ korunur. Ücretli yükseltme veya rezervi düşürme önerilmez.
 
 | 2026-09-13 | P3-1 üçüncü adım | İncele → düzelt → doğrula → kapasite önerisi | Alış maliyeti dahil FIFO PnL, ayrı komisyon/kayma, input atomikliği ve kesirli nakit sınırı; 57 hedefli/tam830-skip1 uyarısız. CLI test/provider çalışması yok. Yeni tek arşiv dosyası önerisinin yedeği doğrulandı; 528MiB altında disk nedeniyle kaynak yayını ve yeni silme onayı açık |
 
+| 2026-09-13 | P3-1 üçüncü adım | Yeni onay → tek günlük temizliği → kaynak kabulü | Final öneri60405933 ve yeni yetki eb212130; yedek yeniden doğrulandı, yalnız tek ARCHIVED günlük kaldırıldı. Kod7787fc1/CI34752893586 başarılı, altı kaynak/kanıt dosyası aktarıldı. Beş servis/config aynı, HTTPS200, son622.800.896B boş alan. Adım4 yalnız salt okunur incelendi; kodu başlamadı, tüm P3 ve dış kabul açık |
+
 Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 
 - İş ID'si, tarih, aşama ve sonuç.
@@ -1273,4 +1342,4 @@ Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 4. Aktif işin bulgusunu ve bağımlılıklarını güncel kodda kontrol et. İncelemeyi baştan tekrarlamak yerine ilgili kanıttan devam et.
 5. İşin dört adımını tamamla veya engeli somutlaştır; ardından durum tablosu, günlük ve Kaldığımız nokta bölümünü güncelle.
 
-**P3-1 üçüncü adım yerelde doğrulandı: muhasebe57/tam830-skip1 uyarısız. Aktif kapanış CI + canonical CLI kaynak yayını; 528MiB rezervin altındaki disk için yedeği doğrulanmış tek eski günlük önerisi yeni onay gerektiriyor. Henüz silme/yayın yok; frontend967/backend279 aynı. Yayından sonra sıradaki kod işi sabit veri/start–end ve kapanmış mum yürütme sözleşmesi. Yeni Pine dış kabulü, kronoloji/WFA ve tüm P3 açık; ücretli yükseltme ve gerçek/testnet emirleri kapsam dışında.**
+**P3-1 üçüncü adım: kod7787fc1, CI34752893586 ve altı dosyalık kaynak yayını doğrulandı. Yeni açık onayla yalnız bir eski günlük kaldırıldı; özel yedek ve diğer altı günlük korundu. Kaynak kabulü sonunda622.800.896B boş alan, frontend967/backend279 aynı ve sağlıklı. Bu kapanış belgesinin kendi SHA/CI ve aktarım kabulü ayrı release kaydındadır. Sonraki kod işi sabit veri/start–end ve kapanmış mum yürütme sözleşmesi; ön inceleme hazır, uygulama başlamadı. Yeni Pine dış kabulü, kronoloji/WFA ve tüm P3 açık; ücretli yükseltme ve gerçek/testnet emirleri kapsam dışında.**
