@@ -8,8 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tests/auth-client.test.mjs tests/realtime-url.test.mjs tests/scan-history.test.mjs tests/realtime-connection.test.mjs tests/browser-preferences.test.mjs tests/health-status.test.mjs tests/trade-metrics.test.mjs tests/chart-route.test.mjs tests/signal-export.test.mjs tests/local-alarms.test.mjs tests/chart-alarm-storage.test.mjs tests/header-clock.test.mjs tests/special-notifications.test.mjs",
-    "test:standalone": "node tests/standalone-proxy-smoke.mjs"
+    "test": "node --test tests/auth-client.test.mjs tests/realtime-url.test.mjs tests/scan-history.test.mjs tests/realtime-connection.test.mjs tests/browser-preferences.test.mjs tests/health-status.test.mjs tests/trade-metrics.test.mjs tests/chart-route.test.mjs tests/signal-export.test.mjs tests/local-alarms.test.mjs tests/chart-alarm-storage.test.mjs tests/header-clock.test.mjs tests/special-notifications.test.mjs tests/dependency-audit.test.mjs",
+    "test:standalone": "node tests/standalone-proxy-smoke.mjs",
+    "audit:dependencies": "node scripts/audit-dependencies.mjs"
   },
   "engines": {
     "node": ">=20 <21",
@@ -18,10 +19,10 @@
   "packageManager": "npm@10.9.9",
   "overrides": {
     "minimatch@3.1.5": {
-      "brace-expansion": "1.1.13"
+      "brace-expansion": "1.1.18"
     },
     "minimatch@9.0.9": {
-      "brace-expansion": "2.0.3"
+      "brace-expansion": "2.1.4"
     },
     "picomatch@>=4.0.0 <4.0.4": "4.0.4"
   },
@@ -37,7 +38,7 @@
     "date-fns": "4.1.0",
     "lightweight-charts": "5.1.0",
     "lucide-react": "0.562.0",
-    "next": "16.2.1",
+    "next": "16.3.5",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "recharts": "3.7.0",
@@ -50,7 +51,7 @@
     "@types/react": "19.2.9",
     "@types/react-dom": "19.2.3",
     "eslint": "9.39.3",
-    "eslint-config-next": "16.2.1",
+    "eslint-config-next": "16.3.5",
     "tailwindcss": "4.1.18",
     "typescript": "5.9.3"
   }

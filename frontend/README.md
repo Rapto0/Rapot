@@ -68,9 +68,23 @@ ve WebSocket upgrade yollarını denetler. Varsayılan 8000/5000 portları test 
 boş olmalıdır. Gerçek API/bot veya üretim hedefi kullanmaz; gerçek piyasa verisi
 ve sunucu kabulünün yerine geçmez.
 
+Kilitli bağımlılık güvenliğini ayrıca doğrulayın:
+
+```bash
+npm run audit:dependencies
+```
+
+Bu komut public npm registry'ye bağlanır; prod/dev/optional/peer paketlerini
+kilit dosyasına bağlı kapsamla tarar. Her bulgu ve araç/ağ/rapor hatası başarısız
+sonuç üretir. Raporlar repo kökünde `security-reports/npm/` altında tutulur;
+`NPM_AUDIT_REPORT_DIR` farklı çıktı klasörü seçer. Guard'ın ağsız negatif/pozitif
+testleri `npm test` içindedir. Advisory kararları ve npm 10'un iki optional
+platform paketi için ürettiği `npm ls` uyarısı
+[bağımlılık incelemesinde](../docs/FRONTEND_DEPENDENCY_SECURITY.md) açıklanır.
+
 ## 🛠️ Teknolojiler
 
-- **Framework:** Next.js 16.2.1 (App Router)
+- **Framework:** Next.js 16.3.5 (App Router)
 - **Dil:** TypeScript
 - **Stil:** Tailwind CSS v4
 - **UI:** Shadcn/UI

@@ -64,7 +64,7 @@ The locked environment uses the `ta` compatibility accessor in `signals.py`;
 installing optional `pandas_ta` can change the calculation path.
 
 Frontend versions come from `frontend/package.json` and its lock: Node 20.20.2,
-npm 10.9.9, Next.js 16.2.1, React 19.2.3, TypeScript 5.9.3, Tailwind 4.1.18,
+npm 10.9.9, Next.js 16.3.5, React 19.2.3, TypeScript 5.9.3, Tailwind 4.1.18,
 Lightweight Charts 5.1.0, Zustand 5.0.10 and React Query 5.90.19.
 
 ## Quick Start
@@ -132,12 +132,19 @@ commit does not change the running application images.
 - Standalone checks require the build output and use local HTTP/WebSocket mocks.
 - `python -m scripts.ci_quality lint` checks all Git-tracked Python files, including
   middleware and tests, with the workspace exclusions in `pyproject.toml`.
-- Security checks use pinned CI-only Bandit/pip-audit tools and publish JSON reports,
+- Python security checks use pinned CI-only Bandit/pip-audit tools and publish JSON reports,
   scope manifests and summaries. Findings are explicitly report-only; tool errors,
   invalid reports or incomplete source/package coverage fail CI. This does not scan
-  npm, container OS packages or runtime configuration, and green CI is not proof of
+  container OS packages or runtime configuration, and green CI is not proof of
   zero security findings. See the [continuation plan](docs/RAPOT_DEVAM_PLANI.md) for
   dated results and follow-up decisions.
+- `npm run audit:dependencies` in `frontend` audits all locked production, development,
+  optional and peer dependencies. Any finding, tool error, invalid report or lock
+  coverage mismatch fails the check. CI preserves the raw npm report, lock hash,
+  scope manifest and summary under `security-reports/npm/`. This check contacts the
+  public npm registry; `npm test` tests the guard without network access. See the
+  [frontend dependency review](docs/FRONTEND_DEPENDENCY_SECURITY.md) for the advisory
+  decisions and the two documented npm 10 optional-platform `npm ls` warnings.
 
 ## Security Notes
 

@@ -122,6 +122,19 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
+      - name: Audit all locked npm dependencies (findings and tool errors fail)
+        timeout-minutes: 4
+        run: npm run audit:dependencies
+
+      - name: Preserve npm audit report and lock coverage manifest
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: npm-security-${{ github.sha }}
+          path: security-reports/npm/
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Run ESLint
         run: npm run lint -- --no-cache
 

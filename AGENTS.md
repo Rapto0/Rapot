@@ -1,6 +1,6 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-Kaynaklarla son karşılaştırma: **13 Eylül 2026 / P3-1 dördüncü adım**. İş sırası, kullanıcı
+Kaynaklarla son karşılaştırma: **13 Eylül 2026 / P1-G2**. İş sırası, kullanıcı
 yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DEVAM_PLANI.md)
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 
@@ -49,7 +49,7 @@ gerekir; [takvim](docs/WRAPPER_DEPRECATION_SCHEDULE.md) otomatik silme emri değ
 
 - Python **3.12** (`.python-version`, `pyproject.toml`); yerelde doğrulanan 3.12.8.
 - Node **20.20.2**, npm **10.9.9** (`.nvmrc`, `frontend/package.json`).
-- Frontend: Next.js **16.2.1**, React **19.2.3**, TypeScript **5.9.3**, Tailwind
+- Frontend: Next.js **16.3.5**, React **19.2.3**, TypeScript **5.9.3**, Tailwind
   **4.1.18**, Lightweight Charts **5.1.0**, Zustand **5.0.10**, React Query **5.90.19**.
 - Backend: FastAPI/Uvicorn, SQLAlchemy/Pydantic, pandas/NumPy/ta, python-binance,
   isyatirimhisse/yfinance, google-genai, python-telegram-bot, Flask, Alembic/psycopg.
@@ -103,6 +103,12 @@ Ruff lint/format uygular; middleware ve testler dahildir. Ruff/pre-commit sını
 iç worktree, ortam/bağımlılık ve üretilmiş klasörleri dışarıda tutar.
 Bandit ve pip-audit bulguları açıkça report-only raporlanır; araç hatası, geçersiz
 rapor veya eksik kapsam CI'yi başarısız yapar. Yeşil CI sıfır güvenlik bulgusu değildir.
+Frontend'de `npm run audit:dependencies` bütün kilitli prod/dev/optional/peer
+paketlerini public npm registry üzerinden tarar; her bulgu veya araç/rapor/kapsam
+hatası CI'yi başarısız yapar. Ham JSON, lock hash'i ve kapsam manifesti saklanır.
+`npm test` bu kontrolün ağsız testlerini içerir. npm 10'un Sharp WASM ortak optional
+çocukları için iki `npm ls` extraneous uyarısı lock uyuşmazlığı değildir;
+[advisory incelemesi](docs/FRONTEND_DEPENDENCY_SECURITY.md) kapsamı açıklar.
 Pip içermeyen uv ortamında bağımlılık kontrolü yukarıdaki `uv pip check` ile yapılır.
 
 ## Strateji terminolojisi
