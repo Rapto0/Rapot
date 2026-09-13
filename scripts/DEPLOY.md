@@ -250,6 +250,47 @@ separately in `documentation-release-record.json` and `documents-final/` under t
 same OPS directory. Publishing these two documents does not restart the application
 or alter images, configuration or databases.
 
+## P2-4 production follow-up: tag query index
+
+The first `aadde728f7e83a636b9493b660fed33434564e9a` rollout passed service,
+HTTPS/SSR, data preservation and 13 auth checks on 13 September. Concurrent reads
+still timed out on the BELES/COK_UCUZ lists; this rollout did not close P2-4.
+The old plan used the single-column tag index followed by a temporary date sort.
+The follow-up adds only the partial `(special_tag, created_at)` index for non-NULL
+tags. Total signal counts remain exact: NULL and non-NULL partitions are counted
+in the same SQL statement using covering tag indexes. No response cache or
+restricted history window is introduced. Equal timestamps retain the existing
+unspecified tie order; an index change can alter which tied rows enter a LIMIT.
+
+This is an additive main SQLite index change, not a middleware Alembic revision.
+Verify the exact new/old source and index definition, take a fresh independently
+restored SQLite backup and a separate PostgreSQL dump, and include index creation
+in the disk/WAL budget. Stop the main writers before the reviewed startup step.
+Compare schema objects before/after: only `idx_signals_special_tag_created` may be
+added; table contents, columns and PostgreSQL identity must be preserved. A code
+rollback retains this compatible index and never restores or downgrades live data.
+The prior operator's blanket no-schema-change check must not be disabled generally.
+
+With limited VPS space, the reviewed fixed SQLite read transaction may stream its
+SQL gzip directly to the operator's private computer instead of retaining another
+large VPS archive. Both ends must verify the complete compressed hash/byte count;
+the source SQL hash, snapshot schema/pragma and typed row fingerprints must match
+an independent full restore. Retain the source manifest, private archive and restore
+proof, bind their hashes to the exact rollout, and verify the private copy again
+before cutover. A truncated stream or missing offhost proof blocks deployment.
+Keep time, compressed-size, WAL-growth and disk-reserve guards active even under
+network backpressure. The PostgreSQL dump remains separate; catalogue validation
+and offhost copy hashes do not claim an independent PostgreSQL restore.
+
+Production acceptance keeps its preselected bounds: three signals WSS connections,
+three waves of eight representative REST reads, REST p95 below 5 s, WSS opening
+below 3 s, protocol ping/pong p95 below 1 s and application heartbeat below 35 s.
+These small-sample smoke checks are distinct from the isolated 250/500 ms benchmark
+and are not a production SLA. Record all failures, application heartbeat/REST
+overlap and socket cleanup; do not raise thresholds to conceal a failed run.
+The current final deployment result is recorded in the continuation plan and the
+versioned operator evidence, rather than inferred from published images.
+
 ## Optional middleware
 
 Create `middleware/.env` or select `RAPOT_MIDDLEWARE_ENV_FILE`, outside Git:

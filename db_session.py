@@ -165,7 +165,11 @@ def init_db() -> None:
         engine,
         "signals",
         {"special_tag": "VARCHAR(20)"},
-        indexes=("CREATE INDEX IF NOT EXISTS idx_signals_special_tag ON signals(special_tag)",),
+        indexes=(
+            "CREATE INDEX IF NOT EXISTS idx_signals_special_tag ON signals(special_tag)",
+            "CREATE INDEX IF NOT EXISTS idx_signals_special_tag_created "
+            "ON signals(special_tag, created_at) WHERE special_tag IS NOT NULL",
+        ),
     )
     ensure_sqlite_columns(
         engine,

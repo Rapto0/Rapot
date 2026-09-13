@@ -1,6 +1,6 @@
 # Veritabanı şema ve veri göçü politikası
 
-Son kaynak doğrulaması: **11 Eylül 2026 / P2-2**. Rapot'un iki ayrı veritabanı yaşam döngüsü vardır. **Ana SQLite şemasında Alembic kullanılmaz; trading middleware PostgreSQL şeması Alembic ile yönetilir.** `db_session.py` ve `migrate_db.py` içindeki eski “No Alembic” ifadeleri yalnız ana uygulama için geçerlidir.
+Son kaynak doğrulaması: **13 Eylül 2026 / P2-4**. Rapot'un iki ayrı veritabanı yaşam döngüsü vardır. **Ana SQLite şemasında Alembic kullanılmaz; trading middleware PostgreSQL şeması Alembic ile yönetilir.** `db_session.py` ve `migrate_db.py` içindeki eski “No Alembic” ifadeleri yalnız ana uygulama için geçerlidir.
 
 ## İki ayrı veri alanı
 
@@ -16,10 +16,13 @@ Son kaynak doğrulaması: **11 Eylül 2026 / P2-2**. Rapot'un iki ayrı veritaba
 `db_session.init_db()` eksik tabloları oluşturur ve mevcut tablolara açıkça tanımlanan eklemeleri uygular:
 
 - `signals.special_tag` ve `idx_signals_special_tag` indeksi.
+- P2-4: `idx_signals_special_tag_created(special_tag, created_at) WHERE special_tag IS NOT NULL` kısmi indeksi. Etiketli en yeni kayıtların tüm tarihsel eşleşmeleri geçici olarak sıralamadan okunmasını sağlar; satırları veya filtre kapsamını değiştirmez.
 - `ai_analyses` sağlayıcı/model, skor, risk, haber, gecikme ve hata metadata alanları.
 - `scan_history.mode`, `errors_count`, `status`; geçmiş için bilinmeyen mod/durum `unknown`, ölçülmemiş hata sayısı `NULL` kalır.
 
 `ensure_sqlite_columns()` mevcut sütun adlarını `PRAGMA table_info` ile karşılaştırır; eksik sütuna `ALTER TABLE ... ADD COLUMN`, tanımlı indekse `CREATE INDEX IF NOT EXISTS` uygular. Mevcut sütunun tipini/constraint'ini veya bütün şemanın doğruluğunu karşılaştırmaz. `create_all()` da var olan tabloları modelle tamamen eşitlemez.
+
+P2-4 indeksi yeni DB için model metadata'sında, mevcut DB için açık `CREATE INDEX IF NOT EXISTS` yolunda tanımlıdır. Mevcut sütunlar ve satırlar aynı kalır. İlk oluşturma tabloyu okur ve indeks/WAL/geçici alan kullanabilir; üretimde yazıcıları durdurma, taze doğrulanmış yedek ve ölçülmüş alan bütçesi gerekir. Geri dönülen önceki uygulama bu ek indeksle çalışabilir; otomatik indeks silme veya DB restore yapılmaz.
 
 Yeni model/alan için hem model hem açık ekleme yolu incelenir. Eski şema örneğinde iki ardışık `init_db()` çağrısı, kayıt korunumu ve yeni okuma/yazma yolu test edilir. Drop, rename, tip daraltma veya tarihsel veri dönüşümü başlangıca sessizce eklenmez; ayrı veri koruma ve geri dönüş planı gerekir. Bu yolun Alembic revision numarası veya otomatik downgrade'i yoktur.
 

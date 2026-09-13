@@ -14,6 +14,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, relationship
 
@@ -94,8 +95,15 @@ class Signal(Base):
     # Relationship
     trades = relationship("Trade", back_populates="signal", lazy="dynamic")
 
-    # Composite unique constraint
-    __table_args__ = (Index("idx_signal_lookup", "symbol", "strategy", "timeframe"),)
+    __table_args__ = (
+        Index("idx_signal_lookup", "symbol", "strategy", "timeframe"),
+        Index(
+            "idx_signals_special_tag_created",
+            "special_tag",
+            "created_at",
+            sqlite_where=text("special_tag IS NOT NULL"),
+        ),
+    )
 
     def __repr__(self) -> str:
         return (
