@@ -102,8 +102,10 @@ This observation allowance is not a guarantee that startup finishes within 180 s
 
 ### Frontend-only releases on the current VPS
 
-For a change confined to frontend application code and release documentation, verify the
-exact source diff first. Backend code, Compose, lock files and build inputs must be unchanged.
+The historical P2-1 archive procedure below applies to changes confined to frontend
+application code and release documentation: its exact source diff requires backend code,
+Compose, lock files and build inputs to remain unchanged. The separately reviewed P1-G2
+dependency rollout below has its own source manifest and acceptance gates.
 The P2-1 operator uses a source archive under `/opt/rapot/releases/<sha>` and the existing
 private `/etc/rapot` environment files plus `compose.images.yml` digest overrides. It pulls
 only the verified frontend digest, then runs Compose with the explicit project/environment/
@@ -349,8 +351,8 @@ The bounded frontend production rollout passed on 13 September at 08:59:10 UTC.
 This completes the first COMBO fix; P3-1 strategy equivalence, Pine boundaries and
 backtest work remain open.
 
-A component-only rollout may avoid uploading another full source archive only
-after the exact Git diff is restricted to reviewed frontend files and documentation,
+For this P3-1 first step, the component rollout avoided another full source archive
+after the exact Git diff was restricted to reviewed frontend files and documentation,
 with build/dependency inputs, backend code, schemas and Compose unchanged. Retain
 the current `279aa9fea99b520e661b43f104a2bf4791893ac3` Compose source,
 `/opt/rapot/current`, `RAPOT_RELEASE` and all backend image selections. Record the
@@ -397,7 +399,7 @@ The earlier four-file approval did not cover this proposal. The user subsequentl
 answered the exact one-file question with a direct continuation instruction; that
 new scoped approval and fresh backup/file/use/runtime checks were recorded before
 removal. Only that journal was removed at 08:52:55 UTC; the other seven archived
-journals and private backup remain. No further deletion is authorized.
+journals and private backup were retained. That approval authorized no further deletion.
 Preparation commit `5c7c47c`, successful CI `34747715788`, and canonical blob hashes
 were recorded under
 `/root/rapot-ops/20260913-p31-preflight/release-record.json`; that record is not
@@ -423,6 +425,69 @@ or an exchange/TradingView acceptance test. Final three-document Git SHA/CI, blo
 hashes and publication checks belong in the component directory
 `documentation-release-record.json`. Documentation publication performs no
 application restart, image build, migration or further deletion.
+
+## P1-G2 dependency component rollout — 20 September 2026
+
+The reviewed P1-G2 exception changes frontend package/lock inputs, the audit script
+and tests, CI audit configuration and documentation. Its canonical source proof
+binds exactly 11 allowed paths against `d79f4cc`, plus the unchanged inherited
+frontend test fixture. It keeps backend code, schemas, Dockerfiles, Compose and
+the image publication workflow unchanged. This exception does not relax the earlier
+P2-1/P3-1 source scopes or authorize an arbitrary dependency rollout.
+
+Source `bbd9377cfd3e8b74f6b02ba23c1c99282ba587bd` passed
+[CI 34757348090](https://github.com/Rapto0/Rapot/actions/runs/34757348090) and
+[image publication 34757661535](https://github.com/Rapto0/Rapot/actions/runs/34757661535).
+The frontend-only operator completed at **08:10:01 UTC**, using digest
+`sha256:e312d7aa5e682a7835e4dc7ba3e1b4263f04a64f872f47037814ec4b0ba1f4d0`.
+Frontend now records `bbd9377`; backend, Compose, current and `RAPOT_RELEASE`
+remain `279aa9f`. Only the frontend image override changed. Four protected container
+identities/start times/restart counts and fixed environment/Nginx bytes matched;
+the new frontend had zero restarts and all eight health/SSR GETs passed.
+
+Staging uploaded three pinned files into `/root/rapot-ops/20260920-p1g2-frontend/`;
+it used no hardlinks. Exact successful workflows, authorized cleanup evidence and
+the five-container/config/current snapshot were checked before the first write.
+The strict pre-staging requirement was **F > 661,207,283 B**, including one total
+2 MiB input/config/evidence allowance and the unchanged 528 MiB reserve. Subsequent
+gates debited only actual allocated OPS blocks from that same allowance. Fresh
+private configuration copies and the old frontend image were retained for rollback.
+No database initializer, migration, restore or backend lifecycle command ran.
+
+The user approved three named archived journals. Two were already absent before
+cleanup, for an unverified reason; only the remaining authorized, freshly verified
+copy was removed. The private backup remains. Observed free space was
+**702,586,880 B** after cleanup and **603,271,168 B** at deploy acceptance. These
+are checkpoint measurements. The exact paths, authorization and preservation
+checks are in the [continuation plan](../docs/RAPOT_DEVAM_PLANI.md).
+
+External public v2 acceptance passed **16 GETs at 08:11:44 UTC**, covering chart/
+alarms HTML, ETHUSDT/Kripto RSC props and 12 JS + 1 CSS sampled from 14 JS + 1 CSS;
+**948,746 B** were read. The original request stopped at Next's 307 RSC query guard.
+The v2 probe supplied the required empty `_rsc` parameter on its fixed navigation
+URL and retained redirect refusal. The failed original record remains separate.
+This verifies delivery, not browser workers, COMBO arithmetic or alarm execution.
+
+Native v2 acceptance completed at **08:17:07 UTC**, bound to the actual frontend
+container, immutable image and source. Linux/x64/musl reported Node **20.20.2**,
+Next **16.3.5**, Sharp **0.35.4**, heif metadata **1.23.2** and native libvips
+**8.18.6**; Sharp selected the verified native binding, with no global or WASM
+fallback. The original probe produced no output because its stdin entry condition
+did not run; that failure was preserved and the helper was corrected. The v2
+metadata probe decoded no image and made no application mutation. Final runtime
+verification retained all expected identities/configuration and **602,435,584 B**
+free space, above the fixed reserve. See the separate native/public/final `-v2`
+records for these checks; the deploy receipt alone is not their substitute.
+
+The deployment receipt is `deployment.json` in the component OPS directory,
+SHA256 `a676adc4549f26819e83874cd679bf9dacbdc04179e442ad9eca8a663f002701`.
+Public/native metadata checks and their limits are recorded separately in the
+[frontend security review](../docs/FRONTEND_DEPENDENCY_SECURITY.md) and continuation
+plan. Final document commit/CI, canonical blob hashes and publication checks belong
+under `/root/rapot-ops/20260920-p1g2-closure/release-record.json`; the existence of
+the deploy receipt does not imply that closure documents have already been published.
+DRY_RUN/trading=false/live=false, disabled AI, all databases and rollback resources
+remain preserved; no paid upgrade or exchange/TradingView acceptance is implied.
 
 ## Optional middleware
 

@@ -4,18 +4,18 @@ Bu belge, 6 Eylül 2026 tarihli salt okunur proje incelemesinden çıkan işleri
 
 ## Kaldığımız nokta
 
-- **Son çalışma — 20 Eylül:** P1-G2 için devam ön kontrolü yapıldı. `main/e454262` temizdi; uygulama kaynağı `bbd9377` için CI 34757348090 ve imaj yayını 34757661535 yeniden doğrulandı. Node 20.20.2/npm 10.9.9 ile taze güvenlik taraması **505 bağımlılık / 0 bulgu** verdi. Beş üretim servisinin kimlikleri, restart=0 ve config hashleri önceki kabul ile aynı; HTTPS API/bot 200. **07:38:01 UTC** boş alan **497.381.376 B (~474,34 MiB)**; yayın için en az **163.825.908 B (~156,24 MiB)** ek alan gerekiyor. Önceki aday artık sunucuda yok; yeni üç kapalı günlüğün özel bilgisayar yedeği, CRC/üye/restore hashleri ve erişim izinleri doğrulandı. Somut üç dosya önerisi yeni onay bekliyor; bu oturumda silme, pull veya restart yapılmadı.
-- **Uygulama durumu:** P0-1–P0-4, P1-1, P1-2, P1-4–P1-7, P1-G1, P2-1, P2-3 ve **P2-4 doğrulandı**; P2-2 belge/karar kapsamı tamam. İç worktree ve 12 wrapper koruma kararı değişmedi.
+- **Son çalışma — 20 Eylül:** **P1-G2 üretim kabulü tamamlandı.** Kullanıcının üç dosyalık açık onayı sonrasında ilk iki dosyanın zaten bulunmadığı doğrulandı; yalnız yedeği doğrulanmış üçüncü günlük kaldırıldı. Taze kapasite kontrolünden sonra frontend `bbd9377` olarak yayımlandı; backend/Compose/current `279aa9f` kaldı. Sekiz sağlık/SSR isteği, dış HTTPS/RSC ve 12 JS + 1 CSS örneği geçti. Çalışan Linux/musl imajında Next16.3.5, Sharp0.35.4, libheif1.23.2 ve native libvips8.18.6 doğrulandı. Beş servis sağlıklı/restart0; korunan dört servis aynı kimlikte. Son kabulde **602.435.584 B** boş alan, sabit **528 MiB** rezervin üzerinde; taze npm taraması **505 bağımlılık / 0 bulgu**.
+- **Uygulama durumu:** P0-1–P0-4, P1-1, P1-2, P1-4–P1-7, P1-G1, **P1-G2**, P2-1, P2-3 ve **P2-4 doğrulandı**; P2-2 belge/karar kapsamı tamam. İç worktree ve 12 wrapper koruma kararı değişmedi.
 - **P1-2 durumu — Doğrulandı:** **8f60f8e üretim geçişi ve [HTTPS](https://138.68.71.27) kabulü tamamlandı.** API, bot, frontend, middleware ve PG16 sağlıklı; veri korunumu, dış HTTPS/auth/WSS, yetkisiz webhook reddi ve sertifika yenileme dry-run testi geçti. Eski supervisor'lar devre dışı; özgün DB/checkout ve geri dönüş kaynakları korundu.
 - **Önceki sürümün uzak doğrulaması — 11 Eylül:** `ccd61544` için [CI 34641121926](https://github.com/Rapto0/Rapot/actions/runs/34641121926) ve [imaj yayını 34641767731](https://github.com/Rapto0/Rapot/actions/runs/34641767731) başarılı. Üretimde API health 47 ms/200; `/`, `/signals`, `/alarms`, `/chart` SSR 200. Beş servis healthy/restart0; SignalFeed hazır, Binance/BIST sağlayıcıları başlamış. Scheduler 47,298 saniyede unknown → running oldu. 1.733.137 sinyal, 6 tarama geçmişi, 26.393 AI kaydı ve diğer ana sayılar; PostgreSQL kimliği ve 135/135/28/383 sayıları korundu. DRY_RUN/false/false ve AI kapalı; dış Windows HTTPS API/bot kontrolleri ayrı ayrı 203 ms/200. Sonraki `aadde728` ve güncel `279aa9f` geçişlerinin 13 Eylül kanıtı P2-4 bölümündedir.
 - **P2-2 doğrulaması ve belge yayını:** Python 3.12.8'de üç ayrı hedefli koşum toplam **98/98** geçti (wrapper/boundary/read-model 37, DB/migration 30, sinyal/config 31); DB grubunda mevcut 10 UTC warning var. 11 Eylül 15:44:58 UTC salt okunur sunucu ön kontrolünde beş servis healthy/restart0, HTTPS API/bot health 200 (0,051/0,043 saniye). Bu yalnız belge commit'inin tam SHA/CI sonucu, Git blob SHA256'ları ve sunucuya aktarım sonrası korunma kanıtı `/root/rapot-ops/20260911-p22/release-record.json` içinde sürüm bazında tutulur. İmaj yayını, servis restart'ı veya migration bu belge yayınının parçası değildir.
-- **Aktif iş:** P1-G2 için `p1g2-20260920-three-journal-removal-proposal.json` (SHA256 `f5e50356a3a838693d90412aa8d3990ac1abfe4d9fc02540e57b82a090311890`) içindeki **yalnız üç sunucu günlük kopyası** için yeni kullanıcı onayı. Özel yedek hazır ve doğrulandı; beklenen kapasite kazancı **226.504.704 B (~216 MiB)**, iki dosya yetersiz. 20 Eylül'de yeniden ölçülen imaj için **661.207.283 B'dan fazla** boş alan gerekir; sabit **528 MiB** rezerv düşürülmez. Onaydan sonra yedek/kimlik/kullanım/kapasite yeniden kontrol edilir; yalnız frontend/native/HTTPS kabulü tamamlanır. Disk rezervin altında olduğundan bu yeni belgenin sunucuya aktarımı da kapasite çözümünü bekler; eski `/root/rapot-ops/20260913-p1g2-capacity-note/release-record.json` yalnız 13 Eylül belge kabulüdür.
+- **Aktif iş:** P1-G2 uygulama geçişi, native ve HTTPS kabulü tamamlandı. Kapanış belgesinin exact commit/CI, canonical Git blob hashleri ve sunucuya aktarım kabulü `/root/rapot-ops/20260920-p1g2-closure/release-record.json` içinde tutulur; yalnız push yeterli değildir. Sonraki geliştirme **P3-1 beşinci adım: çoklu sembol ortak nakit kronolojisi ve fiyatlama**. Gerçek/testnet emir kabulü ertelidir.
 - **P3-1 ikinci adımın yayın kapanışı:** `48be08e6d3717693e601c9f62c3e1b6665a8c85a`, [CI34749745272](https://github.com/Rapto0/Rapot/actions/runs/34749745272) beş job başarılı. 09:40:19 UTC'de 11 canonical kaynak/rapor dosyası488.483B ve12.462B kayıt sunucuda hash/gzip ile doğrulandı; `/root/rapot-ops/20260913-p31-indicators/release-record.json` SHA256 `426a3041f78c22ecb0328c260bbf956178af2be39262b8757522f88e207866b0`. Beş servis/config aynı, dış HTTPS200; frontend967/backend279 aynı kaldı. TradingView script/alarm kopyası değiştirilmedi.
 - **Ertelenen dış kabul:** Gerçek TradingView alarm teslimi, ALL/FIRST/saat filtresi runtime kabulü ve sınırlı testnet emir testi tamamlanmış sayılmıyor. Hazır test araçları korunuyor; testnet onayı ve Webhook URL erişimi için artık yanıt beklenmiyor, bu işler kullanıcı yeniden seçtiğinde ele alınacak. Borsa emri gönderilmedi; geçici test servisleri kapalı.
 - **Başlangıç kaydı:** Bu belge ilk oluşturulduğunda yalnız belge değişmişti; sonraki uygulama değişiklikleri aşağıda ayrı kaydedildi.
 - **Seçilen geliştirme ortamı:** `.venv` / Python 3.12; Node 20.20.2 / npm 10.9.9. Yerelde Python 3.12.8 ile doğrulandı.
 - **Commit / yayın düzeni:** Her tamamlanan P maddesi ayrı commit; doğrulanan grup CI için push edilir, sunucu deploy'u CI ve sunucu kontrollerinden sonra yapılır. İlk sunucu yayını eşiği P0 işleri + P1-7 test hatası + P1-2 dağıtım uyumu.
-- **Açık işler:** P1-G2, P3-1/P3-2 ve kullanıcı isteğiyle ertelenmiş gerçek TradingView alarm/filtre ve testnet emir kabulü. Ücretli yükseltme veya diğer yedek, imaj, release ve günlükler için toplu silme yapılmaz. İlk P3-1 frontend geçişi kabulünde boş disk **562.618.368 B (yaklaşık 537 MiB)**; sabit 528 MiB pay korundu. Her yeni yayından önce büyüyen veriler, imaj katmanları ve çalışma payı yeniden ölçülmelidir.
+- **Açık işler:** P3-1/P3-2 ve kullanıcı isteğiyle ertelenmiş gerçek TradingView alarm/filtre ve testnet emir kabulü. P1-G2'nin kod/CI/imaj ve üretim kabulü tamam. Ücretli yükseltme veya diğer yedek, imaj, release ve günlükler için toplu silme yapılmaz. 20 Eylül son kabulde **602.435.584 B** boş alan vardı; her yeni yayın öncesinde veri büyümesi, katmanlar ve sabit 528 MiB rezerv yeniden ölçülmelidir.
 
 ## Kapsam ve yetki kaydı
 
@@ -33,6 +33,7 @@ Kullanıcının ilk isteği yalnız inceleme ve raporlamaydı; dosya değişikli
 - Kullanıcı 2026-09-13'te, aşağıdaki tek eski günlük dosyasını kaldırıp frontend dağıtımını tamamlama sorusuna **“Kaldığın yerden deavm et”** yanıtını verdi. Bu doğrudan yanıt, yalnız `p31-one-journal-removal-proposal.json` önerisindeki tek dosyanın onayı olarak yorumlandı ve işlem öncesinde kullanıcıya açıklandı. Yeni onay kaydı 08:52:50 UTC'de, öneri SHA256 `9f88d6e7c18307c3dcd080ecedd9b4f6c38a1c3fb299b60255f2a1b0ddf64e65` ve tam hedef yoluyla bağlandı. Diğer yedi arşiv günlüğü, yedekler, imajlar, veriler ve ücretli yükseltme bu onaya dahil değildir.
 - Belgenin varlığı; bağımlılık kurulumu, kod/konfigürasyon değişikliği, migration, commit/push, deploy, servis başlatma, testnet emri veya gerçek emir için kendi başına yetki oluşturmaz.
 - Kullanıcı 2026-09-13'te muhasebe kaynak yayını için önerilen tek ek eski günlüğün kaldırılması sorusuna **“Kaldığın yerden devam et”** yanıtını verdi. Bu doğrudan yanıt yalnız `p31-accounting-one-journal-removal-proposal-final.json` içindeki dosya için onay olarak yorumlandı ve işlem öncesinde açıklandı. Öneri SHA256 `6040593375bfbbc127b334e4cccc8346c5ee49222b81c4083e2b8f2dd10f5407`; yeni yetki kaydı SHA256 `eb2121308c7b99a6ce1841e35914b56db4fd9d2a358dc3d391ce782f2d9d414c`. Kayıttaki 11:22:36 UTC, yanıt okunduktan sonraki kayıt zamanıdır. Diğer altı eski günlük ve özel yedek korunur; ücretli yükseltme veya borsa emri yetkisi eklenmez. Disk zaten yayın rezervinin altında olduğundan yalnız bu kurtarma temizliği için sınırlı audit kaydı yazılır; 528 MiB yayın rezervi düşürülmez ve aktarım öncesinde gerçek boş alan ayrıca doğrulanır.
+- Kullanıcı 20 Eylül'de yeni üç günlük önerisine **“Kaldığın yerden devam et onaylıyorum”** yanıtını verdi. Bu açık onay yalnız `p1g2-20260920-three-journal-removal-proposal.json` içindeki üç tam yolu kapsar; öneri SHA256 `f5e50356a3a838693d90412aa8d3990ac1abfe4d9fc02540e57b82a090311890`. Yanıt okunduktan sonra 07:54:47 UTC'de oluşturulan onay kaydının SHA256'sı `7c2c44eecba14d86685a46f3892ac31b1d4b6b660cb973641f01cbf03137e314`; bu zaman mesajın gönderim zamanı değildir. İşlem öncesinde ilk iki dosyanın zaten bulunmadığı görüldü; yalnız kalan üçüncü dosya gerekli ve yeterli olduğundan kaldırıldı. Önceden bulunmayan dosyaların yokluk nedeni doğrulanmadı. Özel yedek, diğer günlükler, imaj/release/DB ve ücretli kapasite sınırları korundu.
 - Sonraki kullanıcı talimatıyla kapsam değişirse bu kayıt güncellenir. Daha önce açıkça verilmiş yetki tekrar sorulmaz.
 - Gerçek hesap, üretim veritabanı ve VPS üzerinde yapılan işlemler yerel geliştirme/test işlemlerinden ayrı kaydedilir.
 - Deploy yetkisi, gerçek/testnet emir gönderme, veri silme, force-push veya sunucudaki bilinmeyen yerel değişiklikleri ezme yetkisi olarak yorumlanmaz.
@@ -170,9 +171,9 @@ Kapsam tahminleri süre taahhüdü değildir: küçük birkaç dosya; orta bir �
 | P1-G1 | Kilitli Python bağımlılığı advisory incelemesi | Doğrulandı — 710/710, sıfır dependency bulgusu; CI/imaj/üretim ve auth13/13 geçti | Orta | P2-3 raporu; uygulama/test bağımlılığı ayrımı |
 | P3-1 | Backtest ve strateji eşdeğerliği | COMBO üretimde; motor/Pine, FIFO ve günlük yürütme kaynak kabulü tamam. Günlük yürütme 48/tam 878-skip1, exact CI ve altı dosya hash doğrulaması geçti. Ortak nakit kronolojisi/fiyatlama, benchmark/WFA ve Pine dış kabulü açık | Büyük | Emir/veri doğruluğu, P1-3, P1-4 |
 | P3-2 | Backup branch tasarım değerlendirmesi | Bekliyor | Küçük inceleme | Tasarım tercihi |
-| P1-G2 | Frontend bağımlılık güvenliği | Kod/CI/imaj doğrulandı: bbd9377; 20 Eylül taze npm505/0. Üretim diskinde 07:38 ölçümünde ~156,24 MiB açık; eski aday artık yok. Yeni üç kapalı günlük özel yedekle doğrulandı; somut öneri/onayı ve frontend-only kabul bekliyor | Orta | Yeni somut kapasite yetkisi, 528 MiB rezerv ve üretim kabulü |
+| P1-G2 | Frontend bağımlılık güvenliği | **Doğrulandı:** bbd9377 / başarılı CI-imaj; 20 Eylül frontend-only üretim, Linux native ve dış HTTPS/RSC/statik kabulü tamam. npm505/0; backend/current279 aynı | Orta | Sonraki yayınlarda taze kapasite ve 528 MiB rezerv korunur |
 
-**Önerilen sıra:** Başlangıç sırası P0-1 → P0-2 → P0-3 → P0-4, ardından P1-1/P1-2/P1-3 idi. P1-G1 ve P2-4 tamamlandı; yeni npm bildirimlerinin **P1-G2** etki/düzeltme incelemesi, P3-1 beşinci adımdan önce ele alınır. Ardından P3-1 → P3-2; P1-3 dış kabulü kullanıcı yeniden seçene kadar ertelidir.
+**Önerilen sıra:** P0/P1 uygulama işleri, P1-G1/P1-G2 ve P2 kapsamı doğrulandı. Sırada P3-1 beşinci adım (ortak nakit kronolojisi/fiyatlama), ardından kalan P3-1 ve P3-2 var. P1-3 dış kabulü kullanıcı yeniden seçene kadar ertelidir.
 
 ## P0 — Önce tamamlanacak işler
 
@@ -1263,6 +1264,8 @@ Son boş alan622.018.560B, beş servis/config ve frontend967/backend279 aynıyd�
 
 ### P1-G2 — Frontend bağımlılık güvenliği takibi
 
+**Durum — 20 Eylül: Doğrulandı.** Aşağıdaki tarihsel inceleme ve kapasite kayıtları, sondaki üretim kabulüyle tamamlandı.
+
 **Bulgu:** Exact `f937744` CI'sindeki frontend ve Docker `npm ci` adımları 11 güvenlik bildirimi üretiyor. Yeşil frontend testi/build veya Python güvenlik taraması bunları kapatmaz. İlk kayıt paket/advisory etki analizi tamamlanmadan oluşturuldu; bildirim sayısı kanıtlanmış 11 üretim açığı anlamına gelmez.
 
 **Salt okunur ilk audit:** Node 20.20.2 / npm 10.9.9 ile `npm audit --package-lock-only --ignore-scripts --json` aynı 11 etkilenmiş paket düğümünü bildirdi; çıkış 1 bulgu sonucudur. `package.json` ve `package-lock.json` hashleri değişmedi. Rapor `runtime-data/p31-execution-npm-audit.json`, 31.255 B, SHA256 `cd1fc2e7b87a0f1816cbc512f9f5138ab9cbc1f7f57e7391e455b829f867e0ba`. Tek doğrudan etkilenen paket `next@16.2.1`; npm `16.3.5` öneriyor, ancak bu sürüm henüz seçilmedi veya uyumlulukla doğrulanmadı. Diğer düğümler `@babel/core`, `@humanfs/node`, `baseline-browser-mapping`, `brace-expansion`, `browserslist`, `js-yaml`, `minimatch`, `nanoid`, `postcss`, `sharp`. Rapor 46 benzersiz advisory URL içeriyor; bir düğüm birden çok advisory içeriyor. Altı paket yalnız dev, beşi prod yolunda; postcss iki kapsamda da bulunuyor. Mevcut brace-expansion override değerleri 1.1.13 / 2.0.3 olduğu için yalnız lock yenilemesi bu kısıtı kaldırmaz. Next'in 25 doğrudan advisory kaydı arasında Windows sunucusu ve AVIF image optimization için iki kritik bildirim var; üretimin Linux olması bütün Next bulgularını elemez. Kod yollarının erişilebilirliği ve hangi sürümün tüm ilgili aralıkları kapattığı henüz tamamlanmış analiz değildir. Paket yükseltmesi veya saldırı denemesi yapılmadı.
@@ -1305,7 +1308,7 @@ Son boş alan622.018.560B, beş servis/config ve frontend967/backend279 aynıyd�
 - Somut öneri: `runtime-data/p1g2-one-journal-removal-proposal.json`, **18.107 B**, SHA256 **`b98445996e45ca96e4f08e24aef92ab25c76db8bb05dc5bdd3e4f108969bba1c`**. Kaynak `bbd9377`, başarılı kod CI/imaj yayını, maliyet raporu ve yedek kanıtına bağlıdır; Git dışındaki bu dosya ilerideki onayın kapsamını tanımlar. **12:47 ölçümündeki güncel açık 44.890.356 B (~42,81 MiB)**; önceki 42,42 MiB değeri 12:40 ölçümüne aittir.
 - Öneri yalnız bu sunucu kopyası içindir. Bilgisayardaki özel arşiv, diğer beş eski günlük, etkin günlükler, veritabanları ve geri dönüş kaynakları korunur. Mevcut beş servis ve konfigürasyon değişmeden kaldı. **Yeni kullanıcı onayı henüz alınmadı.**
 
-**20 Eylül P1-G2 — devam ön kontrolü ve kapasite önerisinin yenilenmesi:**
+**20 Eylül P1-G2 — devam ön kontrolü ve kapasite önerisinin yenilenmesi (onay öncesi tarihsel kayıt):**
 
 - Başlangıç `main/e454262d9c13041354534fe312e5b3a1dafe941b`; Git ağacı temiz,
   uzak `main` aynı. Önceki belgenin başarılı CI ve sunucu kabulü eski
@@ -1386,6 +1389,79 @@ Son boş alan622.018.560B, beş servis/config ve frontend967/backend279 aynıyd�
   statik/RSC kabulü operatorün sekiz GET kontrolüne ek kapanış kapılarıdır.
   Eski `p31-frontend-public-acceptance.py` doğrudan yeni sürüm kabulü sayılamaz;
   kaynak kimliği güncellenmiş ayrı kayıt gerekir.
+
+**20 Eylül P1-G2 — onaylı kapasite temizliği ve frontend geçişi:**
+
+- Kullanıcının açık onayı yukarıdaki önerinin üç yoluna bağlandı. Özel
+  37.299.305 B arşivin SHA256/CRC/3 üye/restore hashleri ve ACL yeniden geçti.
+  07:55 ön kontrolünde ilk, silme aracının son kontrolünde ilk iki dosya yoktu;
+  bunlar bu işlemin silme sayısına dahil edilmez ve nedenleri bilinmiyor.
+- **08:08:38 UTC** yalnız üçüncü yol,
+  `system@9785d360ea1d4cce9ab534627a929905-00000000006dfb6b-00065a4485cb18e3.journal`
+  kaldırıldı. Stat/hash/ARCHIVED/journalctl ve açık FD/mmap yokluğu kontrol
+  edildi. Tahsisli alan **75.501.568 B**; gerçek boş alan
+  **627.179.520 → 702.586.880 B**, net **75.407.360 B** arttı.
+  Diğer 98 arşiv günlüğünün kimlikleri ve tüm servis/config/pointer korundu;
+  servis restart'ı yok, API/bot HTTPS **18,572/26,706 ms**, 200.
+  Sonuç `runtime-data/p1g2-20260920-three-journal-removal-result.json`, SHA256
+  `4aacacc0f05978c37edde3b223dd456c6db5f65141625307fe94108bdb17d02a`;
+  sunucuda `/root/rapot-ops/20260920-p1g2-cleanup/removal-result.json` ile aynı.
+  Önceki 07:38 kapasite tahmini güncel karar yerine kullanılmadı.
+- Staging ilk yazısından önce exact runtime/config hash'i, onay/temizlik kaydı,
+  başarılı kaynak CI/imaj ve kapasite yeniden doğrulandı. **702.496.768 B**
+  boş alan strict **661.207.283 B** eşiğini aştı. Üç sabit dosya toplam
+  **892.419 B** yüklendi; hardlink kullanılmadı. Önceden ayrılmış staging
+  blokları toplam 2 MiB kanıt bütçesinden bir kez düşüldü; rezerv azaltılmadı.
+- **08:10:01 UTC** yalnız frontend `bbd9377` ve
+  `sha256:e312d7aa5e682a7835e4dc7ba3e1b4263f04a64f872f47037814ec4b0ba1f4d0`
+  imajıyla doğrulandı. Exact CI **34757348090** / imaj **34757661535** başarılı.
+  Compose override'da yalnız frontend digest'i değişti;
+  `up -d --no-deps --no-build --pull never frontend` kullanıldı.
+  API/bot/middleware/PostgreSQL kimlikleri, başlangıçları ve restart=0 aynı;
+  backend/Compose/current **279aa9f**, ortam ve Nginx hashleri korundu.
+  Migration, DB initializer/restore, backend restart'ı veya emir işlemi yok.
+  DRY_RUN, trading/live kapalı; önceki frontend imajı ve özel yedekler duruyor.
+- Dağıtım operatörünün **8/8 GET** sağlık/SSR kontrolü geçti. Son boş alan
+  **603.271.168 B**, sabit 528 MiB rezerv üstünde. Kayıt
+  `runtime-data/p1g2-20260920-frontend-deployment.json`, SHA256
+  `a676adc4549f26819e83874cd679bf9dacbdc04179e442ad9eca8a663f002701`;
+  sunucuda `/root/rapot-ops/20260920-p1g2-frontend/deployment.json`.
+- Dış Windows HTTPS kabulü **08:11:44 UTC**: BTCUSDT/Kripto HTML,
+  ETHUSDT/Kripto RSC ve alarm HTML, seçilen **12 JS + 1 CSS** dosyası
+  200/doğru MIME ile geçti; toplam **948.746 B**. Keşfedilen 14 JS'nin ikisi
+  örnekleme dışında; tam tarayıcı/worker/alarm yürütmesi kabulü değildir.
+  İlk deneme RSC isteğinde `_rsc` bulunmadığı için 307'yi reddetti. Next
+  16.3.5 kaynak kontrolü ve dönüş başlığı boş `_rsc` gerekliliğini doğruladı;
+  düzeltilmiş istek otomatik yönlendirme açılmadan geçti. İlk başarısız kayıt
+  korunur; başarılı kayıt `p1g2-20260920-public-acceptance-v2.json` içindedir.
+  Temizlik 14, staging/dağıtım 28, dış kabul 9 sentetik kontrolü geçti.
+
+- Native kontrolün ilk denemesi, Node stdin modunda `require.main === module`
+  koşulu sağlanmadığı için probe'u çalıştırmadı; boş çıktı kabul edilmedi.
+  Eski başarısız sonuç ve teşhis kaydı korundu. Düzeltilmiş v2 aracı exact
+  deployment hash'i, container/imaj/revision ve korunmuş config kimliğine bağlandı.
+  **2026-09-20T08:17:05.185889+00:00** kabulünde Linux/x64/musl Node20.20.2,
+  Next16.3.5, Sharp0.35.4, heif1.23.2, native vips8.18.6 doğrulandı;
+  Sharp'ın yüklediği binding global/WASM değil. libvips npm paket sürümü
+  1.3.3, kitaplık sürümünden ayrı kaydedildi. Standalone/default image loader,
+  cacheComponents=false, unoptimized=false ve boş remotePatterns okundu.
+  Bu metadata kontrolü exploit veya görüntü decode testi değildir.
+  `p1g2-20260920-native-acceptance-v2.json` SHA256 `f222c64b95d2577f3874ca63402fe952085b9f3b6e16d39048c5bd39d7c2f814`.
+- Son salt okunur runtime kabulü **2026-09-20T08:17:22.412262+00:00**: yeni frontend
+  ve diğer dört servis sağlıklı/restart0; frontend geçişinden sonra container,
+  config ve kaynak pointer aynı. Boş alan **602.435.584 B**. Kayıt
+  `p1g2-20260920-runtime-final-v2.json`, SHA256 `e3c2666501a2c18391e7f2ab943d46fc38af9be75f8e5adb8a210408bb9a340d`.
+  Dış başarılı kayıt SHA256
+  `8ba90b9ab4a53c2fe1ede98d39de911a76210eef757a172b77f802a73a1ad660`.
+- Yerel dağıtım/frontend sözleşme kontrolleri **10/10** geçti. Uygulama kodu
+  bu kapanışta değişmedi; tam test/build yeniden koşumu yeni belge commit'inin
+  CI'sinde doğrulanır. Dört canonical belge ve üç temizlenmiş kabul kaydının
+  sunucu yayını, exact belge commit/CI ve Git blob SHA256'larıyla
+  `/root/rapot-ops/20260920-p1g2-closure/release-record.json` içinde tutulur.
+  Yerel karşılığı `p1g2-20260920-closure-release-record.json` dosyasıdır.
+  Önceki b850b45 checkpoint belgesi kapasite nedeniyle aktarılmamıştı; yeni
+  kapanış yayını önceki 13 Eylül belge kaydıyla karıştırılmaz. Bu belge yayını
+  yeni imaj, restart, migration veya ek silme gerektirmez.
 
 ### P3-2 — Backup branch tasarım değerlendirmesi
 
@@ -1529,6 +1605,8 @@ Son boş alan622.018.560B, beş servis/config ve frontend967/backend279 aynıyd�
 
 | 2026-09-20 | P1-G2 | Taze ön kontrol → eski öneriyi geçersiz say → yeni özel yedek/öneri | Exact kod CI/imaj ve OCI maliyeti yeniden doğrulandı; taze npm505/0, ilgili8+5 test geçti. Beş servis/config aynı, HTTPS200. Eski kalan6 journal artık yok; neden doğrulanmadı. Yeni29–31Ağustos üç ARCHIVED dosya özel PC arşivinde CRC/3üye/restore hash/ACL ile doğrulandı. Öneri f5e50356; toplam226.504.704 B. Son497.381.376 B boş, strict eşik için163.825.908 B açık; iki dosya yetersiz. Yeni üç dosya onayı bekleniyor; sunucuya yazı/silme/pull/restart/emir yok. Bu belgenin sunucu aktarımı rezerv nedeniyle açık |
 
+| 2026-09-20 | P1-G2 | Açık onay → tek günlük temizliği → frontend geçişi → native/HTTPS kabulü | Onaylı üç yoldan ikisi önceden yok; yalnız üçüncü kaldırıldı, net75.407.360 B. Frontend bbd9377/e312; backend/current279 ve dört servis aynı. 8GET, dış16GET, Linux native sürümler geçti; yardımcı araçların ilk başarısız denemeleri korunup düzeltildi. npm505/0; sabit528MiB rezerv korundu. Kapanış belge CI/sunucu kabulü ayrı release-record; sonraki iş P3-1 ortak nakit kronolojisi |
+
 Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 
 - İş ID'si, tarih, aşama ve sonuç.
@@ -1547,4 +1625,4 @@ Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 4. Aktif işin bulgusunu ve bağımlılıklarını güncel kodda kontrol et. İncelemeyi baştan tekrarlamak yerine ilgili kanıttan devam et.
 5. İşin dört adımını tamamla veya engeli somutlaştır; ardından durum tablosu, günlük ve Kaldığımız nokta bölümünü güncelle.
 
-**20 Eylül: P1-G2 kaynak bbd9377 ve başarılı CI/imaj yeniden doğrulandı; taze npm505/0. Üretim frontend967/backend279 sağlıklı. 07:38 ölçümünde ~156,24 MiB kapasite açığı var; eski tek günlük adayı artık yok. Yeni üç kapalı günlük için özel yedek doğrulandı, somut öneri f5e50356 yeni onay bekliyor. Sabit528MiB rezerv korunur; pull/restart/silme yapılmadı. Yeni belgenin sunucu aktarımı da kapasiteyi bekler. Sonraki sıra: yeni üç dosya onayı → taze yedek/kimlik/kullanım/kapasite doğrulaması → frontend-only/native/HTTPS kabulü → P3-1 ortak nakit kronolojisi/fiyatlama. Gerçek/testnet emirleri ve diğer dış kabul erteli.**
+**20 Eylül: P1-G2 tamamlandı. Onaylı üç yoldan ikisi işlem öncesinde yoktu; yalnız kalan tek yedekli günlük kaldırıldı. Frontend bbd9377 yayımlandı; backend/Compose/current279 korundu. Sağlık/SSR, dış HTTPS/RSC/statik ve Linux native sürüm kabulü geçti; sabit528MiB rezerv korundu. Kapanış belge commit/CI ve sunucu kabulü 20260920-p1g2-closure/release-record.json kaydında tutulur. Sonraki geliştirme P3-1 ortak nakit kronolojisi/fiyatlama; gerçek/testnet emirleri ve diğer dış kabul erteli.**

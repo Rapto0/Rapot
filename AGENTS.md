@@ -1,6 +1,6 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-Kaynaklarla son karşılaştırma: **13 Eylül 2026 / P1-G2**. İş sırası, kullanıcı
+Kaynaklarla son karşılaştırma: **20 Eylül 2026 / P1-G2**. İş sırası, kullanıcı
 yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DEVAM_PLANI.md)
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 
@@ -111,6 +111,15 @@ hatası CI'yi başarısız yapar. Ham JSON, lock hash'i ve kapsam manifesti sakl
 [advisory incelemesi](docs/FRONTEND_DEPENDENCY_SECURITY.md) kapsamı açıklar.
 Pip içermeyen uv ortamında bağımlılık kontrolü yukarıdaki `uv pip check` ile yapılır.
 
+P1-G2'nin 20 Eylül üretim kabulünde frontend `bbd9377` / `sha256:e312d7aa…`
+imajına geçti; backend/Compose/current `279aa9f` korundu. Sekiz sağlık/SSR GET,
+dış HTTPS/RSC ve 12 JS + 1 CSS örneği geçti. Exact imajdaki Linux/musl native
+metadata Next16.3.5, Sharp0.35.4, libheif1.23.2 ve libvips8.18.6'yı doğruladı;
+bu exploit, görüntü decode veya etkileşimli tarayıcı testi değildir. Taze npm
+audit 505/0; sabit 528 MiB disk rezervi korundu. Onaylı üç eski günlük yolundan
+ikisi işlem öncesinde yoktu, yalnız kalan bir yedekli dosya kaldırıldı. Ayrıntılı
+yetki/kabul ve sonraki P3-1 ortak nakit işi devam planındadır.
+
 ## Strateji terminolojisi
 
 - AL/SAT = BUY/SELL; BIST/Kripto piyasa adlarıdır.
@@ -133,8 +142,10 @@ Pip içermeyen uv ortamında bağımlılık kontrolü yukarıdaki `uv pip check`
 - HUNTER kısa ATR serisi P1-7'de düzeltildi. P3-1'in ilk adımında frontend
   `calculateCombo` geçerli sıfırı korur; eksik, NaN ve sonsuz göstergeler puan
   üretmez. Eşikler, 26 mum koşulu ve AL sonrası SAT önceliği değişmedi. Altı yeni
-  regresyonla 105 frontend testi, CI ve imaj yayını geçti. Üretimde frontend
-  `967f137`, backend/Compose/current `279aa9f`; yalnız frontend yenilendi.
+  regresyonla 105 frontend testi, CI ve imaj yayını geçti. İlk geçişte frontend
+  `967f137`, backend/Compose/current `279aa9f` idi. 20 Eylül P1-G2 bağımlılık
+  güncellemesiyle üretim frontend'i `bbd9377` oldu; backend/Compose/current
+  `279aa9f` kaldı. Yalnız frontend yenilendi.
   Tek günlük temizliği ve uygulama kabulü devam planında ayrı kayıtlardır.
   Hesaplayıcı yeterli sonlu göstergeyle puan üretebilir; yerel alarm son kaydın tüm
   göstergeleri sonlu değilse `unknown` döndürür. P3-1 ikinci adımında özel Pine

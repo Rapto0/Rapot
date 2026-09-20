@@ -143,8 +143,8 @@ değildir.
 native **libvips** kitaplığı sürümü değildir. Bakımcı sharp 0.35.4 prebuilt
 dağıtımında **libheif 1.23.2** bildirir. Yeni yerel Windows kurulumunun
 `sharp.versions` çıktısı sharp **0.35.4**, heif **1.23.2**, vips **8.18.6**
-gösterdi; bu Windows native binary doğrulamasıdır. Linux imajının native
-kitaplıkları üretim kabulünde ayrıca doğrulanır.
+gösterdi; bu Windows native binary doğrulamasıdır. Linux üretim doğrulaması
+aşağıdaki 20 Eylül kabulünde ayrıca kaydedilmiştir.
 
 ## Doğrulama ve kapanış sınırı
 
@@ -182,6 +182,47 @@ karşılamaz. Sabit 528 MiB disk rezervi, imaj katmanlarının ek alanı, taze y
 çalışan servisler ölçülmeden deploy tamamlandı denmez. Bu inceleme PostgreSQL,
 SQLite, backend imajı, borsa emirleri veya ücretli kapasite değişikliği gerektirmez.
 
+### 20 Eylül üretim geçişi
+
+Kaynak `bbd9377cfd3e8b74f6b02ba23c1c99282ba587bd` için
+[CI 34757348090](https://github.com/Rapto0/Rapot/actions/runs/34757348090) ve
+[imaj yayını 34757661535](https://github.com/Rapto0/Rapot/actions/runs/34757661535)
+yeniden doğrulandı. Aynı gün Node 20.20.2/npm 10.9.9 ile taze audit
+**505/505 düğüm, 0 bulgu** verdi. **08:10:01 UTC** kabulünde yalnız frontend
+`bbd9377` imajına geçti; immutable digest
+`sha256:e312d7aa5e682a7835e4dc7ba3e1b4263f04a64f872f47037814ec4b0ba1f4d0`.
+Backend/Compose/current `279aa9f`, dört korunan konteyner ve ortam/Nginx
+korundu. Sekiz sağlık/SSR GET geçti; deploy sonu boş alan **603.271.168 B**,
+değişmeyen 528 MiB rezervin üzerindeydi. Exact deployment receipt SHA256:
+`a676adc4549f26819e83874cd679bf9dacbdc04179e442ad9eca8a663f002701`.
+
+**08:11:44 UTC** dış HTTPS v2 kabulünde **16 GET** geçti: chart/alarms HTML,
+ETHUSDT/Kripto RSC props ve keşfedilen 14 JS + 1 CSS içinden 12 JS + 1 CSS;
+toplam **948.746 B** okundu. İlk kontrol, yeni Next sürümünün `_rsc` sorgu
+korumasındaki 307 yanıtında durdu. Sabit RSC URL'sine boş `_rsc` parametresi
+eklenen v2 yönlendirmeleri otomatik takip etmedi; ilk başarısız kayıt korundu.
+Bu sonuç tarayıcı/worker veya yerel alarm çalıştırması değildir.
+
+**08:17:07 UTC** native v2 kabulü exact container/imaj/source kimliğine bağlı
+Linux/x64/**musl** runtime'da Node **20.20.2**, Next **16.3.5**, Sharp
+**0.35.4**, `sharp.versions` içinde heif **1.23.2** ve vips **8.18.6** okudu.
+Sharp'ın seçtiği aktif binding, açıkça yüklenen native binding ile aynıydı;
+`libvipsVersion()` **8.18.6**, `isGlobal=false`, `isWasm=false` verdi.
+`@img/sharp-libvips-*` dağıtım paketinin **1.3.3** değeri ayrı tutuldu.
+Standalone/default image loader, `cacheComponents=false`, `unoptimized=false`
+ve boş remote patterns doğrulandı. Native kabul SHA256:
+`f222c64b95d2577f3874ca63402fe952085b9f3b6e16d39048c5bd39d7c2f814`.
+İlk helper stdin giriş koşulu yüzünden çalışmayıp boş çıktı üretmişti; bu
+başarısız kayıt korundu. V2 yalnız metadata okudu; image decoding veya exploit
+testi yapmadı. Önce/sonra servis kimlikleri ve config aynı kaldı.
+
+Kapasite için kullanıcı üç somut kapalı günlük kopyasını onayladı. İşlem öncesi
+ikisi zaten yoktu; yokluk nedeni doğrulanmadı. Yedeği tekrar doğrulanan yalnız
+kalan bir dosya kaldırıldı; özel arşiv korundu. Ayrıntılı yetki, ölçüm ve
+native kabul kanıtı [devam planında](RAPOT_DEVAM_PLANI.md) ayrı tutulur.
+Backend imajı, veritabanları ve geri dönüş imajları korundu; ücretli kapasite
+değişikliği yapılmadı.
+
 Yerel kanıtlar Git dışında `runtime-data/` altında tutulur:
 
 - Başlangıç audit: `p31-execution-npm-audit.json`, SHA256
@@ -193,7 +234,11 @@ Yerel kanıtlar Git dışında `runtime-data/` altında tutulur:
 - Seçilen lock farkı: `p1g2-lock-delta.json`.
 - Yeni tam audit/lock kapsamı: `p1g2-npm-security/` içindeki `npm-audit.json`,
   `manifest.json`, `summary.json`; npm ağaç uyarısı: `p1g2-npm-tree.json`.
+- 20 Eylül taze audit: `p1g2-20260920-npm-security/`; üretim kanıtları
+  `p1g2-20260920-frontend-deployment.json`, `p1g2-20260920-native-acceptance-v2.json`,
+  `p1g2-20260920-public-acceptance-v2.json` ve `p1g2-20260920-runtime-final-v2.json`.
 
-Bu belgede mevcut uygulamaya yönelik exploit çalıştırılmadı; dış ağ okumaları
-paket registry ve açık bakımcı güvenlik kaynaklarıyla sınırlıdır. Paket sürümü,
-statik özellik koşulu ve gerçek üretim kabulü ayrı kanıtlar olarak tutulur.
+Mevcut uygulamaya yönelik exploit veya image decoder saldırı testi çalıştırılmadı.
+Advisory araştırmasının dış ağ okumaları paket registry ve açık bakımcı güvenlik
+kaynaklarıyla sınırlıdır; üretim HTTPS okumaları yukarıda ayrı kaydedilir.
+Paket sürümü, statik özellik koşulu ve üretim kabulü ayrı kanıtlardır.
