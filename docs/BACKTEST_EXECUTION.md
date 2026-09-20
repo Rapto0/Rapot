@@ -116,6 +116,9 @@ günlük equity ve eski fiyatların görünürlüğü
 [ortak portföy sözleşmesindedir](BACKTEST_PORTFOLIO.md). Tek sembol arayüzü başka
 sembollerin açık pozisyonlarını içeren portföyü ilk işlemden önce reddeder.
 
-Benchmark/WFA ve tam CLI/grafik çalıştırması ayrı açık işlerdir.
-Matplotlib/tqdm opsiyonel bağımlılıkları eklenmedi. Testler sentetik veri ve
-stub sağlayıcı/sinyal senaryolarıdır; üretim verisine veya borsa emrine erişmez.
+Son adımın [benchmark](BACKTEST_BENCHMARK.md), doğru adlandırılmış
+[al-tut pencere analizi](BACKTEST_WINDOW_ANALYSIS.md) ve [tam fixture CLI](BACKTEST_CLI.md)
+kabulü bu yürütme sözleşmesini kullanır. SVG grafik için matplotlib gerekmez;
+bağımsız paralel runner'ın tqdm bağımlılığı ayrıdır. Günlük yürütme birim testleri
+stub sinyaller kullanır; CLI kabulü gerçek COMBO/HUNTER hesaplayıcılarını sentetik
+veride çalıştırır. Üretim verisine veya borsa emrine erişmez.

@@ -4,18 +4,18 @@ Bu belge, 6 Eylül 2026 tarihli salt okunur proje incelemesinden çıkan işleri
 
 ## Kaldığımız nokta
 
-- **Son çalışma — 20 Eylül:** **P3-1 beşinci adımın ortak nakit ve fiyatlama düzeltmesi tamamlandı.** Eski kodda gelecekteki satış nakdinin başka sembolün geçmiş alışına taşınması ve 260 olması gereken portföy değerinin 210 çıkması iki RED testle gösterildi. Ortak koşum artık artan gün/ham sembol sırasıyla çalışıyor; gün sonu tüm açık pozisyonlar son bilinen Close ile, fiyat tarihi/eskilik bilgisiyle değerleniyor. **44 yeni test ve tam Python 922 geçti / 1 isteğe bağlı test atlandı**, uyarı yok. Kaynak/kanıt yayını exact commit/CI ve sunucu kabul kaydıyla aşağıda bağlanır. Üretim frontend `bbd9377`, backend/Compose/current `279aa9f`; bu ayrı CLI düzeltmesi servis yayını değildir.
+- **Son çalışma — 20 Eylül:** **P3-1'in altı geliştirme adımı ve yerel kabulü tamamlandı.** Son adım benchmarkı aynı dönem son NAV/başlangıç nakdi esasına geçirdi; eksik veri artık sıfır getiri sayılmıyor. Eski WFA, gerçek yaptığı işe uygun `RollingBuyAndHoldAnalysis` olarak adlandırıldı. İzole CLI gerçek COMBO/HUNTER ile JSON, altı CSV, SVG ve XLSX üretti. **74 yeni test; tam Python 996 geçti / 1 isteğe bağlı test atlandı**, uyarı yok. Frontend 113 test ve lint/typecheck/build/standalone geçti. **P3-1'in tüm dış kabulü tamamlanmış değildir:** güncel Pine TradingView derleme/grafik sonucu aşağıdaki tek açık kapıdır.
 - **Uygulama durumu:** P0-1–P0-4, P1-1, P1-2, P1-4–P1-7, P1-G1, **P1-G2**, P2-1, P2-3 ve **P2-4 doğrulandı**; P2-2 belge/karar kapsamı tamam. İç worktree ve 12 wrapper koruma kararı değişmedi.
 - **P1-2 durumu — Doğrulandı:** **8f60f8e üretim geçişi ve [HTTPS](https://138.68.71.27) kabulü tamamlandı.** API, bot, frontend, middleware ve PG16 sağlıklı; veri korunumu, dış HTTPS/auth/WSS, yetkisiz webhook reddi ve sertifika yenileme dry-run testi geçti. Eski supervisor'lar devre dışı; özgün DB/checkout ve geri dönüş kaynakları korundu.
 - **Önceki sürümün uzak doğrulaması — 11 Eylül:** `ccd61544` için [CI 34641121926](https://github.com/Rapto0/Rapot/actions/runs/34641121926) ve [imaj yayını 34641767731](https://github.com/Rapto0/Rapot/actions/runs/34641767731) başarılı. Üretimde API health 47 ms/200; `/`, `/signals`, `/alarms`, `/chart` SSR 200. Beş servis healthy/restart0; SignalFeed hazır, Binance/BIST sağlayıcıları başlamış. Scheduler 47,298 saniyede unknown → running oldu. 1.733.137 sinyal, 6 tarama geçmişi, 26.393 AI kaydı ve diğer ana sayılar; PostgreSQL kimliği ve 135/135/28/383 sayıları korundu. DRY_RUN/false/false ve AI kapalı; dış Windows HTTPS API/bot kontrolleri ayrı ayrı 203 ms/200. Sonraki `aadde728` ve güncel `279aa9f` geçişlerinin 13 Eylül kanıtı P2-4 bölümündedir.
 - **P2-2 doğrulaması ve belge yayını:** Python 3.12.8'de üç ayrı hedefli koşum toplam **98/98** geçti (wrapper/boundary/read-model 37, DB/migration 30, sinyal/config 31); DB grubunda mevcut 10 UTC warning var. 11 Eylül 15:44:58 UTC salt okunur sunucu ön kontrolünde beş servis healthy/restart0, HTTPS API/bot health 200 (0,051/0,043 saniye). Bu yalnız belge commit'inin tam SHA/CI sonucu, Git blob SHA256'ları ve sunucuya aktarım sonrası korunma kanıtı `/root/rapot-ops/20260911-p22/release-record.json` içinde sürüm bazında tutulur. İmaj yayını, servis restart'ı veya migration bu belge yayınının parçası değildir.
-- **Aktif iş:** P3-1 beşinci adımın kod, test ve sözleşme belgeleri hazır. Sekiz canonical Git dosyası ve yerel kabul kaydı `/root/rapot-ops/20260920-p31-portfolio/` altında yayımlanır; exact kaynak commit/CI, dosya hashleri, taze kapasite ve değişmeyen runtime/HTTPS kabulü `release-record.json` içindedir. Sonraki geliştirme **P3-1 altıncı adım: benchmark/WFA doğruluğu ve gerçek strateji testi veya doğru adlandırma**. Gerçek/testnet emir kabulü ertelidir.
+- **Aktif iş:** P3-1 kod/test/belge ve tekrarlanabilir CLI kabulünün exact commit/CI ile kaynak yayını `/root/rapot-ops/20260920-p31-final/release-record.json` kaydına bağlanır. Bu kayıt olmadan yalnız push yayın kabulü sayılmaz. **Kalan P3-1 kapısı güncel 1.091 satırlık Pine kaynağının TradingView derleme/grafik kabulüdür.** Bu turda bağlı tarayıcı yok; kullanıcıya tam kaynak açıldı ve manuel sonuç soruldu. Bu sonuç gelmeden tüm P3-1 yeşil ilan edilmez. Sonraki bağımsız geliştirme P3-2'dir; gerçek alarm/testnet/emir kabulü ertelidir.
 - **P3-1 ikinci adımın yayın kapanışı:** `48be08e6d3717693e601c9f62c3e1b6665a8c85a`, [CI34749745272](https://github.com/Rapto0/Rapot/actions/runs/34749745272) beş job başarılı. 09:40:19 UTC'de 11 canonical kaynak/rapor dosyası488.483B ve12.462B kayıt sunucuda hash/gzip ile doğrulandı; `/root/rapot-ops/20260913-p31-indicators/release-record.json` SHA256 `426a3041f78c22ecb0328c260bbf956178af2be39262b8757522f88e207866b0`. Beş servis/config aynı, dış HTTPS200; frontend967/backend279 aynı kaldı. TradingView script/alarm kopyası değiştirilmedi.
 - **Ertelenen dış kabul:** Gerçek TradingView alarm teslimi, ALL/FIRST/saat filtresi runtime kabulü ve sınırlı testnet emir testi tamamlanmış sayılmıyor. Hazır test araçları korunuyor; testnet onayı ve Webhook URL erişimi için artık yanıt beklenmiyor, bu işler kullanıcı yeniden seçtiğinde ele alınacak. Borsa emri gönderilmedi; geçici test servisleri kapalı.
 - **Başlangıç kaydı:** Bu belge ilk oluşturulduğunda yalnız belge değişmişti; sonraki uygulama değişiklikleri aşağıda ayrı kaydedildi.
 - **Seçilen geliştirme ortamı:** `.venv` / Python 3.12; Node 20.20.2 / npm 10.9.9. Yerelde Python 3.12.8 ile doğrulandı.
 - **Commit / yayın düzeni:** Her tamamlanan P maddesi ayrı commit; doğrulanan grup CI için push edilir, sunucu deploy'u CI ve sunucu kontrollerinden sonra yapılır. İlk sunucu yayını eşiği P0 işleri + P1-7 test hatası + P1-2 dağıtım uyumu.
-- **Açık işler:** P3-1 benchmark/WFA ve diğer kalan kabul sınırları, P3-2 ve ertelenmiş gerçek TradingView alarm/filtre/testnet emir kabulü. P1-G2 üretim kabulü ve P3-1 ortak portföy düzeltmesi tamam. Tam CLI/provider/grafik çalıştırması yapılmış sayılmaz. Ücretli yükseltme veya diğer yedek, imaj, release ve günlükler için toplu silme yapılmaz; her yeni yayın öncesinde sabit 528 MiB rezerv ve gerçek kapasite yeniden ölçülür.
+- **Açık işler:** P3-1'in yalnız güncel Pine dış derleme/grafik kabulü, P3-2 ve kullanıcı tarafından ertelenen gerçek TradingView alarm/filtre/testnet emir kabulü. Benchmark, doğru adlandırılmış pencere analizi ve tam sentetik CLI rapor kabulü artık açık geliştirme değildir. Gerçek sağlayıcı/gerçek kazanç, tam motor eşdeğerliği ve opsiyonel PNG/paralel runner kabulü iddia edilmez. Ücretli yükseltme ve kapsam dışı silme yok; her yayın öncesinde 528 MiB sabit rezerv yeniden doğrulanır.
 
 ## Kapsam ve yetki kaydı
 
@@ -169,11 +169,11 @@ Kapsam tahminleri süre taahhüdü değildir: küçük birkaç dosya; orta bir �
 | P2-4 | Eşzamanlı API yükünde realtime gecikmesi | Doğrulandı: 279aa9f, 735 Python testi, büyük veri ölçümü, CI ve üretimde 24 REST / 3 WSS kabulü | Orta | P1-5 |
 | P0-G1 | Standalone sağlık sunucusu debug varsayılanını kapat | Doğrulandı — loopback/debug/reloader düzeltmesi P2-3 ile üretimde; yerel/CI HIGH=0 | Küçük | P2-3 raporu ve entrypoint kontrolü |
 | P1-G1 | Kilitli Python bağımlılığı advisory incelemesi | Doğrulandı — 710/710, sıfır dependency bulgusu; CI/imaj/üretim ve auth13/13 geçti | Orta | P2-3 raporu; uygulama/test bağımlılığı ayrımı |
-| P3-1 | Backtest ve strateji eşdeğerliği | COMBO üretimde; motor/Pine, FIFO, günlük yürütme ve ortak nakit/değerleme kaynak düzeltmeleri tamam. Beşinci adımda 44 yeni test; tam Python 922 geçti / 1 atlandı, uyarı yok. Kaynak commit/CI ve yayın kabulü ayrı kayda bağlı. Benchmark/WFA, tam CLI ve Pine dış kabulü açık | Büyük | Emir/veri doğruluğu, P1-3, P1-4 |
+| P3-1 | Backtest ve strateji eşdeğerliği | Altı kod adımı ve yerel kabul tamam: 996 Python / 1 atlanan, 113 frontend; gerçek fixture CLI ve raporlar doğrulandı. Güncel Pine TradingView derleme/grafik dış kabulü açık; bütün P3-1 tamamlanmış sayılmıyor | Büyük | Güncel Pine için tarayıcı veya kullanıcı sonucu; P1-3 dış alarm/emir kabulü ayrı |
 | P3-2 | Backup branch tasarım değerlendirmesi | Bekliyor | Küçük inceleme | Tasarım tercihi |
 | P1-G2 | Frontend bağımlılık güvenliği | **Doğrulandı:** bbd9377 / başarılı CI-imaj; 20 Eylül frontend-only üretim, Linux native ve dış HTTPS/RSC/statik kabulü tamam. npm505/0; backend/current279 aynı | Orta | Sonraki yayınlarda taze kapasite ve 528 MiB rezerv korunur |
 
-**Önerilen sıra:** P0/P1 uygulama işleri, P1-G1/P1-G2 ve P2 kapsamı doğrulandı. P3-1 ortak nakit/fiyatlama adımından sonra benchmark/WFA doğruluğu ve adlandırma, ardından kalan P3-1 ve P3-2 gelir. P1-3 dış kabulü kullanıcı yeniden seçene kadar ertelidir.
+**Önerilen sıra:** P3-1'in kod ve yerel kabul işleri tamam. Güncel Pine TradingView sonucu geldiğinde kalan P3-1 dış kapısı kapatılır; P3-2 tasarım değerlendirmesi bağımsız sıradaki iştir. P1-3 gerçek alarm/emir kabulü kullanıcı yeniden seçene kadar ertelidir.
 
 ## P0 — Önce tamamlanacak işler
 
@@ -960,7 +960,7 @@ HTTPS health **22 ms**, `/`, `/signals`, `/alarms`, `/chart` HTML 200; feed haz�
 
 **Neden:** Python, frontend ve Pine hesaplayıcıları ayrı implementasyonlar. Backtest kodunun varlığı performans/strateji doğruluğu kanıtı değil.
 
-**2026-09-09 kaynak bulgusu — henüz düzeltilmedi:** Pine `calcEma()` içindeki 536. satır döngüsünde `n == len`, `calcAtr()` içindeki 549. satır döngüsünde `n == len + 1` iken başlangıç indeksi son indeksi aşıyor; döngü geriye çalışıp ilk değeri fazladan güncelleyebiliyor. `getC/getH/getL` dizi dışı indekslerde gelişmekte olan mum değerine döndüğünden hesaplama sınırı etkileniyor. Bu mevcut bir ilk değer/ısınma sınırı bulgusudur, derleme hatası değildir; P1-3'te strateji değişikliği yapılmadı. Düzeltmeden önce tam sınır ve sınırın bir üstündeki geçmiş uzunluğu için EMA/ATR beklenen değerleri, kapanmış/gelişmekte olan mum ayrımıyla test edilmeli.
+**2026-09-09 kaynak bulgusu — ikinci adımda düzeltildi:** Pine `calcEma()` içindeki 536. satır döngüsünde `n == len`, `calcAtr()` içindeki 549. satır döngüsünde `n == len + 1` iken başlangıç indeksi son indeksi aşıyor; döngü geriye çalışıp ilk değeri fazladan güncelleyebiliyor. `getC/getH/getL` dizi dışı indekslerde gelişmekte olan mum değerine döndüğünden hesaplama sınırı etkileniyor. Bu mevcut bir ilk değer/ısınma sınırı bulgusudur, derleme hatası değildir; P1-3'te strateji değişikliği yapılmadı. Düzeltmeden önce tam sınır ve sınırın bir üstündeki geçmiş uzunluğu için EMA/ATR beklenen değerleri, kapanmış/gelişmekte olan mum ayrımıyla test edilmeli.
 
 **2026-09-10 P2-1 incelemesindeki COMBO bulgusu — 13 Eylül ilk adımında düzeltildi:** `frontend/src/lib/indicators.ts::calculateCombo`, `rsi[i]?.value || 50` ve `wr[i]?.value || -50` ile geçerli sıfır değerini nötr değere çeviriyor. Tekrarlanabilir örnek: `i=0..39`, günlük ISO tarih, `open=high=low=close=100-i`, `volume=1`; gerçek son RSI `0`, W%R `-100`. `minBuyScore=4/minSellScore=4` ile COMBO sonucu `buyScore=3`, `signal=null`, details RSI `50`, MACD `-7`, CCI `-126,666…`. Dört alış koşulundan RSI koşulu bu yüzden kayboluyor. Yerel alarm ve grafiğin ortak hesaplayıcısını etkiler; P2-1 veri/yarış düzeltmesi bu strateji hatasını kapatmıyor. Sonlu sıfır/eksik/NaN ayrımı ve diğer hesaplayıcılarla aynı örnekte eşdeğerlik birlikte test edilmeli.
 
@@ -972,7 +972,7 @@ Altı yeni test `frontend/tests/local-alarms.test.mjs` içinde gerçek hesaplay�
 
 **İlk yayın hazırlığının kapsamı — tarihsel kayıt:** Yalnız frontend imajı değişecek. `/opt/rapot/current`, mevcut Compose ve `RAPOT_RELEASE` backend sürümünde kalabilir; yeni frontend kaynak SHA/digest ve canonical dosya hash'leri ayrı bileşen manifestine bağlanır. Tam kaynak arşivi veya DB işlemi gerektirmeyen bu yolda yalnız frontend `--no-deps --no-build --pull never` ile yenilenir. Dört korunan container'ın kimlik/başlangıç/restart bilgileri, env/Nginx hash'leri ve eski frontend dönüş imajı doğrulanır. 08:05:16 UTC salt okunur ölçümde beş servis sağlıklı ve boş alan **578.912.256 B**; 400 MiB rezerv +128 MiB çalışma payı sabittir. Yeni imajın gerçek compressed/açılmış katman maliyeti ölçülmeden pull yapılmaz. Ücretli yükseltme veya diğer dosyaların silinmesi için bu kayıt yeni yetki vermez.
 
-**13 Eylül salt okunur inceleme — henüz düzeltilmedi:** P3-1 yalnız iki gösterge sınırından ibaret değil. `backtesting_system.py` içinde Lot maliyet tabanı alış ücretini dışlıyor; aynı 100 fiyatından 1.000 bütçeli kripto alış/satışta gerçek nakit farkı −2,596624… iken rapor PnL −1,30 çıkıyor (saf sınıflarla bellek içi örnek). `run_single_symbol` end_date'i uygulamıyor; kapanıştan türetilen sinyali aynı kapanışta gerçekleştiriyor. `run_backtest` ortak nakitle her sembolün bütün tarihini sırayla işliyor; bir sembolün gelecekteki nakdi diğerinin geçmişinde kullanılabilir. `WalkForwardAnalysis.run_walk_forward` strategy parametresini hesapta kullanmadan pencere buy-and-hold getirisi üretiyor. Bunlar canlı bot emir yolu değildir; backtest doğruluk işleri olarak açık tutulur.
+**13 Eylül salt okunur inceleme — aşağıdaki üçüncü–altıncı adımlarda düzeltildi:** P3-1 yalnız iki gösterge sınırından ibaret değil. `backtesting_system.py` içinde Lot maliyet tabanı alış ücretini dışlıyor; aynı 100 fiyatından 1.000 bütçeli kripto alış/satışta gerçek nakit farkı −2,596624… iken rapor PnL −1,30 çıkıyor (saf sınıflarla bellek içi örnek). `run_single_symbol` end_date'i uygulamıyor; kapanıştan türetilen sinyali aynı kapanışta gerçekleştiriyor. `run_backtest` ortak nakitle her sembolün bütün tarihini sırayla işliyor; bir sembolün gelecekteki nakdi diğerinin geçmişinde kullanılabilir. `WalkForwardAnalysis.run_walk_forward` strategy parametresini hesapta kullanmadan pencere buy-and-hold getirisi üretiyor. Bunlar canlı bot emir yolu değildir; backtest doğruluk işleri olarak açık tutulur.
 
 **13 Eylül dağıtım öncesi CI/imaj ve kapasite kararı — tarihsel kayıt:** `967f137351290735d7e6ae556b4ad237c253677c` için [CI 34746909758](https://github.com/Rapto0/Rapot/actions/runs/34746909758) beş jobla, [imaj yayını 34747132287](https://github.com/Rapto0/Rapot/actions/runs/34747132287) başarılı. Yeni frontend `sha256:9b9fd4dda8a62adb568dbce71b5eda8111c2c583d6130de6db07efa280512f3b`; Linux/amd64 ve kaynak etiketi doğrulandı. 13 katmandan ilk 11'i paylaşılıyor. İki yeni katman toplam **19.369.458 B** sıkıştırılmış, **65.929.216 B** ihtiyatlı açılmış alan ve **13.140 B** metadata gerektiriyor. 400 MiB rezerv +128 MiB çalışma payı +2 MiB sınırlı kanıt/config bütçesiyle toplam boş alan **641.057.094 B'den fazla** olmalı. Son `df` ölçümü **578.150.400 B**; en az **62.906.695 B (~60 MiB)** eksik. Bütçe azaltılmadı, backend imajı indirilmedi. Ölçüm `runtime-data/p31-image-capacity-result.json`, SHA256 `8ba2498c7165c9da7de068675cb52509b93bab81618521a42d8a100a058abbc9`.
 
@@ -1190,9 +1190,10 @@ korunur. Ücretli yükseltme veya rezervi düşürme önerilmez.
 
 **Kabul kriterleri:**
 
-- [ ] Aynı örnek veri, zaman dilimi ve kapanmış/açık mum kurallarıyla hesaplayıcı farkları ölçüldü.
-- [ ] Komisyon, kayma, veri kaynağı ve ileriye bakış etkileri kontrol edildi; sonuçlar tekrarlanabilir.
-- [ ] Bilinçli strateji farkları belgeli; performans raporu canlı kazanç garantisi olarak sunulmuyor.
+- [x] Aynı kapalı günlük OHLCV fixture'inde Python/TypeScript farkları ve prefix kararlılığı ölçüldü; Pine EMA/ATR yalnız dar kaynak sınır testiyle doğrulandı. Gelişen HTF/açık mum politikası belgeli; tam üç motor runtime eşdeğerliği iddia edilmez.
+- [x] Komisyon, kayma, kaynak/cutoff ve ileriye bakış sınırları sentetik testlerle kontrol edildi; gerçek hesaplayıcılı CLI çıktıları tekrar üretildi.
+- [x] Bilinçli strateji farkları ve al-tut pencere modelinin optimizasyon olmadığı belgeli; performans raporu canlı kazanç garantisi olarak sunulmuyor.
+- [ ] Güncel Pine kaynağı TradingView'da derlenip grafikte çalıştırıldı. Bu turda bağlı tarayıcı yok; güncel manuel sonuç bekleniyor. Eski kaynak için önceki kullanıcı kabulü bu kutuyu kapatmaz.
 
 **13 Eylül dördüncü adım — günlük yürütme yerel kabulü:**
 
@@ -1328,6 +1329,73 @@ Son boş alan622.018.560B, beş servis/config ve frontend967/backend279 aynıyd�
   Frontend `bbd9377`, backend/Compose/current `279aa9f`, DRY_RUN/false/false ve
   AI kapalı kalır; yeni imaj, migration, restart veya silme işlemi gerekmez.
   Sabit 528 MiB rezerv ile toplam 2 MiB yayın bütçesi aktarım öncesinde doğrulanır.
+
+**20 Eylül P3-1 son adım — benchmark, doğru adlandırma ve tam CLI kabulü:**
+
+- Başlangıç `b6c555228fe90a31da3dd5a0514c58e32839faef`; önceki ortak portföy
+  [CI 35500567507](https://github.com/Rapto0/Rapot/actions/runs/35500567507) ve
+  kaynak yayını başarılı. Önceki receipt SHA256
+  `319ddb4124f2681ca996ff56d70165422c2c88b1ee27b15354a5f6c0be6f22d2`.
+  Kullanıcı bu turda P3-1'in artık bitirilmesini istedi; kalan bütün yerel işler
+  birlikte ele alındı. Gerçek alarm/testnet/emir ertelemesi kaldırılmadı.
+- **Benchmark iki RED → 25 regresyon:** açık pozisyonun %100 getirisi eski kodda
+  %0 çıkıyordu; devre dışı benchmark da %0 gösteriliyordu. Yeni kıyas ilk işlem
+  günü Open öncesi nakit → son gün Close NAV temelini kullanır. Tek sembolde
+  seyrek equity örneklemesi başlangıcı kaydırmaz. Benchmark tam aynı uç günleri
+  ister; alış gideri dahildir, varsayımsal satış yoktur. Eksik/veri dışı gün ve
+  eski portföy markı açıklı `unavailable`/`None` üretir. Yenileme önce eski cache'i
+  kaldırır. Aynı gün ve aynı nakitli satış/yeniden alış da işlem sayısı kanıtıyla
+  eski NAV'ı geçersiz kılar. [Sözleşme](BACKTEST_BENCHMARK.md).
+- **Pencere analizi iki RED → 40 regresyon:** gerçek eğitim/strateji testi
+  yapmayan eski WFA, planın izin verdiği doğru adlandırma seçeneğiyle
+  `RollingBuyAndHoldAnalysis` oldu. Başlangıç geçmişi yalnız bağlamdır; kalan
+  bütün günler çakışmayan pencerelere bölünür. Her pencere bağımsız 1 birim
+  sermaye, ilk Open ve son Close, iki yönlü toplamsal maliyetle ölçülür.
+  Legacy ad/parametre korunur; `FutureWarning`, `ignored_strategy` ve model
+  metadata'sı gerçek optimizasyon yapılmadığını açıklar. Global warning filtresi
+  kaldırıldı. [Sözleşme](BACKTEST_WINDOW_ANALYSIS.md).
+- **Gerçek CLI ve 9 regresyon:** `python -m scripts.backtest_fixture` önce boş
+  geçici cwd/sentetik ayarlarla izole olur; socket/DNS, SQLite, subprocess,
+  sağlayıcı ve native Curl girişimlerini engeller. Gerçek COMBO/HUNTER dört
+  sabit OHLCV serisini işler. JSON, 6 CSV, gerçek SVG ve openpyxl XLSX üretildi;
+  sayısal içerik, hashler, grafik serileri ve tekrar üretim doğrulandı. Windows
+  hata yolunda log açık kaldığı için asıl hatayı örten temp cleanup düzeltildi.
+  İlk full koşumdaki tek hata testin conftest DB dosyalarını import yan etkisi
+  sanmasıydı; boş alt dizin düzeltmesi sonrası son dosyalarla tam paket tekrar
+  çalıştırıldı. Eski günlük ve ilk kabul dosyaları korunur.
+- Son CLI çıktısı `runtime-data/p31-final-cli/`: BIST NAV **119.956,70**,
+  CRYPTO NAV **21.996,47**; iki piyasada da gerçekleşmiş PnL **0** ve **20'şer
+  alış** var. Bunlar sabit sentetik fixture sayılarıdır, gerçek piyasa getirisi
+  değildir. 27'şer günlük equity; açık kâr ve gerçekleşmiş PnL raporda ayrı.
+  CLI kabulü `p31-final-cli-acceptance.json` ile tam kaynak ve 9 dosya hash'ine
+  bağlanır. [Tekrarlama ve çıktı sözleşmesi](BACKTEST_CLI.md).
+- **Nihai yerel doğrulama:** 74 yeni test (25 benchmark + 40 pencere + 9 CLI);
+  tam Python **996 geçti / 1 isteğe bağlı performans testi atlandı**, uyarı yok.
+  Frontend **113/113**, lint, typecheck, production build ve standalone geçti.
+  Değişen Python kaynakları Ruff lint/format ile doğrulandı; yeni bağımlılık yok.
+- Taze ölçüm `p31-final-strategy-comparison.json`, SHA256
+  `3a33d6c89e9d71b5c70d771d511c5aa801494ae2e6d39cf6ee3b1586457a59f7`;
+  60 karşılaştırma/Pine kaynak testi geçti. Güncel frontend lock hash'i
+  `508e4358715d32a25949f6a9fc1484ade3169d3cc47b4b853383f68bb29be42f` rapora
+  bağlıdır. 560 Python / 840 TypeScript gözlemi; native COMBO/HUNTER karar
+  farkı 2/3, eşlenen politikada bu örneklerde 0. Genel eşdeğerlik iddiası yok.
+- **Tek açık P3-1 dış kapısı:** 13 Eylül'de değişen Pine kaynağının güncel
+  TradingView derleme/grafik kabulü. Bu turda gerçek araç sonucu
+  `apps: [], browsers: []` ve **No browser is available** oldu; eski erişim
+  engelinin hâlâ sürdüğü varsayılmadı. 1.091 satırlık tam kaynak kullanıcıya
+  açılıp BINANCE:BTCUSDT / standart mum / 1D derleme ve grafik sonucu soruldu.
+  LF-normalize Pine SHA256
+  `59ade54a6677a731deedeb4fd5e229b2c97099d27e2e90c502f3967a45cc672f`.
+  Henüz sonuç yok; eski kullanıcı onayı veya kaynak testleri yeni runtime
+  kabulü sayılmaz. P3-1'in kod kapsamı tamam, tüm dış kabulü tamam değildir.
+- Exact başarılı CI sonrasında 15 canonical Git dosyası, 9 CLI çıktısı ve
+  küçük yerel kabul/ölçüm manifesti `/root/rapot-ops/20260920-p31-final/` altına
+  aktarılır. Tam commit/CI, canonical hashler, taze kapasite/HTTPS ve değişmeyen
+  runtime `release-record.json` içindedir; yerel karşılığı
+  `p31-final-release-record.json`. Büyük ham ölçüm yerel/CI'de korunur, manifest
+  hash ve kapsamını bağlar. Sabit 528 MiB rezerv ve 2 MiB aktarım bütçesi korunur.
+  Bu, container içindeki CLI'yi veya servis sürümlerini değiştirmez; frontend
+  `bbd9377`, backend/Compose/current `279aa9f` ve DRY_RUN/false/false kalır.
 
 ### P1-G2 — Frontend bağımlılık güvenliği takibi
 
@@ -1676,6 +1744,8 @@ Son boş alan622.018.560B, beş servis/config ve frontend967/backend279 aynıyd�
 
 | 2026-09-20 | P3-1 beşinci adım | İncele → düzelt → yerel doğrula → kaynak kabulü | Gelecekteki nakit ve eksik portföy fiyatlaması iki RED testle gösterilip düzeltildi. Ortak gün/sembol sırası, son Close ve fiyat tarihi bilgisi, tam sabit eşleme ve işlem öncesi doğrulama eklendi. 44 yeni test; tam Python 922 geçti / 1 atlandı, uyarı yok. Muhasebe ve tek sembol sözleşmesi korundu. Commit/CI ve kaynak kabulü portfolio/release-record.json içinde; frontend bbd9377 / backend 279aa9f aynı. Benchmark/WFA ve tam CLI açık |
 
+| 2026-09-20 | P3-1 son adım | Kalan kod → tam yerel kabul → CI/kaynak yayını | Benchmark NAV/dönem/veri yokluğu; WFA doğru al-tut adı ve tam pencere kapsamı; gerçek izole CLI JSON/CSV/SVG/XLSX. 74 yeni / tam Python 996-skip1 uyarısız, frontend 113 ve diğer kontroller geçti. Kaynak/CI kabulü final/release-record.json içinde. Kod kapsamı tamam; güncel Pine TradingView dış sonucu hâlâ açık, bağlı tarayıcı yok |
+
 Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 
 - İş ID'si, tarih, aşama ve sonuç.
@@ -1694,4 +1764,4 @@ Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 4. Aktif işin bulgusunu ve bağımlılıklarını güncel kodda kontrol et. İncelemeyi baştan tekrarlamak yerine ilgili kanıttan devam et.
 5. İşin dört adımını tamamla veya engeli somutlaştır; ardından durum tablosu, günlük ve Kaldığımız nokta bölümünü güncelle.
 
-**20 Eylül: P3-1 beşinci adım tamamlandı: ortak nakit artan gün/ham sembol sırasıyla yürütülüyor, tüm açık pozisyonlar son bilinen Close ile fiyat tarihi/eskilik bilgisiyle değerleniyor. 44 yeni regresyon; tam Python 922 geçti / 1 atlandı, uyarı yok. Kaynak commit/CI ve sunucu kabulü 20260920-p31-portfolio/release-record.json içinde tutulur; frontend bbd9377 / backend 279aa9f servisleri değişmez. Sonraki iş benchmark/WFA doğruluğu ve adlandırma. Tam CLI/provider/grafik, Pine dış kabulü ve gerçek/testnet emirleri açık/erteli.**
+**20 Eylül: P3-1'in altı geliştirme adımı ve yerel CLI kabulü tamamlandı. 74 yeni test; tam Python 996 geçti / 1 atlandı, frontend 113 ve diğer kontroller başarılı. Exact commit/CI ve kaynak aktarım kabulü 20260920-p31-final/release-record.json içinde tutulur. Güncel Pine TradingView derleme/grafik sonucu, bağlı tarayıcı olmadığından hâlâ dış kapıdır; bütün P3-1 tamamlandı iddiası yok. Gerçek alarm/testnet/emir kabulü erteli; frontend bbd9377 / backend 279aa9f korunur.**

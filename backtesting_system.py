@@ -24,8 +24,6 @@ from infrastructure.time import utc_now_naive
 from isyatirim_ssl import ensure_isyatirim_ca_bundle
 from signals import calculate_combo_signal, calculate_hunter_signal
 
-warnings.filterwarnings("ignore")
-
 
 def get_bist_data_isyatirim_only(
     symbol: str, start_date: str = "01-01-2006"
@@ -465,6 +463,7 @@ class Portfolio:
             "Toplam Değer": round(total_value, 2),
             "Nakit": round(self.cash, 2),
             "Pozisyon Değeri": round(position_value, 2),
+            "Kaydedilen İşlem Sayısı": len(self.all_trades),
         }
         if price_dates is not None:
             if not isinstance(price_dates, Mapping):
@@ -773,6 +772,20 @@ class BacktestEngine:
             with suppress(Exception):
                 pbar.set_postfix({"Islenen": symbol})
 
+        # Only a fresh portfolio has an unambiguous opening-cash baseline.
+        fresh = (
+            not portfolio.all_trades
+            and not portfolio.equity_curve
+            and not any(portfolio.lots.values())
+        )
+        portfolio.backtest_metadata.update(
+            {
+                "comparison_start": frame.index[execution_start] if fresh else None,
+                "comparison_end": frame.index[-1],
+                "comparison_initial_value": portfolio.cash if fresh else None,
+                "as_of": self.as_of,
+            }
+        )
         for i in range(execution_start, len(frame)):
             execution_date = frame.index[i]
             self._execute_bar(symbol, frame, i, portfolio)
@@ -846,6 +859,11 @@ class BacktestEngine:
             "execution_order": "date_then_lexical_symbol_then_existing_strategy_actions",
             "valuation_model": "last_observed_close",
             "as_of": self.as_of,
+            "comparison_start": min(
+                (frame.index[starts[symbol]] for symbol, frame in frames.items()), default=None
+            ),
+            "comparison_end": max((frame.index[-1] for frame in frames.values()), default=None),
+            "comparison_initial_value": initial_cash,
         }
         events = merge(
             *(
@@ -874,363 +892,235 @@ class BacktestEngine:
         print(f"✅ Tamamlandı: {len(frames)}/{len(symbols)} sembol işlendi\n")
         return portfolio
 
-    def generate_excel_report(self, portfolio_bist, portfolio_crypto):
-        """Detaylı Excel raporu"""
+    def generate_excel_report(self, portfolio_bist, portfolio_crypto, *, output_path=None):
+        """Write an optional workbook with NAV and realized-lot results kept separate."""
+        from pathlib import Path
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"backtest_raporu_{timestamp}.xlsx"
+        filename = Path(output_path or f"backtest_raporu_{datetime.now():%Y%m%d_%H%M%S}.xlsx")
+        try:
+            writer = pd.ExcelWriter(filename, engine="openpyxl")
+        except ImportError as error:
+            raise RuntimeError(
+                "Excel output requires optional openpyxl; JSON/CSV/SVG remain available"
+            ) from error
+        with writer:
+            metrics = [
+                "Başlangıç Sermayesi",
+                "Güncel Nakit",
+                "Son Net Varlık Değeri (NAV)",
+                "NAV Getiri %",
+                "Gerçekleşen Kar/Zarar",
+                "Açık Pozisyon Maliyet Tabanı",
+                "Açık Pozisyon Değeri",
+                "Gerçekleşmemiş Kar/Zarar",
+                "Ödenen Komisyon",
+                "Kayma Maliyeti",
+                "Toplam İşlem Maliyeti",
+                "Toplam İşlem",
+                "Alım İşlemi",
+                "Satım İşlemi",
+                "Açık Lot Sayısı",
+                "Değerleme Tarihi",
+            ]
+            summary = {"Metrik": metrics}
+            for market, portfolio, currency in (
+                ("BIST", portfolio_bist, "TL"),
+                ("CRYPTO", portfolio_crypto, "USD"),
+            ):
+                stats = self._calculate_stats(portfolio)
 
-        with pd.ExcelWriter(filename, engine="openpyxl") as writer:
-            # 1. GENEL ÖZET
-            bist_total_profit = sum(
-                s["Toplam Kar/Zarar"] for s in portfolio_bist.symbol_performance.values()
-            )
-            crypto_total_profit = sum(
-                s["Toplam Kar/Zarar"] for s in portfolio_crypto.symbol_performance.values()
-            )
+                def money(value, currency=currency):
+                    return "N/A" if value is None else f"{value:,.2f} {currency}"
 
-            bist_open_lots = sum(len(q) for q in portfolio_bist.lots.values())
-            crypto_open_lots = sum(len(q) for q in portfolio_crypto.lots.values())
-
-            summary = {
-                "Metrik": [
-                    "Başlangıç Sermayesi",
-                    "Güncel Nakit",
-                    "Gerçekleşen Kar/Zarar",
-                    "Ödenen Komisyon",
-                    "Kayma Maliyeti",
-                    "Toplam İşlem Maliyeti",
-                    "Getiri %",
-                    "Toplam İşlem",
-                    "Alım İşlemi",
-                    "Satım İşlemi",
-                    "Açık Lot Sayısı",
-                    "İşlem Gören Sembol",
-                ],
-                "BIST": [
-                    f"{portfolio_bist.initial_cash:,.2f} TL",
-                    f"{portfolio_bist.cash:,.2f} TL",
-                    f"{bist_total_profit:,.2f} TL",
-                    f"{portfolio_bist.total_commission_paid:,.2f} TL",
-                    f"{portfolio_bist.total_slippage_cost:,.2f} TL",
-                    f"{portfolio_bist.total_transaction_cost:,.2f} TL",
-                    f"{(bist_total_profit / portfolio_bist.initial_cash * 100):.2f}%",
-                    len(portfolio_bist.all_trades),
-                    len([t for t in portfolio_bist.all_trades if t["İşlem"] == "ALIM"]),
-                    len([t for t in portfolio_bist.all_trades if t["İşlem"] == "SATIM"]),
-                    bist_open_lots,
-                    len(portfolio_bist.symbol_performance),
-                ],
-                "CRYPTO": [
-                    f"{portfolio_crypto.initial_cash:,.2f} USD",
-                    f"{portfolio_crypto.cash:,.2f} USD",
-                    f"{crypto_total_profit:,.2f} USD",
-                    f"{portfolio_crypto.total_commission_paid:,.2f} USD",
-                    f"{portfolio_crypto.total_slippage_cost:,.2f} USD",
-                    f"{portfolio_crypto.total_transaction_cost:,.2f} USD",
-                    f"{(crypto_total_profit / portfolio_crypto.initial_cash * 100):.2f}%",
-                    len(portfolio_crypto.all_trades),
-                    len([t for t in portfolio_crypto.all_trades if t["İşlem"] == "ALIM"]),
-                    len([t for t in portfolio_crypto.all_trades if t["İşlem"] == "SATIM"]),
-                    crypto_open_lots,
-                    len(portfolio_crypto.symbol_performance),
-                ],
-            }
+                nav_return = stats["total_return_pct"]
+                summary[market] = [
+                    money(portfolio.initial_cash),
+                    money(portfolio.cash),
+                    money(stats["net_asset_value"]),
+                    "N/A" if nav_return is None else f"{nav_return:.2f}%",
+                    money(stats["realized_profit"]),
+                    money(stats["open_cost_basis"]),
+                    money(stats["position_value"]),
+                    money(stats["unrealized_profit"]),
+                    money(portfolio.total_commission_paid),
+                    money(portfolio.total_slippage_cost),
+                    money(portfolio.total_transaction_cost),
+                    len(portfolio.all_trades),
+                    sum(t["İşlem"] == "ALIM" for t in portfolio.all_trades),
+                    sum(t["İşlem"] == "SATIM" for t in portfolio.all_trades),
+                    stats["open_lots"],
+                    str(stats["valuation_date"] or "N/A"),
+                ]
             pd.DataFrame(summary).to_excel(writer, sheet_name="Genel Özet", index=False)
-
-            # 2. BIST - TÜM İŞLEMLER
-            if portfolio_bist.all_trades:
-                df = pd.DataFrame(portfolio_bist.all_trades)
-                df.to_excel(writer, sheet_name="BIST Tüm İşlemler", index=False)
-
-            # 3. CRYPTO - TÜM İŞLEMLER
-            if portfolio_crypto.all_trades:
-                df = pd.DataFrame(portfolio_crypto.all_trades)
-                df.to_excel(writer, sheet_name="Crypto Tüm İşlemler", index=False)
-
-            # 4. BIST - SEMBOL PERFORMANSI
-            if portfolio_bist.symbol_performance:
-                perf_data = []
-                for symbol, stats in portfolio_bist.symbol_performance.items():
-                    avg_holding = (
-                        np.mean(stats["Ortalama Tutma Süresi"])
-                        if stats["Ortalama Tutma Süresi"]
-                        else 0
+            for label, portfolio, currency in (
+                ("BIST", portfolio_bist, "TL"),
+                ("Crypto", portfolio_crypto, "USD"),
+            ):
+                if portfolio.all_trades:
+                    pd.DataFrame(portfolio.all_trades).to_excel(
+                        writer, sheet_name=f"{label} Tüm İşlemler", index=False
                     )
-                    perf_data.append(
+                performance = []
+                for symbol, stats in portfolio.symbol_performance.items():
+                    invested = stats["Toplam Yatırım"]
+                    completed = stats["Tamamlanan İşlem"]
+                    holding = stats["Ortalama Tutma Süresi"]
+                    performance.append(
                         {
                             "Sembol": symbol,
-                            "Toplam Kar/Zarar (TL)": round(stats["Toplam Kar/Zarar"], 2),
-                            "Toplam Yatırım (TL)": round(stats["Toplam Yatırım"], 2),
-                            "Getiri %": round(
-                                (stats["Toplam Kar/Zarar"] / stats["Toplam Yatırım"]) * 100, 2
-                            ),
-                            "Tamamlanan İşlem": stats["Tamamlanan İşlem"],
+                            f"Toplam Kar/Zarar ({currency})": round(stats["Toplam Kar/Zarar"], 2),
+                            f"Toplam Yatırım ({currency})": round(invested, 2),
+                            "Getiri %": round(stats["Toplam Kar/Zarar"] / invested * 100, 2)
+                            if invested
+                            else None,
+                            "Getiri Temeli": "Gerçekleşmiş PnL / kapalı lotların maliyeti",
+                            "Tamamlanan İşlem": completed,
                             "Kazanan": stats["Kazanan"],
                             "Kaybeden": stats["Kaybeden"],
-                            "Başarı Oranı %": round(
-                                (stats["Kazanan"] / stats["Tamamlanan İşlem"]) * 100, 2
-                            )
-                            if stats["Tamamlanan İşlem"] > 0
+                            "Başarı Oranı %": round(stats["Kazanan"] / completed * 100, 2)
+                            if completed
                             else 0,
                             "Toplam Alım": stats["Toplam Alım"],
                             "Toplam Satım": stats["Toplam Satım"],
-                            "Ort. Tutma Süresi (Gün)": round(avg_holding, 1),
-                        }
-                    )
-
-                df = pd.DataFrame(perf_data).sort_values("Toplam Kar/Zarar (TL)", ascending=False)
-                df.to_excel(writer, sheet_name="BIST Sembol Performans", index=False)
-
-            # 5. CRYPTO - SEMBOL PERFORMANSI
-            if portfolio_crypto.symbol_performance:
-                perf_data = []
-                for symbol, stats in portfolio_crypto.symbol_performance.items():
-                    avg_holding = (
-                        np.mean(stats["Ortalama Tutma Süresi"])
-                        if stats["Ortalama Tutma Süresi"]
-                        else 0
-                    )
-                    perf_data.append(
-                        {
-                            "Sembol": symbol,
-                            "Toplam Kar/Zarar (USD)": round(stats["Toplam Kar/Zarar"], 2),
-                            "Toplam Yatırım (USD)": round(stats["Toplam Yatırım"], 2),
-                            "Getiri %": round(
-                                (stats["Toplam Kar/Zarar"] / stats["Toplam Yatırım"]) * 100, 2
-                            ),
-                            "Tamamlanan İşlem": stats["Tamamlanan İşlem"],
-                            "Kazanan": stats["Kazanan"],
-                            "Kaybeden": stats["Kaybeden"],
-                            "Başarı Oranı %": round(
-                                (stats["Kazanan"] / stats["Tamamlanan İşlem"]) * 100, 2
-                            )
-                            if stats["Tamamlanan İşlem"] > 0
+                            "Ort. Tutma Süresi (Gün)": round(float(np.mean(holding)), 1)
+                            if holding
                             else 0,
-                            "Toplam Alım": stats["Toplam Alım"],
-                            "Toplam Satım": stats["Toplam Satım"],
-                            "Ort. Tutma Süresi (Gün)": round(avg_holding, 1),
                         }
                     )
-
-                df = pd.DataFrame(perf_data).sort_values("Toplam Kar/Zarar (USD)", ascending=False)
-                df.to_excel(writer, sheet_name="Crypto Sembol Performans", index=False)
-
-            # 6. BIST - AÇIK POZISYONLAR (LOT BAZLI)
-            open_pos = portfolio_bist.get_open_positions_summary()
-            if open_pos:
-                pd.DataFrame(open_pos).to_excel(
-                    writer, sheet_name="BIST Açık Pozisyonlar", index=False
-                )
-
-            # 7. CRYPTO - AÇIK POZISYONLAR (LOT BAZLI)
-            open_pos = portfolio_crypto.get_open_positions_summary()
-            if open_pos:
-                pd.DataFrame(open_pos).to_excel(
-                    writer, sheet_name="Crypto Açık Pozisyonlar", index=False
-                )
-
-            # 8. PORTFÖY DEĞERİ (BIST)
-            if portfolio_bist.equity_curve:
-                df = pd.DataFrame(portfolio_bist.equity_curve)
-                df.to_excel(writer, sheet_name="BIST Portföy Değeri", index=False)
-
-            # 9. PORTFÖY DEĞERİ (CRYPTO)
-            if portfolio_crypto.equity_curve:
-                df = pd.DataFrame(portfolio_crypto.equity_curve)
-                df.to_excel(writer, sheet_name="Crypto Portföy Değeri", index=False)
-
+                if performance:
+                    pd.DataFrame(performance).sort_values(
+                        f"Toplam Kar/Zarar ({currency})", ascending=False
+                    ).to_excel(writer, sheet_name=f"{label} Sembol Performans", index=False)
+                positions = portfolio.get_open_positions_summary()
+                if positions:
+                    pd.DataFrame(positions).to_excel(
+                        writer, sheet_name=f"{label} Açık Pozisyonlar", index=False
+                    )
+                if portfolio.equity_curve:
+                    pd.DataFrame(portfolio.equity_curve).to_excel(
+                        writer, sheet_name=f"{label} Portföy Değeri", index=False
+                    )
         print(f"💾 Excel Rapor: {filename}")
-        return filename
+        return str(filename)
 
-    def plot_results(self, portfolio_bist, portfolio_crypto):
-        """Görsel raporlar"""
-        import matplotlib.pyplot as plt
+    def plot_results(self, portfolio_bist, portfolio_crypto, *, output_path=None):
+        """Render portable SVG, or an optional matplotlib PNG when that suffix is requested."""
+        from pathlib import Path
 
-        fig = plt.figure(figsize=(18, 12))
-        gs = fig.add_gridspec(3, 3, hspace=0.3, wspace=0.3)
+        from scripts.backtest_fixture import write_equity_svg
 
-        # 1. BIST Portföy Değeri
-        if portfolio_bist.equity_curve:
-            ax1 = fig.add_subplot(gs[0, :2])
-            df = pd.DataFrame(portfolio_bist.equity_curve)
-            ax1.plot(
-                df["Tarih"], df["Toplam Değer"], linewidth=2, color="blue", label="Portföy Değeri"
-            )
-            ax1.axhline(
-                y=portfolio_bist.initial_cash,
-                color="red",
-                linestyle="--",
-                label="Başlangıç",
-                alpha=0.6,
-            )
-            ax1.fill_between(
-                df["Tarih"], portfolio_bist.initial_cash, df["Toplam Değer"], alpha=0.3
-            )
-            ax1.set_title("🇹🇷 BIST Portföy Büyümesi", fontsize=12, fontweight="bold")
-            ax1.set_ylabel("Değer (TL)")
-            ax1.legend()
-            ax1.grid(True, alpha=0.3)
-            ax1.tick_params(axis="x", rotation=45)
-
-        # 2. CRYPTO Portföy Değeri
-        if portfolio_crypto.equity_curve:
-            ax2 = fig.add_subplot(gs[1, :2])
-            df = pd.DataFrame(portfolio_crypto.equity_curve)
-            ax2.plot(
-                df["Tarih"], df["Toplam Değer"], linewidth=2, color="orange", label="Portföy Değeri"
-            )
-            ax2.axhline(
-                y=portfolio_crypto.initial_cash,
-                color="red",
-                linestyle="--",
-                label="Başlangıç",
-                alpha=0.6,
-            )
-            ax2.fill_between(
-                df["Tarih"],
-                portfolio_crypto.initial_cash,
-                df["Toplam Değer"],
-                alpha=0.3,
-                color="orange",
-            )
-            ax2.set_title("💰 CRYPTO Portföy Büyümesi", fontsize=12, fontweight="bold")
-            ax2.set_ylabel("Değer (USD)")
-            ax2.legend()
-            ax2.grid(True, alpha=0.3)
-            ax2.tick_params(axis="x", rotation=45)
-
-        # 3. BIST Top 10 Performans
-        if portfolio_bist.symbol_performance:
-            ax3 = fig.add_subplot(gs[0, 2])
-            sorted_perf = sorted(
-                portfolio_bist.symbol_performance.items(),
-                key=lambda x: x[1]["Toplam Kar/Zarar"],
-                reverse=True,
-            )[:10]
-            symbols = [x[0] for x in sorted_perf]
-            profits = [x[1]["Toplam Kar/Zarar"] for x in sorted_perf]
-            colors = ["green" if p > 0 else "red" for p in profits]
-            ax3.barh(symbols, profits, color=colors, alpha=0.7)
-            ax3.set_title("BIST Top 10", fontsize=10, fontweight="bold")
-            ax3.set_xlabel("Kar/Zarar (TL)", fontsize=9)
-            ax3.tick_params(labelsize=8)
-            ax3.grid(True, alpha=0.3, axis="x")
-
-        # 4. CRYPTO Top 10 Performans
-        if portfolio_crypto.symbol_performance:
-            ax4 = fig.add_subplot(gs[1, 2])
-            sorted_perf = sorted(
-                portfolio_crypto.symbol_performance.items(),
-                key=lambda x: x[1]["Toplam Kar/Zarar"],
-                reverse=True,
-            )[:10]
-            symbols = [x[0] for x in sorted_perf]
-            profits = [x[1]["Toplam Kar/Zarar"] for x in sorted_perf]
-            colors = ["green" if p > 0 else "red" for p in profits]
-            ax4.barh(symbols, profits, color=colors, alpha=0.7)
-            ax4.set_title("Crypto Top 10", fontsize=10, fontweight="bold")
-            ax4.set_xlabel("Kar/Zarar (USD)", fontsize=9)
-            ax4.tick_params(labelsize=8)
-            ax4.grid(True, alpha=0.3, axis="x")
-
-        # 5. İstatistikler
-        ax5 = fig.add_subplot(gs[2, :])
-        ax5.axis("off")
-
-        bist_stats = self._calculate_stats(portfolio_bist)
-        crypto_stats = self._calculate_stats(portfolio_crypto)
-
-        stats_text = f"""
-        ╔═══════════════════════════════════════════════════════════════════════════════╗
-        ║                            📊 BACKTEST İSTATİSTİKLERİ                        ║
-        ╠═══════════════════════════════════════════════════════════════════════════════╣
-        ║  BIST:                                     │  CRYPTO:                         ║
-        ║  • Toplam Kar/Zarar: {bist_stats["profit"]:>10.2f} TL    │  • Toplam Kar/Zarar: {crypto_stats["profit"]:>10.2f} USD ║
-        ║  • Başarı Oranı: {bist_stats["win_rate"]:>14.1f}%        │  • Başarı Oranı: {crypto_stats["win_rate"]:>14.1f}%      ║
-        ║  • Tamamlanan İşlem: {bist_stats["trades"]:>11}         │  • Tamamlanan İşlem: {crypto_stats["trades"]:>11}       ║
-        ║  • Açık Lot: {bist_stats["open_lots"]:>20}         │  • Açık Lot: {crypto_stats["open_lots"]:>20}       ║
-        ╚═══════════════════════════════════════════════════════════════════════════════╝
-        """
-        ax5.text(
-            0.5,
-            0.5,
-            stats_text,
-            fontsize=10,
-            family="monospace",
-            ha="center",
-            va="center",
-            bbox={"boxstyle": "round", "facecolor": "wheat", "alpha": 0.3},
-        )
-
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"backtest_grafik_{timestamp}.png"
-        plt.savefig(filename, dpi=300, bbox_inches="tight")
+        filename = Path(output_path or f"backtest_grafik_{datetime.now():%Y%m%d_%H%M%S}.png")
+        portfolios = {"BIST": portfolio_bist, "CRYPTO": portfolio_crypto}
+        if filename.suffix.lower() == ".svg":
+            write_equity_svg(portfolios, filename)
+        else:
+            try:
+                import matplotlib.pyplot as plt
+            except ImportError as error:
+                raise RuntimeError(
+                    "PNG output requires optional matplotlib; use .svg for the portable chart"
+                ) from error
+            figure, axes = plt.subplots(2, 1, figsize=(12, 8))
+            try:
+                for axis, (market, portfolio) in zip(axes, portfolios.items(), strict=True):
+                    rows = portfolio.equity_curve
+                    if rows:
+                        axis.plot(
+                            [r["Tarih"] for r in rows],
+                            [r["Toplam Değer"] for r in rows],
+                            label="NAV",
+                        )
+                    axis.axhline(portfolio.initial_cash, linestyle="--", label="Initial capital")
+                    axis.set_title(f"{market} — closing NAV (not realized PnL)")
+                    axis.set_ylabel("TL" if market == "BIST" else "USD")
+                    axis.legend()
+                    axis.grid(alpha=0.3)
+                figure.tight_layout()
+                figure.savefig(filename, dpi=150)
+            finally:
+                plt.close(figure)
         print(f"📈 Grafik: {filename}")
-        plt.close()
+        return str(filename)
 
     def _calculate_stats(self, portfolio):
-        """İstatistik hesapla"""
-        total_profit = sum(s["Toplam Kar/Zarar"] for s in portfolio.symbol_performance.values())
-
-        completed_trades = sum(s["Tamamlanan İşlem"] for s in portfolio.symbol_performance.values())
-        winning_trades = sum(s["Kazanan"] for s in portfolio.symbol_performance.values())
-        win_rate = (winning_trades / completed_trades * 100) if completed_trades > 0 else 0
-
-        open_lots = sum(len(q) for q in portfolio.lots.values())
-
+        """Separate closing NAV from realized FIFO PnL; missing marks stay unavailable."""
+        realized = math.fsum(s["Toplam Kar/Zarar"] for s in portfolio.symbol_performance.values())
+        completed = sum(s["Tamamlanan İşlem"] for s in portfolio.symbol_performance.values())
+        winners = sum(s["Kazanan"] for s in portfolio.symbol_performance.values())
+        open_lots = sum(len(queue) for queue in portfolio.lots.values())
+        basis = math.fsum(lot.invested for queue in portfolio.lots.values() for lot in queue)
+        nav = portfolio.cash if not open_lots else None
+        valuation_date = None
+        if portfolio.equity_curve:
+            last = portfolio.equity_curve[-1]
+            last_trade = max(
+                (trade["Tarih"] for trade in portfolio.all_trades), default=last["Tarih"]
+            )
+            # A manual transaction after the last mark must not reuse a stale NAV.
+            if (
+                last["Tarih"] >= last_trade
+                and last.get("Kaydedilen İşlem Sayısı") == len(portfolio.all_trades)
+                and math.isclose(last["Nakit"], portfolio.cash, rel_tol=0, abs_tol=0.0051)
+            ):
+                nav = float(last["Toplam Değer"])
+                valuation_date = last["Tarih"]
+        position_value = nav - portfolio.cash if nav is not None else None
+        total_profit = nav - portfolio.initial_cash if nav is not None else None
         return {
-            "profit": total_profit,
-            "win_rate": win_rate,
-            "trades": completed_trades,
+            "profit": realized,  # Legacy consumers use this explicitly realized amount.
+            "realized_profit": realized,
+            "net_asset_value": nav,
+            "total_profit": total_profit,
+            "total_return_pct": total_profit / portfolio.initial_cash * 100
+            if total_profit is not None
+            else None,
+            "open_cost_basis": basis,
+            "position_value": position_value,
+            "unrealized_profit": position_value - basis if position_value is not None else None,
+            "valuation_date": valuation_date,
+            "return_basis": "last_closing_nav_over_initial_cash",
+            "valuation_status": "available" if nav is not None else "missing_current_mark",
+            "win_rate": winners / completed * 100 if completed else 0,
+            "trades": completed,
             "open_lots": open_lots,
         }
 
     def print_summary(self, portfolio_bist, portfolio_crypto):
-        """Konsol özeti"""
-
+        """Print NAV, realized PnL and remaining cost basis without mixing their returns."""
+        print("\n" + "=" * 70 + "\n📊 BACKTEST SONUÇ ÖZETİ")
+        for market, portfolio, currency in (
+            ("BIST", portfolio_bist, "TL"),
+            ("CRYPTO", portfolio_crypto, "USD"),
+        ):
+            stats = self._calculate_stats(portfolio)
+            print(f"\n{market}:")
+            for label, value in (
+                ("Başlangıç", portfolio.initial_cash),
+                ("Güncel Nakit", portfolio.cash),
+                ("Son Net Varlık Değeri (NAV)", stats["net_asset_value"]),
+                ("Gerçekleşen Kar/Zarar", stats["realized_profit"]),
+                ("Açık Pozisyon Maliyet Tabanı", stats["open_cost_basis"]),
+                ("Gerçekleşmemiş Kar/Zarar", stats["unrealized_profit"]),
+                ("Ödenen Komisyon", portfolio.total_commission_paid),
+                ("Kayma Maliyeti", portfolio.total_slippage_cost),
+                ("Toplam İşlem Maliyeti", portfolio.total_transaction_cost),
+            ):
+                print(f"  {label}: " + ("N/A" if value is None else f"{value:,.2f} {currency}"))
+            nav_return = stats["total_return_pct"]
+            print("  NAV Getiri %: " + ("N/A" if nav_return is None else f"{nav_return:.2f}%"))
+            print(f"  Tamamlanan İşlem: {stats['trades']}; Açık Lot Sayısı: {stats['open_lots']}")
         print("\n" + "=" * 70)
-        print("📊 BACKTEST SONUÇ ÖZETİ")
-        print("=" * 70)
-
-        # BIST
-        bist_stats = self._calculate_stats(portfolio_bist)
-        print("\n🇹🇷 BIST:")
-        print("-" * 50)
-        print(f"  Başlangıç: {portfolio_bist.initial_cash:,.2f} TL")
-        print(f"  Güncel Nakit: {portfolio_bist.cash:,.2f} TL")
-        print(f"  Gerçekleşen Kar/Zarar: {bist_stats['profit']:,.2f} TL")
-        print(f"  Ödenen Komisyon: {portfolio_bist.total_commission_paid:,.2f} TL")
-        print(f"  Kayma Maliyeti: {portfolio_bist.total_slippage_cost:,.2f} TL")
-        print(f"  Toplam İşlem Maliyeti: {portfolio_bist.total_transaction_cost:,.2f} TL")
-        print(f"  Toplam İşlem: {len(portfolio_bist.all_trades)}")
-        print(f"  Tamamlanan İşlem: {bist_stats['trades']}")
-        print(f"  Başarı Oranı: {bist_stats['win_rate']:.1f}%")
-        print(f"  Açık Lot Sayısı: {bist_stats['open_lots']}")
-
-        # CRYPTO
-        crypto_stats = self._calculate_stats(portfolio_crypto)
-        print("\n💰 CRYPTO:")
-        print("-" * 50)
-        print(f"  Başlangıç: {portfolio_crypto.initial_cash:,.2f} USD")
-        print(f"  Güncel Nakit: {portfolio_crypto.cash:,.2f} USD")
-        print(f"  Gerçekleşen Kar/Zarar: {crypto_stats['profit']:,.2f} USD")
-        print(f"  Ödenen Komisyon: {portfolio_crypto.total_commission_paid:,.2f} USD")
-        print(f"  Kayma Maliyeti: {portfolio_crypto.total_slippage_cost:,.2f} USD")
-        print(f"  Toplam İşlem Maliyeti: {portfolio_crypto.total_transaction_cost:,.2f} USD")
-        print(f"  Toplam İşlem: {len(portfolio_crypto.all_trades)}")
-        print(f"  Tamamlanan İşlem: {crypto_stats['trades']}")
-        print(f"  Başarı Oranı: {crypto_stats['win_rate']:.1f}%")
-        print(f"  Açık Lot Sayısı: {crypto_stats['open_lots']}")
-
-        print("\n" + "=" * 70 + "\n")
 
 
 # ============================================================
 # BENCHMARK KARŞILAŞTIRMA
 # ============================================================
 class BenchmarkComparison:
-    """Strateji performansını benchmark ile karşılaştırır"""
+    """Compare opening cash to closing NAV over identical observed market days.
+
+    The benchmark buys at the first execution Open, including entry costs, and
+    remains marked at the final Close. Missing endpoints never become zero return.
+    """
 
     BENCHMARKS = {
         # XU100, İş Yatırım hisse veri kaynağında doğrudan desteklenmediği için devre dışı.
@@ -1238,168 +1128,335 @@ class BenchmarkComparison:
         "CRYPTO": "BTCUSDT",  # Bitcoin
     }
 
-    def __init__(self, start_date: str, end_date: str = None):
-        self.start_date = start_date
-        self.end_date = end_date or datetime.now().strftime("%Y-%m-%d")
-        self.benchmark_data = {}
+    def __init__(
+        self,
+        start_date: str | date | None,
+        end_date: str | date | None = None,
+        *,
+        as_of: str | datetime | None = None,
+        costs: TradingCosts | None = None,
+    ) -> None:
+        self.bounds = BacktestEngine(start_date, end_date, as_of=as_of)
+        self.start_date, self.end_date = self.bounds.start_date, self.bounds.end_date
+        self.costs = costs
+        self.benchmark_data: dict[str, pd.DataFrame] = {}
+        self.benchmark_status: dict[str, str] = {}
 
-    def fetch_benchmark(self, market_type: str) -> pd.DataFrame | None:
-        """Benchmark verisini çeker"""
+    def fetch_benchmark(
+        self, market_type: str, *, data: pd.DataFrame | None = None
+    ) -> pd.DataFrame | None:
+        """Read once or validate supplied data; discard the previous cache first."""
+        if market_type not in self.BENCHMARKS:
+            raise ValueError("market_type must be BIST or CRYPTO")
+        self.benchmark_data.pop(market_type, None)
+        self.benchmark_status[market_type] = "unavailable"
         symbol = self.BENCHMARKS.get(market_type)
-        if not symbol:
+        if data is None and symbol is None:
+            self.benchmark_status[market_type] = "benchmark_disabled"
             return None
-
-        try:
-            if market_type == "BIST":
-                df = get_bist_data_isyatirim_only(symbol, start_date="01-01-2006")
-            else:
-                df = get_crypto_data(symbol, start_str="8 years ago")
-
-            if df is not None and not df.empty:
-                self.benchmark_data[market_type] = df
-                return df
-        except Exception as e:
-            print(f"Benchmark veri hatası ({symbol}): {e}")
-
-        return None
+        if data is None:
+            data = self.bounds._load_daily_data(symbol, market_type)
+        if data is None:
+            self.benchmark_status[market_type] = "provider_returned_none"
+            return None
+        frame = self.bounds._prepare_daily_data(data, market_type)
+        if self.start_date is not None:
+            frame = frame.loc[frame.index >= self.start_date].copy()
+        if frame.empty:
+            self.benchmark_status[market_type] = "no_closed_benchmark_data"
+            return None
+        self.benchmark_data[market_type] = frame
+        self.benchmark_status[market_type] = "available"
+        return frame.copy(deep=True)
 
     def calculate_benchmark_return(
         self, market_type: str, start_date: pd.Timestamp, end_date: pd.Timestamp
-    ) -> float:
-        """Benchmark getirisini hesaplar"""
+    ) -> float | None:
+        """Gross Open-to-Close return; absent exact endpoints are unavailable."""
+        if market_type not in self.BENCHMARKS:
+            raise ValueError("market_type must be BIST or CRYPTO")
+        start = BacktestEngine._date_bound(start_date, "start_date")
+        end = BacktestEngine._date_bound(end_date, "end_date")
+        if start is None or end is None or start > end:
+            raise ValueError("A valid benchmark interval is required")
         df = self.benchmark_data.get(market_type)
-        if df is None or df.empty:
-            return 0.0
+        if df is None or start not in df.index or end not in df.index:
+            return None
+        value = (float(df.at[end, "Close"]) / float(df.at[start, "Open"]) - 1) * 100
+        if not math.isfinite(value):
+            raise ValueError("Benchmark return overflow")
+        return value
 
-        try:
-            # Tarih aralığına filtrele
-            mask = (df.index >= start_date) & (df.index <= end_date)
-            filtered = df.loc[mask]
-
-            if len(filtered) < 2:
-                return 0.0
-
-            start_price = filtered["Close"].iloc[0]
-            end_price = filtered["Close"].iloc[-1]
-
-            return ((end_price - start_price) / start_price) * 100
-        except Exception:
-            return 0.0
-
-    def compare(self, portfolio: Portfolio, market_type: str) -> dict[str, Any]:
-        """Portföy vs Benchmark karşılaştırması"""
-        # Benchmark verisini çek
-        self.fetch_benchmark(market_type)
-
-        # Portföy getirisi
-        total_profit = sum(s["Toplam Kar/Zarar"] for s in portfolio.symbol_performance.values())
-        portfolio_return = (total_profit / portfolio.initial_cash) * 100
-
-        # Benchmark getirisi (equity curve'dan tarih al)
-        benchmark_return = 0.0
-        if portfolio.equity_curve:
-            start_date = portfolio.equity_curve[0]["Tarih"]
-            end_date = portfolio.equity_curve[-1]["Tarih"]
-            benchmark_return = self.calculate_benchmark_return(market_type, start_date, end_date)
-
-        # Alpha (fazla getiri)
-        alpha = portfolio_return - benchmark_return
-
-        return {
-            "portfolio_return": portfolio_return,
-            "benchmark_return": benchmark_return,
-            "alpha": alpha,
-            "benchmark_symbol": self.BENCHMARKS.get(market_type) or "N/A",
+    def compare(
+        self, portfolio: Portfolio, market_type: str, *, data: pd.DataFrame | None = None
+    ) -> dict[str, Any]:
+        """Return explicit availability and matched-period NAV and benchmark returns."""
+        if market_type not in self.BENCHMARKS or portfolio.market_type != market_type:
+            raise ValueError("market_type must match the BIST/CRYPTO portfolio")
+        result = {
+            "status": "unavailable",
+            "reason": "missing_portfolio_period",
+            "portfolio_return": None,
+            "benchmark_return": None,
+            "benchmark_gross_return": None,
+            "alpha": None,
+            "benchmark_symbol": (
+                f"supplied:{market_type}" if data is not None else self.BENCHMARKS[market_type]
+            ),
+            "return_basis": "opening_cash_to_closing_nav",
+            "benchmark_model": "first_open_to_last_close_entry_costs_no_liquidation",
         }
+        metadata = portfolio.backtest_metadata
+        start, end = metadata.get("comparison_start"), metadata.get("comparison_end")
+        initial = metadata.get("comparison_initial_value")
+        if start is None or end is None or initial is None or not portfolio.equity_curve:
+            return result
+        start = BacktestEngine._date_bound(start, "comparison_start")
+        end = BacktestEngine._date_bound(end, "comparison_end")
+        if start > end or not _finite_nonnegative(initial) or initial <= 0:
+            raise ValueError("Invalid portfolio comparison baseline")
+        last = portfolio.equity_curve[-1]
+        nav = last.get("Toplam Değer")
+        if last.get("Tarih") != end or not _finite_nonnegative(nav):
+            raise ValueError("The final NAV must match the comparison end")
+        if last.get("Kaydedilen İşlem Sayısı") != len(portfolio.all_trades) or last.get(
+            "Nakit"
+        ) != round(portfolio.cash, 2):
+            result["reason"] = "stale_portfolio_valuation"
+            return result
+        value = (nav / initial - 1) * 100
+        if not math.isfinite(value):
+            raise ValueError("Portfolio return overflow")
+        result.update(
+            {
+                "portfolio_return": value,
+                "start_date": start,
+                "end_date": end,
+                "initial_value": initial,
+                "final_nav": nav,
+                "stale_symbols": last.get("Eski Fiyatlı Semboller", []),
+            }
+        )
+        frame = self.fetch_benchmark(market_type, data=data)
+        if frame is None:
+            result["reason"] = self.benchmark_status[market_type]
+            return result
+        gross = self.calculate_benchmark_return(market_type, start, end)
+        if gross is None:
+            result["reason"] = "missing_exact_benchmark_endpoints"
+            return result
+        costs = self.costs if self.costs is not None else portfolio.costs
+        entry_rate = costs.get_total_cost(market_type)
+        ratio = float(frame.at[end, "Close"]) / float(frame.at[start, "Open"])
+        net = (ratio / (1 + entry_rate) - 1) * 100
+        result.update(
+            {
+                "status": "available",
+                "reason": None,
+                "benchmark_return": net,
+                "benchmark_gross_return": gross,
+                "benchmark_entry_cost_rate": entry_rate,
+                "alpha": value - net,
+            }
+        )
+        return result
 
 
 # ============================================================
-# WALK-FORWARD ANALİZ
+# ROLLING BUY-AND-HOLD ANALİZİ (STRATEJİ OPTİMİZASYONU DEĞİLDİR)
 # ============================================================
-class WalkForwardAnalysis:
-    """
-    Walk-Forward Optimization/Validation
-    Veri: [Train 70% | Test 30%] x N pencere
+class RollingBuyAndHoldAnalysis:
+    """Independent Open-to-Close holding windows after an initial context prefix.
+
+    The prefix is descriptive history, never training or optimization data.
+    Every remaining admitted row belongs to exactly one evaluation window.
     """
 
-    def __init__(self, n_splits: int = 5, train_ratio: float = 0.7):
+    def __init__(
+        self,
+        n_splits: int = 5,
+        history_ratio: float = 0.7,
+        *,
+        start_date: str | date | None = None,
+        end_date: str | date | None = None,
+        as_of: str | datetime | None = None,
+        costs: TradingCosts | None = None,
+    ) -> None:
         self.n_splits = n_splits
-        self.train_ratio = train_ratio
-        self.results = []
+        self.history_ratio = history_ratio
+        self._validate_partition_options()
+        if costs is not None and not isinstance(costs, TradingCosts):
+            raise ValueError("costs must be TradingCosts")
+        self.costs = costs if costs is not None else trading_costs
+        self.bounds = BacktestEngine(start_date=start_date, end_date=end_date, as_of=as_of)
+        self.results: list[dict[str, Any]] = []
 
-    def split_data(self, df: pd.DataFrame) -> list[tuple[pd.DataFrame, pd.DataFrame]]:
-        """Veriyi train/test parçalarına böler"""
+    def _validate_partition_options(self) -> None:
+        if (
+            isinstance(self.n_splits, bool)
+            or not isinstance(self.n_splits, int)
+            or self.n_splits < 1
+        ):
+            raise ValueError("n_splits must be a positive integer")
+        if not _finite_nonnegative(self.history_ratio) or not 0 < self.history_ratio < 1:
+            raise ValueError("history_ratio must be finite and strictly between zero and one")
+
+    def split_data(
+        self, df: pd.DataFrame, market_type: str = "BIST"
+    ) -> list[tuple[pd.DataFrame, pd.DataFrame]]:
+        """Return expanding context and consecutive, nonoverlapping holding windows."""
+        self._validate_partition_options()
+        if market_type not in ("BIST", "CRYPTO"):
+            raise ValueError("market_type must be BIST or CRYPTO")
+        frame = self.bounds._prepare_daily_data(df, market_type)
+        if self.bounds.start_date is not None:
+            frame = frame.loc[frame.index >= self.bounds.start_date].copy(deep=True)
+        history_rows = int(len(frame) * self.history_ratio)
+        remaining = len(frame) - history_rows
+        if history_rows < 1 or remaining < self.n_splits:
+            raise ValueError("At least one history row and one holding row per split are required")
+        size, extra = divmod(remaining, self.n_splits)
         splits = []
-        total_len = len(df)
-        window_size = total_len // self.n_splits
-
-        for i in range(self.n_splits):
-            start_idx = i * (window_size // 2)  # Overlap için yarım kaydır
-            end_idx = start_idx + window_size
-
-            if end_idx > total_len:
-                break
-
-            window = df.iloc[start_idx:end_idx]
-            train_size = int(len(window) * self.train_ratio)
-
-            train = window.iloc[:train_size]
-            test = window.iloc[train_size:]
-
-            if len(train) > 30 and len(test) > 10:
-                splits.append((train, test))
-
+        offset = history_rows
+        for index in range(self.n_splits):
+            stop = offset + size + (index < extra)
+            splits.append(
+                (frame.iloc[:offset].copy(deep=True), frame.iloc[offset:stop].copy(deep=True))
+            )
+            offset = stop
         return splits
 
-    def run_walk_forward(
-        self, symbol: str, market_type: str, strategy: str = "combo"
+    def run(
+        self, symbol: str, market_type: str, *, data: pd.DataFrame | None = None
     ) -> dict[str, Any]:
-        """Walk-forward analiz çalıştır"""
-        # Veri çek
-        if market_type == "BIST":
-            df = get_bist_data_isyatirim_only(symbol, start_date="01-01-2006")
-        else:
-            df = get_crypto_data(symbol, start_str="8 years ago")
-
-        if df is None or len(df) < 120:
-            return {"error": "Yetersiz veri"}
-
-        splits = self.split_data(df)
-
+        """Evaluate buy-and-hold windows; failures raise and clear previous results."""
+        self.results = []
+        self._validate_partition_options()
+        if not isinstance(symbol, str) or not symbol or symbol != symbol.strip():
+            raise ValueError("symbol must be a nonempty trimmed string")
+        commission, slippage = self.costs.get_components(market_type)
+        if data is None:
+            data = BacktestEngine._load_daily_data(symbol, market_type)
+            if data is None:
+                raise ValueError("Provider returned no daily data")
+        splits = self.split_data(data, market_type)
+        rate = commission + slippage
         window_results = []
-        for i, (train, test) in enumerate(splits):
-            # Test döneminde strateji performansını ölç
-            # (Basitleştirilmiş versiyon)
-            test_return = (
-                (test["Close"].iloc[-1] - test["Close"].iloc[0]) / test["Close"].iloc[0]
-            ) * 100
-
+        for index, (context, window) in enumerate(splits):
+            entry_open = float(window["Open"].iloc[0])
+            exit_close = float(window["Close"].iloc[-1])
+            price_ratio = exit_close / entry_open
+            entry_notional = 1.0 / (1.0 + rate)
+            exit_notional = price_ratio * entry_notional
+            total_commission = (entry_notional + exit_notional) * commission
+            total_slippage = (entry_notional + exit_notional) * slippage
+            final_value = exit_notional * (1.0 - rate)
+            gross_return = (price_ratio - 1.0) * 100.0
+            net_return = (final_value - 1.0) * 100.0
+            if not all(
+                math.isfinite(value)
+                for value in (
+                    total_commission,
+                    total_slippage,
+                    final_value,
+                    gross_return,
+                    net_return,
+                )
+            ):
+                raise ValueError("Window return or cost overflow")
             window_results.append(
                 {
-                    "window": i + 1,
-                    "train_start": train.index[0],
-                    "train_end": train.index[-1],
-                    "test_start": test.index[0],
-                    "test_end": test.index[-1],
-                    "test_return": round(test_return, 2),
+                    "window": index + 1,
+                    "history_start": context.index[0],
+                    "history_end": context.index[-1],
+                    "history_rows": len(context),
+                    "test_start": window.index[0],
+                    "test_end": window.index[-1],
+                    "test_rows": len(window),
+                    "entry_open": entry_open,
+                    "exit_close": exit_close,
+                    "gross_return": gross_return,
+                    "net_return": net_return,
+                    "test_return": net_return,
+                    "final_value": final_value,
+                    "commission_paid": total_commission,
+                    "slippage_cost": total_slippage,
                 }
             )
-
-        self.results = window_results
-
-        # Özet istatistikler
-        returns = [w["test_return"] for w in window_results]
-
+        returns = [window["net_return"] for window in window_results]
+        average = math.fsum(value / len(returns) for value in returns)
+        # Scale before squaring so a finite return distribution does not overflow.
+        scale = max(abs(value) for value in returns)
+        std = float(np.std([value / scale for value in returns])) * scale if scale else 0.0
+        self.results = [dict(window) for window in window_results]
         return {
             "symbol": symbol,
-            "strategy": strategy,
+            "market_type": market_type,
+            "model": "rolling_buy_and_hold",
+            "strategy": "buy_and_hold",
+            "strategy_evaluated": False,
+            "optimization_performed": False,
+            "history_usage": "context_only_no_training",
+            "history_ratio": self.history_ratio,
+            "as_of": self.bounds.as_of,
+            "start_date": self.bounds.start_date,
+            "end_date": self.bounds.end_date,
+            "execution_model": "first_open_to_last_close",
+            "cost_model": "round_trip_additive_reference_notional",
+            "cost_rates": {"commission": commission, "slippage": slippage},
+            "initial_capital_per_window": 1.0,
+            "aggregation": "arithmetic_statistics_of_independent_window_returns",
             "n_windows": len(window_results),
-            "avg_return": round(np.mean(returns), 2) if returns else 0,
-            "std_return": round(np.std(returns), 2) if returns else 0,
-            "min_return": round(min(returns), 2) if returns else 0,
-            "max_return": round(max(returns), 2) if returns else 0,
+            "avg_return": average,
+            "std_return": std,
+            "min_return": min(returns),
+            "max_return": max(returns),
             "windows": window_results,
         }
+
+
+class WalkForwardAnalysis(RollingBuyAndHoldAnalysis):
+    """Legacy compatibility name; no strategy training or walk-forward optimization."""
+
+    def __init__(self, n_splits: int = 5, train_ratio: float = 0.7, **kwargs: Any) -> None:
+        warnings.warn(
+            "WalkForwardAnalysis is a legacy name for rolling buy-and-hold window analysis; "
+            "no strategy is trained or optimized. Use RollingBuyAndHoldAnalysis.",
+            FutureWarning,
+            stacklevel=2,
+        )
+        super().__init__(n_splits=n_splits, history_ratio=train_ratio, **kwargs)
+
+    @property
+    def train_ratio(self) -> float:
+        """Legacy spelling of the context-only history ratio."""
+        return self.history_ratio
+
+    @train_ratio.setter
+    def train_ratio(self, value: float) -> None:
+        self.history_ratio = value
+
+    def run_walk_forward(
+        self,
+        symbol: str,
+        market_type: str,
+        strategy: str = "combo",
+        *,
+        data: pd.DataFrame | None = None,
+    ) -> dict[str, Any]:
+        """Preserve old calls while explicitly reporting the ignored strategy argument."""
+        self.results = []
+        message = "run_walk_forward evaluates buy-and-hold windows; strategy is ignored."
+        warnings.warn(message, FutureWarning, stacklevel=2)
+        result = self.run(symbol, market_type, data=data)
+        result.update(
+            {"legacy_api": "run_walk_forward", "ignored_strategy": strategy, "warning": message}
+        )
+        for window in result["windows"]:
+            window["train_start"] = window["history_start"]
+            window["train_end"] = window["history_end"]
+        self.results = [dict(window) for window in result["windows"]]
+        return result
 
 
 # ============================================================
@@ -1511,60 +1568,102 @@ def run_parallel_backtest(
     return results
 
 
-def main():
-    """Ana fonksiyon"""
+def main(argv: list[str] | None = None) -> int:
+    """Run the provider CLI, or explicitly selected deterministic fixture, and export reports."""
+    import argparse
+    import hashlib
+    import platform
+    from pathlib import Path
 
-    print("\n" + "=" * 70)
-    print("🚀 BACKTEST SİSTEMİ v2.0 - Komisyon + Benchmark + Paralel")
-    print("=" * 70)
-    print("\n⚙️  Yeni Özellikler:")
-    print("   • Komisyon + Slippage desteği (%0.15 toplam)")
-    print("   • Benchmark karşılaştırma (Crypto/BTC)")
-    print("   • Walk-Forward analiz")
-    print("   • Paralel backtest (multiprocessing)\n")
-
-    engine = BacktestEngine(start_date="2006-01-01")
-
-    # Test sembolleri
-    bist_symbols = [
-        "BSOKE",  # BIST100'den
-    ]
-    crypto_symbols = ["BTCUSDT"]
-
-    # BIST Backtest (normal)
-    portfolio_bist = engine.run_backtest(
-        bist_symbols, "BIST", initial_cash=100000, trade_amount=1000
+    from scripts.backtest_fixture import (
+        FIXTURE_AS_OF,
+        FIXTURE_END,
+        FIXTURE_ID,
+        FIXTURE_START,
+        daily_frames,
+        write_reports,
     )
 
-    # Crypto Backtest (normal)
-    portfolio_crypto = engine.run_backtest(
-        crypto_symbols, "CRYPTO", initial_cash=20000, trade_amount=100
+    parser = argparse.ArgumentParser(description="Daily shared-cash backtest with NAV reports")
+    parser.add_argument(
+        "--fixture",
+        action="store_true",
+        help="Use synthetic OHLCV; prefer python -m scripts.backtest_fixture for settings isolation",
     )
-
-    # Sonuçlar
-    engine.print_summary(portfolio_bist, portfolio_crypto)
-
-    # Benchmark karşılaştırma
-    print("\n📊 BENCHMARK KARŞILAŞTIRMA")
-    print("-" * 50)
-    benchmark = BenchmarkComparison(start_date="2006-01-01")
-
-    bist_comp = benchmark.compare(portfolio_bist, "BIST")
-    print(f"  BIST Strateji: {bist_comp['portfolio_return']:.2f}%")
-    print("  BIST Benchmark: Devre dışı (XU100 İş Yatırım kaynağında yok)")
-
-    crypto_comp = benchmark.compare(portfolio_crypto, "CRYPTO")
-    print(f"\n  Crypto Strateji: {crypto_comp['portfolio_return']:.2f}%")
-    print(f"  Bitcoin ({crypto_comp['benchmark_symbol']}): {crypto_comp['benchmark_return']:.2f}%")
-    print(f"  Alpha: {crypto_comp['alpha']:+.2f}%")
-
-    # Raporlar
-    engine.generate_excel_report(portfolio_bist, portfolio_crypto)
-    engine.plot_results(portfolio_bist, portfolio_crypto)
-
-    print("\n✅ Backtest tamamlandı!\n")
-    print("=" * 70 + "\n")
+    parser.add_argument("--output-dir", type=Path)
+    parser.add_argument("--as-of", help="Timezone-aware daily closure cutoff")
+    parser.add_argument("--excel", action="store_true", help="Also produce optional openpyxl XLSX")
+    args = parser.parse_args(argv)
+    if args.fixture and args.output_dir is None:
+        parser.error("--fixture requires --output-dir; use python -m scripts.backtest_fixture")
+    output = (args.output_dir or Path(f"backtest_output_{datetime.now():%Y%m%d_%H%M%S}")).resolve()
+    if output.exists() and (not output.is_dir() or any(output.iterdir())):
+        parser.error("--output-dir must be absent or empty; reports are never overwritten")
+    as_of = args.as_of or (FIXTURE_AS_OF if args.fixture else None)
+    engine = BacktestEngine(
+        start_date=FIXTURE_START if args.fixture else "2006-01-01",
+        end_date=FIXTURE_END if args.fixture else None,
+        as_of=as_of,
+    )
+    frames = daily_frames() if args.fixture else None
+    portfolios = {}
+    for market, symbols, cash, budget in (
+        ("BIST", ["BSOKE"], 100000.0, 1000.0),
+        ("CRYPTO", ["BTCUSDT"], 20000.0, 100.0),
+    ):
+        feeds = frames[market] if frames is not None else None
+        portfolios[market] = engine.run_backtest(
+            list(feeds) if feeds is not None else symbols,
+            market,
+            cash,
+            budget,
+            data_by_symbol=feeds,
+        )
+    engine.print_summary(portfolios["BIST"], portfolios["CRYPTO"])
+    benchmark = BenchmarkComparison(engine.start_date, engine.end_date, as_of=engine.as_of)
+    comparisons = {}
+    windows = {}
+    for market, portfolio in portfolios.items():
+        feed = next(iter(frames[market].values())) if frames is not None else None
+        comparisons[market] = benchmark.compare(portfolio, market, data=feed)
+        if feed is not None:
+            windows[market] = RollingBuyAndHoldAnalysis(
+                n_splits=3, history_ratio=0.7, as_of=engine.as_of, end_date=engine.end_date
+            ).run(next(iter(frames[market])), market, data=feed)
+    metadata = {
+        "mode": "synthetic_fixture" if args.fixture else "provider",
+        "fixture_id": FIXTURE_ID if args.fixture else None,
+        "signal_calculators": "real COMBO/HUNTER, default parameters and developing HTF",
+        "python_version": platform.python_version(),
+        "pandas_version": pd.__version__,
+        "numpy_version": np.__version__,
+        "start_date": engine.start_date,
+        "end_date": engine.end_date,
+        "benchmark": comparisons,
+        "rolling_buy_and_hold": windows,
+        "walk_forward_optimization_performed": False,
+        "artifacts": {"chart": "equity.svg", "excel": "report.xlsx" if args.excel else None},
+        "input_sha256": {
+            f"{market}/{symbol}": hashlib.sha256(
+                frame.to_csv(lineterminator="\n").encode("utf-8")
+            ).hexdigest()
+            for market, feeds in (frames or {}).items()
+            for symbol, frame in feeds.items()
+        },
+    }
+    output.mkdir(parents=True, exist_ok=True)
+    engine.plot_results(portfolios["BIST"], portfolios["CRYPTO"], output_path=output / "equity.svg")
+    if args.excel:
+        engine.generate_excel_report(
+            portfolios["BIST"], portfolios["CRYPTO"], output_path=output / "report.xlsx"
+        )
+    report = write_reports(engine, portfolios, output, metadata)
+    print(f"Report: {report}")
+    print(
+        "Fixture acceptance is not provider, exchange, TradingView or strategy-profit acceptance."
+    )
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

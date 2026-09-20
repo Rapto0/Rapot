@@ -511,6 +511,28 @@ restore or deletion is part of this publication. Actual provider, full CLI/chart
 benchmark/WFA, TradingView and exchange acceptance remain separate. The
 [portfolio contract](../docs/BACKTEST_PORTFOLIO.md) describes the tested behavior.
 
+## P3-1 final backtest source acceptance — 20 September 2026
+
+The final code step fixes NAV benchmark comparisons, names the window analysis
+as rolling buy-and-hold, and adds the isolated full fixture CLI with actual
+JSON/CSV/SVG/XLSX reports. Production services do not import this separate CLI.
+
+Publish the 15 canonical source/test/document files, nine verified fixture
+artifacts and two small acceptance/measurement manifests only after successful
+exact-source CI. The destination is `/root/rapot-ops/20260920-p31-final/`; its
+`release-record.json` binds the source commit, CI, canonical hashes, fixture
+files, unchanged runtime and fresh HTTPS/capacity checks. The full strategy
+measurement stays local/CI; its hash and source/lock identity are bound by the
+compact manifest. Require the fixed 528 MiB reserve plus the 2 MiB publication
+budget before the first write; no service change, deletion or database action
+is included. Frontend `bbd9377`, backend/Compose/current `279aa9f` remain active.
+
+The code and offline acceptance do not certify TradingView compilation/runtime.
+On this task's current browser inventory no browser was connected. The latest
+Pine source therefore needs separate external acceptance; previous user reports
+for the pre-fix source and the narrow Pine source tests do not substitute for it.
+Deferred real alarm/testnet/order acceptance remains outside this publication.
+
 ## Optional middleware
 
 Create `middleware/.env` or select `RAPOT_MIDDLEWARE_ENV_FILE`, outside Git:

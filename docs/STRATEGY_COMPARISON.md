@@ -141,5 +141,9 @@ hash'leri ve runtime sürümleri raporda bulunur. Ham sayılar sentetik örnekle
 aittir; fark oranı gerçek piyasa genelindeki hata veya başarı oranı değildir.
 
 Ölçüm sonucu ve doğrulama sayıları [devam planındaki P3-1 kaydına](RAPOT_DEVAM_PLANI.md#p3-1--backtest-ve-strateji-eşdeğerliği)
-eklenir. Motor formüllerini topluca eşitleme kararı verilmedi; sonraki uygulama
-alış maliyeti dahil backtest nakit–PnL muhasebesidir.
+eklenir. Motor formüllerini topluca eşitleme kararı verilmedi. Sonraki adımlarda
+[muhasebe](BACKTEST_ACCOUNTING.md), [günlük yürütme](BACKTEST_EXECUTION.md),
+[ortak portföy](BACKTEST_PORTFOLIO.md), [benchmark](BACKTEST_BENCHMARK.md) ve
+[al-tut pencere analizi](BACKTEST_WINDOW_ANALYSIS.md) tamamlanmıştır.
+[Fixture CLI kabulü](BACKTEST_CLI.md) gerçek hesaplayıcıları ve rapor dosyalarını
+birlikte sınar; güncel Pine'ın TradingView dış kabulünün yerini almaz.

@@ -1,6 +1,6 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-Kaynaklarla son karşılaştırma: **20 Eylül 2026 / P3-1 beşinci adım**. İş sırası, kullanıcı
+Kaynaklarla son karşılaştırma: **20 Eylül 2026 / P3-1 son adım**. İş sırası, kullanıcı
 yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DEVAM_PLANI.md)
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 
@@ -153,7 +153,7 @@ yetki/kabul ve sonraki P3-1 ortak nakit işi devam planındadır.
   kaynak alt kümesi sayısal testi TradingView derleyicisi değildir. Güncel Pine
   derleme/runtime kabulü ayrıca açık. Gerçek Python/TS ölçümünün kapsamı ve
   varsayılan/formül farkları [karşılaştırma belgesinde](docs/STRATEGY_COMPARISON.md).
-  Motorları topluca eşitleme kararı verilmedi; backtest işleri açık.
+  Motorları topluca eşitleme kararı verilmedi; yerel backtest kabulü aşağıdadır.
 
 `backtesting_system.py` ayrı CLI'dir; çalışan servis girişleri onu import etmez.
 P3-1 üçüncü adımında `Lot.invested` tüm alış giderlerini içerir; komisyon ve kayma
@@ -162,8 +162,9 @@ tam satma FIFO sözleşmesi korunur. Nakit + açık maliyet tabanı = başlangı
 gerçekleşmiş PnL bağıntısı sentetik testlerle doğrulanır. Float/Kahan ve dar
 temsil toleransı Decimal defteri değildir;
 [muhasebe belgesi](docs/BACKTEST_ACCOUNTING.md) sınırları açıklar.
-Matplotlib ve tqdm kilit ortamda yoktur; yalnız grafik/runner fonksiyonlarında
-yüklenir. Muhasebe testleri tam CLI veya grafik çalıştırmış sayılmaz.
+SVG grafik standart kütüphane ile üretilir; Excel isteğe bağlı openpyxl kullanır.
+tqdm yalnız bağımsız paralel runner için gerekir. Muhasebe testleri tek başına
+tam CLI kabulü değildir; gerçek fixture CLI kabulü ayrı kaydedilir.
 
 P3-1 dördüncü adımında `BacktestEngine(..., as_of=...)` kapanış anını bir kez
 sabitler; açıkça verilen an saat dilimli olmalıdır. `run_single_symbol(...,
@@ -176,8 +177,7 @@ BIST Close/AOF proxy açılışı ve bilinmeyen `open_quality` reddedilir; yaln�
 eksik/None veya `provider` metadata kabul edilir. 120 uygun satır ve ilk sinyal
 indeksi60 korunur; en erken işlem indeksi61'dir. Günlük prefix'ten gelişen HTF
 politikası değişmez. Paralel worker bir kez veri okur ve ortak `as_of` alır.
-Benchmark/WFA ve tam CLI kabulü hâlâ açıktır;
-[yürütme sözleşmesi](docs/BACKTEST_EXECUTION.md) kapsamı açıklar.
+[Yürütme sözleşmesi](docs/BACKTEST_EXECUTION.md) kapsamı açıklar.
 
 P3-1 beşinci adımında `run_backtest(..., data_by_symbol=..., costs=...)` tek
 piyasanın ortak nakdini artan gün, aynı günde ham sembol metni sırasıyla işler.
@@ -190,6 +190,20 @@ yolu eski equity sıklığını korur ve başka sembolde açık lot varsa redded
 Paralel runner bağımsız sermayeli deneylerdir. Minimum 120 uygun satır kuralı
 tarihsel sembol evreni modeli değildir; eskimiş fiyat taşımanın süre sınırı yoktur.
 [Ortak portföy sözleşmesi](docs/BACKTEST_PORTFOLIO.md) kapsamı ve sınırları açıklar.
+
+P3-1 son adımında benchmark son NAV/başlangıç nakdini, aynı işlem günlerinin
+Open→Close al-tut NAV'ıyla karşılaştırır. Alış maliyeti dahildir; açık pozisyona
+varsayımsal satış gideri eklenmez. Tam tarih uçları veya dönem verisi yoksa
+benchmark/alpha `None` ve açıklı durum döner; sıfır getiri gibi gösterilmez.
+[Benchmark sözleşmesi](docs/BACKTEST_BENCHMARK.md) ayrıntıları açıklar.
+`RollingBuyAndHoldAnalysis` tüm değerlendirme dönemini çakışmayan pencerelerle
+kapsar; strateji eğitimi/optimizasyonu yapmaz. Eski `WalkForwardAnalysis` yolu
+uyumluluk için korunur, kullanılmayan strategy parametresini açıkça bildirir.
+[Pencere analizi](docs/BACKTEST_WINDOW_ANALYSIS.md) bağımsız, maliyetli al-tut
+deneyleridir. `python -m scripts.backtest_fixture --output-dir <yeni-dizin> --excel`
+boş geçici ayar ortamında gerçek COMBO/HUNTER ve JSON/CSV/SVG/XLSX çıktısını sınar;
+ağ/sağlayıcı/SQLite/subprocess girişimleri engellenir. [CLI rehberi](docs/BACKTEST_CLI.md)
+tekrarlama komutunu ve gerçek piyasa/dış kabul sınırlarını açıklar.
 
 ## Veri, erişim ve dağıtım
 

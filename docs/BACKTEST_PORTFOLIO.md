@@ -109,7 +109,8 @@ tanımlanan ortak nakitli portföyün sonucu değildir. Bu adım paralel runner'
 ortak sermaye motoruna dönüştürmez.
 
 Bir koşum tek piyasa ve tek para birimi varsayar; BIST/CRYPTO arasında ortak
-nakit veya döviz dönüşümü eklenmedi. Gerçekleşmiş PnL raporlarının anlamı,
-benchmark/WFA ve tam CLI/grafik kabulü bu adımda değiştirilmez. Maliyet modeli,
+nakit veya döviz dönüşümü eklenmedi. Gerçekleşmiş PnL ayrı bir ölçüt olarak
+korunur; son adım [benchmark](BACKTEST_BENCHMARK.md), [pencere analizi](BACKTEST_WINDOW_ANALYSIS.md)
+ve [tam CLI](BACKTEST_CLI.md) kabulünü ekler. Maliyet modeli,
 tek en eski lotu tam satma FIFO davranışı, günlük kapanış sınırı ve gelişen HTF
 politikası önceki sözleşmelerdeki gibidir.

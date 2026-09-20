@@ -104,17 +104,19 @@ edilir; normal CLI, piyasa sağlayıcıları ve broker çağrılmaz.
 .venv/Scripts/python.exe -X utf8 -B -m pytest tests/test_backtest_accounting.py -q
 ```
 
-Muhasebe sınıflarını import etmek artık matplotlib/tqdm gerektirmez. Bu
-paketler kilitli ortamda bulunmadığından yalnız grafik veya ilerleme çubuğunu
-kullanan fonksiyonlarda yüklenir; tam CLI/grafik çalıştırma kabulü yapılmış
-sayılmaz. Bu adım bağımlılık eklemez veya mevcut warning politikasını yenilemez.
+Muhasebe sınıflarını import etmek matplotlib/tqdm gerektirmez. Son adımda grafik
+çıktısı standart kütüphane ile SVG olarak üretilir; isteğe bağlı Excel openpyxl
+kullanır. Ayrı paralel runner hâlâ tqdm ister. Muhasebe testlerinin dışında
+[tam fixture CLI kabulü](BACKTEST_CLI.md) gerçek rapor dosyalarını üretir ve
+doğrular. Modülün bütün uyarıları susturan eski global filtresi kaldırılmıştır.
 
 Tarih/kapanış sınırları ve önceki kapanış sinyalinin sonraki Open'da yürütülmesi
 [dördüncü adımda](BACKTEST_EXECUTION.md), ortak nakit kronolojisi ve açık
 pozisyon değerlemesi [beşinci adımda](BACKTEST_PORTFOLIO.md) tanımlanmıştır.
-Benchmark hâlâ gerçekleşmiş PnL getirisi kullanır; WalkForward mevcut haliyle
-gerçek strateji optimizasyonu değildir. Bu muhasebe ve yürütme adımları onları
-geçerli karşılaştırma veya canlı kazanç kanıtı haline getirmez.
+Son adımda [benchmark](BACKTEST_BENCHMARK.md) son NAV ve aynı tarih aralığını
+kullanır; [pencere analizi](BACKTEST_WINDOW_ANALYSIS.md) bağımsız al-tut
+deneyleri olarak doğru adlandırılmıştır. Gerçek strateji optimizasyonu yapılmaz;
+bu sonuçlar canlı kazanç kanıtı değildir.
 
 Kaynak yayını yalnız sürümlü CLI kaynağı/test/belge/kanıt kopyasıdır. Çalışan
 API/bot/middleware bu modülü tüketmez; mevcut container içindeki dosya veya
