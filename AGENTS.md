@@ -1,6 +1,6 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-Kaynaklarla son karşılaştırma: **20 Eylül 2026 / P1-G2**. İş sırası, kullanıcı
+Kaynaklarla son karşılaştırma: **20 Eylül 2026 / P3-1 beşinci adım**. İş sırası, kullanıcı
 yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DEVAM_PLANI.md)
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 
@@ -176,8 +176,20 @@ BIST Close/AOF proxy açılışı ve bilinmeyen `open_quality` reddedilir; yaln�
 eksik/None veya `provider` metadata kabul edilir. 120 uygun satır ve ilk sinyal
 indeksi60 korunur; en erken işlem indeksi61'dir. Günlük prefix'ten gelişen HTF
 politikası değişmez. Paralel worker bir kez veri okur ve ortak `as_of` alır.
-Çoklu sembol nakit kronolojisi/fiyatlama, benchmark/WFA ve tam CLI kabulü hâlâ
-açıktır; [yürütme sözleşmesi](docs/BACKTEST_EXECUTION.md) kapsamı açıklar.
+Benchmark/WFA ve tam CLI kabulü hâlâ açıktır;
+[yürütme sözleşmesi](docs/BACKTEST_EXECUTION.md) kapsamı açıklar.
+
+P3-1 beşinci adımında `run_backtest(..., data_by_symbol=..., costs=...)` tek
+piyasanın ortak nakdini artan gün, aynı günde ham sembol metni sırasıyla işler.
+COMBO/HUNTER ve sembol içi eylem sırası korunur. Sabit eşleme istenen sembollerle
+tam eşleşir, sağlayıcıya dönmez; tüm uygun girdiler ilk işlemden önce doğrulanır.
+Her ortak işlem gününün sonunda tek equity kaydı, tüm açık pozisyonları o ana
+kadar gözlenen son Close ile fiyatlar. Eksik günlerde fiyat tarihi/eskilik
+metadata'sı taşınır; alış fiyatı veya gelecek fiyat fallback'i yoktur. Tek sembol
+yolu eski equity sıklığını korur ve başka sembolde açık lot varsa reddeder.
+Paralel runner bağımsız sermayeli deneylerdir. Minimum 120 uygun satır kuralı
+tarihsel sembol evreni modeli değildir; eskimiş fiyat taşımanın süre sınırı yoktur.
+[Ortak portföy sözleşmesi](docs/BACKTEST_PORTFOLIO.md) kapsamı ve sınırları açıklar.
 
 ## Veri, erişim ve dağıtım
 

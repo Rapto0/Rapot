@@ -42,9 +42,11 @@ borsadan alınmış gerçek dolum saatleri olarak sunulmaz.
 Kabul edilen işlem kaydında `Tarih` işlem günü, `Sinyal Tarihi` önceki gözlenen
 gün, `Yürütme Modeli` ise `next_open` olur. COMBO ardından HUNTER ve her biri
 içindeki ÇOK UCUZ / BELEŞ / PAHALI sırası korunur; aynı açılışta birden fazla
-eylem mümkündür. Maliyet/FIFO sınırları değişmez. Equity kaynak satır indeksi
-10'un katı olduğunda ve son uygun günde Close ile gün sonu değeri olarak
-kaydedilir; gerçekleşmiş işlem adedi sayılmaz.
+eylem mümkündür. Maliyet/FIFO sınırları değişmez. Tek sembol arayüzünde equity,
+kaynak satır indeksi 10'un katı olduğunda ve son uygun günde Close ile gün sonu
+değeri olarak kaydedilir; gerçekleşmiş işlem adedi sayılmaz. Ortak portföy
+runner'ının her ortak işlem gününde tek kayıt üreten değerlemesi
+[ayrı sözleşmede](BACKTEST_PORTFOLIO.md) tanımlanır.
 
 ## Girdi ve hata davranışı
 
@@ -104,9 +106,16 @@ Paralel worker artık aynı sembolü iki kez indirmez; tek sağlayıcı okuması
 engine içindedir. Eski dört elemanlı worker tuple'ı korunur; altı elemanlı
 yol `end_date` ve `as_of` taşır. `run_parallel_backtest` bunları keyword-only
 alır ve tüm worker'lara aynı sabit kapanış anını verir. Bu runner'a sabit
-DataFrame koleksiyonu API'si eklenmedi; sabit girdi tek sembol yolundadır.
+DataFrame koleksiyonu API'si eklenmedi. Her worker kendi sermaye/portföyünü
+kullanır; sonuçlarının toplamı ortak nakitli bir portföy değildir.
 
-Çoklu sembollerin ortak nakitle tarih sırasına sokulması, ortak portföy
-fiyatlaması, benchmark/WFA ve tam CLI/grafik çalıştırması ayrı açık işlerdir.
+P3-1 beşinci adımda `run_backtest(..., data_by_symbol=...)`, sabit günlük
+eşlemeyi ortak nakitle tarih sırasına koyar ve açık pozisyonları son bilinen
+kapanışlarıyla birlikte değerler. Tam eşleme, deterministik aynı gün sırası,
+günlük equity ve eski fiyatların görünürlüğü
+[ortak portföy sözleşmesindedir](BACKTEST_PORTFOLIO.md). Tek sembol arayüzü başka
+sembollerin açık pozisyonlarını içeren portföyü ilk işlemden önce reddeder.
+
+Benchmark/WFA ve tam CLI/grafik çalıştırması ayrı açık işlerdir.
 Matplotlib/tqdm opsiyonel bağımlılıkları eklenmedi. Testler sentetik veri ve
 stub sağlayıcı/sinyal senaryolarıdır; üretim verisine veya borsa emrine erişmez.

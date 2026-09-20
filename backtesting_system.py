@@ -1,13 +1,15 @@
 import math
 import multiprocessing
 import re
-import traceback
 import warnings
 from collections import deque
+from collections.abc import Iterator, Mapping, Sequence
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import date, datetime
+from heapq import merge
+from itertools import groupby
 from typing import Any
 
 import numpy as np
@@ -221,6 +223,7 @@ class Portfolio:
 
         # Portföy değeri takibi
         self.equity_curve = []
+        self.backtest_metadata: dict[str, Any] = {}
 
         # Kayma komisyon değildir; iki gider ayrı izlenir.
         self.total_commission_paid = 0.0
@@ -426,34 +429,72 @@ class Portfolio:
 
         return True
 
-    def get_portfolio_value(self, current_prices):
-        """Toplam portföy değeri"""
-        position_value = 0
-
+    def get_portfolio_value(self, current_prices: Mapping[str, float]) -> float:
+        """Value every open lot at an explicit valid mark, without an entry-price fallback."""
+        if not isinstance(current_prices, Mapping):
+            raise ValueError("Current prices must be a symbol-to-price mapping")
+        values = [self.cash]
         for symbol, lot_queue in self.lots.items():
-            current_price = current_prices.get(symbol, 0)
-            if current_price == 0:
-                # Fiyat yoksa son lot fiyatını kullan
-                current_price = lot_queue[-1].price if lot_queue else 0
+            if not lot_queue:
+                continue
+            price = current_prices.get(symbol)
+            if not _finite_nonnegative(price) or price <= 0:
+                raise ValueError(f"Missing or invalid valuation price for {symbol}")
+            values.extend(lot.shares * price for lot in lot_queue)
+        if not all(_finite_nonnegative(value) for value in values):
+            raise ValueError("Portfolio valuation must remain finite and nonnegative")
+        try:
+            return math.fsum(values)
+        except OverflowError as error:
+            raise ValueError("Portfolio valuation overflow") from error
 
-            for lot in lot_queue:
-                position_value += lot.shares * current_price
-
-        return self.cash + position_value
-
-    def record_equity(self, date, current_prices):
-        """Portföy değerini kaydet"""
+    def record_equity(
+        self,
+        date: datetime,
+        current_prices: Mapping[str, float],
+        *,
+        price_dates: Mapping[str, datetime] | None = None,
+    ) -> None:
+        """Record a complete mark; shared runs expose the age of carried closing prices."""
+        if not isinstance(date, datetime) or pd.isna(date):
+            raise ValueError("Equity date must be a valid timestamp")
         total_value = self.get_portfolio_value(current_prices)
         position_value = total_value - self.cash
-
-        self.equity_curve.append(
-            {
-                "Tarih": date,
-                "Toplam Değer": round(total_value, 2),
-                "Nakit": round(self.cash, 2),
-                "Pozisyon Değeri": round(position_value, 2),
-            }
-        )
+        row = {
+            "Tarih": date,
+            "Toplam Değer": round(total_value, 2),
+            "Nakit": round(self.cash, 2),
+            "Pozisyon Değeri": round(position_value, 2),
+        }
+        if price_dates is not None:
+            if not isinstance(price_dates, Mapping):
+                raise ValueError("Price dates must be a symbol-to-timestamp mapping")
+            held_dates = {}
+            for symbol, lots in sorted(self.lots.items()):
+                if not lots:
+                    continue
+                mark_date = price_dates.get(symbol)
+                try:
+                    valid = (
+                        isinstance(mark_date, datetime)
+                        and not pd.isna(mark_date)
+                        and mark_date <= date
+                    )
+                except TypeError:
+                    valid = False
+                if not valid:
+                    raise ValueError(f"Missing, incompatible or future price date for {symbol}")
+                held_dates[symbol] = mark_date
+            row.update(
+                {
+                    "Değerleme Modeli": "last_observed_close",
+                    "Fiyat Tarihleri": held_dates,
+                    "Eski Fiyatlı Semboller": [
+                        symbol for symbol, mark_date in held_dates.items() if mark_date < date
+                    ],
+                }
+            )
+        self.equity_curve.append(row)
 
     def get_open_positions_summary(self):
         """Açık pozisyonların özeti"""
@@ -647,6 +688,51 @@ class BacktestEngine:
 
         return signals
 
+    def _execution_start(self, frame: pd.DataFrame) -> int | None:
+        """Keep the closed-history eligibility gate and the first 0..60 signal prefix."""
+        if len(frame) < 120:
+            return None
+        start = 61
+        if self.start_date is not None:
+            start = max(start, int(frame.index.searchsorted(self.start_date)))
+        return start if start < len(frame) else None
+
+    @staticmethod
+    def _load_daily_data(symbol: str, market_type: str) -> pd.DataFrame | None:
+        if market_type == "BIST":
+            return get_bist_data_isyatirim_only(symbol, start_date="01-01-2006")
+        return get_crypto_data(symbol, start_str="8 years ago")
+
+    def _execute_bar(
+        self, symbol: str, frame: pd.DataFrame, index: int, portfolio: Portfolio
+    ) -> None:
+        """Apply the existing strategy/action order at the next observed Open."""
+        execution_date = frame.index[index]
+        signal_date = frame.index[index - 1]
+        execution_price = float(frame["Open"].iloc[index])
+        history = frame.iloc[:index].copy(deep=True)
+        for strategy in ("combo", "hunter"):
+            signals = self.check_signals(history.copy(deep=True), portfolio.market_type, strategy)
+            actions = (
+                (signals["buy"]["cok_ucuz"], portfolio.buy, "ÇOK UCUZ"),
+                (signals["buy"]["beles"], portfolio.buy, "BELEŞ"),
+                (signals["sell"]["pahali"], portfolio.sell, "PAHALI"),
+            )
+            for active, operation, label in actions:
+                if active and operation(
+                    symbol, execution_price, execution_date, f"{strategy.upper()}: {label}"
+                ):
+                    portfolio.all_trades[-1].update(
+                        {"Sinyal Tarihi": signal_date, "Yürütme Modeli": "next_open"}
+                    )
+
+    @staticmethod
+    def _execution_events(
+        symbol: str, frame: pd.DataFrame, start: int
+    ) -> Iterator[tuple[pd.Timestamp, str, int]]:
+        for index in range(start, len(frame)):
+            yield frame.index[index], symbol, index
+
     def run_single_symbol(
         self,
         symbol: str,
@@ -665,25 +751,19 @@ class BacktestEngine:
             raise ValueError("market_type must match the BIST/CRYPTO portfolio")
         if not isinstance(symbol, str) or not symbol.strip():
             raise ValueError("symbol must be a nonempty string")
+        if any(lots for held, lots in portfolio.lots.items() if held != symbol):
+            raise ValueError("Use run_backtest for a portfolio holding multiple symbols")
         if data is None:
-            if market_type == "BIST":
-                data = get_bist_data_isyatirim_only(symbol, start_date="01-01-2006")
-            else:
-                data = get_crypto_data(symbol, start_str="8 years ago")
+            data = self._load_daily_data(symbol, market_type)
             if data is None:
                 print(f"[WARN] {symbol}: Veri cekilemedi")
                 return None
         frame = self._prepare_daily_data(data, market_type)
         # Preserve the historical minimum and signal warm-up. Future rows outside
         # end_date/as_of cannot make an otherwise ineligible input pass this gate.
-        if len(frame) < 120:
-            print(f"[WARN] {symbol}: En az 120 uygun kapanmis gunluk mum gerekli")
-            return None
-        execution_start = 61  # First signal has rows 0..60; execute at row 61 Open.
-        if self.start_date is not None:
-            execution_start = max(execution_start, int(frame.index.searchsorted(self.start_date)))
-        if execution_start >= len(frame):
-            print(f"[WARN] {symbol}: Baslangic uygun veri araliginin disinda")
+        execution_start = self._execution_start(frame)
+        if execution_start is None:
+            print(f"[WARN] {symbol}: Yetersiz kapanmis gecmis veya aralikta islem gunu yok")
             return None
         print(
             f"[INFO] {symbol}: next_open, {frame.index[execution_start].date()}"
@@ -695,36 +775,42 @@ class BacktestEngine:
 
         for i in range(execution_start, len(frame)):
             execution_date = frame.index[i]
-            signal_date = frame.index[i - 1]
-            execution_price = float(frame["Open"].iloc[i])
-            # Only already closed daily observations reach either calculator.
-            # Its weekly/monthly aggregate may still be a developing HTF candle.
-            history = frame.iloc[:i].copy(deep=True)
-            for strategy in ("combo", "hunter"):
-                signals = self.check_signals(history.copy(deep=True), market_type, strategy)
-                actions = (
-                    (signals["buy"]["cok_ucuz"], portfolio.buy, "ÇOK UCUZ"),
-                    (signals["buy"]["beles"], portfolio.buy, "BELEŞ"),
-                    (signals["sell"]["pahali"], portfolio.sell, "PAHALI"),
-                )
-                for active, operation, label in actions:
-                    if active and operation(
-                        symbol, execution_price, execution_date, f"{strategy.upper()}: {label}"
-                    ):
-                        portfolio.all_trades[-1].update(
-                            {"Sinyal Tarihi": signal_date, "Yürütme Modeli": "next_open"}
-                        )
-            # These are end-of-day marks, after Open execution. The final eligible
-            # date is always represented; multi-symbol marking remains separate work.
+            self._execute_bar(symbol, frame, i, portfolio)
+            # Retain single-symbol sampling; shared runs record every union day.
             if i % 10 == 0 or i == len(frame) - 1:
                 portfolio.record_equity(execution_date, {symbol: float(frame["Close"].iloc[i])})
         return True
 
-    def run_backtest(self, symbols_list, market_type, initial_cash, trade_amount):
-        """Ana backtest"""
-        from tqdm import tqdm
+    def run_backtest(
+        self,
+        symbols_list: Sequence[str],
+        market_type: str,
+        initial_cash: float,
+        trade_amount: float,
+        *,
+        data_by_symbol: Mapping[str, pd.DataFrame] | None = None,
+        costs: TradingCosts | None = None,
+    ) -> Portfolio:
+        """Run one market's shared cash in date/symbol order with daily closing marks.
 
-        portfolio = Portfolio(initial_cash, market_type, trade_amount)
+        A supplied mapping must cover exactly the requested symbols and never
+        falls back to providers. Validate all admitted feeds before any trade.
+        Same-day lexical priority is deterministic, not a signal ranking.
+        """
+        if isinstance(symbols_list, (str, bytes)) or not isinstance(symbols_list, Sequence):
+            raise ValueError("symbols_list must be a sequence of unique symbol strings")
+        symbols = list(symbols_list)
+        if any(
+            not isinstance(symbol, str) or not symbol or symbol != symbol.strip()
+            for symbol in symbols
+        ) or len(set(symbols)) != len(symbols):
+            raise ValueError("Symbols must be nonempty, trimmed and unique")
+        symbols.sort()
+        if data_by_symbol is not None and (
+            not isinstance(data_by_symbol, Mapping) or set(data_by_symbol) != set(symbols)
+        ):
+            raise ValueError("data_by_symbol must cover exactly the requested symbols")
+        portfolio = Portfolio(initial_cash, market_type, trade_amount, costs=costs)
 
         print(f"\n{'=' * 70}")
         print(f"🔄 {market_type} Backtest Başlatılıyor...")
@@ -733,31 +819,59 @@ class BacktestEngine:
         print(f"💵 İşlem Başına Tutar: {trade_amount:,.2f}")
         print(f"{'=' * 70}\n")
 
-        success_count = 0
+        frames: dict[str, pd.DataFrame] = {}
+        starts: dict[str, int] = {}
+        skipped: dict[str, str] = {}
+        for symbol in symbols:
+            data = (
+                self._load_daily_data(symbol, market_type)
+                if data_by_symbol is None
+                else data_by_symbol[symbol]
+            )
+            if data is None and data_by_symbol is None:
+                skipped[symbol] = "provider_returned_none"
+                continue
+            frame = self._prepare_daily_data(data, market_type)
+            start = self._execution_start(frame)
+            if start is None:
+                skipped[symbol] = (
+                    "insufficient_closed_history" if len(frame) < 120 else "no_execution_dates"
+                )
+                continue
+            frames[symbol], starts[symbol] = frame, start
 
-        with tqdm(total=len(symbols_list), desc=f"{market_type}") as pbar:
-            for symbol in symbols_list:
-                try:
-                    result = self.run_single_symbol(symbol, market_type, portfolio, pbar)
-                    if result:
-                        success_count += 1
-                        # Alım sayısını güncelle
-                        if symbol in portfolio.symbol_performance:
-                            portfolio.symbol_performance[symbol]["Toplam Alım"] = len(
-                                [
-                                    t
-                                    for t in portfolio.all_trades
-                                    if t["Sembol"] == symbol and t["İşlem"] == "ALIM"
-                                ]
-                            )
-                except Exception:
-                    print(f"[ERROR] {symbol}: backtest sirasinda beklenmeyen hata.")
-                    traceback.print_exc()
-                finally:
-                    pbar.update(1)
+        portfolio.backtest_metadata = {
+            "processed_symbols": list(frames),
+            "skipped_symbols": skipped,
+            "execution_order": "date_then_lexical_symbol_then_existing_strategy_actions",
+            "valuation_model": "last_observed_close",
+            "as_of": self.as_of,
+        }
+        events = merge(
+            *(
+                self._execution_events(symbol, frame, starts[symbol])
+                for symbol, frame in frames.items()
+            )
+        )
+        prices: dict[str, float] = {}
+        price_dates: dict[str, pd.Timestamp] = {}
+        for execution_date, daily_events in groupby(events, key=lambda event: event[0]):
+            day = list(daily_events)
+            # All Open executions precede all marks for this market-day label.
+            for _, symbol, index in day:
+                self._execute_bar(symbol, frames[symbol], index, portfolio)
+            for _, symbol, index in day:
+                prices[symbol] = float(frames[symbol]["Close"].iloc[index])
+                price_dates[symbol] = execution_date
+            portfolio.record_equity(execution_date, prices, price_dates=price_dates)
 
-        print(f"✅ Tamamlandı: {success_count}/{len(symbols_list)} sembol işlendi\n")
-
+        buys: dict[str, int] = {}
+        for trade in portfolio.all_trades:
+            if trade["İşlem"] == "ALIM":
+                buys[trade["Sembol"]] = buys.get(trade["Sembol"], 0) + 1
+        for symbol, performance in portfolio.symbol_performance.items():
+            performance["Toplam Alım"] = buys.get(symbol, 0)
+        print(f"✅ Tamamlandı: {len(frames)}/{len(symbols)} sembol işlendi\n")
         return portfolio
 
     def generate_excel_report(self, portfolio_bist, portfolio_crypto):
@@ -1341,7 +1455,7 @@ def run_parallel_backtest(
     as_of: str | datetime | None = None,
 ) -> list[dict[str, Any]]:
     """
-    Paralel backtest çalıştır
+    Her sembolü kendi başlangıç sermayesiyle bağımsız çalıştır.
 
     Args:
         symbols: Sembol listesi
@@ -1352,7 +1466,7 @@ def run_parallel_backtest(
         as_of: Tüm worker'lar için sabit, saat dilimli kapanış sınırı
 
     Returns:
-        Her sembol için sonuç listesi
+        Her bağımsız sembol deneyi için sonuç listesi; ortak nakit portföyü değildir.
     """
     if market_type not in ("BIST", "CRYPTO"):
         raise ValueError("market_type must be BIST or CRYPTO")
@@ -1392,7 +1506,7 @@ def run_parallel_backtest(
     total_profit = sum(r.get("profit", 0) for r in successful)
 
     print(f"\n✅ Tamamlandı: {len(successful)}/{len(symbols)} başarılı")
-    print(f"💰 Toplam Kar/Zarar: {total_profit:,.2f}")
+    print(f"💰 Bağımsız sembol kâr/zarar toplamı: {total_profit:,.2f}")
 
     return results
 

@@ -56,7 +56,11 @@ Her alış/satıştan sonra temel kontrol:
 
 Tüm lotlar kapandığında gerçekleşmiş kâr/zarar, nakdin başlangıca göre farkıdır.
 Bu denklem açık pozisyonların piyasa değerini hesaplamaz. Piyasa değerlemesi
-ayrıca güncel fiyat ister ve gelecekteki satış giderleri henüz gerçekleşmemiştir.
+ayrıca bir değerleme fiyatı ister; gelecekteki satış giderleri henüz gerçekleşmemiştir.
+P3-1 beşinci adımın [ortak portföy değerlemesi](BACKTEST_PORTFOLIO.md), her açık
+sembol için son bilinen kapanışı ve fiyatın gününü taşır. Eksik/geçersiz fiyatı
+lot alış fiyatıyla değiştirmez; bu maliyet tabanını veya gerçekleşmiş PnL'yi
+yeniden tanımlamaz.
 
 Elle hesaplanan örnek: başlangıç 4.000, her alış bütçesi 1.030, komisyon %1,
 kayma %2. Önce 100 fiyatından 10 birim, sonra 200 fiyatından 5 birim alınır.
@@ -105,11 +109,12 @@ paketler kilitli ortamda bulunmadığından yalnız grafik veya ilerleme çubuğ
 kullanan fonksiyonlarda yüklenir; tam CLI/grafik çalıştırma kabulü yapılmış
 sayılmaz. Bu adım bağımlılık eklemez veya mevcut warning politikasını yenilemez.
 
-`end_date`, kapanış sinyalinin hangi sonraki fiyatla gerçekleştirileceği,
-çoklu sembolün ortak nakitle kronolojik işlenmesi ve açık pozisyon değerlemesi
-ayrı işlerdir. Benchmark hâlâ gerçekleşmiş PnL getirisi kullanır; WalkForward
-mevcut haliyle gerçek strateji optimizasyonu değildir. Bu adım bunları geçerli
-backtest sonucu veya canlı kazanç kanıtı haline getirmez.
+Tarih/kapanış sınırları ve önceki kapanış sinyalinin sonraki Open'da yürütülmesi
+[dördüncü adımda](BACKTEST_EXECUTION.md), ortak nakit kronolojisi ve açık
+pozisyon değerlemesi [beşinci adımda](BACKTEST_PORTFOLIO.md) tanımlanmıştır.
+Benchmark hâlâ gerçekleşmiş PnL getirisi kullanır; WalkForward mevcut haliyle
+gerçek strateji optimizasyonu değildir. Bu muhasebe ve yürütme adımları onları
+geçerli karşılaştırma veya canlı kazanç kanıtı haline getirmez.
 
 Kaynak yayını yalnız sürümlü CLI kaynağı/test/belge/kanıt kopyasıdır. Çalışan
 API/bot/middleware bu modülü tüketmez; mevcut container içindeki dosya veya

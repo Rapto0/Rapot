@@ -4,18 +4,18 @@ Bu belge, 6 Eylül 2026 tarihli salt okunur proje incelemesinden çıkan işleri
 
 ## Kaldığımız nokta
 
-- **Son çalışma — 20 Eylül:** **P1-G2 üretim kabulü tamamlandı.** Kullanıcının üç dosyalık açık onayı sonrasında ilk iki dosyanın zaten bulunmadığı doğrulandı; yalnız yedeği doğrulanmış üçüncü günlük kaldırıldı. Taze kapasite kontrolünden sonra frontend `bbd9377` olarak yayımlandı; backend/Compose/current `279aa9f` kaldı. Sekiz sağlık/SSR isteği, dış HTTPS/RSC ve 12 JS + 1 CSS örneği geçti. Çalışan Linux/musl imajında Next16.3.5, Sharp0.35.4, libheif1.23.2 ve native libvips8.18.6 doğrulandı. Beş servis sağlıklı/restart0; korunan dört servis aynı kimlikte. Son kabulde **602.435.584 B** boş alan, sabit **528 MiB** rezervin üzerinde; taze npm taraması **505 bağımlılık / 0 bulgu**.
+- **Son çalışma — 20 Eylül:** **P3-1 beşinci adımın ortak nakit ve fiyatlama düzeltmesi tamamlandı.** Eski kodda gelecekteki satış nakdinin başka sembolün geçmiş alışına taşınması ve 260 olması gereken portföy değerinin 210 çıkması iki RED testle gösterildi. Ortak koşum artık artan gün/ham sembol sırasıyla çalışıyor; gün sonu tüm açık pozisyonlar son bilinen Close ile, fiyat tarihi/eskilik bilgisiyle değerleniyor. **44 yeni test ve tam Python 922 geçti / 1 isteğe bağlı test atlandı**, uyarı yok. Kaynak/kanıt yayını exact commit/CI ve sunucu kabul kaydıyla aşağıda bağlanır. Üretim frontend `bbd9377`, backend/Compose/current `279aa9f`; bu ayrı CLI düzeltmesi servis yayını değildir.
 - **Uygulama durumu:** P0-1–P0-4, P1-1, P1-2, P1-4–P1-7, P1-G1, **P1-G2**, P2-1, P2-3 ve **P2-4 doğrulandı**; P2-2 belge/karar kapsamı tamam. İç worktree ve 12 wrapper koruma kararı değişmedi.
 - **P1-2 durumu — Doğrulandı:** **8f60f8e üretim geçişi ve [HTTPS](https://138.68.71.27) kabulü tamamlandı.** API, bot, frontend, middleware ve PG16 sağlıklı; veri korunumu, dış HTTPS/auth/WSS, yetkisiz webhook reddi ve sertifika yenileme dry-run testi geçti. Eski supervisor'lar devre dışı; özgün DB/checkout ve geri dönüş kaynakları korundu.
 - **Önceki sürümün uzak doğrulaması — 11 Eylül:** `ccd61544` için [CI 34641121926](https://github.com/Rapto0/Rapot/actions/runs/34641121926) ve [imaj yayını 34641767731](https://github.com/Rapto0/Rapot/actions/runs/34641767731) başarılı. Üretimde API health 47 ms/200; `/`, `/signals`, `/alarms`, `/chart` SSR 200. Beş servis healthy/restart0; SignalFeed hazır, Binance/BIST sağlayıcıları başlamış. Scheduler 47,298 saniyede unknown → running oldu. 1.733.137 sinyal, 6 tarama geçmişi, 26.393 AI kaydı ve diğer ana sayılar; PostgreSQL kimliği ve 135/135/28/383 sayıları korundu. DRY_RUN/false/false ve AI kapalı; dış Windows HTTPS API/bot kontrolleri ayrı ayrı 203 ms/200. Sonraki `aadde728` ve güncel `279aa9f` geçişlerinin 13 Eylül kanıtı P2-4 bölümündedir.
 - **P2-2 doğrulaması ve belge yayını:** Python 3.12.8'de üç ayrı hedefli koşum toplam **98/98** geçti (wrapper/boundary/read-model 37, DB/migration 30, sinyal/config 31); DB grubunda mevcut 10 UTC warning var. 11 Eylül 15:44:58 UTC salt okunur sunucu ön kontrolünde beş servis healthy/restart0, HTTPS API/bot health 200 (0,051/0,043 saniye). Bu yalnız belge commit'inin tam SHA/CI sonucu, Git blob SHA256'ları ve sunucuya aktarım sonrası korunma kanıtı `/root/rapot-ops/20260911-p22/release-record.json` içinde sürüm bazında tutulur. İmaj yayını, servis restart'ı veya migration bu belge yayınının parçası değildir.
-- **Aktif iş:** P1-G2 uygulama geçişi, native ve HTTPS kabulü tamamlandı. Kapanış belgesinin exact commit/CI, canonical Git blob hashleri ve sunucuya aktarım kabulü `/root/rapot-ops/20260920-p1g2-closure/release-record.json` içinde tutulur; yalnız push yeterli değildir. Sonraki geliştirme **P3-1 beşinci adım: çoklu sembol ortak nakit kronolojisi ve fiyatlama**. Gerçek/testnet emir kabulü ertelidir.
+- **Aktif iş:** P3-1 beşinci adımın kod, test ve sözleşme belgeleri hazır. Sekiz canonical Git dosyası ve yerel kabul kaydı `/root/rapot-ops/20260920-p31-portfolio/` altında yayımlanır; exact kaynak commit/CI, dosya hashleri, taze kapasite ve değişmeyen runtime/HTTPS kabulü `release-record.json` içindedir. Sonraki geliştirme **P3-1 altıncı adım: benchmark/WFA doğruluğu ve gerçek strateji testi veya doğru adlandırma**. Gerçek/testnet emir kabulü ertelidir.
 - **P3-1 ikinci adımın yayın kapanışı:** `48be08e6d3717693e601c9f62c3e1b6665a8c85a`, [CI34749745272](https://github.com/Rapto0/Rapot/actions/runs/34749745272) beş job başarılı. 09:40:19 UTC'de 11 canonical kaynak/rapor dosyası488.483B ve12.462B kayıt sunucuda hash/gzip ile doğrulandı; `/root/rapot-ops/20260913-p31-indicators/release-record.json` SHA256 `426a3041f78c22ecb0328c260bbf956178af2be39262b8757522f88e207866b0`. Beş servis/config aynı, dış HTTPS200; frontend967/backend279 aynı kaldı. TradingView script/alarm kopyası değiştirilmedi.
 - **Ertelenen dış kabul:** Gerçek TradingView alarm teslimi, ALL/FIRST/saat filtresi runtime kabulü ve sınırlı testnet emir testi tamamlanmış sayılmıyor. Hazır test araçları korunuyor; testnet onayı ve Webhook URL erişimi için artık yanıt beklenmiyor, bu işler kullanıcı yeniden seçtiğinde ele alınacak. Borsa emri gönderilmedi; geçici test servisleri kapalı.
 - **Başlangıç kaydı:** Bu belge ilk oluşturulduğunda yalnız belge değişmişti; sonraki uygulama değişiklikleri aşağıda ayrı kaydedildi.
 - **Seçilen geliştirme ortamı:** `.venv` / Python 3.12; Node 20.20.2 / npm 10.9.9. Yerelde Python 3.12.8 ile doğrulandı.
 - **Commit / yayın düzeni:** Her tamamlanan P maddesi ayrı commit; doğrulanan grup CI için push edilir, sunucu deploy'u CI ve sunucu kontrollerinden sonra yapılır. İlk sunucu yayını eşiği P0 işleri + P1-7 test hatası + P1-2 dağıtım uyumu.
-- **Açık işler:** P3-1/P3-2 ve kullanıcı isteğiyle ertelenmiş gerçek TradingView alarm/filtre ve testnet emir kabulü. P1-G2'nin kod/CI/imaj ve üretim kabulü tamam. Ücretli yükseltme veya diğer yedek, imaj, release ve günlükler için toplu silme yapılmaz. 20 Eylül son kabulde **602.435.584 B** boş alan vardı; her yeni yayın öncesinde veri büyümesi, katmanlar ve sabit 528 MiB rezerv yeniden ölçülmelidir.
+- **Açık işler:** P3-1 benchmark/WFA ve diğer kalan kabul sınırları, P3-2 ve ertelenmiş gerçek TradingView alarm/filtre/testnet emir kabulü. P1-G2 üretim kabulü ve P3-1 ortak portföy düzeltmesi tamam. Tam CLI/provider/grafik çalıştırması yapılmış sayılmaz. Ücretli yükseltme veya diğer yedek, imaj, release ve günlükler için toplu silme yapılmaz; her yeni yayın öncesinde sabit 528 MiB rezerv ve gerçek kapasite yeniden ölçülür.
 
 ## Kapsam ve yetki kaydı
 
@@ -169,11 +169,11 @@ Kapsam tahminleri süre taahhüdü değildir: küçük birkaç dosya; orta bir �
 | P2-4 | Eşzamanlı API yükünde realtime gecikmesi | Doğrulandı: 279aa9f, 735 Python testi, büyük veri ölçümü, CI ve üretimde 24 REST / 3 WSS kabulü | Orta | P1-5 |
 | P0-G1 | Standalone sağlık sunucusu debug varsayılanını kapat | Doğrulandı — loopback/debug/reloader düzeltmesi P2-3 ile üretimde; yerel/CI HIGH=0 | Küçük | P2-3 raporu ve entrypoint kontrolü |
 | P1-G1 | Kilitli Python bağımlılığı advisory incelemesi | Doğrulandı — 710/710, sıfır dependency bulgusu; CI/imaj/üretim ve auth13/13 geçti | Orta | P2-3 raporu; uygulama/test bağımlılığı ayrımı |
-| P3-1 | Backtest ve strateji eşdeğerliği | COMBO üretimde; motor/Pine, FIFO ve günlük yürütme kaynak kabulü tamam. Günlük yürütme 48/tam 878-skip1, exact CI ve altı dosya hash doğrulaması geçti. Ortak nakit kronolojisi/fiyatlama, benchmark/WFA ve Pine dış kabulü açık | Büyük | Emir/veri doğruluğu, P1-3, P1-4 |
+| P3-1 | Backtest ve strateji eşdeğerliği | COMBO üretimde; motor/Pine, FIFO, günlük yürütme ve ortak nakit/değerleme kaynak düzeltmeleri tamam. Beşinci adımda 44 yeni test; tam Python 922 geçti / 1 atlandı, uyarı yok. Kaynak commit/CI ve yayın kabulü ayrı kayda bağlı. Benchmark/WFA, tam CLI ve Pine dış kabulü açık | Büyük | Emir/veri doğruluğu, P1-3, P1-4 |
 | P3-2 | Backup branch tasarım değerlendirmesi | Bekliyor | Küçük inceleme | Tasarım tercihi |
 | P1-G2 | Frontend bağımlılık güvenliği | **Doğrulandı:** bbd9377 / başarılı CI-imaj; 20 Eylül frontend-only üretim, Linux native ve dış HTTPS/RSC/statik kabulü tamam. npm505/0; backend/current279 aynı | Orta | Sonraki yayınlarda taze kapasite ve 528 MiB rezerv korunur |
 
-**Önerilen sıra:** P0/P1 uygulama işleri, P1-G1/P1-G2 ve P2 kapsamı doğrulandı. Sırada P3-1 beşinci adım (ortak nakit kronolojisi/fiyatlama), ardından kalan P3-1 ve P3-2 var. P1-3 dış kabulü kullanıcı yeniden seçene kadar ertelidir.
+**Önerilen sıra:** P0/P1 uygulama işleri, P1-G1/P1-G2 ve P2 kapsamı doğrulandı. P3-1 ortak nakit/fiyatlama adımından sonra benchmark/WFA doğruluğu ve adlandırma, ardından kalan P3-1 ve P3-2 gelir. P1-3 dış kabulü kullanıcı yeniden seçene kadar ertelidir.
 
 ## P0 — Önce tamamlanacak işler
 
@@ -1262,6 +1262,73 @@ Son boş alan622.018.560B, beş servis/config ve frontend967/backend279 aynıyd�
 - Güvenlik işinin başarı durumu report-only politikasına göredir. Bandit 225 dosyada **1.883 LOW / 17 MEDIUM / 0 HIGH**; pip-audit 115 pakette **0 bulgu**. Frontend kurulumunda npm ayrıca **11 güvenlik bildirimi (1 düşük / 2 orta / 7 yüksek / 1 kritik)** üretti. Bunlar backtest test uyarısı değildir; P1-G2 aşağıda ayrı takip edilir.
 - Bu kapanış yalnız `docs/RAPOT_DEVAM_PLANI.md` değişikliğidir. Kendi tam SHA/CI, canonical belge hash'i ve son sunucu kabulü `/root/rapot-ops/20260913-p31-execution-closure/release-record.json` içinde tutulur; uygulama restart'ı gerekmez.
 
+**20 Eylül P3-1 beşinci adım — ortak nakit ve portföy değerleme:**
+
+- Başlangıç `cc215ae32f696af82670a06e558cf14433120869`, temiz main; önceki
+  P1-G2 kapanış [CI35499269819](https://github.com/Rapto0/Rapot/actions/runs/35499269819)
+  ve sunucu kabulü tamam. Önceki release-record SHA256
+  `c154db324b427cfb9b3f411bfabed4e905544a9759cb43899f8dd0400a080e3d`.
+  Yeni çalışma ortak nakit/fiyatlama kapsamındadır; eski boş kutular bütün P3'ün
+  tamamlandığı anlamına getirilmedi.
+- **Eski kodda iki RED:** AAA'nın 10 Mart satışından gelen nakitle BBB'nin
+  5 Mart alışının yapılması; iki açık pozisyonun kapanış değeri **260** olması
+  gerekirken diğer sembolün alış fiyatına dönülmesiyle **210** raporlanması.
+  Sentetik sağlayıcı/sinyal fixture'leri gerçek `run_backtest` döngüsünü sınadı.
+  `runtime-data/p31-shared-portfolio-red.log` SHA256
+  `7db4c15887e09ad4ee0feec939f5763b6228075763d09797e6f9d26f8c75cb1c`.
+- `run_backtest(..., data_by_symbol=..., costs=...)` tüm sabit eşleme anahtarlarını,
+  sembolleri ve uygun OHLCV'yi ilk işlemden önce doğrular/kopyalar. Sabit girdi
+  sağlayıcıya gitmez; normal yol sembol başına bir kez okur. Hatalı girdi veya
+  sağlayıcı istisnası kısmi başarılı sonuç olarak gizlenmez. Sağlayıcı `None`,
+  120'den az uygun satır ve işlem günü yokluğu, `backtest_metadata` içindeki atlama
+  nedenleriyle açıkça ayrılır. İşlenmiş/sinyalsiz sembol atlanmış sayılmaz.
+- Sıralı sembol akışları tek tarih akışında birleştirilir. Aynı gün ham sembol
+  metni sırası kullanılır; giriş listesini ters çevirmek nakit tahsisini değiştirmez.
+  COMBO→HUNTER ve ÇOK UCUZ→BELEŞ→PAHALI sırası, sabit bütçe, FIFO ve önceki
+  prefix→sonraki gerçek Open sözleşmesi korunur. Tüm satışları önceye alan yeni
+  strateji kuralı yoktur. Aynı gün önceki sembol sonraki sembolün nakdini etkiler.
+- Her ortak işlem gününde bütün Open işlemleri sonrasında bir equity kaydı
+  üretilir; bütün açık lotlar son gözlenen Close ile değerlenir. Eksik gün ve
+  erken biten feed son kapanışı taşır; gelecek fiyat, sıfır veya son lot alış
+  fiyatına fallback yoktur. `Fiyat Tarihleri` ve `Eski Fiyatlı Semboller` alanları
+  taşınan fiyatları görünür yapar. Taşıma süresi sınırsızdır; delist/askı veya
+  gerçekleşebilir satış fiyatı modeli değildir. Bir koşum tek piyasa ve para
+  birimi kullanır; döviz dönüşümü eklenmedi.
+- `get_portfolio_value` her açık sembol için açıkça verilen sonlu/pozitif fiyat ister.
+  Eksik/geçersiz fiyat ve geleceğe tarihli fiyat kaydı hata verir, equity'yi
+  değiştirmez. Tek sembol yolu, kaynak indeksinin 10'un katlarında ve son uygun
+  günde kayıt sıklığını korur; başka sembolde açık pozisyon
+  varsa sağlayıcı/işlem öncesinde reddeder. Paralel runner bağımsız sermayeli
+  deneyler olarak kalır ve çıktı etiketi bunu açıklar. Gerçekleşmiş PnL raporları
+  NAV ile değiştirilmedi; benchmark/WFA ayrı açık iş olarak korunur.
+- **44/44 yeni regresyon**, tam Python **922 geçti / 1 isteğe bağlı performans
+  testi atlandı**, uyarı yok. Yeni test dosyası dahil değişen kaynaklarda Ruff
+  lint/format geçti; Git'in izlediği 225 Python dosyasının kontrolü de geçti.
+  İlk tam koşum başladıktan sonra iki koruma testi eklendiği için nihai dosya
+  hâliyle tam paket yeniden koşuldu. Sabit veri sırası/değişmezlik, sembol sırasına
+  göre nakit önceliği, ayrık takvim, BIST/CRYPTO kapanışı, 61/120 sınırı,
+  eskimiş/geleceğe tarihli fiyat,
+  Kahan dahil hata atomikliği, aynı gün eylem sırası ve ücretli FIFO oracle geçti.
+  Frontend tip kontrolü ve production build de geçti; frontend kaynağı değişmedi.
+  CLI, gerçek sağlayıcı, Excel/grafik veya borsa emri çalıştırılmadı.
+- [Ortak portföy sözleşmesi](BACKTEST_PORTFOLIO.md), günlük yürütme ve muhasebe
+  belgeleri birlikte güncellendi. Minimum 120 satır kuralı gelecekteki kabul edilmiş
+  satırlarla yeterlilik kazanabilir; bu tarihsel sembol evreni/survivorship
+  modeli değildir. Hesaplayıcı/Pine eşdeğerliği varsayılmadı.
+- Yerel loglar `p31-20260920-portfolio-green.log` ve
+  `p31-20260920-portfolio-full-final.log`; küçük kabul JSON'u
+  `p31-20260920-portfolio-local-acceptance.json`, SHA256 `da2f67f4b33f3bc7693fad7f17386c5241b25355e54a1ef334f9454d518008ff`.
+  Kaynak ve yeni testin LF-normalize hashleri bu JSON'a bağlıdır. Exact başarılı
+  CI sonrasında sekiz canonical Git dosyası ve bu kabul JSON'u
+  `/root/rapot-ops/20260920-p31-portfolio/` dizinine aktarılır. Tam kaynak commit,
+  CI, Git blob hashleri, taze kapasite/HTTPS ve değişmeyen runtime kabulü
+  `release-record.json` içinde tutulur; yerel karşılığı
+  `p31-20260920-portfolio-release-record.json` dosyasıdır.
+  Bu sınırlı kaynak yayını container içindeki CLI'yi veya servisleri güncellemez.
+  Frontend `bbd9377`, backend/Compose/current `279aa9f`, DRY_RUN/false/false ve
+  AI kapalı kalır; yeni imaj, migration, restart veya silme işlemi gerekmez.
+  Sabit 528 MiB rezerv ile toplam 2 MiB yayın bütçesi aktarım öncesinde doğrulanır.
+
 ### P1-G2 — Frontend bağımlılık güvenliği takibi
 
 **Durum — 20 Eylül: Doğrulandı.** Aşağıdaki tarihsel inceleme ve kapasite kayıtları, sondaki üretim kabulüyle tamamlandı.
@@ -1607,6 +1674,8 @@ Son boş alan622.018.560B, beş servis/config ve frontend967/backend279 aynıyd�
 
 | 2026-09-20 | P1-G2 | Açık onay → tek günlük temizliği → frontend geçişi → native/HTTPS kabulü | Onaylı üç yoldan ikisi önceden yok; yalnız üçüncü kaldırıldı, net75.407.360 B. Frontend bbd9377/e312; backend/current279 ve dört servis aynı. 8GET, dış16GET, Linux native sürümler geçti; yardımcı araçların ilk başarısız denemeleri korunup düzeltildi. npm505/0; sabit528MiB rezerv korundu. Kapanış belge CI/sunucu kabulü ayrı release-record; sonraki iş P3-1 ortak nakit kronolojisi |
 
+| 2026-09-20 | P3-1 beşinci adım | İncele → düzelt → yerel doğrula → kaynak kabulü | Gelecekteki nakit ve eksik portföy fiyatlaması iki RED testle gösterilip düzeltildi. Ortak gün/sembol sırası, son Close ve fiyat tarihi bilgisi, tam sabit eşleme ve işlem öncesi doğrulama eklendi. 44 yeni test; tam Python 922 geçti / 1 atlandı, uyarı yok. Muhasebe ve tek sembol sözleşmesi korundu. Commit/CI ve kaynak kabulü portfolio/release-record.json içinde; frontend bbd9377 / backend 279aa9f aynı. Benchmark/WFA ve tam CLI açık |
+
 Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 
 - İş ID'si, tarih, aşama ve sonuç.
@@ -1625,4 +1694,4 @@ Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 4. Aktif işin bulgusunu ve bağımlılıklarını güncel kodda kontrol et. İncelemeyi baştan tekrarlamak yerine ilgili kanıttan devam et.
 5. İşin dört adımını tamamla veya engeli somutlaştır; ardından durum tablosu, günlük ve Kaldığımız nokta bölümünü güncelle.
 
-**20 Eylül: P1-G2 tamamlandı. Onaylı üç yoldan ikisi işlem öncesinde yoktu; yalnız kalan tek yedekli günlük kaldırıldı. Frontend bbd9377 yayımlandı; backend/Compose/current279 korundu. Sağlık/SSR, dış HTTPS/RSC/statik ve Linux native sürüm kabulü geçti; sabit528MiB rezerv korundu. Kapanış belge commit/CI ve sunucu kabulü 20260920-p1g2-closure/release-record.json kaydında tutulur. Sonraki geliştirme P3-1 ortak nakit kronolojisi/fiyatlama; gerçek/testnet emirleri ve diğer dış kabul erteli.**
+**20 Eylül: P3-1 beşinci adım tamamlandı: ortak nakit artan gün/ham sembol sırasıyla yürütülüyor, tüm açık pozisyonlar son bilinen Close ile fiyat tarihi/eskilik bilgisiyle değerleniyor. 44 yeni regresyon; tam Python 922 geçti / 1 atlandı, uyarı yok. Kaynak commit/CI ve sunucu kabulü 20260920-p31-portfolio/release-record.json içinde tutulur; frontend bbd9377 / backend 279aa9f servisleri değişmez. Sonraki iş benchmark/WFA doğruluğu ve adlandırma. Tam CLI/provider/grafik, Pine dış kabulü ve gerçek/testnet emirleri açık/erteli.**

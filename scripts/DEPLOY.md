@@ -489,6 +489,28 @@ the deploy receipt does not imply that closure documents have already been publi
 DRY_RUN/trading=false/live=false, disabled AI, all databases and rollback resources
 remain preserved; no paid upgrade or exchange/TradingView acceptance is implied.
 
+## P3-1 shared portfolio source publication — 20 September 2026
+
+The fifth backtest step changes the separate `backtesting_system.py` CLI and its
+synthetic tests/documents. It orders one market's shared cash by day and symbol,
+then records all open positions at their last observed closing prices. Missing
+calendar days retain explicit mark dates and stale-symbol metadata. It does not
+change the scanner, API, frontend, Pine or exchange execution path.
+
+After exact-source CI succeeds, publish the eight reviewed canonical Git files
+and the bounded local acceptance record under
+`/root/rapot-ops/20260920-p31-portfolio/`. Its `release-record.json` records the
+full source/CI identity, Git blob hashes, transferred bytes and before/after
+runtime/configuration and HTTPS checks. Require the unchanged 528 MiB reserve
+plus a total 2 MiB publication allowance before the first write.
+
+This is an operator source copy. It neither updates the CLI inside existing
+containers nor runs it. Production remains frontend `bbd9377`, backend/Compose/
+current `279aa9f`; no image pull, service restart, initializer, migration, database
+restore or deletion is part of this publication. Actual provider, full CLI/chart,
+benchmark/WFA, TradingView and exchange acceptance remain separate. The
+[portfolio contract](../docs/BACKTEST_PORTFOLIO.md) describes the tested behavior.
+
 ## Optional middleware
 
 Create `middleware/.env` or select `RAPOT_MIDDLEWARE_ENV_FILE`, outside Git:
