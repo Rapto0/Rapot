@@ -1,13 +1,13 @@
 # Algotrading Spot — kapsam ve backlog durumları
 
-Son eşleştirme: **11 Eylül 2026 / P2-2**. Güncel iş sırası ve kabul kanıtlarının ana kaynağı [RAPOT_DEVAM_PLANI.md](RAPOT_DEVAM_PLANI.md)'dir. Bu belge eski ALG kimliklerini korur; ilk taslaktaki boş kutular, tamamlanan P0/P1 işlerini yeniden açmak için kullanılmaz. Durumlar kod ile plandaki tarihli kabul kayıtlarının karşılaştırmasıdır; bu belge düzenlenirken dış servis veya emir testi yapılmadı.
+Son ALG eşleştirmesi: **11 Eylül 2026 / P2-2**; Pine kabul notu ve belge yolları **21 Eylül** güncellendi. Güncel iş sırası ve kabul kanıtlarının ana kaynağı [RAPOT_DEVAM_PLANI.md](RAPOT_DEVAM_PLANI.md)'dir. Bu belge eski ALG kimliklerini korur; ilk taslaktaki boş kutular, tamamlanan P0/P1 işlerini yeniden açmak için kullanılmaz. Durumlar kod ile plandaki tarihli kabul kayıtlarının karşılaştırmasıdır; bu belge düzenlenirken dış servis veya emir testi yapılmadı.
 
 ## Mevcut kapsam ve çalışma sınırı
 
 - Doğrulanan middleware girişi **TradingView webhook → Binance Spot** akışıdır. Python tarayıcısından middleware'e yeni doğrudan emir köprüsü tamamlanmış sayılmaz; ana bot/API ve middleware ayrı servis/veri alanlarıdır.
 - Üretim **`MW_EXECUTION_MODE=DRY_RUN`, `MW_TRADING_ENABLED=false`, `MW_BINANCE_LIVE_ENABLED=false`** kalır. Gerçek/testnet emir gönderimi belge veya deploy yetkisiyle açılmaz.
 - Kullanıcı **10 Eylül 2026'da** borsa/alarm dış kabulünü erteledi. Gerçek TradingView alarm JSON'u/HTTPS teslimi, ALL/FIRST ve saat filtresi runtime kabulü, sınırlı testnet emirleri ve canlı geçiş tamamlanmadı. Artık yanıt beklenmiyor; kullanıcı yeniden seçtiğinde mevcut araç/kanıtlardan devam edilir.
-- Pine derlemesi ve standart Spot/engelli grafik kontrolleri **kullanıcı gözlemidir**. Ayrı PG16 üzerinde HTTPS, iki BUY/iki FIFO SELL ve restart/duplicate kabulü **operatör kaynaklı simülasyondur**; gerçek TradingView teslimi veya hesap dolumu değildir.
+- Pine'ın 9–10 Eylül derleme ve standart Spot/engelli grafik kontrolleri **kullanıcı gözlemidir**. Güncel kaynak için 21 Eylül **araçla gözlenen derleme/Spot grafik kabulü** [ayrı kayıttadır](PINE_RUNTIME_ACCEPTANCE.md); güncel futures/standart olmayan grafik kabulünü kapsamaz. Ayrı PG16 üzerinde HTTPS, iki BUY/iki FIFO SELL ve restart/duplicate kabulü **operatör kaynaklı simülasyondur**; gerçek TradingView teslimi veya hesap dolumu değildir.
 - P2-1 dashboard alarmları `/alarms` açıkken çalışan tarayıcı kurallarıdır; borsa emri, sunucu alarm servisi veya TradingView kabulü yerine geçmez.
 
 ## Eski taslaktan değişen kararlar
@@ -20,7 +20,7 @@ Gerçek sözleşme [TradingViewWebhookPayload](../middleware/domain/events.py)'d
 | --- | --- |
 | `H_BLS`, `H_UCZ`, `C_BLS`, `C_UCZ` | `H_PAH`, `C_PAH` |
 
-Ana tarayıcının `BELES`, `COK_UCUZ`, `PAHALI`, `FAHIS_FIYAT` etiketleri webhook `signalCode` alanına doğrudan gönderilmez. `FAHIS_FIYAT` için v1'de ayrı emir kodu yoktur. Ayrıntılar [middleware README](../middleware/README.md) ve [Pine sözleşmesi](../middleware/pine/README.md)'ndedir.
+Ana tarayıcının `BELES`, `COK_UCUZ`, `PAHALI`, `FAHIS_FIYAT` etiketleri webhook `signalCode` alanına doğrudan gönderilmez. `FAHIS_FIYAT` için v1'de ayrı emir kodu yoktur. Ayrıntılar [middleware README](MIDDLEWARE.md) ve [Pine sözleşmesi](PINE_CONTRACT.md)'ndedir.
 
 BUY quote bütçesi/çarpanıyla yeni tranche açar; SELL filtreleri karşılayan en eski açık tranche'ı seçer. Toz miktarlar silinmez. V1 tekrar kontrolü **aynı normalize payload + aynı execution/account kapsamı** içindir; aynı barın farklı kodu veya yeni üretim zamanı ayrı olay olabilir. “Bar başına yalnız bir emir” garantisi verilmez.
 
@@ -74,4 +74,4 @@ Sırayı [devam planı](RAPOT_DEVAM_PLANI.md) belirler: bu belge P2-2 kapsamınd
 
 Kullanıcı dış kabulü yeniden seçerse P1-3 araçları ve sınırları korunur: testnet taslağı ayrı PG16/kapsamda en fazla **25 sanal USDT × 2 BUY + 2 FIFO SELL**, başlangıç bakiye/açık emir kontrolü, partial/unknown/eksik komisyon durumunda duruş ve audit/dust korunumu içerir. **Hazır taslak, çalıştırılmış emir testi değildir.** Otomatik temizleme/düzeltme emri eklenmez.
 
-Şema/CLI sınırları için [DB_MIGRATION_POLICY.md](DB_MIGRATION_POLICY.md), dağıtım/rollback ve bileşen SHA kaydı için [scripts/DEPLOY.md](../scripts/DEPLOY.md) kullanılır. Bu eşleştirme yeni migration, gerçek alarm veya emir çalıştırma yetkisi oluşturmaz.
+Şema/CLI sınırları için [DB_MIGRATION_POLICY.md](DB_MIGRATION_POLICY.md), dağıtım/rollback ve bileşen SHA kaydı için [dağıtım rehberi](DEPLOY.md) kullanılır. Bu eşleştirme yeni migration, gerçek alarm veya emir çalıştırma yetkisi oluşturmaz.

@@ -1,8 +1,9 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-Kaynaklarla son karşılaştırma: **21 Eylül 2026 / P3-1 ve P3-2 kapanışı**. İş sırası, kullanıcı
+Kaynaklarla son karşılaştırma: **21 Eylül 2026 / P3 kapanışı ve repo temizliği**. İş sırası, kullanıcı
 yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DEVAM_PLANI.md)
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
+Teknik rehberler [docs dizininde](docs/README.md) listelenir.
 
 ## Proje ve çalışma sınırları
 
@@ -238,18 +239,19 @@ sekme belleğinde tutar. TestClient için dev-only httpx2, SDK'lar için httpx
 korunur; kök test izolasyonu ikisinin de HTTP transport'unu engeller. Yönetici
 işleri admin ister; dashboard okuma endpointlerinin tamamı özel değildir.
 Middleware webhook token'ı ve X-Admin-Token yönetim kimliği ana JWT'den ayrıdır.
-[README erişim tablosu](README.md#security-notes) ve [middleware rehberi](middleware/README.md)
+[README erişim tablosu](README.md#security-notes) ve [middleware rehberi](docs/MIDDLEWARE.md)
 güncel sözleşmeyi gösterir. Gizli anahtarlar NEXT_PUBLIC değişkenlerine konmaz.
 
 Üretim yolu Docker Compose 2.24+ ve HTTPS Nginx'tir. API/bot/frontend sürekli
 servislerdir; main-init bir defalık iştir. Middleware profili PostgreSQL,
 middleware-migrate ve middleware'i ekler. API embedded bot'u kapatır; scanner
-paylaşılan dosya kilidiyle tek süreçte çalışır. PM2 dosyaları legacy'dir.
+paylaşılan dosya kilidiyle tek süreçte çalışır. Kullanılmayan eski PM2/API
+launcher dosyaları 21 Eylül repo temizliğinde kaldırıldı; Compose yolu kullanılır.
 Host upstream'leri açıkça 127.0.0.1 kullanır; portlar loopback'e bağlıdır.
 
 `.github/workflows/deploy.yml` imaj yayımlar; sunucu deploy'u yapmaz.
 `scripts/deploy.ps1` doğrulanmış SHA'yı kontrol edip komutları yazdırır; SSH
-çalıştırmaz. [Dağıtım rehberi](scripts/DEPLOY.md) ve devam planındaki son kabul
+çalıştırmaz. [Dağıtım rehberi](docs/DEPLOY.md) ve devam planındaki son kabul
 kaydı izlenir. Yalnız belge değişikliği servis restart'ı veya migration gerektirmez.
 
 ## Kod stili

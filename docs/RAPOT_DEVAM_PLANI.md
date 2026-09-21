@@ -4,6 +4,7 @@ Bu belge, 6 Eylül 2026 tarihli salt okunur proje incelemesinden çıkan işleri
 
 ## Kaldığımız nokta
 
+- **Son çalışma — 21 Eylül repo temizliği:** Kullanıcının gereksiz dosyaları silme ve Markdown rehberlerini toplama isteği uygulandı. 22 atıl kaynak/varlık/config ve üç eski belge kaldırıldı; bir middleware planı ana rehbere birleştirildi. Teknik rehberlerin merkezi [docs indeksidir](README.md). Beş doğrudan npm bağımlılığı ve toplam 23 paket kaldırıldı; kalan paket sürümleri değişmedi. Tam yerel kabul **996 Python / 1 isteğe bağlı atlanan, 113 frontend**, lint/typecheck/build/standalone ve **482 paket / 0 audit bulgusu**. Ayrıntı ve yerel ortam temizliği aşağıdadır.
 - **Son çalışma — 21 Eylül:** **P3-1 ve P3-2 tamamlandı.** P3-1'in altı kod adımı, yerel/CLI kabulü ve son açık güncel Pine derleme/grafik kriteri doğrulandı. 1.091 satırlık kaynak hash'i editörde ve yeniden açılan özel scriptte eşleşti; TradingView BINANCE:BTCUSDT / standart mum / 1D grafiğinde skor tablosu ve TF OK görüldü. P3-2'de beş eski commit ve 18 frontend dosyası değerlendirildi; aktarım seçilmedi. 20 Eylül kod kabulü **996 Python / 1 isteğe bağlı atlanan, 113 frontend**; bugünkü belgeyle ilgili **62 Python ve 9 frontend** kontrolü geçti. Gerçek alarm/filtre/testnet/emir kabulü ayrı ve ertelidir.
 - **Uygulama durumu:** P0-1–P0-4, P1-1, P1-2, P1-4–P1-7, P1-G1, **P1-G2**, P2-1, P2-3 ve **P2-4 doğrulandı**; P2-2 belge/karar kapsamı tamam. İç worktree ve 12 wrapper koruma kararı değişmedi.
 - **P1-2 durumu — Doğrulandı:** **8f60f8e üretim geçişi ve [HTTPS](https://138.68.71.27) kabulü tamamlandı.** API, bot, frontend, middleware ve PG16 sağlıklı; veri korunumu, dış HTTPS/auth/WSS, yetkisiz webhook reddi ve sertifika yenileme dry-run testi geçti. Eski supervisor'lar devre dışı; özgün DB/checkout ve geri dönüş kaynakları korundu.
@@ -35,6 +36,7 @@ Kullanıcının ilk isteği yalnız inceleme ve raporlamaydı; dosya değişikli
 - Kullanıcı 2026-09-13'te muhasebe kaynak yayını için önerilen tek ek eski günlüğün kaldırılması sorusuna **“Kaldığın yerden devam et”** yanıtını verdi. Bu doğrudan yanıt yalnız `p31-accounting-one-journal-removal-proposal-final.json` içindeki dosya için onay olarak yorumlandı ve işlem öncesinde açıklandı. Öneri SHA256 `6040593375bfbbc127b334e4cccc8346c5ee49222b81c4083e2b8f2dd10f5407`; yeni yetki kaydı SHA256 `eb2121308c7b99a6ce1841e35914b56db4fd9d2a358dc3d391ce782f2d9d414c`. Kayıttaki 11:22:36 UTC, yanıt okunduktan sonraki kayıt zamanıdır. Diğer altı eski günlük ve özel yedek korunur; ücretli yükseltme veya borsa emri yetkisi eklenmez. Disk zaten yayın rezervinin altında olduğundan yalnız bu kurtarma temizliği için sınırlı audit kaydı yazılır; 528 MiB yayın rezervi düşürülmez ve aktarım öncesinde gerçek boş alan ayrıca doğrulanır.
 - Kullanıcı 20 Eylül'de yeni üç günlük önerisine **“Kaldığın yerden devam et onaylıyorum”** yanıtını verdi. Bu açık onay yalnız `p1g2-20260920-three-journal-removal-proposal.json` içindeki üç tam yolu kapsar; öneri SHA256 `f5e50356a3a838693d90412aa8d3990ac1abfe4d9fc02540e57b82a090311890`. Yanıt okunduktan sonra 07:54:47 UTC'de oluşturulan onay kaydının SHA256'sı `7c2c44eecba14d86685a46f3892ac31b1d4b6b660cb973641f01cbf03137e314`; bu zaman mesajın gönderim zamanı değildir. İşlem öncesinde ilk iki dosyanın zaten bulunmadığı görüldü; yalnız kalan üçüncü dosya gerekli ve yeterli olduğundan kaldırıldı. Önceden bulunmayan dosyaların yokluk nedeni doğrulanmadı. Özel yedek, diğer günlükler, imaj/release/DB ve ücretli kapasite sınırları korundu.
 - Sonraki kullanıcı talimatıyla kapsam değişirse bu kayıt güncellenir. Daha önce açıkça verilmiş yetki tekrar sorulmaz.
+- Kullanıcı 21 Eylül'de projedeki gereksiz dosyaların silinmesini ve Markdown belgelerinin mantıklı biçimde `docs` altında toplanmasını açıkça istedi; konumu işlevsel dosyaların yerinde bırakılması kararını asistana verdi. Bu çalışma yerel repo/kaynak temizliğidir; sunucudaki yedek, veri ve kabul kayıtlarının silinmesini içermez.
 - Gerçek hesap, üretim veritabanı ve VPS üzerinde yapılan işlemler yerel geliştirme/test işlemlerinden ayrı kaydedilir.
 - Deploy yetkisi, gerçek/testnet emir gönderme, veri silme, force-push veya sunucudaki bilinmeyen yerel değişiklikleri ezme yetkisi olarak yorumlanmaz.
 - Gizli anahtarlar, parolalar ve token değerleri bu belgeye yazılmaz.
@@ -49,6 +51,50 @@ Kullanıcının ilk isteği yalnız inceleme ve raporlamaydı; dosya değişikli
 **Yalnız belge değişiklikleri:** Kaynak/bağlantı ve ilgili mevcut regression kontrolleri yapılır; tam SHA CI sonucu doğrulanır. Değişen belgeler Git blob'larından alınarak sunucuda sürümlü operator kaydına aktarılır ve SHA256 karşılaştırılır. Uygulama imajı/pointer/config veya veritabanı değiştirilmez, servis yeniden başlatılmaz. Son belge commit'inin kendisine referans döngüsü yaratmamak için tam commit/CI sonucu ve aktarım sonrası kabul, ilgili `/root/rapot-ops/<tarih-iş>/release-record.json` kaydında tutulur; yalnız push sunucuya belge aktarımı sayılmaz.
 
 **Mevcut mekanizma, koddan doğrulanan (P1-2 sonrası):** `.github/workflows/deploy.yml` release/manual tetiklemeli ve backend/frontend imajlarını tam commit SHA etiketiyle yayımlıyor; sunucu deploy'u yapmıyor. `scripts/deploy.ps1` temiz ağaç ve doğrulanmış tam SHA ister; isteğe bağlı push yapar, manuel sunucu komutlarını yazdırır, SSH çalıştırmaz. Repo içinde normal push'u sunucu deploy'una bağlayan bir workflow yok; sunucuda repo dışı otomasyon bulunup bulunmadığı henüz doğrulanmadı. Yalnız push yapılması deploy başarısı sayılmayacak.
+
+## 21 Eylül repo ve belge temizliği
+
+- Python import/literal taraması, TypeScript çözümleme grafiği, route/test/asset
+  tüketicileri ve eski dağıtım girişleri incelendi. Kullanılmayan
+  `batch_data_loader.py`, kök `test_binance.py`, `ecosystem.config.js`,
+  `start-api.sh`, 10 frontend modülü ve yedi public varlık kaldırıldı.
+  Docker/standalone paketleme sözleşmesi için `frontend/public/.gitkeep` kaldı.
+  Hiçbir komut/CI tüketicisi olmayan `frontend/tsconfig.typecheck.json` de
+  kaldırıldı; gerçek `tsconfig.json` ile typecheck yeniden geçti.
+- Dört atıl Radix bağımlılığı ve `date-fns` kaldırıldı: lock 505 → 482 paket,
+  eklenen/yükseltilen paket yok. Kalan paketlerin sürüm/resolved/integrity alanları
+  aynı; `@types/react-dom` optional peer zinciri kalkınca dev-only sınıflandı.
+- Üç eski mimari/tasarım belgesi kaldırıldı. Middleware execution planının
+  özgün 12 hazırlık ve üç takip maddesi `docs/MIDDLEWARE.md` içine birleştirildi.
+  Mimari, frontend, middleware, Pine ve dağıtım rehberleri `docs` altında;
+  konumu işlevsel kök rehberler ve kısa component README girişleri korundu.
+  Tarihsel silinmiş kaynak bağlantıları sabit Git commit'ine yönlendirildi.
+- Seçili `.venv` dışındaki eski `venv`, iki emekli araç ortamı
+  (`runtime-data/p1g1-candidate-venv`, `runtime-data/p23-security-tools`) ve
+  kökteki eksik `node_modules` kalıntısı kaldırıldı: **34.536 dosya /
+  1.032.618.042 bayt mantıksal içerik**. Mutlak yol, reparse ve aktif süreç
+  kontrolleri geçtikten sonra işlem yapıldı; bu sayı net disk boşluğu ölçümü değildir.
+- Testler bittikten sonra eski `.next`, kaynak `__pycache__` dizinleri,
+  pytest/Ruff/coverage çıktıları, tsbuildinfo ve üç atıl kök tanı günlüğü
+  temizlendi: **2.370 dosya / 107.638.517 bayt**. Yeni build için olağan
+  `npm run build` gerekir. `.tmp_pytest/pytest-of-memet` Windows erişim
+  engeli verdi; içeriği ölçülemediğinden bu tek eski önbellek korundu,
+  erişim izinleri değiştirilmedi.
+- Aktif `.venv`/frontend bağımlılıkları, kayıtlı iç Git worktree, 12 compatibility
+  wrapper'ı, bakım CLI'leri, veritabanları, yedekler ve geçmiş kabul kanıtları
+  işlevleri nedeniyle korundu. Eski PM2 süreçlerini tespit eden deploy kontrolü kaldı.
+- İlk tam test eski takvim bileşenine bağlı bir source kontrolünü yakaladı;
+  kontrol aktif `/calendar` sayfasının ortak API client/query kullanımına taşındı.
+  Son tam Python koşumu **996 geçti / 1 isteğe bağlı performans testi atlandı**;
+  frontend **113 geçti**, lint/typecheck/build/standalone proxy/WS kabulü başarılı.
+  228 tracked Python kaynağında Ruff lint/format geçti. Yeni npm audit
+  **482 paket / 0 bulgu**; raporlar `runtime-data/20260921-cleanup-*` altındadır.
+  27 Markdown dosyasında **381 yerel dosya/başlık ve altı tarihsel Git bağlantısı**
+  doğrulandı. Taşımalar hariç 26 tracked dosya kaldırıldı; eski ortam/cache ile
+  birlikte yaklaşık **1,16 GB dosya içeriği** temizlendi (net disk kazanımı değil).
+- Bu iş repo ve yerel geliştirme dizinini düzenler; çalışan Compose imajları için
+  rollout veya restart gerektirmez. Önceki üretim ve operator kabul kayıtları
+  tarihsel hash'leriyle korunur; Git push/CI üretim deploy'u olarak raporlanmaz.
 
 ## Başlangıç fotoğrafı
 
@@ -372,7 +418,7 @@ Migration `20260907_0004`, geçmiş order'larda hesap/venue kimliği kanıtlanam
 
 **Neden:** Komisyon net miktara işlenmiyor; fiyatlar altı ondalıkla sınırlı. Günlük sayım aday emri içerdiği için limit=1 ilk emri reddedebilir. Reconciliation şu an yalnız rapor. Replay suffix'inin eski client ID kısaltmasında kaybolması P0-4'te tam anahtar hash'iyle giderildi; kalan doğruluk sınırları bu maddede açık.
 
-**Dosyalar:** [adapter](../middleware/broker_adapters/binance_spot.py), [modeller](../middleware/infra/models.py), [risk](../middleware/risk/checks.py), [order repository](../middleware/repositories/order_repository.py), [tranche repository](../middleware/repositories/tranche_repository.py), [TradingService](../middleware/services/trading_service.py), [execution plan](../middleware/docs/BINANCE_SPOT_EXECUTION_PLAN.md).
+**Dosyalar:** [adapter](../middleware/broker_adapters/binance_spot.py), [modeller](../middleware/infra/models.py), [risk](../middleware/risk/checks.py), [order repository](../middleware/repositories/order_repository.py), [tranche repository](../middleware/repositories/tranche_repository.py), [TradingService](../middleware/services/trading_service.py), [execution plan](MIDDLEWARE.md#live-readiness-checklist).
 
 **Kabul kriterleri:**
 
@@ -401,6 +447,8 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 **2026-09-09 uygulaması:** Canonical topoloji Compose 2.24+: tek worker API + ayrı tek bot + Next standalone; opsiyonel middleware + ayrı PostgreSQL + tek seferlik Alembic servisi. Ana SQLite dizini `RAPOT_DATA_DIR` ile WAL/SHM ve bot kilidi dahil paylaşılır; kaynak kod image'dan gelir. Python 3.12.8/runtime constraint lock, Node 20.20.2/npm 10.9.9, build sırasında API/health Compose DNS hedefleri ve aynı origin üzerinden WebSocket yolu uygulandı. Ana DB hazırlığı ve middleware migration başarı koşulları başlatmaya bağlandı; üretimde Alembic head kontrol edilir, sürümsüz eski mw_* tabloları otomatik stamp edilmez. Doğrudan ve embedded bot girişleri ortak dosya kilidiyle korunur. Eski kilitsiz VPS süreçleri ilk geçişte tespit edildi; yedek ve sahiplik kontrolünden sonra eski supervisor'lar devre dışı bırakıldı.
 
 **Araç/doküman:** `scripts/runtime.py`, Compose, Dockerfile'lar, build-context dışlama kuralları, legacy PM2 launcher'ları, CI image kontrolleri ve `scripts/DEPLOY.md` güncellendi. Deploy scripti temiz ağaç + tam doğrulanmış SHA ister; isteğe bağlı push ve gerçek davranışını açıkça belirten manuel sunucu komutları üretir. Stage-all, stash ve reset kaldırıldı. Workflow'un image yayınlaması sunucu deploy'u olarak sunulmuyor.
+
+**21 Eylül repo düzeni notu:** Yukarıdaki P1-2 araç kaydı tarihseldir. Kullanılmayan eski PM2/API launcher dosyaları (`ecosystem.config.js`, `start-api.sh`) kaynak ağacından kaldırıldı; aşağıdaki bağlantıları sabit eski Git kaynağını gösterir. Desteklenen dağıtım yolu Compose, güncel rehber [docs/DEPLOY.md](DEPLOY.md) içindedir. Sunucudaki tarihsel yedek/rollback kayıtları bu repo temizliğiyle değiştirilmez.
 
 **Geçen kontroller:** Yeni Python kilit/topoloji/şema testleri 10/10; tam paket 315/319 ve yalnız önceki P1-7 hataları. Frontend 12/12, ESLint, TypeScript dahil production standalone build; gerçek standalone sunucuda sahte localhost API/bot ile HTML, statik JS, Authorization/query aktarımı, health ve WebSocket 101 testi geçti. Compose config ve PowerShell AST doğrulandı; değişen Python dosyalarında Ruff lint/format geçti.
 
@@ -454,7 +502,7 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 
 **Başlangıç sorunu:** Frontend Dockerfile standalone çıktı bekliyor fakat Next config bunu açmıyordu. Health proxy frontend localhost'una gidiyordu; middleware Compose'ta yoktu. Bu uyumsuzluklar ve deploy workflow'unun yanıltıcı adı giderildi.
 
-**Dosyalar:** [docker-compose.yml](../docker-compose.yml), [frontend Dockerfile](../frontend/Dockerfile), [Next config](../frontend/next.config.ts), [ecosystem.config.js](../ecosystem.config.js), [start-api.sh](../start-api.sh), [deploy workflow](../.github/workflows/deploy.yml), [deploy rehberi](../scripts/DEPLOY.md), [middleware README](../middleware/README.md).
+**Dosyalar:** [docker-compose.yml](../docker-compose.yml), [frontend Dockerfile](../frontend/Dockerfile), [Next config](../frontend/next.config.ts), [ecosystem.config.js](https://github.com/Rapto0/Rapot/blob/07b7e53dcad9301f56a0da097b36a81541584219/ecosystem.config.js), [start-api.sh](https://github.com/Rapto0/Rapot/blob/07b7e53dcad9301f56a0da097b36a81541584219/start-api.sh), [deploy workflow](../.github/workflows/deploy.yml), [deploy rehberi](DEPLOY.md), [middleware README](MIDDLEWARE.md).
 
 **Kabul kriterleri:**
 
@@ -503,7 +551,7 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 
 **Neden:** Son Pine commit'i büyük; başlangıçta derleme/alarm testi doğrulanmamıştı. Derleme artık kullanıcı bildirimiyle kayıtlı, alarm/runtime kabulü açık. Varsayılan Manuel/günlük/saat filtresi ile Kripto 24/7 preset'i farklı. barTime=timenow ve tüm payload hash'i, aynı bar/sinyalin tekrar semantiğini etkiliyor.
 
-**Dosyalar:** [Pine](../middleware/pine/combo_hunter_binance.pine), [Pine README](../middleware/pine/README.md), [payload modeli](../middleware/domain/events.py), [signal repository](../middleware/repositories/signal_repository.py), [middleware README](../middleware/README.md), [webhook testleri](../middleware/tests/test_webhook_validation.py).
+**Dosyalar:** [Pine](../middleware/pine/combo_hunter_binance.pine), [Pine README](PINE_CONTRACT.md), [payload modeli](../middleware/domain/events.py), [signal repository](../middleware/repositories/signal_repository.py), [middleware README](MIDDLEWARE.md), [webhook testleri](../middleware/tests/test_webhook_validation.py).
 
 **Kabul kriterleri:**
 
@@ -714,7 +762,7 @@ Recovery işlem geçmişini ilk trade ID'den itibaren 1.000'lik sayfalarla okuyo
 
 **Neden:** HUNTER açıklaması, Alembic kapsamı ve bazı bağımlılık notları eski. Paketleme aşama 5 açık; kaldırma takviminde canonical handler da legacy listesinde.
 
-**Dosyalar:** [AGENTS.md](../AGENTS.md), [README](../README.md), [Codex bağlamı](Codex.md), [paketleme haritası](PACKAGING_REFACTOR_MAP.md), [wrapper takvimi](WRAPPER_DEPRECATION_SCHEDULE.md), [DB politikası](DB_MIGRATION_POLICY.md), [eski spot backlog](ALGOTRADING_SPOT_BACKLOG.md), [compat telemetry](../infrastructure/compat/wrapper_telemetry.py).
+**Dosyalar:** [AGENTS.md](../AGENTS.md), [README](../README.md), [mimari bağlam](ARCHITECTURE.md), [paketleme haritası](PACKAGING_REFACTOR_MAP.md), [wrapper takvimi](WRAPPER_DEPRECATION_SCHEDULE.md), [DB politikası](DB_MIGRATION_POLICY.md), [eski spot backlog](ALGOTRADING_SPOT_BACKLOG.md), [compat telemetry](../infrastructure/compat/wrapper_telemetry.py).
 
 **Kabul kriterleri:**
 
@@ -1795,6 +1843,8 @@ birebir taşındığı söylenmez. Checkout/merge/cherry-pick veya branch silme 
 | 2026-09-20 | P3-1 son adım | Kalan kod → tam yerel kabul → CI/kaynak yayını | Benchmark NAV/dönem/veri yokluğu; WFA doğru al-tut adı ve tam pencere kapsamı; gerçek izole CLI JSON/CSV/SVG/XLSX. 74 yeni / tam Python 996-skip1 uyarısız, frontend 113 ve diğer kontroller geçti. Kaynak/CI kabulü final/release-record.json içinde. Kod kapsamı tamam; güncel Pine TradingView dış sonucu hâlâ açık, bağlı tarayıcı yok |
 
 | 2026-09-21 | P3-1 / P3-2 | Gerçek Pine grafik kabulü → backup kararı → belge kapanışı | Güncel kaynak SHA256 editörde ve yeniden açılan özel scriptte eşleşti; BINANCE:BTCUSDT / Candles / 1D skor tablosu ve TF OK görüldü. Oturum çakışması kullanıcı diğer grafikleri kapatınca çözüldü. Beş backup commitinden aktarım seçilmedi; 18 dosya incelendi. 62 Python / 9 frontend kontrolü geçti. P3-1/P3-2 tamam; gerçek alarm/filtre/emir kabulü erteli. Exact başarılı CI ve sunucu aktarımı sonrasında kabul p31-p32-closure/release-record.json kaydına bağlanacak |
+
+| 2026-09-21 | Repo temizliği | Kullanım denetimi → silme/belge taşıma → tam test | 22 atıl kaynak/varlık/config ve üç eski belge kaldırıldı; bir plan birleştirildi. Beş npm bağımlılığı/23 paket ve dört eski yerel ortam/kalıntı temizlendi. Docs indeksi ve yönlendirmeler hazır. 996 Python / 1 atlanan, 113 frontend, lint/type/build/standalone ve 482/0 audit geçti; üretim rollout gerekmedi. |
 
 Uygulama sırasında her iş için bu bilgileri günlüğe ekle:
 

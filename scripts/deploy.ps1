@@ -181,7 +181,7 @@ Write-Host "Recorded server (access unverified): $Server" -ForegroundColor Yello
 Write-Host "Open an authorized server shell. First run this read-only inventory block:" -ForegroundColor Cyan
 Write-Host $preflight
 Write-Host ""
-Write-Host "Before proceeding, follow scripts/DEPLOY.md: identify legacy processes, back up data, and prepare the environment." -ForegroundColor Yellow
+Write-Host "Before proceeding, follow docs/DEPLOY.md: identify legacy processes, back up data, and prepare the environment." -ForegroundColor Yellow
 Write-Host "Unknown bot ownership or unresolved data paths block deployment. Never stop unknown processes automatically."
 Write-Host "Then review and run this deployment block:" -ForegroundColor Cyan
 Write-Host $deployment

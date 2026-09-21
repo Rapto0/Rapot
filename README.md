@@ -7,8 +7,9 @@ process handles TradingView webhooks and order accounting.
 
 Current priorities, production evidence and deferred acceptance:
 [Rapot continuation plan](docs/RAPOT_DEVAM_PLANI.md). Documentation was compared with
-the source on **11 September 2026 (P2-2)**. Old backlog IDs and unchecked boxes are
+the source on **21 September 2026 (repository cleanup)**. Old backlog IDs and unchecked boxes are
 historical planning information; use the continuation plan for current work.
+The [documentation index](docs/README.md) groups the current technical guides and acceptance records.
 
 ## Architecture
 
@@ -27,12 +28,12 @@ Main dashboard trades/stats and middleware orders/positions are separate dataset
 Browser alarms run while the alarms page is open; they do not provide server-side
 24/7 monitoring. The settings page explains configuration scope; browser preferences
 are edited in their respective screens. Signal CSV exports include the
-currently loaded, filtered rows. See the [frontend guide](frontend/README.md).
+currently loaded, filtered rows. See the [frontend guide](docs/FRONTEND.md).
 
 Canonical imports and compatibility decisions are in the
 [packaging map](docs/PACKAGING_REFACTOR_MAP.md) and
 [wrapper removal policy](docs/WRAPPER_DEPRECATION_SCHEDULE.md). Technical flows and
-known limits are described in [the architecture context](docs/Codex.md).
+known limits are described in [the architecture context](docs/ARCHITECTURE.md).
 
 ## Signal Scores
 
@@ -98,7 +99,7 @@ and `frontend`. The optional `middleware` profile adds `postgres`,
 `middleware-migrate` and `middleware`. Init/migrate are one-shot jobs; middleware
 uses its own database, with DRY_RUN and trading/live disabled in Compose.
 
-Prepare the data directory and configuration using [the deployment guide](scripts/DEPLOY.md)
+Prepare the data directory and configuration using [the deployment guide](docs/DEPLOY.md)
 before starting Compose. Main SQLite uses `db_session.init_db()` and compatible
 schema additions; middleware uses Alembic migrations and a production revision
 check. The legacy `migrate_db.py` script is not a general deployment command.
@@ -170,7 +171,7 @@ commit does not change the running application images.
   account changes clear query caches and private component state. No middleware admin key
   belongs in a frontend environment variable.
 - Middleware management uses a separate `MW_ADMIN_AUTH_TOKEN` through `X-Admin-Token`;
-  see its [access policy](middleware/README.md#management-authentication).
+  see its [access policy](docs/MIDDLEWARE.md#management-authentication).
 - `JWT_SECRET_KEY` is required by default.
 - Only for isolated local development, insecure fallback requires all three:
   an empty `JWT_SECRET_KEY`, `APP_ENV=development`, and

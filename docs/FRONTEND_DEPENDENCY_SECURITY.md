@@ -30,6 +30,14 @@ dayanarak istisna tanımlanmadan yükseltildi.
 
 ## Rapot'ta incelenen yollar
 
+Bu tablo 13 Eylül incelemesinin kaynak durumunu anlatır. 21 Eylül repo
+temizliğinde referansı olmayan yedi public varlık (iki PNG dahil) kaldırıldı.
+Beş tüketicisiz doğrudan bağımlılığın kaldırılmasıyla lock kapsamı 505'ten
+482 pakete indi; kalan paketlerin sürüm, resolved ve integrity alanları değişmedi.
+Yeni tam kapsamlı audit **482 paket / 0 bulgu** verdi; yerel kanıt
+`runtime-data/20260921-cleanup-npm-security/` altındadır. Bu yerel temizlik,
+aşağıdaki tarihli üretim imajı kabulünü değiştirmez.
+
 | Kanıt | Çıkarım ve sınır |
 |---|---|
 | [Dockerfile](../frontend/Dockerfile), [Next yapılandırması](../frontend/next.config.ts) | `node:20.20.2-alpine`, `output: standalone`, `node server.js`; self-hosted Node sunucusu. Dockerfile tek başına canlı imaj kimliği kanıtı değildir. Yerel geliştirme Windows'tadır. |

@@ -2,7 +2,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FRONTEND_SRC = REPO_ROOT / "frontend" / "src"
-ECONOMIC_CALENDAR_COMPONENT = FRONTEND_SRC / "components" / "dashboard" / "economic-calendar.tsx"
+ECONOMIC_CALENDAR_PAGE = FRONTEND_SRC / "app" / "calendar" / "page.tsx"
 API_CORE_FILE = FRONTEND_SRC / "lib" / "api" / "core.ts"
 API_CLIENT_FACADE_FILE = FRONTEND_SRC / "lib" / "api" / "client.ts"
 REALTIME_CONNECTION_FILE = FRONTEND_SRC / "lib" / "realtime" / "use-realtime-connection.ts"
@@ -29,10 +29,14 @@ def test_frontend_has_no_hardcoded_local_backend_urls():
     )
 
 
-def test_economic_calendar_uses_shared_api_client():
-    source = ECONOMIC_CALENDAR_COMPONENT.read_text(encoding="utf-8", errors="ignore")
+def test_economic_calendar_page_uses_shared_api_client():
+    source = ECONOMIC_CALENDAR_PAGE.read_text(encoding="utf-8", errors="ignore")
 
-    assert "fetchEconomicCalendar" in source
+    assert (
+        'import { fetchEconomicCalendar, type EconomicCalendarEvent } from "@/lib/api/client"'
+        in source
+    )
+    assert "queryFn: () => fetchEconomicCalendar(" in source
     assert "http://localhost:8000" not in source
 
 

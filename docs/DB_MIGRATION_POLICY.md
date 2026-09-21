@@ -26,7 +26,7 @@ P2-4 indeksi yeni DB için model metadata'sında, mevcut DB için açık `CREATE
 
 Yeni model/alan için hem model hem açık ekleme yolu incelenir. Eski şema örneğinde iki ardışık `init_db()` çağrısı, kayıt korunumu ve yeni okuma/yazma yolu test edilir. Drop, rename, tip daraltma veya tarihsel veri dönüşümü başlangıca sessizce eklenmez; ayrı veri koruma ve geri dönüş planı gerekir. Bu yolun Alembic revision numarası veya otomatik downgrade'i yoktur.
 
-[scripts/runtime.py](../scripts/runtime.py) içindeki `init-main-db` komutu **şemaya yazabilir**. Üretim env/veri yolu ve Compose override dosyaları [dağıtım runbook'u](../scripts/DEPLOY.md) ile seçilmelidir; komut bir sağlık kontrolü yerine çalıştırılmaz. Kanonik uygulama runtime'ı Python **3.12**'dir.
+[scripts/runtime.py](../scripts/runtime.py) içindeki `init-main-db` komutu **şemaya yazabilir**. Üretim env/veri yolu ve Compose override dosyaları [dağıtım runbook'u](DEPLOY.md) ile seçilmelidir; komut bir sağlık kontrolü yerine çalıştırılmaz. Kanonik uygulama runtime'ı Python **3.12**'dir.
 
 ## Veri taşıma ve backfill araçlarının sınırları
 

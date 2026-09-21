@@ -71,5 +71,5 @@ jobs:
             echo "Source commit: $SOURCE_SHA"
             echo "Backend: $REGISTRY/$IMAGE_REPOSITORY/backend:$SOURCE_SHA"
             echo "Frontend: $REGISTRY/$IMAGE_REPOSITORY/frontend:$SOURCE_SHA"
-            echo 'Follow scripts/DEPLOY.md for verified-commit checks, backups, migrations and server rollout.'
+            echo 'Follow docs/DEPLOY.md for verified-commit checks, backups, migrations and server rollout.'
           } >> "$GITHUB_STEP_SUMMARY"
