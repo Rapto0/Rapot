@@ -20,6 +20,7 @@ export default function RootLayout({
   return (
     <html lang="tr" className="dark">
       <body className="antialiased bg-background text-foreground font-sans">
+        <a href="#main-content" className="skip-link">İçeriğe geç</a>
         <Providers>
           <Sidebar />
           <Header />

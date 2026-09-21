@@ -80,14 +80,14 @@ export function Header() {
   }
 
   return (
-    <header className="fixed left-0 right-0 top-0 z-50 hidden h-10 border-b border-border bg-surface md:left-14 md:block">
+    <header className="fixed left-0 right-0 top-0 z-50 hidden h-10 border-b border-border bg-surface md:left-14 md:block xl:left-44">
       <div className="flex h-full items-center justify-between px-4">
         <div className="flex items-center gap-2 text-sm">
           <Link href="/" className="font-semibold text-foreground">
             Rapot
           </Link>
           <span className="text-muted-foreground">|</span>
-          <span className="text-muted-foreground">Otonom Piyasa Analizi</span>
+          <span className="hidden text-muted-foreground lg:inline">Otonom Piyasa Analizi</span>
         </div>
 
         <div className="flex items-center gap-4">

@@ -6,7 +6,7 @@ export default function ChartLayout({
   children: ReactNode
 }>) {
   return (
-    <div className="-mb-16 h-[calc(100vh-40px+4rem)] overflow-hidden md:mb-0 md:h-[calc(100vh-40px)]">
+    <div className="-mb-[16px] h-[calc(100dvh-120px-env(safe-area-inset-bottom))] overflow-hidden md:-mb-4 md:h-[calc(100dvh-2.5rem)]">
       {children}
     </div>
   )

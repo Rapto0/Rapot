@@ -1,11 +1,9 @@
 "use client"
 
-import { useEffect, useMemo, useState, type ComponentType, type KeyboardEvent } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useMemo, useState, type ComponentType } from "react"
 import Link from "next/link"
-import { Search, ArrowRight, CalendarDays, LineChart, Activity, History, Bell, Brain } from "lucide-react"
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
+import { CalendarDays, LineChart, Activity, History, Bell, Brain } from "lucide-react"
+import { SymbolSearch } from "@/components/dashboard/symbol-search"
 import { useBinanceTicker } from "@/lib/hooks/use-binance-ticker"
 import { fetchGlobalIndices, type GlobalIndexData } from "@/lib/api/client"
 import { cn } from "@/lib/utils"
@@ -57,7 +55,7 @@ const LIVE_MARKET_CATEGORIES: MarketCategory[] = [
       { id: "NASDAQ100", label: "NASDAQ 100", source: "indices", feedSymbol: "^NDX" },
       { id: "SP500", label: "S&P 500", source: "indices", feedSymbol: "^GSPC" },
       { id: "NVDA", label: "NVDA", source: "indices", feedSymbol: "NVDA" },
-      { id: "AAPL", label: "AAPLE (AAPL)", source: "indices", feedSymbol: "AAPL" },
+      { id: "AAPL", label: "Apple (AAPL)", source: "indices", feedSymbol: "AAPL" },
       { id: "TSLA", label: "TSLA", source: "indices", feedSymbol: "TSLA" },
       { id: "GOOGL", label: "GOOGL", source: "indices", feedSymbol: "GOOGL" },
       { id: "VIX", label: "VIX Korku Endeksi", source: "indices", feedSymbol: "^VIX" },
@@ -66,7 +64,7 @@ const LIVE_MARKET_CATEGORIES: MarketCategory[] = [
   {
     id: "commodities-fx",
     label: "Emtia ve Döviz",
-    description: "Saniyelik işlenen emtia, DXY ve USD/TRY",
+    description: "Emtia, DXY ve USD/TRY özeti",
     items: [
       { id: "XAUUSD", label: "XAUUSD", source: "indices", feedSymbol: "XAUUSD=X" },
       { id: "XAGUSD", label: "XAGUSD", source: "indices", feedSymbol: "XAGUSD=X" },
@@ -95,8 +93,6 @@ function chunkSymbols(symbols: string[], size: number): string[][] {
 }
 
 export default function LandingPage() {
-  const router = useRouter()
-  const [searchQuery, setSearchQuery] = useState("")
   const [marketData, setMarketData] = useState<Record<string, GlobalIndexData>>({})
   const cryptoTicker = useBinanceTicker(BINANCE_SYMBOLS)
 
@@ -162,16 +158,6 @@ export default function LandingPage() {
     [cryptoTicker, marketData]
   )
 
-  const handleSearch = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key !== "Enter") return
-
-    const symbol = searchQuery.trim().toUpperCase()
-    if (!symbol) return
-
-    const market = symbol.includes("USDT") || symbol.includes("BTC") || symbol.includes("ETH") ? "Kripto" : "BIST"
-    router.push(`/chart?symbol=${encodeURIComponent(symbol)}&market=${market}`)
-  }
-
   return (
     <div className="mx-auto flex min-h-[calc(100vh-40px)] w-full max-w-[1680px] flex-col gap-4 p-4 md:p-5">
       <section className="border border-border bg-surface p-5">
@@ -179,38 +165,15 @@ export default function LandingPage() {
           <div className="space-y-3">
             <div className="label-uppercase">Rapot Terminal</div>
             <h1 className="max-w-3xl text-xl font-semibold tracking-[-0.02em] md:text-2xl">
-              Kripto, BIST, ABD ve emtia tarafında veri odaklı izleme, analiz ve sinyal akışı
+              Piyasalara genel bakış
             </h1>
             <p className="max-w-2xl text-sm text-muted-foreground">
-              Canlı fiyatları kategori bazlı takip et, sembol ara ve doğrudan grafik görünümüne geç.
+              Piyasa özetlerini takip et. BIST veya kripto sembolü seçerek grafiğini aç.
             </p>
           </div>
 
-          <div className="w-full max-w-xl">
-            <label className="label-uppercase mb-2 block">Sembol Arama</label>
-            <div className="relative flex items-center gap-2">
-              <Search className="pointer-events-none absolute left-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                onKeyDown={handleSearch}
-                className="h-9 pl-9"
-                placeholder="Örn: BTCUSDT, THYAO"
-              />
-              <Button
-                type="button"
-                className="h-9 shrink-0"
-                onClick={() => {
-                  const symbol = searchQuery.trim().toUpperCase()
-                  if (!symbol) return
-                  const market = symbol.includes("USDT") || symbol.includes("BTC") || symbol.includes("ETH") ? "Kripto" : "BIST"
-                  router.push(`/chart?symbol=${encodeURIComponent(symbol)}&market=${market}`)
-                }}
-              >
-                Aç
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Button>
-            </div>
+          <div className="w-full min-w-0 max-w-xl">
+            <SymbolSearch />
           </div>
         </div>
       </section>
@@ -220,13 +183,13 @@ export default function LandingPage() {
           <article key={category.id} className="border border-border bg-surface p-3">
             <div className="flex items-center justify-between border-b border-[rgba(255,255,255,0.04)] pb-2">
               <div>
-                <div className="label-uppercase">{category.label}</div>
+                <h2 className="label-uppercase">{category.label}</h2>
                 <p className="mt-1 text-[10px] text-muted-foreground">{category.description}</p>
               </div>
               <span className="mono-numbers text-[10px] text-muted-foreground">{category.rows.length} enstrüman</span>
             </div>
 
-            <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="mt-2 grid grid-cols-2 gap-2">
               {category.rows.map((item) => (
                 <MarketStrip key={item.key} label={item.label} value={item.value} change={item.change} />
               ))}
@@ -235,7 +198,8 @@ export default function LandingPage() {
         ))}
       </section>
 
-      <section className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <section aria-labelledby="quick-links-heading" className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <h2 id="quick-links-heading" className="sr-only">Hızlı erişim</h2>
         <QuickLinkCard
           href="/trades"
           title="İşlemler"
@@ -275,7 +239,7 @@ export default function LandingPage() {
       </section>
 
       <section className="border border-border bg-surface p-4 text-xs text-muted-foreground">
-        <div className="label-uppercase mb-2">Not</div>
+        <h2 className="label-uppercase mb-2">Verileri okurken</h2>
         <p>
           Renkler yalnızca veri anlamı için kullanılır. Pozitif değerler yeşil, negatif değerler kırmızı olarak gösterilir.
         </p>
@@ -306,7 +270,7 @@ function MarketStrip({
 
   return (
     <div className="border border-border bg-base px-3 py-2">
-      <div className="label-uppercase mb-1">{label}</div>
+      <h3 className="label-uppercase mb-1">{label}</h3>
       <div className="mono-numbers text-lg font-semibold">{formattedValue}</div>
       <div className={cn("mono-numbers text-xs", hasChange ? (isPositive ? "text-profit" : "text-loss") : "text-muted-foreground")}>
         {hasChange ? `${isPositive ? "+" : ""}${(change ?? 0).toFixed(2)}%` : "--"}
@@ -331,7 +295,7 @@ function QuickLinkCard({
       <div className="mb-3 flex h-8 w-8 items-center justify-center border border-border bg-base text-muted-foreground group-hover:text-foreground">
         <Icon className="h-4 w-4" />
       </div>
-      <h2 className="mb-1 text-sm font-semibold">{title}</h2>
+      <h3 className="mb-1 text-sm font-semibold">{title}</h3>
       <p className="text-xs text-muted-foreground">{description}</p>
     </Link>
   )

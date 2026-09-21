@@ -2698,16 +2698,16 @@ export function AdvancedChartPage({
         <div
             ref={fullscreenContainerRef}
             className={cn(
-                "relative flex h-full min-h-0 overflow-hidden rounded-sm bg-background glass-panel-intense",
+                "relative flex h-full min-h-0 flex-col overflow-y-auto rounded-sm bg-background glass-panel-intense lg:flex-row",
                 isFullscreen ? "fixed inset-0 z-50 rounded-none" : ""
             )}
         >
             {/* Main Chart Area */}
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+            <div className="flex min-h-0 min-w-0 shrink-0 flex-col lg:flex-1">
                 {/* Header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-border/30">
+                <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-b border-border/30">
                     {/* Symbol Selector */}
-                    <div className="flex items-center gap-4">
+                    <div className="flex flex-wrap items-center gap-4">
                         <div className="relative">
                             <button
                                 aria-label={`Sembol seç: ${symbol} (${marketType})`}
@@ -2724,7 +2724,7 @@ export function AdvancedChartPage({
                             </button>
 
                             {showSymbolSearch && (
-                                <div className="absolute top-full left-0 mt-2 w-96 glass-panel z-50 overflow-hidden">
+                                <div className="absolute top-full left-0 mt-2 w-96 max-w-[calc(100vw-40px)] glass-panel z-50 overflow-hidden">
                                     <div className="p-3 border-b border-border/30">
                                         <div className="relative">
                                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -2772,7 +2772,7 @@ export function AdvancedChartPage({
                     </div>
 
                     {/* Timeframe & Controls */}
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-3">
                         {/* Quick Timeframes */}
                         <div className="flex items-center bg-muted/30 rounded-sm p-1">
                             {availableQuickTimeframes.map((tf) => (
@@ -2914,7 +2914,7 @@ export function AdvancedChartPage({
                         <IconButton
                             onClick={() => setShowRightPanel(!showRightPanel)}
                             className={cn("p-2 rounded-sm transition-all bg-muted/30 hover:bg-muted/50", showRightPanel && "text-primary")}
-                            label={showRightPanel ? "Sağ paneli gizle" : "Sağ paneli göster"}
+                            label={showRightPanel ? "İzleme panelini gizle" : "İzleme panelini göster"}
                         >
                             {showRightPanel ? <PanelRightClose className="h-4 w-4" /> : <PanelRightOpen className="h-4 w-4" />}
                         </IconButton>
@@ -2931,7 +2931,7 @@ export function AdvancedChartPage({
 
                 {/* OHLCV Info Bar */}
                 {displayOHLCV && (
-                    <div className="flex items-center gap-6 px-4 py-2 border-b border-border/30 bg-muted/10">
+                    <div className="flex shrink-0 items-center gap-6 overflow-x-auto px-4 py-2 border-b border-border/30 bg-muted/10">
                         <div className="flex items-center gap-6 text-sm">
                             <div className="flex items-center gap-2">
                                 <span className="text-muted-foreground text-xs uppercase">Açılış</span>
@@ -3149,8 +3149,8 @@ export function AdvancedChartPage({
                 ))}
 
                 {/* Status Bar */}
-                <div className="flex items-center justify-between px-4 py-2 border-t border-border/30 text-xs text-muted-foreground">
-                    <div className="flex items-center gap-4">
+                <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-4 py-2 border-t border-border/30 text-xs text-muted-foreground">
+                    <div className="flex flex-wrap items-center gap-4">
                         <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-profit animate-pulse" />Canlı</span>
                         <span>{candles.length} mum</span>
                         <span>Periyot: {currentTimeframeLabel}</span>
@@ -3165,7 +3165,7 @@ export function AdvancedChartPage({
 
             {/* Right Panel - Watchlist (TradingView Style) */}
             {showRightPanel && (
-                <div className="flex w-[300px] border-l border-border/30 bg-surface text-foreground xl:w-[320px]">
+                <div className="flex w-full shrink-0 border-t border-border/30 bg-surface text-foreground lg:w-[300px] lg:border-l lg:border-t-0 xl:w-[320px]">
                     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                         <div className="relative flex items-center gap-1 px-2 py-2 border-b border-border">
                             <div className="relative">

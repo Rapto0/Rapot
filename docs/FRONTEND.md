@@ -138,6 +138,35 @@ platform paketi için ürettiği `npm ls` uyarısı
   bağlandığı varsayılmamalıdır. Frontend COMBO/HUNTER hesaplamalarıyla Python/Pine
   hesaplamalarının birebir eşitliği ayrıca doğrulanmış değildir.
 
+## Gezinme ve arama iyileştirmesi — 21 Eylül 2026
+
+- Mobil alt menü dört ana ekran ve **Diğer** düğmesini içerir. Alarmlar,
+  İşlemler, Bot Sağlığı, AI Analizi, Takvim ve Ayarlar bu menüden açılır.
+  Native dialog odağı içeride tutar; Escape, kapatma düğmesi, dış alan,
+  sayfa seçimi ve masaüstü genişliğine geçişte kapanır. Alt boşluk cihazın
+  güvenli alanını hesaba katar. Masaüstü menü adları geniş ekranda görünür;
+  kısa ekranlarda menü kaydırılabilir. Aktif bağlantı `aria-current` taşır.
+- **İçeriğe geç** bağlantısı ve belirgin klavye odağı eklendi. Ana arama
+  açık BIST/Kripto seçimi kullanır; varsayılan BIST'tir. `BTCIM` gibi BIST
+  sembolleri artık `BTC` metni nedeniyle Kripto'ya yönlenmez. Enter ve düğme
+  aynı formu gönderir. Boş/geçersiz sembol açıklanır ve girişe odaklanılır;
+  geçerli biçim sağlayıcıda listelenme garantisi değildir.
+- Arama kontrolleri 44 px, sembol giriş yazısı 16 px'tir. Ana ekran başlığı
+  kısaltıldı, piyasa kartları mobilde iki sütun oldu. Grafik araçları dar
+  alanda sarılır; 1024 px altında izleme paneli grafiğin altına geçer.
+  Grafik yüksekliği üst/alt gezinme alanıyla eşleşir; hesaplama değişmedi.
+
+Yerel tarayıcı kontrolünde 320, 390, 768 ve 1280 px genişlikler; boş arama,
+BIST/BTCIM Enter gönderimi, Kripto/ETHUSDT düğme gönderimi, sağlık ekranına
+menüden erişim, Escape/resize kapanışı ve yatay taşma kontrol edildi. 44 px
+kontrol yüksekliği ve odaklanan girişin 16 px yazısı DOM üzerinden ölçüldü.
+API/health hedefleri kullanılmayan yerel portlardı; grafik kabulü yerleşim ve
+yönlendirme kapsamındadır. Bu, gerçek mum/veri doğruluğu veya dış alarm/emir
+kabulü değildir. Mevcut Binance fiyat akışı salt okunur kaldı.
+
+Altı yeni arama regresyonuyla frontend **119 test** geçer. Güncel CI ve
+üretim sürümü [devam planından](RAPOT_DEVAM_PLANI.md) izlenir.
+
 ## 🎨 Tema
 
 Proje **Dark Mode** odaklı tasarlanmıştır. Renk paleti TradingView dark temasıyla uyumludur:

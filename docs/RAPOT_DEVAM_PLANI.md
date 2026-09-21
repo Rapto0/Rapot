@@ -9,6 +9,12 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Kaldığımız nokta
 
+- **Yeni kullanıcı kapsamı: arayüz iyileştirmeleri (UI-1).** Mobil tam menü,
+  masaüstü menü adları, klavye odağı, açık piyasa seçimiyle sembol arama ve
+  dar ekranda grafik/izleme paneli düzeni uygulandı. Altı yeni regresyonla
+  119 frontend testi ve 320–1280 px yerel tarayıcı kontrolü geçti.
+  [Davranış ve kabul sınırları](FRONTEND.md#gezinme-ve-arama-iyileştirmesi--21-eylül-2026).
+  Exact CI ve frontend-only üretim yayını henüz bu kaynak kaydının sonrasındadır.
 - **P0–P3 geliştirme işleri tamamlandı.** P1-3'ün gerçek alarm/emir dış kabulü
   kullanıcı kararıyla erteli; aşağıdaki tablo bu ayrımı korur.
 - **P3-1 kapandı:** altı kod adımı, sabit verili gerçek CLI ve güncel Pine
@@ -16,12 +22,12 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
   doğrulanmış sayılmaz.
 - **P3-2 kapandı:** backup branch'teki beş commit ve 18 frontend dosyası
   incelendi; aktarım seçilmedi. Backup ref ve kayıtlı iç worktree korundu.
-- **Son kaynak işi repo temizliği:** `abc918ededf6b491ea6cda707fb1d1005d0eaa84`,
+- **Önceki kaynak işi repo temizliği:** `abc918ededf6b491ea6cda707fb1d1005d0eaa84`,
   [CI 35640081565](https://github.com/Rapto0/Rapot/actions/runs/35640081565),
   beş job başarılı. 26 atıl/tekrarlı dosya, beş doğrudan npm bağımlılığı
   (toplam 23 paket) ve eski ortam/cache çıktıları kaldırıldı. Rehberler `docs/`
   altında; kök ve bileşen giriş README'leri uygun yerlerinde.
-- **Son kod doğrulaması:** 996 Python testi geçti, bir isteğe bağlı performans
+- **Temizlik doğrulaması:** 996 Python testi geçti, bir isteğe bağlı performans
   testi atlandı; 113 frontend testi, lint, typecheck, build ve standalone
   HTTP/WS kontrolleri geçti. npm audit: **482 paket / 0 bulgu**.
 - Temizlikte yaklaşık **1,16 GB dosya içeriği** kaldırıldı; bu net disk boşluğu
@@ -32,8 +38,10 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Sıradaki işler ve ertelenen kabul
 
-Planın geliştirme listesinde sıradaki açık P maddesi yok. Yeni kullanıcı isteği
-üzerinden devam et; kapatılmış işleri veya eski onay bekleme kayıtlarını yeniden başlatma.
+P0–P3 geliştirme listesi kapalıdır. Kullanıcı arayüz iyileştirmelerini seçti;
+UI-1'in CI/üretim kabulünden devam edilir. Sonraki arayüz adayı ana sayfadaki
+veri güncelliği/hata bilgisidir; bu pakette veri akışı değiştirilmedi.
+Kapatılmış işleri veya eski onay bekleme kayıtlarını yeniden başlatma.
 
 | Konu | Durum / devam koşulu |
 |---|---|
@@ -73,8 +81,8 @@ açılmadı. Bu taslak sınırlar kendi başına emir veya alıcıyı açma yetk
   [Özgün ifadeler, yollar ve hash'ler](archive/RAPOT_DEVAM_GECMISI_2026-09-21.md#kapsam-ve-yetki-kaydı).
 - 21 Eylül repo temizliği talimatı, gereksiz **yerel proje** dosyalarını silmeyi
   ve Markdown rehberlerini toplamayı kapsadı; sunucu verisi/yedeği silme yetkisi eklemedi.
-- Sonraki istek bu planın sadeleştirilmesidir. Eski metin arşivde bütünüyle
-  korunur; güncel kararlar burada, ayrıntılı sözleşmeler ilgili teknik rehberdedir.
+- Planın sadeleştirilmesi `8a05b11` ile tamamlandı; eski metin arşivde bütünüyle
+  korunur. Son kullanıcı seçimi arayüz iyileştirmeleridir; dış kabul ertelemesi sürer.
 - Deploy yetkisi; gerçek/testnet emri, üretim verisi silme/geri yükleme,
   force-push veya sunucudaki bilinmeyen değişiklikleri ezme yetkisi değildir.
   Belgenin kendisi yeni yetki üretmez. Gerçek kullanıcı kapsam değişikliği kayda geçirilir.
