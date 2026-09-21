@@ -117,8 +117,11 @@ HTF toplaması ve alarm sözleşmesi aynı kaldı.
 
 Regresyon testi yalnız gerçek iki Pine fonksiyon gövdesinin izin verilen dar
 sözdizimini yorumlar. Genel Pine derleyicisi, `ta.*` yürütücüsü veya TradingView
-kabulü değildir. Mevcut kullanıcı derleme/grafik kabulü 9–10 Eylül kaynağına
-aittir; değişmiş kaynağın TradingView derlemesi ve yürütmesi ayrıca açık kalır.
+kabulü değildir. 9–10 Eylül kullanıcı kabulü eski kaynağa aittir. Güncel
+1.091 satırlık kaynağın hash'i doğrulanarak **21 Eylül'de ayrı TradingView
+derleme/grafik kabulü** tamamlandı: BINANCE:BTCUSDT / standart mum / 1D,
+Manuel preset, skor tablosu ve TF OK. [Gerçek tarayıcı kabul kaydı](PINE_RUNTIME_ACCEPTANCE.md)
+bu gözlemi, kaynak kimliğini ve ertelenen alarm/emir sınırlarını açıklar.
 Pine'ın RSI/CCI tepe eşikleri, gösterge ağırlıkları, native/custom hesaplama ve
 çoklu HTF koşulları nedeniyle son Pine alarmını Python/TS puanıyla eşdeğer
 saymak mümkün değildir. Sayısal Python/TS raporunda Pine çalıştırılmış gösterilmez.

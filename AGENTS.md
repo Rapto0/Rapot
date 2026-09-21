@@ -1,6 +1,6 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-Kaynaklarla son karşılaştırma: **20 Eylül 2026 / P3-1 son adım**. İş sırası, kullanıcı
+Kaynaklarla son karşılaştırma: **21 Eylül 2026 / P3-1 ve P3-2 kapanışı**. İş sırası, kullanıcı
 yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DEVAM_PLANI.md)
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 
@@ -118,7 +118,7 @@ metadata Next16.3.5, Sharp0.35.4, libheif1.23.2 ve libvips8.18.6'yı doğruladı
 bu exploit, görüntü decode veya etkileşimli tarayıcı testi değildir. Taze npm
 audit 505/0; sabit 528 MiB disk rezervi korundu. Onaylı üç eski günlük yolundan
 ikisi işlem öncesinde yoktu, yalnız kalan bir yedekli dosya kaldırıldı. Ayrıntılı
-yetki/kabul ve sonraki P3-1 ortak nakit işi devam planındadır.
+yetki/kabul ve tamamlanan P3-1 backtest işleri devam planındadır.
 
 ## Strateji terminolojisi
 
@@ -150,8 +150,12 @@ yetki/kabul ve sonraki P3-1 ortak nakit işi devam planındadır.
   Hesaplayıcı yeterli sonlu göstergeyle puan üretebilir; yerel alarm son kaydın tüm
   göstergeleri sonlu değilse `unknown` döndürür. P3-1 ikinci adımında özel Pine
   EMA/ATR devam döngüleri yalnız seed sonrasında çalışacak biçimde sınırlandı;
-  kaynak alt kümesi sayısal testi TradingView derleyicisi değildir. Güncel Pine
-  derleme/runtime kabulü ayrıca açık. Gerçek Python/TS ölçümünün kapsamı ve
+  kaynak alt kümesi sayısal testi TradingView derleyicisi değildir. Güncel 1.091
+  satırlık Pine, 21 Eylül'de hash'i doğrulanmış ayrı özel script ile TradingView
+  BINANCE:BTCUSDT / standart mum / 1D grafiğinde derlenip çalıştırıldı; skor
+  tablosu ve TF OK görüldü. [Kabul kaydı](docs/PINE_RUNTIME_ACCEPTANCE.md)
+  gerçek alarm/filtre/testnet kapsamının hâlâ erteli olduğunu açıklar.
+  Gerçek Python/TS ölçümünün kapsamı ve
   varsayılan/formül farkları [karşılaştırma belgesinde](docs/STRATEGY_COMPARISON.md).
   Motorları topluca eşitleme kararı verilmedi; yerel backtest kabulü aşağıdadır.
 
@@ -204,6 +208,11 @@ deneyleridir. `python -m scripts.backtest_fixture --output-dir <yeni-dizin> --ex
 boş geçici ayar ortamında gerçek COMBO/HUNTER ve JSON/CSV/SVG/XLSX çıktısını sınar;
 ağ/sağlayıcı/SQLite/subprocess girişimleri engellenir. [CLI rehberi](docs/BACKTEST_CLI.md)
 tekrarlama komutunu ve gerçek piyasa/dış kabul sınırlarını açıklar.
+
+P3-2'de `backup/pre-da7d452-rollback` içindeki beş commit ve 18 frontend dosyası
+değerlendirildi; eski kod/belge aktarımı seçilmedi. Güncel tasarım, nullable
+sağlık sözleşmesi ve backup ref korunur. [Karar kaydı](docs/BACKUP_BRANCH_REVIEW.md)
+parçaların güncel karşılığını açıklar; branch otomatik merge/silme adayı değildir.
 
 ## Veri, erişim ve dağıtım
 

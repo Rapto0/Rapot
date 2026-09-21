@@ -348,8 +348,8 @@ passed locally. Source `967f137351290735d7e6ae556b4ad237c253677c` passed
 [CI 34746909758](https://github.com/Rapto0/Rapot/actions/runs/34746909758) and
 [image publication 34747132287](https://github.com/Rapto0/Rapot/actions/runs/34747132287).
 The bounded frontend production rollout passed on 13 September at 08:59:10 UTC.
-This completes the first COMBO fix; P3-1 strategy equivalence, Pine boundaries and
-backtest work remain open.
+This completed the first COMBO fix. The remaining P3-1 work was accepted in the
+later source and 21 September Pine closure records below.
 
 For this P3-1 first step, the component rollout avoided another full source archive
 after the exact Git diff was restricted to reviewed frontend files and documentation,
@@ -528,10 +528,32 @@ budget before the first write; no service change, deletion or database action
 is included. Frontend `bbd9377`, backend/Compose/current `279aa9f` remain active.
 
 The code and offline acceptance do not certify TradingView compilation/runtime.
-On this task's current browser inventory no browser was connected. The latest
-Pine source therefore needs separate external acceptance; previous user reports
-for the pre-fix source and the narrow Pine source tests do not substitute for it.
+On 20 September no browser was connected. Separate current-source acceptance
+was completed on 21 September as recorded below; the earlier user reports and
+narrow Pine source tests were not used as substitutes.
 Deferred real alarm/testnet/order acceptance remains outside this publication.
+
+## P3-1 Pine and P3-2 decision closure — 21 September 2026
+
+The unchanged 1,091-line Pine source was copied into TradingView, checked by
+SHA256 before paste, after editor copyback and after reopening the saved private
+script. On BINANCE:BTCUSDT / standard Candles / 1D it compiled and rendered the
+score table and TF OK status. See [Pine acceptance](../docs/PINE_RUNTIME_ACCEPTANCE.md).
+No alert was created or changed and no exchange order was sent. P3-2 reviewed
+the five backup commits and selected no code/document transplant; its
+[decision](../docs/BACKUP_BRANCH_REVIEW.md) preserves main and the backup ref.
+
+After exact successful CI, publish only six canonical documents (`AGENTS.md`,
+the continuation plan, strategy comparison, this deployment guide, and the two
+acceptance/decision documents) plus the small Pine acceptance JSON into
+`/root/rapot-ops/20260921-p31-p32-closure/`. Its `release-record.json` records
+the exact commit, CI, blob hashes, fresh health/capacity checks and stable
+production identity, chained to the 20 September final source receipt.
+The local copy is `runtime-data/p31-p32-closure-release-record.json`.
+Require the fixed 528 MiB reserve plus 2 MiB publication budget before the first
+write; use exclusive versioned files and verify readback hashes. This does not
+pull images, restart services, change config/current pointers or touch databases.
+Frontend `bbd9377` and backend/Compose/current `279aa9f` remain in place.
 
 ## Optional middleware
 
