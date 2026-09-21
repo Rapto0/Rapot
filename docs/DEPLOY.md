@@ -202,7 +202,8 @@ backfill or production database restore was run.
 
 The user rejected a paid server upgrade. After durable private copies and repeated
 SHA/CRC/SQLite/ACL verification, the user's direct continuation authorized only the
-three named historical gzip server copies listed in `docs/RAPOT_DEVAM_PLANI.md`.
+three named historical gzip server copies listed in the
+[continuation archive](archive/RAPOT_DEVAM_GECMISI_2026-09-21.md#p1-g1--python-bağımlılık-güvenliği).
 Their removal is audited in
 `/root/rapot-ops/p1g1-cold-retirement-5e4659d7a3e64888ae7405e9062680a0/`.
 Observed free space increased by **606,547,968 bytes**. The six local files under

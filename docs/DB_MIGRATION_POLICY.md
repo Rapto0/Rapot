@@ -72,7 +72,7 @@ Bu araçlar otomatik deploy adımı değildir. Kaynak/hedef, tekrar çalıştır
 4. İncelenmiş tam deploy'da `main-init` ve `middleware-migrate` kendi veri alanlarında çalışır; korunması gereken veri ve servis kabulü kaydedilir. Bot durdurulmadıysa doğal yeni kayıtları koşulsuz öncesi/sonrası eşitlik hatası sayma.
 5. Üretim middleware ayarları `MW_EXECUTION_MODE=DRY_RUN`, `MW_TRADING_ENABLED=false`, `MW_BINANCE_LIVE_ENABLED=false` kalır. Migration/deploy başarısı gerçek veya testnet emir yetkisi sağlamaz.
 
-[Devam planındaki P1-2/P1-3/P1-4 kayıtları](RAPOT_DEVAM_PLANI.md), PG16/head `0006` üretim geçişini, ayrı boş PG16 simülasyon kabulünü ve ana scan-history şema kabulünü ayrı kanıtlarla içerir. P2-2 belge düzenlemesinde üretim DB'si açılmadı; üretim migration/backfill'i çalıştırılmadı. Gerçek TradingView alarm teslimi ve testnet/canlı emir kabulü kullanıcı tarafından ertelenmiştir.
+[Devam arşivindeki P1-2/P1-3/P1-4 kayıtları](archive/RAPOT_DEVAM_GECMISI_2026-09-21.md#p1--önemli-tamamlamalar), PG16/head `0006` üretim geçişini, ayrı boş PG16 simülasyon kabulünü ve ana scan-history şema kabulünü ayrı kanıtlarla içerir. P2-2 belge düzenlemesinde üretim DB'si açılmadı; üretim migration/backfill'i çalıştırılmadı. Gerçek TradingView alarm teslimi ve testnet/canlı emir kabulü kullanıcı tarafından ertelenmiştir.
 
 ## İzole test kanıtı
 

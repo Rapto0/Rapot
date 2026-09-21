@@ -37,6 +37,7 @@ rehberlerdeki hazırlık adımları tamamlanmış emir testi veya işlem yetkisi
 - [Frontend bağımlılık güvenliği ve üretim kabulü](FRONTEND_DEPENDENCY_SECURITY.md)
 - [21 Eylül Pine derleme/grafik kabulü](PINE_RUNTIME_ACCEPTANCE.md)
 - [Backup branch karşılaştırması ve aktarım yapmama kararı](BACKUP_BRANCH_REVIEW.md)
+- [6–21 Eylül ayrıntılı devam geçmişi](archive/RAPOT_DEVAM_GECMISI_2026-09-21.md)
 
 Eski mimari backlog/sprint ve tasarım direktifi Git geçmişinde tutulur. Güncel
 belgelerdeki tarihsel kayıtlar yeni iş, dosya silme veya üretim değişikliği emri değildir.
