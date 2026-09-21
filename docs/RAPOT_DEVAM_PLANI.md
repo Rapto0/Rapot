@@ -9,12 +9,13 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Kaldığımız nokta
 
-- **Yeni kullanıcı kapsamı: arayüz iyileştirmeleri (UI-1).** Mobil tam menü,
+- **Arayüz iyileştirmeleri (UI-1) tamamlandı ve üretimde.** Mobil tam menü,
   masaüstü menü adları, klavye odağı, açık piyasa seçimiyle sembol arama ve
   dar ekranda grafik/izleme paneli düzeni uygulandı. Altı yeni regresyonla
   119 frontend testi ve 320–1280 px yerel tarayıcı kontrolü geçti.
   [Davranış ve kabul sınırları](FRONTEND.md#gezinme-ve-arama-iyileştirmesi--21-eylül-2026).
-  Exact CI ve frontend-only üretim yayını henüz bu kaynak kaydının sonrasındadır.
+  Kaynak `7b90365`; beş CI job'ı, imaj yayını ve yalnız frontend rollout'u geçti.
+  Canlı tarayıcıda menü, Escape ile odak dönüşü ve boş arama geri bildirimi doğrulandı.
 - **P0–P3 geliştirme işleri tamamlandı.** P1-3'ün gerçek alarm/emir dış kabulü
   kullanıcı kararıyla erteli; aşağıdaki tablo bu ayrımı korur.
 - **P3-1 kapandı:** altı kod adımı, sabit verili gerçek CLI ve güncel Pine
@@ -38,9 +39,9 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Sıradaki işler ve ertelenen kabul
 
-P0–P3 geliştirme listesi kapalıdır. Kullanıcı arayüz iyileştirmelerini seçti;
-UI-1'in CI/üretim kabulünden devam edilir. Sonraki arayüz adayı ana sayfadaki
-veri güncelliği/hata bilgisidir; bu pakette veri akışı değiştirilmedi.
+P0–P3 geliştirme listesi ve UI-1 kapalıdır. Kullanıcının seçtiği arayüz
+iyileştirmelerinde sonraki aday ana sayfadaki veri güncelliği/hata bilgisidir;
+UI-1 paketinde veri akışı değiştirilmedi.
 Kapatılmış işleri veya eski onay bekleme kayıtlarını yeniden başlatma.
 
 | Konu | Durum / devam koşulu |
@@ -98,16 +99,28 @@ repodan kaldırıldı. Dağıtım ve geri dönüş adımları [DEPLOY.md](DEPLOY
 | Alan | Son kayıt |
 |---|---|
 | Sunucu / erişim | `root@138.68.71.27`, IP üzerinden HTTPS |
-| Frontend kaynak | `bbd9377cfd3e8b74f6b02ba23c1c99282ba587bd` |
-| Frontend imaj | `sha256:e312d7aa5e682a7835e4dc7ba3e1b4263f04a64f872f47037814ec4b0ba1f4d0` |
+| Frontend kaynak | `7b903655e2685f294aed86cca2cd97de0102d2ca` |
+| Frontend imaj | `sha256:dc3c65bf2fda404559260770a5cdf9cf459782c3a897a8796fa83bcec8fbca61` |
 | Backend / Compose / current kaynak | `279aa9fea99b520e661b43f104a2bf4791893ac3` |
 | Backend imaj | `sha256:9be0fdb6097f52bf97730f44c86d28c24e2c0cea1fe181e7e8fd668177fdb034` |
 | Veri / kaynak pointer | `/var/lib/rapot/main` ve `/opt/rapot/current`; operator kaynak kopyası bunlardan ayrıdır |
 | Çalışma modu | `MW_EXECUTION_MODE=DRY_RUN`, `MW_TRADING_ENABLED=false`, `MW_BINANCE_LIVE_ENABLED=false`; AI kapalı |
-| Son uzak kabul | 21 Eylül 18:13:51 UTC; API, bot, frontend, middleware ve PostgreSQL sağlıklı, restart0; HTTPS API/bot 200 |
+| Son uzak kabul | 21 Eylül 19:58:08 UTC; beş servis sağlıklı, restart0; HTTPS API/bot 200; boş alan 1.193.254.912 bayt |
 
 Son kayıtlar:
 
+- **UI-1 üretim kabulü:** kaynak `7b90365`,
+  [CI 35645956442](https://github.com/Rapto0/Rapot/actions/runs/35645956442) ve
+  [imaj yayını 35646872042](https://github.com/Rapto0/Rapot/actions/runs/35646872042)
+  başarılı. `/root/rapot-ops/20260921-ui-frontend/deployment.json` durumu **verified**;
+  uzak/yerel SHA256 `50d433aa5f42768426800db386e6534b6b92cdd7101d264518352aca9bc91a15`.
+  Sekiz sağlık/sayfa kontrolü, iki grafik rotası ve 11 JS + 1 CSS dosyası geçti.
+  Runtime SHA256 `0efe0a4886cb0b102c0c04d434705b6fdeb2ed91095ca7573c2c0e39c8342ae7`.
+  Diğer dört servis, env/Nginx ve backend/Compose/current korundu; eski frontend
+  `bbd9377` / `e312d7aa…` geri dönüş için duruyor. 528 MiB rezerv korundu;
+  migration, sunucu temizliği veya alarm/emir testi yapılmadı.
+  Yerel kanıtlar: `runtime-data/ui1-local-validation.json`,
+  `runtime-data/ui1-http-acceptance.json`, `runtime-data/ui1-browser-acceptance.json`.
 - **P3-1 son kod:** `07b7e53dcad9301f56a0da097b36a81541584219`,
   [CI 35502828849](https://github.com/Rapto0/Rapot/actions/runs/35502828849).
   `/root/rapot-ops/20260920-p31-final/release-record.json`;
@@ -121,11 +134,13 @@ Son kayıtlar:
   `runtime-data/20260921-cleanup-pytest.log` ve
   `runtime-data/20260921-cleanup-npm-security/` yerel kanıtları tutar;
   sunucu rollout'u yapılmadı.
-- **Frontend üretim kabulü:** `/root/rapot-ops/20260920-p1g2-frontend/deployment.json`;
+- **Önceki frontend kabulü:** `/root/rapot-ops/20260920-p1g2-frontend/deployment.json`;
   belge kapanışı `/root/rapot-ops/20260920-p1g2-closure/release-record.json`.
-- **Bu sadeleştirmenin yayını:** exact commit/CI ve aktarım sonrası kabul
-  `/root/rapot-ops/20260921-continuation-plan/release-record.json` içinde tutulur;
-  kabul ancak bu kayıt `verified` olduğunda tamamdır.
+- **Planın sadeleştirilmesi:** `8a05b11`,
+  [CI 35642396338](https://github.com/Rapto0/Rapot/actions/runs/35642396338) başarılı;
+  `/root/rapot-ops/20260921-continuation-plan/release-record.json` **verified**.
+  SHA256 `be27d7fb235217f2ac3cc3891f6751c7253359943c1b400edf7065656ca1576d`.
+  UI-1 sonrası belge kapanışı Git'te tutulur; ayrı sunucu belge aktarımı gerekmez.
 
 Eski deployment, rollback, DB sayımı, güvenlik advisory, kapasite, yedek,
 öneri/onay ve alt adım hash'leri [tam arşivde](archive/RAPOT_DEVAM_GECMISI_2026-09-21.md)

@@ -97,7 +97,7 @@ platform paketi için ürettiği `npm ls` uyarısı
 
 | Sayfa | Açıklama |
 |-------|----------|
-| **Dashboard** | Ana ekran, KPI kartları, grafik ve ana DB PnL özeti |
+| **Dashboard** | Piyasa özetleri, BIST/Kripto sembol araması ve ekranlara hızlı erişim |
 | **Piyasa Tarayıcı** | `/scanner` - BIST ve Kripto tarama durumu |
 | **Aktif Sinyaller** | `/signals` - Filtre/arama, HUNTER/COMBO sinyalleri ve görünür satırların CSV çıktısı |
 | **Grafik** | `/chart` - URL'den sembol/piyasa seçimi, izleme listeleri ve yerel alarm kuralı oluşturma |
@@ -167,10 +167,16 @@ kabulü değildir. Mevcut Binance fiyat akışı salt okunur kaldı.
 Altı yeni arama regresyonuyla frontend **119 test** geçer. Güncel CI ve
 üretim sürümü [devam planından](RAPOT_DEVAM_PLANI.md) izlenir.
 
+`7b90365` kaynağı 21 Eylül'de yalnız frontend yenilenerek üretime alındı.
+CI, sekiz sağlık/sayfa isteği, iki grafik rotası ve 11 JS + 1 CSS kontrolü geçti.
+Canlı HTTPS tarayıcıda yeni ana ekran, alt menüdeki altı ek rota, Escape ile
+kapanma/odağın dönüşü ve boş aramanın açıklamalı hatası görüldü. Bu kontrol tam
+erişilebilirlik denetimi veya bütün ekranların etkileşimli kabulü değildir.
+
 ## 🎨 Tema
 
 Proje **Dark Mode** odaklı tasarlanmıştır. Renk paleti TradingView dark temasıyla uyumludur:
-- **Arka Plan:** `#0e1117`
-- **Kartlar:** `#161b22`
-- **Yükseliş (Long):** `#00c853`
-- **Düşüş (Short):** `#ff3d00`
+- **Arka Plan:** `#08080c`
+- **Kartlar:** `#0c0c12`
+- **Yükseliş (Long):** `#22c55e`
+- **Düşüş (Short):** `#ef4444`
