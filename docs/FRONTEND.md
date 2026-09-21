@@ -203,8 +203,11 @@ Yerel kabul sentetik HTTP ile ilk hata, eksik/boş yanıt, eski fiyatla hata ve
 elle yenilemeyle toparlanmayı; 320/768/1280 px taşma kontrolünü ve 44 px yenileme
 düğmesini kapsar. Kripto bağlantısını yenileme salt okunur akışla gözlendi;
 kopma/zaman aşımı/bozuk paket senaryoları ağsız test edildi. Toplam 155 frontend
-testi, lint, typecheck, build ve standalone HTTP/WS kontrolü geçti. Gerçek mum,
-alarm/emir veya tam erişilebilirlik kabulü değildir. Üretim durumu devam planındadır.
+testi, lint, typecheck, build ve standalone HTTP/WS kontrolü geçti. `13e5fbb`
+kaynağı yalnız frontend yenilenerek üretime alındı. Exact CI ve sekiz sağlık/sayfa
+kontrolü, iki grafik rotası ve 11 JS + 1 CSS geçti. Canlı tarayıcıda BIST/Kripto
+fiyatlarının görünmesi, durumlar, alım süreleri ve BIST **Yenile** düğmesi doğrulandı. Gerçek mum,
+alarm/emir veya tam erişilebilirlik kabulü değildir. Yayın kanıtları devam planındadır.
 
 ## 🎨 Tema
 

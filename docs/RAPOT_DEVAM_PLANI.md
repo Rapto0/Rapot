@@ -9,11 +9,13 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Kaldığımız nokta
 
-- **Arayüz UI-2 uygulandı; CI/üretim kabulü sırada.** Ana sayfada yükleme,
+- **Arayüz UI-2 tamamlandı ve üretimde.** Ana sayfada yükleme,
   eksik/boş yanıt, hata, son başarılı yanıt ve kripto akışı durumu görünür;
   elle yenileme var. 36 yeni regresyonla 155 frontend testi, lint/typecheck,
   build/standalone ve 320/768/1280 px yerel tarayıcı kabulü geçti.
   [Davranış ve sınırlar](FRONTEND.md#piyasa-verisi-durumları--ui-2).
+  Kaynak `13e5fbb`; exact CI, imaj yayını ve yalnız frontend rollout'u başarılı.
+  Canlı tarayıcıda fiyatların görünmesi, durum/alım süresi ve elle yenileme doğrulandı.
 - **Arayüz iyileştirmeleri (UI-1) tamamlandı ve üretimde.** Mobil tam menü,
   masaüstü menü adları, klavye odağı, açık piyasa seçimiyle sembol arama ve
   dar ekranda grafik/izleme paneli düzeni uygulandı. Altı yeni regresyonla
@@ -44,8 +46,7 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Sıradaki işler ve ertelenen kabul
 
-P0–P3 geliştirme listesi ve UI-1 kapalıdır. Arayüz UI-2'nin exact CI ve yalnız
-frontend üretim kabulünden devam edilir. Ardından arayüz adayı sinyal/tarayıcı
+P0–P3 geliştirme listesi ve arayüz UI-1/UI-2 kapalıdır. Sonraki arayüz adayı sinyal/tarayıcı
 ekranlarında filtreler ve boş sonuç anlatımıdır; henüz incelenmiş eksiklik listesi değildir.
 Kapatılmış işleri veya eski onay bekleme kayıtlarını yeniden başlatma.
 
@@ -104,16 +105,28 @@ repodan kaldırıldı. Dağıtım ve geri dönüş adımları [DEPLOY.md](DEPLOY
 | Alan | Son kayıt |
 |---|---|
 | Sunucu / erişim | `root@138.68.71.27`, IP üzerinden HTTPS |
-| Frontend kaynak | `7b903655e2685f294aed86cca2cd97de0102d2ca` |
-| Frontend imaj | `sha256:dc3c65bf2fda404559260770a5cdf9cf459782c3a897a8796fa83bcec8fbca61` |
+| Frontend kaynak | `13e5fbb93ab191c21619ae981d3145b9d9814984` |
+| Frontend imaj | `sha256:a24bbefa443cf30f77af55161c19520f6febf1c977ef55a044fd030189bd0b41` |
 | Backend / Compose / current kaynak | `279aa9fea99b520e661b43f104a2bf4791893ac3` |
 | Backend imaj | `sha256:9be0fdb6097f52bf97730f44c86d28c24e2c0cea1fe181e7e8fd668177fdb034` |
 | Veri / kaynak pointer | `/var/lib/rapot/main` ve `/opt/rapot/current`; operator kaynak kopyası bunlardan ayrıdır |
 | Çalışma modu | `MW_EXECUTION_MODE=DRY_RUN`, `MW_TRADING_ENABLED=false`, `MW_BINANCE_LIVE_ENABLED=false`; AI kapalı |
-| Son uzak kabul | 21 Eylül 19:58:08 UTC; beş servis sağlıklı, restart0; HTTPS API/bot 200; boş alan 1.193.254.912 bayt |
+| Son uzak kabul | 21 Eylül 20:38:35 UTC; beş servis sağlıklı, restart0; HTTPS API/bot 200; boş alan 1.090.461.696 bayt |
 
 Son kayıtlar:
 
+- **UI-2 üretim kabulü:** [CI 35650332366](https://github.com/Rapto0/Rapot/actions/runs/35650332366)
+  ve [imaj yayını 35651233045](https://github.com/Rapto0/Rapot/actions/runs/35651233045)
+  başarılı. `/root/rapot-ops/20260921-ui2-frontend/deployment.json` **verified**;
+  SHA256 `c3b9e7d833af7a2383707c75f59b09807d9b21bd4671dc5552cc847dec6f7b00`.
+  Uzak/yerel makbuz bağımsız doğrulandı; yeni runtime SHA256
+  `a2b118e0de10a04ec5820800ef41abf9771ddc7290ec5f96b2be8baacadd22d5`.
+  Sekiz sağlık/sayfa kontrolü, iki grafik rotası ve 11 JS + 1 CSS geçti.
+  Canlı BIST/Kripto durumları ve BIST yenilemesi tarayıcıda doğrulandı.
+  Backend/current ve diğer servisler korundu; `7b90365` / `dc3c65bf…` geri dönüş
+  imajı duruyor. 528 MiB rezerv korundu; bağımlılık, DB/migration veya emir değişikliği yok.
+  Yerel kanıtlar: `runtime-data/ui2-local-acceptance.json`,
+  `runtime-data/ui2-http-acceptance.json`, `runtime-data/ui2-browser-acceptance.json`.
 - **UI-1 üretim kabulü:** kaynak `7b90365`,
   [CI 35645956442](https://github.com/Rapto0/Rapot/actions/runs/35645956442) ve
   [imaj yayını 35646872042](https://github.com/Rapto0/Rapot/actions/runs/35646872042)
@@ -145,7 +158,7 @@ Son kayıtlar:
   [CI 35642396338](https://github.com/Rapto0/Rapot/actions/runs/35642396338) başarılı;
   `/root/rapot-ops/20260921-continuation-plan/release-record.json` **verified**.
   SHA256 `be27d7fb235217f2ac3cc3891f6751c7253359943c1b400edf7065656ca1576d`.
-  UI-1 sonrası belge kapanışı Git'te tutulur; ayrı sunucu belge aktarımı gerekmez.
+  UI paketlerinin belge kapanışı Git'te tutulur; ayrı sunucu belge aktarımı gerekmez.
 
 Eski deployment, rollback, DB sayımı, güvenlik advisory, kapasite, yedek,
 öneri/onay ve alt adım hash'leri [tam arşivde](archive/RAPOT_DEVAM_GECMISI_2026-09-21.md)
