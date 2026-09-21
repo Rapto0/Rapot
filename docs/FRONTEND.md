@@ -173,6 +173,39 @@ Canlı HTTPS tarayıcıda yeni ana ekran, alt menüdeki altı ek rota, Escape il
 kapanma/odağın dönüşü ve boş aramanın açıklamalı hatası görüldü. Bu kontrol tam
 erişilebilirlik denetimi veya bütün ekranların etkileşimli kabulü değildir.
 
+## Piyasa verisi durumları — UI-2
+
+Ana sayfa her grupta alınabilen fiyat sayısını, yükleme/eksik veri/boş yanıt/hata
+durumunu ve **Yenile** düğmesini gösterir. İlk isteğin hatası boş fiyatlarla,
+sonraki isteğin hatası son alınan fiyatlarla ve açık uyarıyla görünür. Başarılı
+ama kısmi/boş yanıtta eksik semboller eski yanıttan taşınmaz. Sonlu sıfır korunur;
+null, metin, NaN veya sonsuz fiyat gösterilmez. Eksik fiyatın yüzdesi de gösterilmez.
+
+- BIST/ABD/emtia/döviz özeti React Query ile 10 saniyede bir denetlenir;
+  görünür sekmeye dönüşte de yenilenir. Tek sorgu paylaşılır; sürmekte olan
+  isteğe elle yenileme ikinci istek eklemez. İstek 60 saniyede iptal edilir;
+  sayfadan çıkışın iptal sinyali HTTP'ye ulaşır. 30 saniyedir başarılı yanıt
+  alınmadığında gecikme görünür. Arka plan sekmesi ve tarayıcı zamanlayıcıları
+  bu süreleri geciktirebilir; bunlar teslim garantisi değildir.
+- **Son başarılı yanıt**, tarayıcının yanıtı aldığı zamandır. API son mevcut
+  günlük veriyi kullanır; borsa zamanı/cache yaşı veya her sembolün hata nedenini
+  vermez. Boş HTTP 200 yanıt fiyat bulunduğunu göstermez. Gösterim, piyasa verisinin
+  gerçek zamanlı veya işlem yapılabilir olduğunu doğrulamaz.
+- Kripto kartları bağlantıyı ve her sembolün son geçerli mesaj alımını ayrı izler.
+  Fiyat değişmese de alım zamanı ilerler. 30 saniyelik sessizlik uyarı üretir;
+  ilk geçerli mesaj hiç gelmezse de bekleme açıklamaya dönüşür. Kopma, normal
+  uzak kapanış ve tarayıcı çevrimdışı/çevrimiçi geçişi görünür. Bağlantı açılışı
+  20 saniyede bırakılır; tekrarlar 1–10 saniye aralıkla denenir. Eski socket/timer
+  olayları temizlenir. Grafik/izleme listesinin eski `useBinanceTicker` fiyat
+  haritası ve `paused`/biriktirme seçenekleri korunur.
+
+Yerel kabul sentetik HTTP ile ilk hata, eksik/boş yanıt, eski fiyatla hata ve
+elle yenilemeyle toparlanmayı; 320/768/1280 px taşma kontrolünü ve 44 px yenileme
+düğmesini kapsar. Kripto bağlantısını yenileme salt okunur akışla gözlendi;
+kopma/zaman aşımı/bozuk paket senaryoları ağsız test edildi. Toplam 155 frontend
+testi, lint, typecheck, build ve standalone HTTP/WS kontrolü geçti. Gerçek mum,
+alarm/emir veya tam erişilebilirlik kabulü değildir. Üretim durumu devam planındadır.
+
 ## 🎨 Tema
 
 Proje **Dark Mode** odaklı tasarlanmıştır. Renk paleti TradingView dark temasıyla uyumludur:

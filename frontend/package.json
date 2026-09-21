@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tests/auth-client.test.mjs tests/realtime-url.test.mjs tests/scan-history.test.mjs tests/realtime-connection.test.mjs tests/browser-preferences.test.mjs tests/health-status.test.mjs tests/trade-metrics.test.mjs tests/chart-route.test.mjs tests/signal-export.test.mjs tests/local-alarms.test.mjs tests/chart-alarm-storage.test.mjs tests/header-clock.test.mjs tests/special-notifications.test.mjs tests/dependency-audit.test.mjs tests/symbol-search.test.mjs",
+    "test": "node --test tests/auth-client.test.mjs tests/realtime-url.test.mjs tests/scan-history.test.mjs tests/realtime-connection.test.mjs tests/browser-preferences.test.mjs tests/health-status.test.mjs tests/trade-metrics.test.mjs tests/chart-route.test.mjs tests/signal-export.test.mjs tests/local-alarms.test.mjs tests/chart-alarm-storage.test.mjs tests/header-clock.test.mjs tests/special-notifications.test.mjs tests/dependency-audit.test.mjs tests/symbol-search.test.mjs tests/market-feed.test.mjs tests/binance-ticker.test.mjs",
     "test:standalone": "node tests/standalone-proxy-smoke.mjs",
     "audit:dependencies": "node scripts/audit-dependencies.mjs"
   },

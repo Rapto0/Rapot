@@ -163,17 +163,28 @@ test('changing market updates the example without guessing from or overwriting t
 });
 
 test('landing page uses the search component and clear heading hierarchy without a seconds claim', () => {
+  const model = load('../src/lib/market-feed.ts');
+  const category = load('../src/components/dashboard/market-category.tsx', {
+    'react/jsx-runtime': jsxRuntime, 'lucide-react': icons,
+    '@/lib/market-feed': model,
+    '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') },
+  });
   const Page = load('../src/app/page.tsx', {
-    react: { useState: () => [{}, () => {}], useEffect: () => {}, useMemo: callback => callback() },
+    react: { useState: initial => [initial, () => {}], useEffect: () => {} },
     'react/jsx-runtime': jsxRuntime,
     'next/link': { default: props => React.createElement('a', props) },
     'lucide-react': icons,
     '@/components/dashboard/symbol-search': {
       SymbolSearch: () => React.createElement('form', { 'data-symbol-search': true }),
     },
-    '@/lib/hooks/use-binance-ticker': { useBinanceTicker: () => ({}) },
-    '@/lib/api/client': { fetchGlobalIndices() { assert.fail('Page render must not fetch'); } },
-    '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') },
+    '@/components/dashboard/market-category': category,
+    '@/lib/market-feed': model,
+    '@/lib/hooks/use-binance-ticker': {
+      useBinanceTickerFeed: () => ({ prices: {}, receivedAtBySymbol: {}, status: 'connecting', reconnect() {} }),
+    },
+    '@/lib/hooks/use-market-snapshot': {
+      useMarketSnapshot: () => ({ dataUpdatedAt: 0, isFetching: true, isError: false, fetchStatus: 'fetching', refetch() {} }),
+    },
   }).default;
   const html = renderToStaticMarkup(Page());
   assert.match(html, /<h1[^>]*>Piyasalara genel bakış<\/h1>/);

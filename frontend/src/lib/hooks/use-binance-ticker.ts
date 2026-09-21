@@ -1,12 +1,11 @@
 "use client"
 
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
-interface TickerData {
-    s: string // Symbol
-    c: string // Last price (current price)
-    p: string // Price change
-    P: string // Price Change Percent
+interface TickerPrice {
+    price: number
+    change: number
+    priceChange: number
 }
 
 interface UseBinanceTickerOptions {
@@ -14,200 +13,223 @@ interface UseBinanceTickerOptions {
     flushIntervalMs?: number
 }
 
-export function useBinanceTicker(symbols: string[], options?: UseBinanceTickerOptions) {
+export type BinanceTickerStatus = "connecting" | "connected" | "reconnecting" | "offline" | "paused"
+
+interface TickerSnapshot {
+    prices: Record<string, TickerPrice>
+    receivedAtBySymbol: Record<string, number>
+}
+
+function numericField(value: unknown): number | null {
+    if (typeof value === "string") {
+        // Number/parseFloat alone also accept empty strings or numeric prefixes.
+        if (!/^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/.test(value.trim())) return null
+        value = Number(value)
+    }
+    return typeof value === "number" && Number.isFinite(value) ? value : null
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+export function useBinanceTickerFeed(symbols: string[], options?: UseBinanceTickerOptions) {
     const paused = options?.paused === true
-    const flushIntervalMs = Math.max(100, options?.flushIntervalMs ?? 250)
-    const [prices, setPrices] = useState<Record<string, { price: number; change: number; priceChange: number }>>({})
-    const ws = useRef<WebSocket | null>(null)
-    const reconnectTimerRef = useRef<number | null>(null)
-    const flushTimerRef = useRef<number | null>(null)
-    const pendingUpdatesRef = useRef<Record<string, { price: number; change: number; priceChange: number }>>({})
-    const perfLogRef = useRef<{ lastAt: number; flushes: number; symbols: number }>({
-        lastAt: 0,
-        flushes: 0,
-        symbols: 0,
+    const requestedInterval = options?.flushIntervalMs ?? 250
+    const flushIntervalMs = Number.isFinite(requestedInterval) ? Math.max(100, requestedInterval) : 250
+    const symbolsKey = useMemo(() => Array.from(new Set(symbols
+        .map((symbol) => symbol.trim().toUpperCase())
+        .filter((symbol) => /^[A-Z0-9]{1,32}$/.test(symbol)))).sort().join("|"), [symbols])
+    const normalizedSymbols = useMemo(() => symbolsKey ? symbolsKey.split("|") : [], [symbolsKey])
+    const scope = `${symbolsKey}:${paused}`
+    const [snapshot, setSnapshot] = useState<TickerSnapshot>({ prices: {}, receivedAtBySymbol: {} })
+    const [connection, setConnection] = useState<{ scope: string; status: BinanceTickerStatus }>({
+        scope, status: paused ? "paused" : symbolsKey ? "connecting" : "offline",
     })
-
-    const symbolsKey = useMemo(() => {
-        const unique = Array.from(
-            new Set(
-                symbols
-                    .map((symbol) => symbol.trim().toUpperCase())
-                    .filter(Boolean)
-            )
-        )
-        unique.sort()
-        return unique.join("|")
-    }, [symbols])
-
-    const normalizedSymbols = useMemo(
-        () => (symbolsKey ? symbolsKey.split("|") : []),
-        [symbolsKey]
-    )
+    const reconnectRef = useRef<(() => void) | null>(null)
+    const reconnect = useCallback(() => reconnectRef.current?.(), [])
 
     useEffect(() => {
+        const setStatus = (status: BinanceTickerStatus) => setConnection((previous) =>
+            previous.scope === scope && previous.status === status ? previous : { scope, status })
         if (paused || normalizedSymbols.length === 0) {
-            if (reconnectTimerRef.current !== null) {
-                window.clearTimeout(reconnectTimerRef.current)
-                reconnectTimerRef.current = null
-            }
-            if (flushTimerRef.current !== null) {
-                window.clearTimeout(flushTimerRef.current)
-                flushTimerRef.current = null
-            }
-            pendingUpdatesRef.current = {}
-            ws.current?.close(1000, paused ? "Paused" : "No symbols")
-            ws.current = null
+            setStatus(paused ? "paused" : "offline")
             return
         }
 
         let disposed = false
-        let reconnectDelay = 1000
+        let generation = 0
         let socket: WebSocket | null = null
+        let reconnectTimer: number | null = null
+        let openingTimer: number | null = null
+        let flushTimer: number | null = null
+        let reconnectDelay = 1000
+        let pending = new Map<string, { price: TickerPrice; receivedAt: number }>()
         const activeSymbols = new Set(normalizedSymbols)
+        const online = () => window.navigator.onLine !== false
+        const streams = normalizedSymbols.map((symbol) => `${symbol.toLowerCase()}@ticker`)
+        const url = streams.length === 1
+            ? `wss://stream.binance.com:9443/ws/${streams[0]}`
+            : `wss://stream.binance.com:9443/stream?streams=${streams.join("/")}`
 
-        const flushPendingUpdates = () => {
-            if (flushTimerRef.current !== null) {
-                window.clearTimeout(flushTimerRef.current)
-                flushTimerRef.current = null
-            }
-
-            const pending = pendingUpdatesRef.current
-            const entries = Object.entries(pending)
-            if (entries.length === 0) return
-            pendingUpdatesRef.current = {}
-
-            setPrices((prev) => {
-                let changed = false
-                const next = { ...prev }
-
-                for (const [symbol, payload] of entries) {
-                    // Ignore stale updates after symbols list changed.
-                    if (!activeSymbols.has(symbol)) continue
-
-                    const current = prev[symbol]
-                    if (
-                        current &&
-                        current.price === payload.price &&
-                        current.change === payload.change &&
-                        current.priceChange === payload.priceChange
-                    ) {
-                        continue
-                    }
-                    next[symbol] = payload
-                    changed = true
-                }
-
-                return changed ? next : prev
-            })
-
-            if (process.env.NODE_ENV !== "production") {
-                const now = performance.now()
-                perfLogRef.current.flushes += 1
-                perfLogRef.current.symbols = entries.length
-                if (now - perfLogRef.current.lastAt >= 3000) {
-                    perfLogRef.current.lastAt = now
-                    console.debug("[ws-perf] binance-ticker", {
-                        symbols: normalizedSymbols.length,
-                        flushIntervalMs,
-                        pendingSymbols: perfLogRef.current.symbols,
-                        flushCountWindow: perfLogRef.current.flushes,
-                    })
-                    perfLogRef.current.flushes = 0
-                }
+        const clearRetry = () => {
+            if (reconnectTimer !== null) window.clearTimeout(reconnectTimer)
+            reconnectTimer = null
+        }
+        const clearOpeningTimer = () => {
+            if (openingTimer !== null) window.clearTimeout(openingTimer)
+            openingTimer = null
+        }
+        const retireSocket = () => {
+            generation++
+            clearOpeningTimer()
+            if (flushTimer !== null) window.clearTimeout(flushTimer)
+            flushTimer = null
+            pending.clear()
+            const previous = socket
+            socket = null
+            if (!previous) return
+            previous.onopen = null
+            previous.onmessage = null
+            previous.onerror = null
+            previous.onclose = null
+            if (previous.readyState === WebSocket.CONNECTING || previous.readyState === WebSocket.OPEN) {
+                previous.close(1000, "Ticker connection retired")
             }
         }
-
         const scheduleFlush = () => {
-            if (flushTimerRef.current !== null) return
-            flushTimerRef.current = window.setTimeout(flushPendingUpdates, flushIntervalMs)
-        }
-
-        const connect = () => {
-            if (disposed) return
-            if (reconnectTimerRef.current !== null) {
-                window.clearTimeout(reconnectTimerRef.current)
-                reconnectTimerRef.current = null
-            }
-
-            const streams = normalizedSymbols.map((symbol) => `${symbol.toLowerCase()}@ticker`)
-            const url = streams.length === 1
-                ? `wss://stream.binance.com:9443/ws/${streams[0]}`
-                : `wss://stream.binance.com:9443/stream?streams=${streams.join("/")}`
-
-            socket = new WebSocket(url)
-            ws.current = socket
-
-            socket.onopen = () => {
-                reconnectDelay = 1000
-            }
-
-            socket.onmessage = (event) => {
-                try {
-                    const parsed = JSON.parse(event.data) as { data?: TickerData } | TickerData
-                    const ticker = ("data" in parsed ? parsed.data : parsed) as TickerData | undefined
-                    if (!ticker?.s) return
-
-                    const symbol = ticker.s.toUpperCase()
-                    const nextValue = {
-                        price: parseFloat(ticker.c),
-                        change: parseFloat(ticker.P),
-                        priceChange: parseFloat(ticker.p),
+            if (flushTimer !== null) return
+            const version = generation
+            const timer = window.setTimeout(() => {
+                if (disposed || generation !== version || flushTimer !== timer) return
+                flushTimer = null
+                const updates = pending
+                pending = new Map()
+                setSnapshot((previous) => {
+                    const prices = { ...previous.prices }
+                    const receivedAtBySymbol = { ...previous.receivedAtBySymbol }
+                    for (const [symbol, update] of updates) {
+                        prices[symbol] = update.price
+                        receivedAtBySymbol[symbol] = update.receivedAt
                     }
-
-                    pendingUpdatesRef.current[symbol] = nextValue
+                    return { prices, receivedAtBySymbol }
+                })
+            }, flushIntervalMs)
+            flushTimer = timer
+        }
+        const scheduleRetry = () => {
+            if (disposed || reconnectTimer !== null) return
+            if (!online()) { setStatus("offline"); return }
+            setStatus("reconnecting")
+            const version = generation
+            const timer = window.setTimeout(() => {
+                if (disposed || generation !== version || reconnectTimer !== timer) return
+                reconnectTimer = null
+                connect(true)
+            }, reconnectDelay)
+            reconnectTimer = timer
+            reconnectDelay = Math.min(reconnectDelay * 2, 10000)
+        }
+        const connect = (retrying = false) => {
+            if (disposed) return
+            if (!online()) { setStatus("offline"); return }
+            setStatus(retrying ? "reconnecting" : "connecting")
+            const version = ++generation
+            let current: WebSocket
+            try {
+                current = new WebSocket(url)
+            } catch {
+                scheduleRetry()
+                return
+            }
+            socket = current
+            const isCurrent = () => !disposed && generation === version && socket === current
+            current.onopen = () => {
+                if (!isCurrent()) return
+                clearOpeningTimer()
+                reconnectDelay = 1000
+                setStatus("connected")
+            }
+            current.onmessage = (event) => {
+                if (!isCurrent() || typeof event.data !== "string") return
+                try {
+                    const parsed: unknown = JSON.parse(event.data)
+                    if (!isRecord(parsed)) return
+                    const ticker = "data" in parsed ? parsed.data : parsed
+                    if (!isRecord(ticker) || typeof ticker.s !== "string") return
+                    const symbol = ticker.s.toUpperCase()
+                    if (!activeSymbols.has(symbol)) return
+                    const price = numericField(ticker.c)
+                    const change = numericField(ticker.P)
+                    const priceChange = numericField(ticker.p)
+                    if (price === null || price <= 0 || change === null || priceChange === null) return
+                    // Browser receipt time, not an exchange/source price timestamp.
+                    pending.set(symbol, { price: { price, change, priceChange }, receivedAt: Date.now() })
                     scheduleFlush()
                 } catch {
-                    // Ignore malformed packets from network edges/proxies.
+                    // Malformed packets do not replace the last valid quote or its receipt time.
                 }
             }
-
-            // Let onclose own retry policy to avoid duplicate reconnects.
-            socket.onerror = () => undefined
-
-            socket.onclose = (event) => {
-                if (ws.current === socket) {
-                    ws.current = null
-                }
-                if (disposed) return
-                if (event.code === 1000 || event.code === 1001) return
-
-                reconnectTimerRef.current = window.setTimeout(() => {
-                    connect()
-                }, reconnectDelay)
-                reconnectDelay = Math.min(reconnectDelay * 2, 10000)
+            const disconnected = () => {
+                if (!isCurrent()) return
+                retireSocket()
+                scheduleRetry()
             }
+            current.onerror = disconnected
+            // Normal remote closes also retry. Local closes detach their handlers first.
+            current.onclose = disconnected
+            const timer = window.setTimeout(() => {
+                if (openingTimer !== timer) return
+                openingTimer = null
+                disconnected()
+            }, 20000)
+            openingTimer = timer
         }
-
+        const reconnectNow = () => {
+            if (disposed) return
+            clearRetry()
+            retireSocket()
+            reconnectDelay = 1000
+            connect(true)
+        }
+        const wentOffline = () => {
+            if (disposed) return
+            clearRetry()
+            retireSocket()
+            setStatus("offline")
+        }
+        const wentOnline = () => {
+            if (!disposed && socket === null && reconnectTimer === null) reconnectNow()
+        }
+        reconnectRef.current = reconnectNow
+        window.addEventListener("offline", wentOffline)
+        window.addEventListener("online", wentOnline)
         connect()
 
         return () => {
             disposed = true
-            if (reconnectTimerRef.current !== null) {
-                window.clearTimeout(reconnectTimerRef.current)
-                reconnectTimerRef.current = null
-            }
-            if (flushTimerRef.current !== null) {
-                window.clearTimeout(flushTimerRef.current)
-                flushTimerRef.current = null
-            }
-            pendingUpdatesRef.current = {}
-
-            if (socket) {
-                socket.onopen = null
-                socket.onmessage = null
-                socket.onerror = null
-                socket.onclose = null
-                if (socket.readyState === WebSocket.CONNECTING || socket.readyState === WebSocket.OPEN) {
-                    socket.close(1000, "Ticker hook cleanup")
-                }
-            }
-
-            if (ws.current === socket) {
-                ws.current = null
-            }
+            clearRetry()
+            retireSocket()
+            window.removeEventListener("offline", wentOffline)
+            window.removeEventListener("online", wentOnline)
+            if (reconnectRef.current === reconnectNow) reconnectRef.current = null
         }
-    }, [normalizedSymbols, symbolsKey, paused, flushIntervalMs])
+    }, [normalizedSymbols, paused, flushIntervalMs, scope])
 
-    return prices
+    // Removed symbols disappear on the request render, before effect cleanup.
+    const visible = useMemo(() => ({
+        prices: Object.fromEntries(normalizedSymbols.filter((symbol) => snapshot.prices[symbol])
+            .map((symbol) => [symbol, snapshot.prices[symbol]])),
+        receivedAtBySymbol: Object.fromEntries(normalizedSymbols
+            .filter((symbol) => snapshot.receivedAtBySymbol[symbol] !== undefined)
+            .map((symbol) => [symbol, snapshot.receivedAtBySymbol[symbol]])),
+    }), [snapshot, normalizedSymbols])
+    const status: BinanceTickerStatus = paused ? "paused" : !symbolsKey ? "offline"
+        : connection.scope === scope ? connection.status : "connecting"
+    return { ...visible, status, reconnect }
+}
+
+/** Compatibility API for chart/watchlist consumers that only need quote values. */
+export function useBinanceTicker(symbols: string[], options?: UseBinanceTickerOptions) {
+    return useBinanceTickerFeed(symbols, options).prices
 }

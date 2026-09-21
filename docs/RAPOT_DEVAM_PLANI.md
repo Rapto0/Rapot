@@ -9,6 +9,11 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Kaldığımız nokta
 
+- **Arayüz UI-2 uygulandı; CI/üretim kabulü sırada.** Ana sayfada yükleme,
+  eksik/boş yanıt, hata, son başarılı yanıt ve kripto akışı durumu görünür;
+  elle yenileme var. 36 yeni regresyonla 155 frontend testi, lint/typecheck,
+  build/standalone ve 320/768/1280 px yerel tarayıcı kabulü geçti.
+  [Davranış ve sınırlar](FRONTEND.md#piyasa-verisi-durumları--ui-2).
 - **Arayüz iyileştirmeleri (UI-1) tamamlandı ve üretimde.** Mobil tam menü,
   masaüstü menü adları, klavye odağı, açık piyasa seçimiyle sembol arama ve
   dar ekranda grafik/izleme paneli düzeni uygulandı. Altı yeni regresyonla
@@ -39,9 +44,9 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Sıradaki işler ve ertelenen kabul
 
-P0–P3 geliştirme listesi ve UI-1 kapalıdır. Kullanıcının seçtiği arayüz
-iyileştirmelerinde sonraki aday ana sayfadaki veri güncelliği/hata bilgisidir;
-UI-1 paketinde veri akışı değiştirilmedi.
+P0–P3 geliştirme listesi ve UI-1 kapalıdır. Arayüz UI-2'nin exact CI ve yalnız
+frontend üretim kabulünden devam edilir. Ardından arayüz adayı sinyal/tarayıcı
+ekranlarında filtreler ve boş sonuç anlatımıdır; henüz incelenmiş eksiklik listesi değildir.
 Kapatılmış işleri veya eski onay bekleme kayıtlarını yeniden başlatma.
 
 | Konu | Durum / devam koşulu |

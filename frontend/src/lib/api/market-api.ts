@@ -31,12 +31,16 @@ export async function fetchMarketOverview(): Promise<MarketOverviewResponse> {
     return fetchApi<MarketOverviewResponse>(`${API_BASE_URL}/market/overview`);
 }
 
-export async function fetchGlobalIndices(symbols: string[]): Promise<GlobalIndexData[]> {
+export async function fetchGlobalIndices(
+    symbols: string[],
+    options: { signal?: AbortSignal } = {}
+): Promise<GlobalIndexData[]> {
     const params = new URLSearchParams();
     symbols.forEach((value) => params.append('symbol', value));
     const query = params.toString();
     return fetchApi<GlobalIndexData[]>(
-        `${API_BASE_URL}/market/indices${query ? `?${query}` : ''}`
+        `${API_BASE_URL}/market/indices${query ? `?${query}` : ''}`,
+        options
     );
 }
 

@@ -1,12 +1,13 @@
 "use client"
 
-import { useEffect, useMemo, useState, type ComponentType } from "react"
+import { useEffect, useState, type ComponentType } from "react"
 import Link from "next/link"
 import { CalendarDays, LineChart, Activity, History, Bell, Brain } from "lucide-react"
 import { SymbolSearch } from "@/components/dashboard/symbol-search"
-import { useBinanceTicker } from "@/lib/hooks/use-binance-ticker"
-import { fetchGlobalIndices, type GlobalIndexData } from "@/lib/api/client"
-import { cn } from "@/lib/utils"
+import { MarketCategoryPanel } from "@/components/dashboard/market-category"
+import { useBinanceTickerFeed } from "@/lib/hooks/use-binance-ticker"
+import { useMarketSnapshot } from "@/lib/hooks/use-market-snapshot"
+import { describeMarketRequest, describeTickerFeed } from "@/lib/market-feed"
 
 type MarketFeedSource = "binance" | "indices"
 
@@ -82,81 +83,45 @@ const BINANCE_SYMBOLS = LIVE_MARKET_CATEGORIES.flatMap((category) =>
 const INDEX_SYMBOLS = LIVE_MARKET_CATEGORIES.flatMap((category) =>
   category.items.filter((item) => item.source === "indices").map((item) => item.feedSymbol)
 )
-const INDEX_REFRESH_MS = 10_000
-
-function chunkSymbols(symbols: string[], size: number): string[][] {
-  const chunks: string[][] = []
-  for (let index = 0; index < symbols.length; index += size) {
-    chunks.push(symbols.slice(index, index + size))
-  }
-  return chunks
-}
-
 export default function LandingPage() {
-  const [marketData, setMarketData] = useState<Record<string, GlobalIndexData>>({})
-  const cryptoTicker = useBinanceTicker(BINANCE_SYMBOLS)
+  const market = useMarketSnapshot(INDEX_SYMBOLS)
+  const crypto = useBinanceTickerFeed(BINANCE_SYMBOLS)
+  const [clock, setClock] = useState({ now: 0, startedAt: 0 })
 
   useEffect(() => {
-    let isDisposed = false
-    let isFetching = false
-
-    const loadIndices = async () => {
-      if (isFetching) return
-      isFetching = true
-      try {
-        const chunks = chunkSymbols(INDEX_SYMBOLS, 30)
-        const responses = await Promise.all(chunks.map((chunk) => fetchGlobalIndices(chunk)))
-        const next: Record<string, GlobalIndexData> = {}
-
-        for (const item of responses.flat()) {
-          next[item.symbol.toUpperCase()] = item
-        }
-
-        if (isDisposed) return
-        setMarketData(next)
-      } catch (error) {
-        console.error("Market indices load error:", error)
-      } finally {
-        isFetching = false
-      }
-    }
-
-    void loadIndices()
-    const timer = setInterval(() => {
-      void loadIndices()
-    }, INDEX_REFRESH_MS)
+    const startedAt = Date.now()
+    const tick = () => setClock({ now: Date.now(), startedAt })
+    tick()
+    const timer = setInterval(tick, 5_000)
+    document.addEventListener("visibilitychange", tick)
     return () => {
-      isDisposed = true
       clearInterval(timer)
+      document.removeEventListener("visibilitychange", tick)
     }
   }, [])
 
-  const categorizedMarketRows = useMemo(
-    () =>
-      LIVE_MARKET_CATEGORIES.map((category) => ({
-        ...category,
-        rows: category.items.map((item) => {
-          if (item.source === "binance") {
-            const live = cryptoTicker[item.feedSymbol]
-            return {
-              key: item.id,
-              label: item.label,
-              value: live?.price,
-              change: live?.change,
-            }
-          }
-
-          const live = marketData[item.feedSymbol.toUpperCase()]
-          return {
-            key: item.id,
-            label: item.label,
-            value: live?.regularMarketPrice,
-            change: live?.regularMarketChangePercent,
-          }
-        }),
-      })),
-    [cryptoTicker, marketData]
-  )
+  const categorizedMarketRows = LIVE_MARKET_CATEGORIES.map((category) => {
+    const streaming = category.id === "crypto"
+    const rows = category.items.map((item) => {
+      const live = streaming ? crypto.prices[item.feedSymbol] : undefined
+      const snapshot = streaming ? undefined : market.data?.[item.feedSymbol.toUpperCase()]
+      return {
+        key: item.id, label: item.label,
+        value: live?.price ?? snapshot?.value,
+        change: live?.change ?? snapshot?.change,
+        receivedAt: streaming ? crypto.receivedAtBySymbol[item.feedSymbol] : market.dataUpdatedAt,
+      }
+    })
+    const notice = streaming ? describeTickerFeed({
+      status: crypto.status, receivedAt: rows.map((row) => row.receivedAt),
+      now: clock.now, startedAt: clock.startedAt, total: rows.length,
+    }) : describeMarketRequest({
+      receivedAt: market.dataUpdatedAt, now: clock.now,
+      available: rows.filter((row) => row.value !== undefined).length, total: rows.length,
+      isError: market.isError, isFetching: market.isFetching, isPaused: market.fetchStatus === "paused",
+    })
+    return { ...category, rows, notice, streaming }
+  })
 
   return (
     <div className="mx-auto flex min-h-[calc(100vh-40px)] w-full max-w-[1680px] flex-col gap-4 p-4 md:p-5">
@@ -180,21 +145,14 @@ export default function LandingPage() {
 
       <section className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         {categorizedMarketRows.map((category) => (
-          <article key={category.id} className="border border-border bg-surface p-3">
-            <div className="flex items-center justify-between border-b border-[rgba(255,255,255,0.04)] pb-2">
-              <div>
-                <h2 className="label-uppercase">{category.label}</h2>
-                <p className="mt-1 text-[10px] text-muted-foreground">{category.description}</p>
-              </div>
-              <span className="mono-numbers text-[10px] text-muted-foreground">{category.rows.length} enstrüman</span>
-            </div>
-
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              {category.rows.map((item) => (
-                <MarketStrip key={item.key} label={item.label} value={item.value} change={item.change} />
-              ))}
-            </div>
-          </article>
+          <MarketCategoryPanel
+            key={category.id}
+            {...category}
+            now={clock.now}
+            receivedAt={market.dataUpdatedAt}
+            onRefresh={category.streaming ? crypto.reconnect : () => { void market.refetch({ cancelRefetch: false }) }}
+            refreshing={category.streaming ? crypto.status === "connecting" : market.isFetching}
+          />
         ))}
       </section>
 
@@ -241,40 +199,11 @@ export default function LandingPage() {
       <section className="border border-border bg-surface p-4 text-xs text-muted-foreground">
         <h2 className="label-uppercase mb-2">Verileri okurken</h2>
         <p>
-          Renkler yalnızca veri anlamı için kullanılır. Pozitif değerler yeşil, negatif değerler kırmızı olarak gösterilir.
+          Süreler, tarayıcının son mesajı veya yanıtı aldığı zamanı gösterir; borsadaki işlem zamanı değildir.
+          BIST, ABD, emtia ve döviz özetleri son mevcut günlük veriyi kullanır; fiyatlar gecikmeli olabilir.
+          Akış veya yenileme kesilirse son alınan fiyatlar uyarıyla birlikte gösterilir.
         </p>
       </section>
-    </div>
-  )
-}
-
-function MarketStrip({
-  label,
-  value,
-  change,
-}: {
-  label: string
-  value: number | null | undefined
-  change: number | null | undefined
-}) {
-  const hasChange = typeof change === "number"
-  const isPositive = (change ?? 0) >= 0
-  const formattedValue =
-    typeof value === "number"
-      ? Math.abs(value) >= 1000
-        ? value.toLocaleString("tr-TR", { maximumFractionDigits: 2 })
-        : Math.abs(value) >= 1
-          ? value.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-          : value.toLocaleString("tr-TR", { minimumFractionDigits: 4, maximumFractionDigits: 4 })
-      : "--"
-
-  return (
-    <div className="border border-border bg-base px-3 py-2">
-      <h3 className="label-uppercase mb-1">{label}</h3>
-      <div className="mono-numbers text-lg font-semibold">{formattedValue}</div>
-      <div className={cn("mono-numbers text-xs", hasChange ? (isPositive ? "text-profit" : "text-loss") : "text-muted-foreground")}>
-        {hasChange ? `${isPositive ? "+" : ""}${(change ?? 0).toFixed(2)}%` : "--"}
-      </div>
     </div>
   )
 }
