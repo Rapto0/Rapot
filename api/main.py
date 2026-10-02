@@ -22,6 +22,7 @@ from api.auth import get_current_admin_user, get_current_user
 from api.contracts.health_contract import build_health_payload  # noqa: E402
 from api.rate_limit import limiter  # noqa: E402
 from api.realtime import router as realtime_router  # noqa: E402
+from api.routes.alarm_routes import router as alarm_router
 from api.routes.auth_routes import router as auth_router  # noqa: E402
 from api.routes.calendar_routes import router as calendar_router  # noqa: E402
 from api.routes.symbols_routes import router as symbols_router  # noqa: E402
@@ -32,6 +33,7 @@ from api.runtime.realtime_bootstrap import (  # noqa: E402
 from api.runtime.realtime_bootstrap import (  # noqa: E402
     stop_realtime_services as runtime_stop_realtime_services,
 )
+from api.runtime.server_alarms import start_server_alarms, stop_server_alarms
 from logger import get_logger  # noqa: E402
 from settings import settings  # noqa: E402
 from state_keys import SPECIAL_TAG_HEALTH_STATE_KEY, SPECIAL_TAG_HEALTH_SUMMARY_KEY  # noqa: E402
@@ -72,6 +74,11 @@ async def lifespan(app: FastAPI):
     """
     _run_startup_sequence()
     await _start_realtime_services()
+    try:
+        await start_server_alarms()
+    except BaseException:
+        await _stop_realtime_services()
+        raise
 
     if RUN_EMBEDDED_BOT:
         # Bot Thread Başlat
@@ -92,7 +99,10 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
-        await _stop_realtime_services()
+        try:
+            await stop_server_alarms()
+        finally:
+            await _stop_realtime_services()
         logger.info("API shutting down.")
         logger.info("Otonom Analiz API kapatildi")
 
@@ -126,6 +136,7 @@ app.include_router(auth_router)
 app.include_router(calendar_router)
 app.include_router(symbols_router)
 app.include_router(system_router)
+app.include_router(alarm_router)
 
 # ==================== SCHEMAS ====================
 

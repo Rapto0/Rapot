@@ -6,6 +6,7 @@ Sinyal, trade, tarama geçmişi ve bot istatistikleri için veritabanı modeller
 import enum
 
 from sqlalchemy import (
+    Boolean,
     Column,
     DateTime,
     Float,
@@ -14,6 +15,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     text,
 )
 from sqlalchemy.orm import DeclarativeBase, relationship
@@ -25,6 +27,79 @@ class Base(DeclarativeBase):
     """SQLAlchemy declarative base."""
 
     pass
+
+
+class ServerAlarmRule(Base):
+    """Administrator-owned rules evaluated independently of browser sessions."""
+
+    __tablename__ = "server_alarm_rules"
+
+    id = Column(String(36), primary_key=True)
+    owner = Column(String(100), nullable=False, index=True)
+    name = Column(String(80), nullable=False)
+    symbols_json = Column(Text, nullable=False)
+    indicator = Column(String(10), nullable=False)
+    timeframe = Column(String(5), nullable=False)
+    side = Column(String(5), nullable=False)
+    threshold = Column(Float, nullable=False)
+    mode = Column(String(20), nullable=False)
+    enabled = Column(Boolean, nullable=False, default=True)
+    notify_telegram = Column(Boolean, nullable=False, default=False)
+    revision = Column(Integer, nullable=False, default=1)
+    created_at = Column(DateTime, nullable=False, default=utc_now_naive)
+    updated_at = Column(DateTime, nullable=False, default=utc_now_naive)
+    deleted_at = Column(DateTime, nullable=True)
+    last_checked_at = Column(DateTime, nullable=True)
+    last_triggered_at = Column(DateTime, nullable=True)
+    last_error = Column(String(300), nullable=True)
+
+
+class ServerAlarmSymbolState(Base):
+    """Last observed closed bar, durable across worker and browser restarts."""
+
+    __tablename__ = "server_alarm_symbol_states"
+
+    rule_id = Column(String(36), ForeignKey("server_alarm_rules.id"), primary_key=True)
+    revision = Column(Integer, primary_key=True)
+    symbol = Column(String(25), primary_key=True)
+    market_type = Column(String(10), primary_key=True)
+    bar_time = Column(DateTime, nullable=False)
+    matched = Column(Boolean, nullable=False)
+
+
+class ServerAlarmEvent(Base):
+    """Immutable trigger snapshot with a durable, bounded-retry Telegram outbox."""
+
+    __tablename__ = "server_alarm_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    rule_id = Column(String(36), ForeignKey("server_alarm_rules.id"), nullable=False)
+    revision = Column(Integer, nullable=False)
+    owner = Column(String(100), nullable=False, index=True)
+    rule_name = Column(String(80), nullable=False)
+    symbol = Column(String(25), nullable=False)
+    market_type = Column(String(10), nullable=False)
+    indicator = Column(String(10), nullable=False)
+    timeframe = Column(String(5), nullable=False)
+    side = Column(String(5), nullable=False)
+    value = Column(Float, nullable=False)
+    bar_time = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, nullable=False, default=utc_now_naive, index=True)
+    delivery_status = Column(String(20), nullable=False)
+    delivery_error = Column(String(300), nullable=True)
+    delivery_attempts = Column(Integer, nullable=False, default=0)
+    next_attempt_at = Column(DateTime, nullable=True, index=True)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "rule_id",
+            "revision",
+            "symbol",
+            "market_type",
+            "bar_time",
+            name="uq_server_alarm_event_bar",
+        ),
+    )
 
 
 # ==================== ENUMS ====================

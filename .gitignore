@@ -34,6 +34,7 @@ backups/
 runtime-data/
 /security-reports/
 *.bot.lock
+server-alarms.lock
 
 # Backtest outputs
 backtest_*.xlsx

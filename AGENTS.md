@@ -38,8 +38,11 @@ Anahtar, parola, .env içeriği ve gerçek veritabanları rapora/Git'e alınmaz.
 Ana dashboard `/`; diğer sayfalar `/signals`, `/trades`, `/scanner`, `/health`,
 `/settings`, `/chart`, `/alarms`, `/ai`, `/calendar`, `/tradingview`, `/login`.
 Ayarlar sayfası sunucu/tarayıcı ayarlarının kapsamını açıklar; tarayıcı tercihleri
-ilgili ekranlardan düzenlenir. Yerel alarmlar yalnız alarm sayfası
-açıkken değerlendirilir; kalıcı sunucu alarmı veya Telegram aboneliği değildir.
+ilgili ekranlardan düzenlenir. `/alarms` yöneticiye ait kalıcı sunucu kurallarını
+yönetir; API alarm motoru tarayıcıdan bağımsız çalışır. Eski yerel kurallar
+`/alarms/local` sayfası açıkken değerlendirilir ve otomatik taşınmaz.
+[Sunucu alarm sözleşmesi](docs/SERVER_ALARMS.md) periyot, hesaplayıcı ve teslim
+sınırlarını açıklar; keyfi Pine çalıştırma desteği değildir.
 
 Canonical import ve compatibility listesi [paketleme haritasındadır](docs/PACKAGING_REFACTOR_MAP.md).
 `application.scanner.signal_handlers` gerçek uygulamadır; `scanner_side_effects`

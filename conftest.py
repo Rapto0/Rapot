@@ -62,6 +62,7 @@ def _isolate_environment() -> None:
         "APP_ENV": "test",
         "AI_ENABLED": "0",
         "RUN_EMBEDDED_BOT": "0",
+        "SERVER_ALARMS_ENABLED": "0",
         "MW_DATABASE_URL": f"sqlite+pysqlite:///{(TEST_ROOT / 'middleware.sqlite3').as_posix()}",
         "MW_WEBHOOK_AUTH_TOKEN": "test-token",
         "MW_APP_ENV": "development",

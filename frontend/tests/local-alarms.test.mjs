@@ -483,7 +483,7 @@ test('hook forwards AbortSignal and hides old configuration results before effec
 function renderPage(runtime, isChecking = false) {
   let stateIndex = 0;
   const states = [configuration().watchlists, [rule()], true, null];
-  const page = loadSource('../src/app/alarms/page.tsx', {
+  const page = loadSource('../src/app/alarms/local/page.tsx', {
     react: { ...React, useState: () => [states[stateIndex++], () => {}] },
     'react/jsx-runtime': jsxRuntime, 'lucide-react': icons,
     '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') },
@@ -524,7 +524,7 @@ test('page hydration/storage events only read; user toggle/delete submit intents
   let reads = 0;
   let result = { ok: true, rules: [rule({ enabled: false }), rule({ id: 'peer-rule' })] };
   const makeNode = (type, props) => ({ type, props });
-  const page = loadSource('../src/app/alarms/page.tsx', {
+  const page = loadSource('../src/app/alarms/local/page.tsx', {
     react: {
       useState: () => {
         const index = stateIndex++;

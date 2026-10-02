@@ -165,30 +165,25 @@ function chartHarness(storage, extra = {}) {
     showWatchlistToast(message) { notices.push(message); },
     ...extra,
   };
-  const names = ['commitAlarmRuleChange', 'handleCreateWatchlistAlarmRule', 'handleToggleAlarmRule', 'handleRemoveAlarmRule'];
+  const names = ['commitAlarmRuleChange', 'handleToggleAlarmRule', 'handleRemoveAlarmRule'];
   return { callbacks: chartCallbacks(names, globals), notices, displayed: () => plain(displayed) };
 }
 
-test('actual chart create/toggle/delete handlers respect other tab changes; failures keep UI and avoid success', () => {
+test('legacy chart toggle/delete handlers respect other tab changes; failures keep UI and avoid success', () => {
   const storage = memory([rule('A')]);
   const chart = chartHarness(storage);
   storage.values.set(key, JSON.stringify([rule('A', { enabled: false })]));
   chart.callbacks.handleToggleAlarmRule('A');
   assert.equal(storage.rules()[0].enabled, false);
-  storage.values.set(key, '[]');
-  chart.callbacks.handleCreateWatchlistAlarmRule();
-  assert.equal(storage.rules().length, 1);
-  assert.notEqual(storage.rules()[0].id, 'A');
-  chart.callbacks.handleRemoveAlarmRule(storage.rules()[0].id);
+  chart.callbacks.handleRemoveAlarmRule('A');
   assert.deepEqual(storage.rules(), []);
 
   const broken = memory([rule('A')]);
   broken.setItem = () => { throw new Error('quota'); };
   const failed = chartHarness(broken);
   failed.callbacks.handleRemoveAlarmRule('A');
-  failed.callbacks.handleCreateWatchlistAlarmRule();
   assert.deepEqual(failed.displayed(), [rule('A')]);
-  assert.equal(failed.notices.length, 2);
+  assert.equal(failed.notices.length, 1);
   assert.ok(failed.notices.every((notice) => notice.includes('İşlem uygulanmadı')));
 });
 

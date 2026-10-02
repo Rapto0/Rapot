@@ -250,6 +250,111 @@
         "title": "AIAnalysisResponse",
         "type": "object"
       },
+      "AlarmSymbol": {
+        "additionalProperties": false,
+        "properties": {
+          "market_type": {
+            "enum": [
+              "BIST",
+              "Kripto"
+            ],
+            "title": "Market Type",
+            "type": "string"
+          },
+          "symbol": {
+            "maxLength": 25,
+            "minLength": 1,
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "market_type"
+        ],
+        "title": "AlarmSymbol",
+        "type": "object"
+      },
+      "AlarmWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "indicator": {
+            "enum": [
+              "rsi",
+              "wr",
+              "combo",
+              "hunter"
+            ],
+            "title": "Indicator",
+            "type": "string"
+          },
+          "mode": {
+            "default": "on_enter",
+            "enum": [
+              "on_enter",
+              "once_per_bar"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "notify_telegram": {
+            "default": false,
+            "title": "Notify Telegram",
+            "type": "boolean"
+          },
+          "side": {
+            "enum": [
+              "dip",
+              "top"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "symbols": {
+            "items": {
+              "$ref": "#/components/schemas/AlarmSymbol"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Symbols",
+            "type": "array"
+          },
+          "threshold": {
+            "title": "Threshold",
+            "type": "number"
+          },
+          "timeframe": {
+            "enum": [
+              "1h",
+              "4h",
+              "1d"
+            ],
+            "title": "Timeframe",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "symbols",
+          "indicator",
+          "timeframe",
+          "side",
+          "threshold"
+        ],
+        "title": "AlarmWrite",
+        "type": "object"
+      },
       "CalendarEventResponse": {
         "properties": {
           "actual": {
@@ -1760,6 +1865,238 @@
         "summary": "Root",
         "tags": [
           "Root"
+        ]
+      }
+    },
+    "/alarms": {
+      "get": {
+        "operationId": "list_alarms_alarms_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Alarms Alarms Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Alarms",
+        "tags": [
+          "Server alarms"
+        ]
+      },
+      "post": {
+        "operationId": "create_alarm_alarms_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlarmWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Alarm Alarms Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Alarm",
+        "tags": [
+          "Server alarms"
+        ]
+      }
+    },
+    "/alarms/events": {
+      "get": {
+        "operationId": "list_alarm_events_alarms_events_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Alarm Events Alarms Events Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Alarm Events",
+        "tags": [
+          "Server alarms"
+        ]
+      }
+    },
+    "/alarms/{rule_id}": {
+      "delete": {
+        "operationId": "delete_alarm_alarms__rule_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "title": "Rule Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Delete Alarm Alarms  Rule Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Delete Alarm",
+        "tags": [
+          "Server alarms"
+        ]
+      },
+      "put": {
+        "operationId": "update_alarm_alarms__rule_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "title": "Rule Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AlarmWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Alarm Alarms  Rule Id  Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Alarm",
+        "tags": [
+          "Server alarms"
         ]
       }
     },

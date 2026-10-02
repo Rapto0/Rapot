@@ -19,6 +19,10 @@ Son kaynak doğrulaması: **13 Eylül 2026 / P2-4**. Rapot'un iki ayrı veritaba
 - P2-4: `idx_signals_special_tag_created(special_tag, created_at) WHERE special_tag IS NOT NULL` kısmi indeksi. Etiketli en yeni kayıtların tüm tarihsel eşleşmeleri geçici olarak sıralamadan okunmasını sağlar; satırları veya filtre kapsamını değiştirmez.
 - `ai_analyses` sağlayıcı/model, skor, risk, haber, gecikme ve hata metadata alanları.
 - `scan_history.mode`, `errors_count`, `status`; geçmiş için bilinmeyen mod/durum `unknown`, ölçülmemiş hata sayısı `NULL` kalır.
+- Sunucu alarmları: kural, sembol başına işlenen mum ve olay/teslim tabloları
+  model metadata'sı üzerinden eklenir. Mevcut sinyal/trade satırlarına backfill
+  uygulanmaz. Eski uygulamaya geri dönüş ek tabloları korur; kurallar eski
+  imajda değerlendirilmez. [Alarm sözleşmesi](SERVER_ALARMS.md) yaşam döngüsünü açıklar.
 
 `ensure_sqlite_columns()` mevcut sütun adlarını `PRAGMA table_info` ile karşılaştırır; eksik sütuna `ALTER TABLE ... ADD COLUMN`, tanımlı indekse `CREATE INDEX IF NOT EXISTS` uygular. Mevcut sütunun tipini/constraint'ini veya bütün şemanın doğruluğunu karşılaştırmaz. `create_all()` da var olan tabloları modelle tamamen eşitlemez.
 

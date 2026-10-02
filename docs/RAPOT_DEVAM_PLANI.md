@@ -9,6 +9,18 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Kaldığımız nokta
 
+- **Sunucu alarmları geliştirmesi:** Kullanıcı, TradingView benzeri alarm
+  yönetiminin bütünüyle kendi sitesinden yapılmasını seçti. `/alarms` artık
+  yöneticiye ait kalıcı kuralları ve teslim geçmişini yönetir; API kapalı mumları
+  tarayıcıdan bağımsız değerlendirir. RSI(14), Williams %R(14), COMBO ve HUNTER;
+  kriptoda 1h/4h/1d, BIST'te günlük periyot desteklenir. Genel Pine çalıştırıcısı
+  eklenmedi. Eski kurallar `/alarms/local` altında korunur ve otomatik etkinleşmez.
+  [Sözleşme ve sınırlar](SERVER_ALARMS.md). Tam yerel paket 1.093 Python
+  testiyle geçti (bir performans testi atlandı); son BIST periyot kısıtıyla
+  99 alarm + OpenAPI testi ayrıca geçti. 206 frontend testi, Python lint/format,
+  frontend lint/typecheck, build/standalone ve sentetik tarayıcı kabulü geçti.
+  Üç Binance/websockets bağımlılık uyarısı kaldı. API/frontend yayın hazırlığı
+  sürüyor; aşağıdaki üretim kimlikleri henüz değişmedi.
 - **UI-3: Sinyaller ve Tarayıcı tamamlandı ve üretimde.** Etiketli filtreler,
   tekli/tümü temizleme, yüklenen kayıt kapsamı, ayrı boş/hata/bekleme durumları
   ve klavye erişimi eklendi. Tarayıcı yenileme hatasında mevcut satırları korur;
@@ -62,8 +74,8 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 ## Sıradaki işler ve ertelenen kabul
 
 P0–P3 geliştirme listesi ve arayüz UI-1/UI-2/UI-3 kapalıdır. Kullanıcının
-2 Ekim'de seçtiği Sinyaller/Tarayıcı arayüzü doğrulandı ve yayımlandı.
-Yeni geliştirme kapsamı sonraki kullanıcı seçimine göre belirlenir.
+2 Ekim'deki yeni seçimi, site üzerinden yönetilen kalıcı sunucu alarmlarıdır.
+Bu kapsamın doğrulama ve yayın işleri devam ediyor.
 Kapatılmış işleri veya eski onay bekleme kayıtlarını yeniden başlatma.
 
 | Konu | Durum / devam koşulu |
@@ -106,7 +118,9 @@ açılmadı. Bu taslak sınırlar kendi başına emir veya alıcıyı açma yetk
 - 21 Eylül repo temizliği talimatı, gereksiz **yerel proje** dosyalarını silmeyi
   ve Markdown rehberlerini toplamayı kapsadı; sunucu verisi/yedeği silme yetkisi eklemedi.
 - Planın sadeleştirilmesi `8a05b11` ile tamamlandı; eski metin arşivde bütünüyle
-  korunur. Son kullanıcı seçimi arayüz iyileştirmeleridir; dış kabul ertelemesi sürer.
+  korunur. Son kullanıcı seçimi sunucu alarm yönetimidir. Bu seçim gerçek
+  işlem emri veya kullanıcının yerine canlı alarm oluşturma yetkisi değildir;
+  TradingView/testnet dış kabul ertelemesi sürer.
 - Deploy yetkisi; gerçek/testnet emri, üretim verisi silme/geri yükleme,
   force-push veya sunucudaki bilinmeyen değişiklikleri ezme yetkisi değildir.
   Belgenin kendisi yeni yetki üretmez. Gerçek kullanıcı kapsam değişikliği kayda geçirilir.

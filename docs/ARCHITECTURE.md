@@ -31,8 +31,9 @@ TradingView Pine → /webhooks/tradingview → TradingService
 ```
 
 Bu iki veri hattı otomatik birleşmez. Ana /trades ve /stats, middleware
-pozisyon/emir API'sinin dashboard entegrasyonu değildir. Yerel /alarms da
-TradingView webhook'u veya sunucuda 7/24 çalışan alarm aboneliği değildir.
+pozisyon/emir API'sinin dashboard entegrasyonu değildir. `/alarms` API içinde
+çalışan ayrı, kalıcı bildirim motoruna bağlıdır; emir hattına bağlanmaz.
+Eski `/alarms/local` kuralları yalnız tarayıcıda değerlendirilir.
 
 ## Dosya ve sorumluluk haritası
 
@@ -142,10 +143,12 @@ Signals.py, opsiyonel pandas_ta yokluğunda lock'taki ta ile accessor sağlar.
   girdiyi normalize eder; sembolün borsada listeli olduğuna dair kontrol yapmaz.
 - /signals CSV çıktısı yüklenmiş ve filtrelenmiş satırlardır; tüm tarihsel DB
   export'u değildir. Hatalı/yüklenen/boş veri durumunda export devre dışıdır.
-- /alarms RSI/Williams %R/COMBO/HUNTER kurallarını sayfa açıkken 60 saniyelik tur veya
-  manuel kontrolle değerlendirir. Kural/watchlist tarayıcıda saklanır; farklı
-  sekmeler eşgüdümlenir fakat localStorage eşzamanlı yazılarda transaction sağlamaz.
-  Veri yok/hata/kapalı/koşul sağlandı durumları ayrıdır; sunucuda sürekli alarm yoktur.
+- /alarms yöneticiye ait RSI/Williams %R/COMBO/HUNTER kurallarını sunucuda saklar.
+  API lifespan'indeki tek motor kapanmış mumları değerlendirir; kural, sembol
+  durumu ve bildirim olayları ana SQLite'dadır. Telegram teslimi kalıcı olay
+  durumuyla izlenir. [Sunucu alarm sözleşmesi](SERVER_ALARMS.md) sınırları açıklar.
+  /alarms/local eski tarayıcı kurallarını sayfa açıkken yaklaşık 60 saniyelik
+  turlarla değerlendirir; yerel kurallar otomatik sunucuya taşınmaz.
 - /settings sunucu ve tarayıcı ayarlarının kapsamını açıklar; tarayıcı tercihleri
   ilgili ekranlardan düzenlenir. Backend API anahtarları veya trading yetkisi
   buradan yönetilmez. Token yalnız sekme belleğindedir; refresh/expiry/logout

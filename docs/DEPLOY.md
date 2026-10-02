@@ -101,6 +101,25 @@ The P1-6 operator allows 180 seconds for this startup observation, with status r
 bounded to seven seconds; it retains the separate 20-second API health request limit.
 This observation allowance is not a guarantee that startup finishes within 180 seconds.
 
+### API source update with an unchanged runtime
+
+`Dockerfile.api-delta` can reuse the immutable `279aa9f` production backend
+runtime when Python/dependency build inputs have not changed. The optional
+`publish_api_delta` manual workflow input verifies those inputs, replaces `/app`
+inside the build image with the exact Git source, compares installed distributions,
+and checks source hashes, imports, temporary SQLite CRUD and four alarm indicators
+without network. Only after these checks does it publish
+`backend:api-<full-source-sha>` in the existing backend package. The ordinary
+backend/frontend publication remains available. The API image records its source
+and base digest separately; this path does not update inherited dependencies.
+
+This avoids downloading a rebuilt Python dependency layer on the constrained VPS.
+It does not waive exact-source CI, measured registry layer costs, the fixed 528 MiB
+reserve, an independently restored and verified offhost SQLite backup, or rollback
+preparation. An alarm release may replace API and frontend only, preserving bot,
+middleware and PostgreSQL containers. Record their individual image/source
+identities; `current` is not the source revision of every running component.
+
 ### Frontend-only releases on the current VPS
 
 The historical P2-1 archive procedure below applies to changes confined to frontend

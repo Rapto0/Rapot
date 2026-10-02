@@ -8,6 +8,7 @@ Güncel iş sırası, kullanıcı yetkileri ve tarihli kabul kanıtları
 
 - [Mimari ve veri akışları](ARCHITECTURE.md)
 - [Frontend: kurulum, testler ve ekran davranışları](FRONTEND.md)
+- [Sunucuda çalışan alarmlar: kurallar, bildirim ve sınırlar](SERVER_ALARMS.md)
 - [Canonical paketler ve compatibility importları](PACKAGING_REFACTOR_MAP.md)
 - [Wrapper kaldırma koşulları](WRAPPER_DEPRECATION_SCHEDULE.md)
 - [Veritabanı şema ve veri göçü](DB_MIGRATION_POLICY.md)

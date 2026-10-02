@@ -1,0 +1,15 @@
+# API-only source update using the exact runtime already present on the VPS.
+# Publishing is allowed only when the workflow verifies unchanged dependency inputs.
+FROM ghcr.io/rapto0/rapot/backend@sha256:9be0fdb6097f52bf97730f44c86d28c24e2c0cea1fe181e7e8fd668177fdb034
+
+LABEL org.opencontainers.image.base.name="ghcr.io/rapto0/rapot/backend@sha256:9be0fdb6097f52bf97730f44c86d28c24e2c0cea1fe181e7e8fd668177fdb034" \
+      org.opencontainers.image.base.digest="sha256:9be0fdb6097f52bf97730f44c86d28c24e2c0cea1fe181e7e8fd668177fdb034"
+
+# Remove inherited application files inside the build image so deleted modules
+# cannot survive the source update. No production volume is involved in a build.
+WORKDIR /
+RUN python -c "import pathlib, shutil; source = pathlib.Path('/app'); assert source.is_dir() and not source.is_symlink(); shutil.rmtree(source); source.mkdir()"
+WORKDIR /app
+COPY . .
+
+CMD ["python", "-m", "scripts.runtime", "api"]

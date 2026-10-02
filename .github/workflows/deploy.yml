@@ -4,6 +4,11 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      publish_api_delta:
+        description: Publish API source update on the pinned production runtime (unchanged dependencies only)
+        type: boolean
+        default: false
 
 env:
   REGISTRY: ghcr.io
@@ -73,3 +78,147 @@ jobs:
             echo "Frontend: $REGISTRY/$IMAGE_REPOSITORY/frontend:$SOURCE_SHA"
             echo 'Follow docs/DEPLOY.md for verified-commit checks, backups, migrations and server rollout.'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  publish-api-delta:
+    name: Verify and publish API delta image
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_api_delta
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      API_BASE_SOURCE: 279aa9fea99b520e661b43f104a2bf4791893ac3
+      API_BASE_IMAGE: ghcr.io/rapto0/rapot/backend@sha256:9be0fdb6097f52bf97730f44c86d28c24e2c0cea1fe181e7e8fd668177fdb034
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Verify unchanged runtime inputs and prepare canonical source
+        id: source
+        shell: bash
+        run: |
+          git diff --exit-code "$API_BASE_SOURCE" HEAD -- \
+            Dockerfile requirements.txt requirements-security.txt requirements-dev.lock .python-version
+          test -z "$(git status --porcelain)"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "repository=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          mkdir "$RUNNER_TEMP/api-delta-context" "$RUNNER_TEMP/api-delta-proof"
+          git archive --format=tar HEAD | tar -x -C "$RUNNER_TEMP/api-delta-context"
+          python - <<'PY'
+          import hashlib, json, os, pathlib, subprocess
+          files = subprocess.check_output(["git", "ls-files", "-z"]).decode().split("\0")
+          wanted = [name for name in files if name.endswith(".py") and not name.startswith(".")]
+          wanted += ["Dockerfile", "Dockerfile.api-delta", ".python-version", "requirements.txt",
+                     "requirements-security.txt", "requirements-dev.lock"]
+          result = {name: hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest() for name in wanted}
+          target = pathlib.Path(os.environ["RUNNER_TEMP"]) / "api-delta-proof/source-sha256.json"
+          target.write_text(json.dumps(result, sort_keys=True), encoding="utf-8")
+          PY
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build API image from the pinned installed runtime
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ runner.temp }}/api-delta-context
+          file: ${{ runner.temp }}/api-delta-context/Dockerfile.api-delta
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: ghcr.io/${{ steps.source.outputs.repository }}/backend:api-${{ steps.source.outputs.sha }}
+          labels: org.opencontainers.image.revision=${{ steps.source.outputs.sha }}
+
+      - name: Compare installed distributions and verify the API image offline
+        shell: bash
+        env:
+          API_IMAGE: ghcr.io/${{ steps.source.outputs.repository }}/backend:api-${{ steps.source.outputs.sha }}
+        run: |
+          docker pull "$API_BASE_IMAGE"
+          INVENTORY='import importlib.metadata,json; print(json.dumps(sorted((d.metadata["Name"].lower(),d.version) for d in importlib.metadata.distributions())))'
+          docker run --rm --network none "$API_BASE_IMAGE" python -c "$INVENTORY" > "$RUNNER_TEMP/api-delta-proof/base-distributions.json"
+          docker run --rm --network none "$API_IMAGE" python -c "$INVENTORY" > "$RUNNER_TEMP/api-delta-proof/api-distributions.json"
+          cmp "$RUNNER_TEMP/api-delta-proof/base-distributions.json" "$RUNNER_TEMP/api-delta-proof/api-distributions.json"
+          docker run --rm --network none "$API_IMAGE" python -m pip check
+          docker run --rm -i --network none --read-only --tmpfs /tmp:rw,size=64m --workdir /tmp \
+            --mount "type=bind,source=$RUNNER_TEMP/api-delta-proof/source-sha256.json,target=/source-sha256.json,readonly" \
+            -e PYTHONPATH=/app -e TELEGRAM_TOKEN=ci-test-token -e TELEGRAM_CHAT_ID=ci-test-chat \
+            -e APP_ENV=test -e AI_ENABLED=0 -e RUN_EMBEDDED_BOT=false -e SERVER_ALARMS_ENABLED=false \
+            -e JWT_SECRET_KEY=ci-only-secret-not-used-for-real-sessions \
+            -e DATABASE_PATH=/tmp/trading.sqlite3 -e CACHE_DATABASE_PATH=/tmp/cache.sqlite3 \
+            -e MW_WEBHOOK_AUTH_TOKEN=ci-test-webhook \
+            "$API_IMAGE" python - <<'PY'
+          import hashlib, json, pathlib
+          from datetime import UTC, datetime
+          expected = json.loads(pathlib.Path("/source-sha256.json").read_text())
+          for name, digest in expected.items():
+              source = pathlib.Path("/app") / name
+              assert hashlib.sha256(source.read_bytes()).hexdigest() == digest, name
+              if name.endswith(".py"):
+                  compile(source.read_bytes(), str(source), "exec")
+          import ai_evaluation
+          import api.main
+          import middleware.api.main
+          import numpy as np
+          import pandas as pd
+          from db_session import init_db
+          from api.routes.alarm_routes import AlarmWrite
+          from application.services.server_alarm_evaluator import evaluate_closed_alarm_bars
+          from application.services import server_alarm_service as service
+          from infrastructure.repositories import server_alarm_repository as repository
+          init_db()
+          write = AlarmWrite(name="CI offline", symbols=[{"symbol": "BTCUSDT", "market_type": "Kripto"}],
+                             indicator="rsi", timeframe="1h", side="dip", threshold=30,
+                             notify_telegram=False)
+          rule = service.save_rule("ci-admin", write.model_dump())
+          assert service.list_rules("ci-other") == []
+          assert service.list_rules("ci-admin")[0]["id"] == rule["id"]
+          axis = np.arange(161)
+          close = 100 + axis / 10 + np.sin(axis / 3) * 5
+          frame = pd.DataFrame({"Open": close + .2, "High": close + 2, "Low": close - 2,
+                                "Close": close, "Volume": 1000. + axis},
+                               index=pd.date_range(end="2026-10-02T12:00:00Z", periods=161, freq="1h"))
+          frame.attrs["timeframe"] = "1h"
+          for indicator, threshold in (("rsi", 30), ("wr", -80), ("combo", 3), ("hunter", 7)):
+              result = evaluate_closed_alarm_bars(frame, market_type="Kripto", timeframe="1h",
+                        indicator=indicator, side="dip", threshold=threshold,
+                        now=datetime(2026, 10, 2, 12, 30, tzinfo=UTC))
+              assert result["bar_time"] == "2026-10-02T11:00:00Z"
+          service.delete_rule("ci-admin", rule["id"])
+          assert service.list_rules("ci-admin") == []
+          repository.prune_history()
+          print(json.dumps({"status": "passed", "source_files_verified": len(expected),
+                            "network": "disabled", "indicators": 4, "crud": "passed"}))
+          PY
+          docker image inspect "$API_IMAGE" --format '{"size_bytes":{{.Size}},"layers":{{json .RootFS.Layers}}}' > "$RUNNER_TEMP/api-delta-proof/image-layers.json"
+
+      - name: Publish verified API image
+        shell: bash
+        env:
+          API_IMAGE: ghcr.io/${{ steps.source.outputs.repository }}/backend:api-${{ steps.source.outputs.sha }}
+        run: |
+          docker push "$API_IMAGE"
+          docker image inspect "$API_IMAGE" --format '{{json .RepoDigests}}' > "$RUNNER_TEMP/api-delta-proof/published-digests.json"
+          {
+            echo '## API delta image published; server deployment not performed'
+            echo "API image: $API_IMAGE"
+            echo "Unchanged dependency base: $API_BASE_IMAGE"
+            echo 'Installed distributions matched the base; source hashes, imports, SQLite CRUD and four indicators passed without network.'
+            echo 'Fresh registry-layer capacity checks, anonymous pull access and a verified offhost SQLite backup are still required before server deployment.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Preserve API delta source and runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: api-delta-evidence-${{ github.sha }}
+          path: ${{ runner.temp }}/api-delta-proof/
+          if-no-files-found: error
+          retention-days: 14

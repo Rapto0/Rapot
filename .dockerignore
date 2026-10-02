@@ -41,6 +41,7 @@ venv/
 **/.turbo/
 runtime-data/
 runtime-logs/
+server-alarms.lock
 
 # Database (Mount edilmeli)
 *.db

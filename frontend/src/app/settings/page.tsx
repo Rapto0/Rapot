@@ -38,6 +38,18 @@ export default function SettingsPage() {
       </section>
 
       <section className="border border-border bg-surface p-4">
+        <h2 className="text-sm font-semibold">Sunucu alarmları</h2>
+        <p className="mt-2 text-xs leading-5 text-muted-foreground">
+          Kendi sembol, gösterge ve eşik kurallarınızı alarm merkezinde yönetebilirsiniz.
+          Sunucu alarm servisi çalışırken bu kurallar tarayıcı kapalı olsa da değerlendirilir.
+          Telegram seçimi, sunucuda tanımlı mevcut bildirim hedefine gönderimi açar.
+        </p>
+        <Link href="/alarms" className="mt-2 inline-flex min-h-11 items-center text-xs text-primary underline underline-offset-4">
+          Sunucu alarm merkezini aç
+        </Link>
+      </section>
+
+      <section className="border border-border bg-surface p-4">
         <h2 className="text-sm font-semibold">Bu tarayıcıdaki tercihler</h2>
         <p className="mt-2 text-xs leading-5 text-muted-foreground">
           Tarayıcı ekranındaki izleme listeleri, sütunlar ve filtreler kendi ekranından düzenlenir ve bu tarayıcıda saklanır.

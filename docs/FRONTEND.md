@@ -101,7 +101,8 @@ platform paketi için ürettiği `npm ls` uyarısı
 | **Piyasa Tarayıcı** | `/scanner` - BIST ve Kripto tarama durumu |
 | **Aktif Sinyaller** | `/signals` - Filtre/arama, HUNTER/COMBO sinyalleri ve görünür satırların CSV çıktısı |
 | **Grafik** | `/chart` - URL'den sembol/piyasa seçimi, izleme listeleri ve yerel alarm kuralı oluşturma |
-| **Yerel Alarmlar** | `/alarms` - Bu sayfa açıkken kuralların kontrolü, kapatma ve silme |
+| **Sunucu Alarmları** | `/alarms` - Yöneticiye ait kalıcı kural oluşturma/düzenleme, duraklatma ve teslim geçmişi |
+| **Eski Yerel Alarmlar** | `/alarms/local` - Bu sayfa açıkken eski tarayıcı kurallarının kontrolü |
 | **İşlem Geçmişi** | `/trades` - Ana DB işlemleri; hesaplanabilir PnL, eksik veride bilinmeyen değer |
 | **Bot Sağlığı** | `/health` - Bot yaşam döngüsü, tarama sonucu, admin logları ve sistem metrikleri |
 | **Ayarlar** | `/settings` - Sunucuda yönetilen ayarların açıklaması ve tarayıcı tercihlerinin kapsamı |
@@ -118,7 +119,17 @@ platform paketi için ürettiği `npm ls` uyarısı
   değer kullanılır; piyasa `Kripto` değilse BIST, geçersiz/boş sembolde seçilen
   piyasanın varsayılanı BTCUSDT veya THYAO uygulanır. Sembol doğrulaması biçimseldir;
   sağlayıcıda gerçekten listelenmesi ayrıca veri yanıtına bağlıdır.
-- **Yerel alarm:** Kurallar bu tarayıcıda saklanır. `/alarms` açıkken ilk kontrol,
+- **Sunucu alarmı:** `/alarms` yönetici oturumu ister. Kurallar ana DB'ye kaydedilir;
+  API motoru tarayıcı ve oturumdan bağımsız çalışır. Grafik üzerinden sembol/listeden
+  kural taslağı açılabilir. Telegram varsayılan kapalıdır. Durum, son kontrol,
+  hata ve teslim geçmişi görünür; başarısız yenileme mevcut kayıtları silmez.
+  BIST yalnız günlük (`1d`), Binance Spot USDT ise `1h`/`4h`/`1d` destekler;
+  BIST içeren karma listelerde de saatlik seçim reddedilir. BIST günlük mumları,
+  Türkiye saatinde ertesi gün 00.00 geçince kapanmış kabul edilir. Her kontrol
+  turundan sonra yaklaşık 60 saniye beklenir; tüm semboller aynı turda
+  tamamlanamayabilir. Form, desteklenmeyen periyodu sessizce değiştirmez.
+  [Hesaplama, periyot ve teslim sınırları](SERVER_ALARMS.md) geçerlidir.
+- **Yerel alarm:** Eski kurallar bu tarayıcıda saklanır. `/alarms/local` açıkken ilk kontrol,
   ardından yaklaşık 60 saniyelik kontrol vardır; devam eden tura yenisi eklenmez.
   Sayfa kapanınca durur; arka plan zamanlayıcıları tarayıcı tarafından geciktirilebilir.
   Veri hatası, eksik gösterge ve kısmi kontrol başarılı bir “tetik yok” sonucu
