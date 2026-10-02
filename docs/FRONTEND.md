@@ -2,7 +2,8 @@
 
 Rapot'un BIST/Kripto sinyallerini, ana veritabanındaki işlemleri ve bot durumunu
 gösteren Next.js dashboard'u. Grafikler Lightweight Charts kullanır; TradingView
-Pine/alarm akışı ve ayrı Spot middleware bu arayüzden yönetilmez.
+Pine/webhook akışı ve ayrı Spot middleware bu arayüzden yönetilmez.
+Rapot'un kendi kalıcı sunucu alarmları `/alarms` ekranından yönetilir.
 
 Güncel iş sırası, doğrulama ve yayın kayıtları [Rapot Devam Planı](RAPOT_DEVAM_PLANI.md)
 içindedir. P2-1 ekran davranışları, P2-4 eşzamanlı yük ve P3-1 COMBO sıfır-değer
