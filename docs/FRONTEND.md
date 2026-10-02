@@ -253,6 +253,24 @@ başarılı boş yanıt, eldeki satırlarla yenileme hatası, 44 px/16 px kontro
 dialog Tab/Shift+Tab/Enter/Escape odağını kapsar. Fixture yalnız loopback sentetik
 GET yanıtlarıdır. Yayın sonucu [devam planında](RAPOT_DEVAM_PLANI.md).
 
+**Üretim kabulü, 2 Ekim:** `db534fb` kaynağı exact beş CI işi ve imaj yayını
+sonrasında yalnız frontend yenilenerek **09:52:39 UTC**'de üretime alındı;
+imaj digest'i `sha256:feaa0325…`, backend/Compose/current `279aa9f` korundu.
+Dış HTTP kabulünde ana sayfa, Sinyaller, Tarayıcı ve iki grafik URL'si ile
+**20 JS + 1 CSS** geçti. Canlı tarayıcıda 320/768/1280 px taşma kontrolü,
+filtre/arama boş sonucu, tekli/tümü temizleme ve odak dönüşü; işlem penceresinde
+Tab/Shift+Tab, Escape ve Enter doğrulandı. Kontroller 44 px, metin girişi 16 px
+ölçüldü. Kabul anında Sinyaller 300 kayıt, Tarayıcı 1.400 sinyalden 325 sembol
+gösterdi; BIST filtresi 102 sembol, sayısal filtre boş sonuç verdi ve temizleme
+325 sembole döndürdü. Bu sayılar sabit ürün toplamı değil, kabul anı gözlemidir.
+
+Tarayıcıda **ek metriklerin beklediği uyarısı kabul boyunca görünür kaldı**;
+etkileşim kabulü bu uyarının veya tüm sağlayıcı/metrik yolunun düzeldiğini
+göstermez. Üretim kanıtları Git dışında `runtime-data/ui3-http-acceptance.json`
+ve `runtime-data/ui3-browser-acceptance.json` dosyalarındadır. Next/Node sürüm
+metadata'sı [güvenlik belgesinde](FRONTEND_DEPENDENCY_SECURITY.md) ayrıca kayıtlıdır;
+fiyat doğruluğu, gerçek alarm/emir ve tam erişilebilirlik kabulü kapsam dışıdır.
+
 ## 🎨 Tema
 
 Proje **Dark Mode** odaklı tasarlanmıştır. Renk paleti TradingView dark temasıyla uyumludur:

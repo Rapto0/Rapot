@@ -6,7 +6,7 @@ P3-1 dördüncü adım kapanışındaki durumdur. İş sırası ve üretim kabul
 [devam planında](RAPOT_DEVAM_PLANI.md#p1-g2--frontend-bağımlılık-güvenliği-takibi)
 tutulur.
 
-## 2 Ekim 2026 — UI3 yayın öncesi güvenlik düzeltmesi
+## 2 Ekim 2026 — UI3 güvenlik düzeltmesi ve üretim kabulü
 
 `bc9bdc0e008cb815650037d754fd50adb0654d92` kaynağının
 [CI 36989001597](https://github.com/Rapto0/Rapot/actions/runs/36989001597)
@@ -50,9 +50,31 @@ Git dışı yerel kanıtlar:
 - Yeni ham audit, kapsam manifesti ve özet:
   `runtime-data/ui3-20261002-security-fix-audit/`.
 
-Bu bölüm yerel güvenlik düzeltmesini kaydeder. Son kaynak için uygulama/CI,
-imaj ve üretim kabulü [devam planında](RAPOT_DEVAM_PLANI.md) ayrıca tutulur;
-bu sonuç tek başına üretimin yeni sürüme geçtiğini göstermez.
+### Üretim kabulü
+
+Son kaynak `db534fb47fabc6ff89b9ff42b0a80064f2552901` için
+[CI 36990139903](https://github.com/Rapto0/Rapot/actions/runs/36990139903)
+beş işi ve [imaj yayını 36991379299](https://github.com/Rapto0/Rapot/actions/runs/36991379299)
+geçti. Yamalı ortamda 192 frontend testi, lint/typecheck, build ve standalone
+doğrulandı. **09:52:39 UTC**'de yalnız frontend şu immutable imajla yenilendi:
+`sha256:feaa0325b0079ad398a203fefd18fc0497594535ff80f110de056444c485af0a`.
+Backend/Compose/current `279aa9f` korundu. Başarılı deployment kaydı
+`runtime-data/ui3-20261002-frontend-deployment.json`, SHA256
+`2d5e28febb7cb6843135cf89a2b1820929138b97202aaec20388bd58d55c3fb4`.
+
+**09:53:24 UTC** salt okunur sürüm kabulü, aynı deployment receipt'ine bağlı
+konteyner/imaj kimliğini önce ve sonra eşleştirdi: **Next 16.3.8**, **Node
+v20.20.2**, **linux/x64**. Yalnız `next/package.json` ve Node process metadata'sı
+okundu; Sharp/native binding, libvips, image decoding veya exploit testi
+yapılmadı. Kayıt `runtime-data/ui3-20261002-native-version-acceptance.json`, SHA256
+`a889426ad6ac619600e95e484ca427a3ce2a84b25d07656b3f583454b724276b`.
+
+Dış HTTP kabulü beş sayfa/grafik URL'si ve **20 JS + 1 CSS** içerir;
+canlı Sinyaller/Tarayıcı etkileşim kabulü ayrı kaydedildi. Tarayıcıdaki ek
+metriklerin beklediği uyarısı devam ettiği için bu sonuç bütün sağlayıcı
+yollarının kabulü değildir. Ayrıntılar [frontend rehberinde](FRONTEND.md#sinyaller-ve-tarayıcı--ui-3)
+ve [devam planında](RAPOT_DEVAM_PLANI.md) tutulur. Aşağıdaki 13/20 Eylül
+sürüm ve native test sonuçları kendi tarihli imajlarına aittir.
 
 ## 13 Eylül incelemesinin sonucu ve kapsamı
 

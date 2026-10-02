@@ -9,12 +9,16 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Kaldığımız nokta
 
-- **UI-3: Sinyaller ve Tarayıcı yerel kabulü tamam.** Etiketli filtreler,
+- **UI-3: Sinyaller ve Tarayıcı tamamlandı ve üretimde.** Etiketli filtreler,
   tekli/tümü temizleme, yüklenen kayıt kapsamı, ayrı boş/hata/bekleme durumları
   ve klavye erişimi eklendi. Tarayıcı yenileme hatasında mevcut satırları korur;
   bozuk/engellenen tarayıcı depolaması açıklanır. 37 yeni regresyonla **192
   frontend testi**, lint/typecheck, build/standalone ve 320/768/1280 px yerel
-  tarayıcı kabulü geçti. CI ve üretim yayını henüz tamamlanmadı.
+  tarayıcı kabulü geçti. Kaynak `db534fb`; beş CI işi, imaj yayını ve yalnız
+  frontend rollout'u başarılı. Canlı iki ekranda filtre/temizleme, dar ekran
+  ve Tarayıcı dialog klavye kabulü geçti. Ek fiyat bilgileri beklerken mevcut
+  satırların uyarıyla görünmesi doğrulandı; tüm sağlayıcı yanıtlarının
+  tamamlandığı iddia edilmez.
   [Davranış ve sınırlar](FRONTEND.md#sinyaller-ve-tarayıcı--ui-3).
   İlk kaynak `bc9bdc0` / CI `36989001597` mevcut npm lock bulgularıyla durdu;
   Next/eslint 16.3.8 ve brace-expansion 1.1.21/2.1.7 yamaları uygulandı;
@@ -57,12 +61,14 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Sıradaki işler ve ertelenen kabul
 
-P0–P3 geliştirme listesi ve arayüz UI-1/UI-2 kapalıdır. Kullanıcı 2 Ekim'de
-Sinyaller/Tarayıcı arayüzünü seçti; UI-3'ün doğrulama ve yayını yürütülüyor.
+P0–P3 geliştirme listesi ve arayüz UI-1/UI-2/UI-3 kapalıdır. Kullanıcının
+2 Ekim'de seçtiği Sinyaller/Tarayıcı arayüzü doğrulandı ve yayımlandı.
+Yeni geliştirme kapsamı sonraki kullanıcı seçimine göre belirlenir.
 Kapatılmış işleri veya eski onay bekleme kayıtlarını yeniden başlatma.
 
 | Konu | Durum / devam koşulu |
 |---|---|
+| Canlı veri yükleme gecikmesi | UI-3 kabulünde Tarayıcı ek fiyat/metrikleri bekledi; Sinyaller tekrar açılışta bekledikten sonra 300 kaydı yükledi. Arayüz durumları doğru gösterildi; gecikmenin nedeni ve sağlayıcı performansı bu pakette çözülmedi. |
 | Gerçek TradingView alarmının webhook'a teslimi | Erteli; kullanıcı yeniden seçtiğinde ele alınır. Webhook URL erişimi için şu an yanıt beklenmiyor. |
 | ALL/FIRST, saat filtresi, futures/standart olmayan grafik korumaları | Güncel kaynağın bu runtime matrisi erteli. BTCUSDT/standart mum kabulü bunları kapsamaz. |
 | Testnet BUY → FIFO SELL → reconcile ve gerçek emir | Erteli; ayrı hesap/DB/kapsam ve somut emir yetkisi gerekir. Hazır test araçlarını kendiliğinden çalıştırma. |
@@ -116,16 +122,37 @@ repodan kaldırıldı. Dağıtım ve geri dönüş adımları [DEPLOY.md](DEPLOY
 | Alan | Son kayıt |
 |---|---|
 | Sunucu / erişim | `root@138.68.71.27`, IP üzerinden HTTPS |
-| Frontend kaynak | `13e5fbb93ab191c21619ae981d3145b9d9814984` |
-| Frontend imaj | `sha256:a24bbefa443cf30f77af55161c19520f6febf1c977ef55a044fd030189bd0b41` |
+| Frontend kaynak | `db534fb47fabc6ff89b9ff42b0a80064f2552901` |
+| Frontend imaj | `sha256:feaa0325b0079ad398a203fefd18fc0497594535ff80f110de056444c485af0a` |
 | Backend / Compose / current kaynak | `279aa9fea99b520e661b43f104a2bf4791893ac3` |
 | Backend imaj | `sha256:9be0fdb6097f52bf97730f44c86d28c24e2c0cea1fe181e7e8fd668177fdb034` |
 | Veri / kaynak pointer | `/var/lib/rapot/main` ve `/opt/rapot/current`; operator kaynak kopyası bunlardan ayrıdır |
 | Çalışma modu | `MW_EXECUTION_MODE=DRY_RUN`, `MW_TRADING_ENABLED=false`, `MW_BINANCE_LIVE_ENABLED=false`; AI kapalı |
-| Son uzak kabul | 21 Eylül 20:38:35 UTC; beş servis sağlıklı, restart0; HTTPS API/bot 200; boş alan 1.090.461.696 bayt |
+| Son uzak kabul | 2 Ekim 10:03:15 UTC; beş servis sağlıklı/restart0, HTTPS API/bot 200; boş alan 1.095.524.352 bayt |
 
 Son kayıtlar:
 
+- **UI-3 üretim kabulü:** [CI 36990139903](https://github.com/Rapto0/Rapot/actions/runs/36990139903)
+  ve [imaj yayını 36991379299](https://github.com/Rapto0/Rapot/actions/runs/36991379299)
+  başarılı. `/root/rapot-ops/20261002-ui3-frontend/deployment.json` **verified**;
+  SHA256 `2d5e28febb7cb6843135cf89a2b1820929138b97202aaec20388bd58d55c3fb4`.
+  Uzak/yerel makbuz birebir; son runtime SHA256
+  `273eb2b589056d48a79471b972720dc0f823f7ecd9ab5ef2ced28241948c9b67`.
+  Yalnız frontend değişti; backend/Compose/current `279aa9f`, diğer dört servis,
+  env/Nginx ve eski `13e5fbb` / `a24bbefa…` geri dönüş imajı korundu. Sabit
+  528 MiB rezerv ve 2 MiB kanıt bütçesi sağlandı; silme veya DB işlemi yok.
+  Beş dış HTTPS sayfası (iki grafik rotası dahil), iki sağlık GET'i ve
+  **20 JS + 1 CSS** geçti. Exact konteynerde Next **16.3.8**, Node **20.20.2**,
+  Linux/x64 metadata'sı doğrulandı; bu native decode/exploit testi değildir.
+  Canlı tarayıcıda Sinyaller 300 kayıt, Tarayıcı 325 sembol yükledi; filtre
+  birleşimi, tekli/tümü temizleme, sayısal dialog Tab/Shift+Tab/Enter/Escape
+  ve 320/768/1280 px taşma kontrolü geçti. Tarayıcı ek fiyat bilgilerini
+  beklerken satırlar uyarıyla görünür kaldı; bu tam sağlayıcı kabulü değildir.
+  Hata ve başarılı boş API yanıtı senaryoları ayrıca yerel sentetik kabulde
+  sınandı. Yerel kanıtlar: `runtime-data/ui3-final-local-validation.json`,
+  `ui3-local-browser-acceptance.json`, `ui3-http-acceptance.json`,
+  `ui3-browser-acceptance.json`, `ui3-browser-overview-followup.json`,
+  `ui3-20261002-native-version-acceptance.json`, `ui3-20261002-runtime-final.json`.
 - **UI-2 üretim kabulü:** [CI 35650332366](https://github.com/Rapto0/Rapot/actions/runs/35650332366)
   ve [imaj yayını 35651233045](https://github.com/Rapto0/Rapot/actions/runs/35651233045)
   başarılı. `/root/rapot-ops/20260921-ui2-frontend/deployment.json` **verified**;
