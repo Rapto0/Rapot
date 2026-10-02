@@ -120,6 +120,28 @@ preparation. An alarm release may replace API and frontend only, preserving bot,
 middleware and PostgreSQL containers. Record their individual image/source
 identities; `current` is not the source revision of every running component.
 
+The 2 October 2026 server-alarm release used this path for API and frontend
+source `d4d2b6588744dc82779ef240ef292241933a20ff`. CI `37004866806` and both
+publication jobs in `37005938969` passed. API digest is
+`sha256:fb6bff3d29d6e8f8d088a0c23857e1eee8790742288616373249d2f8cc21026e`;
+frontend digest is
+`sha256:d0403873d7fd836709f515efa5e4f3629cb6f4fee65d03c1a41f1d6b8c7e0a8f`.
+Bot, middleware, Compose and `current` retain `279aa9f`; their existing backend
+digest remains the API dependency base. Only the API's explicit image and the
+frontend image changed in the private Compose override.
+
+The verified offhost backup restored all seven original tables with matching
+schema and typed row fingerprints before rollout. Startup added three empty
+alarm tables; a separate read-only check confirmed the original schema remained
+unchanged. Authenticated runtime GETs, public provider computations, four HTTPS
+pages, 17 static assets and anonymous 401 responses passed. No live alarm,
+Telegram test notification, middleware order, database restore or cleanup was
+performed. `/root/rapot-ops/20261002-server-alarms/deployment.json` records the
+health/SSR/auth boundary; separate acceptance covers the runtime and schema.
+The final recorded free space was 1,056,694,272 bytes, above the fixed 528 MiB
+reserve. Exact evidence hashes and acceptance boundaries are in the
+[continuation plan](RAPOT_DEVAM_PLANI.md#son-üretim-ve-yayın-kanıtları).
+
 ### Frontend-only releases on the current VPS
 
 The historical P2-1 archive procedure below applies to changes confined to frontend

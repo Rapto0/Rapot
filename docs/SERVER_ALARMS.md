@@ -101,3 +101,10 @@ boş alarm tablolarıyla gelir; kullanıcının yerine canlı alarm oluşturulma
 Geri dönüş eski API/frontend imajlarını kullanır ve uyumlu ek tabloları korur;
 otomatik veri geri yükleme veya tablo silme yapılmaz. Güncel yayın/kabul durumu
 [devam planında](RAPOT_DEVAM_PLANI.md) tutulur.
+
+2 Ekim 2026'da `d4d2b65` API/frontend kaynağı üretime alındı. Canlı yönetici
+okumalarında motorun çalıştığı ve son turun hatasız olduğu; BTCUSDT/1h ve
+THYAO/1d verilerinden kapalı mum hesaplanabildiği doğrulandı. Üç alarm tablosu
+boş olarak eklendi; mevcut şema korundu. Yerel sentetik CRUD/bildirim testleri
+ve canlı salt okunur kabul, gerçek kullanıcı alarmı veya Telegram teslimi
+olarak yorumlanmaz. İlk kuralı kullanıcı yönetici oturumuyla oluşturur.

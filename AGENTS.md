@@ -1,6 +1,6 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-Kaynaklarla son karşılaştırma: **2 Ekim 2026 / UI-3 ve frontend güvenlik yamaları**. İş sırası, kullanıcı
+Kaynaklarla son karşılaştırma: **2 Ekim 2026 / sunucu alarmları canlı kabulü**. İş sırası, kullanıcı
 yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DEVAM_PLANI.md)
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 Teknik rehberler [docs dizininde](docs/README.md) listelenir.
