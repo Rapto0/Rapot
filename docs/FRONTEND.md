@@ -209,6 +209,45 @@ kontrolü, iki grafik rotası ve 11 JS + 1 CSS geçti. Canlı tarayıcıda BIST/
 fiyatlarının görünmesi, durumlar, alım süreleri ve BIST **Yenile** düğmesi doğrulandı. Gerçek mum,
 alarm/emir veya tam erişilebilirlik kabulü değildir. Yayın kanıtları devam planındadır.
 
+## Sinyaller ve Tarayıcı — UI-3
+
+2 Ekim 2026: iki ekranda etiketli, en az 44 px filtre kontrolleri; etkin
+seçimlerin tekli/tümü temizliği ve yükleme/hata/boş sonuç ayrımı eklendi.
+Sayılar yüklenen kayıt kapsamını açıklar. İlk bağlantı bekleme durumu boş
+başarılı yanıt sayılmaz. Yenileme hatasında eldeki satırlar uyarıyla kalır;
+başarılı boş yanıtta eski satırlar kaldırılır.
+
+- **Sinyaller:** piyasa/strateji/yön/özel etiket API filtreleri ve yerel sembol
+  araması korunur. Tüm piyasalarda 150 BIST + 150 Kripto, tek piyasada en fazla
+  300 kayıt alınır; arama tüm geçmişi taramaz. CSV yine yalnız görünen satırları
+  indirir; hata/yükleme/yenilemede kapalıdır. Satır seçimi klavyeden sembol
+  düğmesiyle yapılır; sonuç tablosu klavyeyle yatay kaydırılabilir.
+- **Tarayıcı:** her piyasanın en son 700 sinyalinden sembol özeti üretir.
+  Strateji/yön/periyot sembolün son sinyaline göre süzülür. Ayrı filtreler AND,
+  seçili periyotlar kendi aralarında OR'dur. Gizlenen sütunun sayısal filtresi
+  etkin kalır ve özetinde görünür; kayıtlarda artık olmayan seçili periyot da
+  kaldırılabilir. Temizleme izleme listelerini, görünümü ve sıralamayı korur.
+  Bir piyasanın yenileme hatası diğer mevcut satırları gizlemez.
+- **Tercihler:** Tarayıcı filtre/görünüm/listeleri mevcut v2 anahtarlarında
+  hatırlar; arama metni saklanmaz. Bozuk JSON veya engellenen depolama ekranı
+  düşürmez. Anahtarlar bağımsız okunur; okuma hatasında otomatik yazma durur,
+  ham kayıt ezilmez. Yazma hatasında kalıcılık uyarısı görünür. Bu üç anahtarın
+  yazımı atomik değildir ve sekmeler arası eşzamanlılık garantisi eklenmedi.
+- **Ortak işlem penceresi:** native dialog, başlık/açıklama bağlantısı, ilk
+  odak, Tab/Shift+Tab sınırı, Escape ve kapanınca tetikleyiciye dönüş sağlar.
+  Bekleyen işlemde yeniden gönderme/iptal engellenir. Tarayıcı ve Alarmlar
+  mevcut props sözleşmesini kullanmaya devam eder.
+
+API istekleri, sorgu sıklıkları, fiyat/gösterge hesapları ve strateji eşikleri
+değişmedi. Tarayıcı metrik yardımcısının bazı parça hatalarını boş/kısmi haritaya
+dönüştüren mevcut davranışı sürer; uyarı tüm sağlayıcı hatalarını tespit etme
+garantisi değildir. Bu çalışma tam erişilebilirlik veya gerçek veri/emir kabulü
+değildir. 37 yeni regresyonla 192 frontend testi, lint/typecheck, build/standalone
+geçti. Yerel 320/768/1280 px tarayıcı kontrolü; filtre birleştirme/temizleme,
+başarılı boş yanıt, eldeki satırlarla yenileme hatası, 44 px/16 px kontroller ve
+dialog Tab/Shift+Tab/Enter/Escape odağını kapsar. Fixture yalnız loopback sentetik
+GET yanıtlarıdır. Yayın sonucu [devam planında](RAPOT_DEVAM_PLANI.md).
+
 ## 🎨 Tema
 
 Proje **Dark Mode** odaklı tasarlanmıştır. Renk paleti TradingView dark temasıyla uyumludur:

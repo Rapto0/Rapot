@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { useQuery } from "@tanstack/react-query"
-import { AlertTriangle, Check, ListPlus, RefreshCw, Search, Settings2, Star, StarOff } from "lucide-react"
+import { AlertTriangle, Check, ListPlus, RefreshCw, Search, Settings2, Star, StarOff, X } from "lucide-react"
 import {
   fetchMarketMetrics,
   fetchSpecialTagHealth,
@@ -206,7 +206,7 @@ const COLUMN_META: Record<ColumnId, ColumnMeta> = {
   symbol: { label: "Sembol", align: "left", sortValue: (row) => row.symbol },
   market: { label: "Pazar", align: "left", sortValue: (row) => row.marketType },
   price: { label: "Fiyat", align: "right", sortValue: (row) => row.latestPrice },
-  changePct: { label: "Degisim %", align: "right", sortValue: (row) => row.changePct ?? Number.NEGATIVE_INFINITY },
+  changePct: { label: "Değişim %", align: "right", sortValue: (row) => row.changePct ?? Number.NEGATIVE_INFINITY },
   perf7d: { label: "Perf 7G", align: "right", sortValue: (row) => row.perf7d ?? Number.NEGATIVE_INFINITY },
   perf30d: { label: "Perf 30G", align: "right", sortValue: (row) => row.perf30d ?? Number.NEGATIVE_INFINITY },
   lastSignal: { label: "Son Sinyal", align: "left", sortValue: (row) => row.lastSignalType },
@@ -226,7 +226,7 @@ const COLUMN_META: Record<ColumnId, ColumnMeta> = {
   signalsTotal: { label: "Sinyal Toplam", align: "right", sortValue: (row) => row.totalSignals },
   bias: { label: "Bias", align: "right", sortValue: (row) => row.buySignals - row.sellSignals },
   score: { label: "Skor", align: "left", sortValue: (row) => row.lastScore },
-  lastSeen: { label: "Son Guncelleme", align: "right", sortValue: (row) => row.lastSeenTs },
+  lastSeen: { label: "Son kayıt", align: "right", sortValue: (row) => row.lastSeenTs },
 }
 
 const COLUMN_HELP: Record<ColumnId, string> = {
@@ -249,8 +249,8 @@ const COLUMN_HELP: Record<ColumnId, string> = {
   bbp: "Bollinger Band %B degeri.",
   psy: "PSY osilator degeri.",
   zScore: "Fiyatin normalize edilmis Z-Score degeri.",
-  signals24h: "Son 24 saatte bu sembolde uretilen toplam AL+SAT sinyal adedi.",
-  signalsTotal: "Bu sembol icin kaydedilen toplam sinyal sayisi.",
+  signals24h: "Yüklenen kayıtlarda bu sembolün son 24 saatteki AL+SAT sinyal adedi.",
+  signalsTotal: "Yüklenen kayıtlarda bu sembolün sinyal sayısı; tüm arşivin toplamı değildir.",
   bias: "AL sinyalleri eksi SAT sinyalleri.",
   score: "Stratejinin son hesaplanan skor metni.",
   lastSeen: "Bu sembole ait son kaydin sisteme dusme zamani.",
@@ -287,29 +287,29 @@ const NUMERIC_FILTER_OPERATORS: Array<{ value: NumericFilterOperator; label: str
 
 const VIEW_PRESETS: Record<ViewKey, { label: string; subtitle: string; columns: ColumnId[]; sortBy: ColumnId; sortDirection: SortDirection }> = {
   ozel: {
-    label: "Ozel",
-    subtitle: "Sinyal yogunlugu ve son durum odakli temel takip gorunumu.",
+    label: "Özel",
+    subtitle: "Sinyal yoğunluğu ve son durum odaklı temel takip görünümü.",
     columns: ["symbol", "price", "changePct", "lastSignal", "strategy", "timeframe", "rsi14", "signals24h", "signalsTotal", "lastSeen"],
     sortBy: "signals24h",
     sortDirection: "desc",
   },
   momentum: {
     label: "Momentum",
-    subtitle: "Kisa ve orta vade ivme takibi icin performans ve osilator odakli gorunum.",
+    subtitle: "Kısa ve orta vade ivme için performans ve osilatör görünümü.",
     columns: ["symbol", "price", "changePct", "perf7d", "perf30d", "rsi14", "rsiFast", "roc", "macd", "wr", "cci", "bias", "lastSeen"],
     sortBy: "changePct",
     sortDirection: "desc",
   },
   akim: {
-    label: "Akim",
-    subtitle: "Bot akisinda son uretilen sinyallerin frekans ve strateji dagilimi.",
+    label: "Akış",
+    subtitle: "Son üretilen sinyallerin sıklığı ve strateji dağılımı.",
     columns: ["symbol", "lastSignal", "strategy", "timeframe", "score", "signals24h", "signalsTotal", "price", "lastSeen"],
     sortBy: "lastSeen",
     sortDirection: "desc",
   },
   risk: {
     label: "Risk",
-    subtitle: "Asiri alis/satis bolgeleri ve sinyal bias dengesini takip eder.",
+    subtitle: "Aşırı alış/satış bölgeleri ve AL–SAT dengesini gösterir.",
     columns: ["symbol", "price", "changePct", "rsi14", "wr", "ult", "bbp", "cci", "zScore", "bias", "signals24h", "lastSignal", "lastSeen"],
     sortBy: "rsi14",
     sortDirection: "desc",
@@ -356,6 +356,7 @@ export default function ScannerPage() {
   const [showWatchlistPanel, setShowWatchlistPanel] = useState(false)
   const [selectedRowKey, setSelectedRowKey] = useState<string | null>(null)
   const [hydrated, setHydrated] = useState(false)
+  const [storageNotice, setStorageNotice] = useState(false)
   const [dialogState, setDialogState] = useState<ScannerDialogState>(null)
 
   const scansQuery = useQuery({
@@ -433,10 +434,10 @@ export default function ScannerPage() {
   )
 
   const timeframeOptions = useMemo(() => {
-    const values = new Set<string>()
+    const values = new Set<string>(timeframeFilter)
     for (const row of rowsWithMarketMetrics) values.add(row.lastTimeframe)
     return Array.from(values).sort((left, right) => timeframeRank(left) - timeframeRank(right))
-  }, [rowsWithMarketMetrics])
+  }, [rowsWithMarketMetrics, timeframeFilter])
 
   const activeWatchlist = useMemo(
     () => watchlists.find((watchlist) => watchlist.id === activeWatchlistId) ?? watchlists[0] ?? null,
@@ -511,9 +512,10 @@ export default function ScannerPage() {
     marketMetricQuery.isFetching
 
   const isScreenerDataLoading =
-    (bistSignalsQuery.isLoading && !bistSignalsQuery.data) ||
-    (kriptoSignalsQuery.isLoading && !kriptoSignalsQuery.data) ||
-    (metricTargets.length > 0 && marketMetricQuery.isLoading && !marketMetricQuery.data)
+    (bistSignalsQuery.data === undefined && !bistSignalsQuery.isError) ||
+    (kriptoSignalsQuery.data === undefined && !kriptoSignalsQuery.isError) ||
+    (metricTargets.length > 0 && marketMetricQuery.data === undefined && !marketMetricQuery.isError)
+  const isScreenerDataPaused = bistSignalsQuery.fetchStatus === "paused" || kriptoSignalsQuery.fetchStatus === "paused" || (metricTargets.length > 0 && marketMetricQuery.fetchStatus === "paused")
 
   const hasScreenerDataError =
     bistSignalsQuery.isError ||
@@ -525,16 +527,25 @@ export default function ScannerPage() {
     if (bistSignalsQuery.error instanceof Error) messages.push(`BIST: ${bistSignalsQuery.error.message}`)
     if (kriptoSignalsQuery.error instanceof Error) messages.push(`Kripto: ${kriptoSignalsQuery.error.message}`)
     if (marketMetricQuery.error instanceof Error) messages.push(`Metrikler: ${marketMetricQuery.error.message}`)
-    if (messages.length === 0) return "Tarama verisi alinamadi. Ag veya API durumunu kontrol edin."
+    if (messages.length === 0) return "Tarama verisi alınamadı. Ağ veya API durumunu kontrol edin."
     return messages.join(" | ")
   }, [bistSignalsQuery.error, kriptoSignalsQuery.error, marketMetricQuery.error])
 
   useEffect(() => {
     if (typeof window === "undefined") return
+    const readStored = (key: string) => {
+      try { return window.localStorage.getItem(key) }
+      catch { setStorageNotice(true); return null }
+    }
+    const readJson = (key: string) => {
+      const raw = readStored(key)
+      try { return raw ? JSON.parse(raw) : null }
+      catch { setStorageNotice(true); return null }
+    }
     try {
-      const rawWatchlists = window.localStorage.getItem(WATCHLIST_STORAGE_KEY)
-      if (rawWatchlists) {
-        const parsed = JSON.parse(rawWatchlists)
+      let restoredWatchlists = DEFAULT_WATCHLISTS
+      const parsed = readJson(WATCHLIST_STORAGE_KEY)
+      if (parsed) {
         if (Array.isArray(parsed)) {
           const restored = parsed
             .map((item): WatchlistModel | null => {
@@ -544,16 +555,16 @@ export default function ScannerPage() {
               return { id: model.id, name: model.name, symbols: model.symbols.filter((s): s is string => typeof s === "string") }
             })
             .filter((item): item is WatchlistModel => item !== null)
-          if (restored.length > 0) setWatchlists(restored)
+          if (restored.length > 0) { restoredWatchlists = restored; setWatchlists(restored) }
         }
       }
 
-      const storedActiveId = window.localStorage.getItem(WATCHLIST_ACTIVE_KEY)
-      if (storedActiveId) setActiveWatchlistId(storedActiveId)
+      const storedActiveId = readStored(WATCHLIST_ACTIVE_KEY)
+      setActiveWatchlistId(restoredWatchlists.some((list) => list.id === storedActiveId) ? storedActiveId! : restoredWatchlists[0].id)
 
-      const rawPrefs = window.localStorage.getItem(PREF_STORAGE_KEY)
-      if (rawPrefs) {
-        const prefs = JSON.parse(rawPrefs) as Partial<{
+      const rawPrefs = readJson(PREF_STORAGE_KEY)
+      if (rawPrefs && typeof rawPrefs === "object") {
+        const prefs = rawPrefs as Partial<{
           activeView: ViewKey
           visibleColumns: ColumnId[]
           sortBy: ColumnId
@@ -582,6 +593,7 @@ export default function ScannerPage() {
         }
       }
     } catch (error) {
+      setStorageNotice(true)
       console.error("Scanner preferences could not be restored:", error)
     } finally {
       setHydrated(true)
@@ -589,11 +601,13 @@ export default function ScannerPage() {
   }, [])
 
   useEffect(() => {
-    if (!hydrated || typeof window === "undefined") return
-    window.localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(watchlists))
-    window.localStorage.setItem(WATCHLIST_ACTIVE_KEY, activeWatchlistId)
-    window.localStorage.setItem(PREF_STORAGE_KEY, JSON.stringify({ activeView, visibleColumns, sortBy, sortDirection, marketFilter, strategyFilter, signalFilter, timeframeFilter, watchOnly, columnFilterInputs }))
-  }, [hydrated, watchlists, activeWatchlistId, activeView, visibleColumns, sortBy, sortDirection, marketFilter, strategyFilter, signalFilter, timeframeFilter, watchOnly, columnFilterInputs])
+    if (!hydrated || storageNotice || typeof window === "undefined") return
+    try {
+      window.localStorage.setItem(WATCHLIST_STORAGE_KEY, JSON.stringify(watchlists))
+      window.localStorage.setItem(WATCHLIST_ACTIVE_KEY, activeWatchlistId)
+      window.localStorage.setItem(PREF_STORAGE_KEY, JSON.stringify({ activeView, visibleColumns, sortBy, sortDirection, marketFilter, strategyFilter, signalFilter, timeframeFilter, watchOnly, columnFilterInputs }))
+    } catch { setStorageNotice(true) }
+  }, [hydrated, storageNotice, watchlists, activeWatchlistId, activeView, visibleColumns, sortBy, sortDirection, marketFilter, strategyFilter, signalFilter, timeframeFilter, watchOnly, columnFilterInputs])
 
   useEffect(() => {
     if (!watchlistNotice) return
@@ -851,29 +865,52 @@ export default function ScannerPage() {
   }
 
   const visibleColumnsSafe = addLockedColumns(visibleColumns)
+  const resetFilters = () => {
+    setSearchQuery("")
+    setMarketFilter("ALL")
+    setStrategyFilter("ALL")
+    setSignalFilter("ALL")
+    setTimeframeFilter([])
+    setColumnFilterInputs({})
+    setWatchOnly(false)
+    document.getElementById("scanner-search")?.focus()
+  }
+  const activeFilters = [
+    ...(searchQuery.trim() ? [{ id: "search", label: `Arama: ${searchQuery.trim()}`, clear: () => setSearchQuery("") }] : []),
+    ...(marketFilter !== "ALL" ? [{ id: "market", label: `Piyasa: ${marketFilter}`, clear: () => setMarketFilter("ALL") }] : []),
+    ...(strategyFilter !== "ALL" ? [{ id: "strategy", label: `Son strateji: ${strategyFilter}`, clear: () => setStrategyFilter("ALL") }] : []),
+    ...(signalFilter !== "ALL" ? [{ id: "signal", label: `Son yön: ${signalFilter}`, clear: () => setSignalFilter("ALL") }] : []),
+    ...timeframeFilter.map((value) => ({ id: `timeframe-${value}`, label: `Periyot: ${value}`, clear: () => toggleTimeframe(value) })),
+    ...(watchOnly ? [{ id: "watch", label: `Liste: ${activeWatchlist?.name ?? "Seçili liste"}`, clear: () => setWatchOnly(false) }] : []),
+    ...numericFilters.map((rule) => ({ id: rule.column, label: `${COLUMN_META[rule.column].label}: ${summarizeColumnFilterInput(columnFilterInputs[rule.column])}`, clear: () => clearColumnFilterInput(rule.column) })),
+  ]
+  const hasSignalSnapshot = bistSignalsQuery.data !== undefined || kriptoSignalsQuery.data !== undefined
   const criticalLogs = logs.filter((entry) => {
     const level = toLogLevel(entry.level)
     return level === "ERROR" || level === "WARNING"
   }).slice(0, 12)
 
   return (
-    <div className="mx-auto flex w-full max-w-[1900px] flex-col gap-3 px-3 py-3 md:px-4">
+    <div className="mx-auto flex w-full min-w-0 max-w-[1900px] flex-col gap-3 px-3 py-3 md:px-4">
       <section className="border border-border bg-surface">
         <div className="border-b border-border px-3 py-3">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <div>
-              <div className="label-uppercase">Hisse Takipcisi</div>
-              <h1 className="mt-1 text-lg font-semibold tracking-[-0.02em]">Rapto Screener</h1>
+              <div className="label-uppercase">BIST ve Kripto</div>
+              <h1 className="mt-1 text-lg font-semibold tracking-[-0.02em]">Piyasa Tarayıcı</h1>
               <p className="mt-1 text-xs text-muted-foreground">{VIEW_PRESETS[activeView].subtitle}</p>
             </div>
             <div className="flex w-full flex-wrap items-center gap-2 xl:w-auto">
-              <label className="relative flex min-w-[280px] flex-1 items-center xl:min-w-[360px] xl:flex-none">
-                <Search className="pointer-events-none absolute left-2 h-3.5 w-3.5 text-muted-foreground" />
-                <Input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} className="h-8 pl-8 text-xs" placeholder="Ara (CTRL+K) - THYAO, BTCUSDT..." />
+              <label className="flex w-full min-w-0 flex-col gap-1 sm:w-auto sm:flex-1 xl:w-[320px] xl:flex-none">
+                <span className="text-xs text-muted-foreground">Sembol veya piyasa ara</span>
+                <span className="relative flex items-center">
+                  <Search aria-hidden="true" className="pointer-events-none absolute left-2 h-3.5 w-3.5 text-muted-foreground" />
+                  <Input id="scanner-search" type="search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} className="min-h-[44px] pl-8" style={{ fontSize: 16 }} placeholder="THYAO, BTCUSDT…" />
+                </span>
               </label>
-              <Button type="button" variant="outline" size="sm" className="h-8 gap-1.5 px-2 text-xs" onClick={refreshAll} disabled={isRefreshing}>
+              <Button type="button" variant="outline" size="sm" className="min-h-[44px] gap-1.5 self-end px-3 text-xs" onClick={refreshAll} disabled={isRefreshing}>
                 <RefreshCw className={cn("h-3.5 w-3.5", isRefreshing && "animate-spin")} />
-                Yenile
+                {isRefreshing ? "Yenileniyor…" : "Verileri yenile"}
               </Button>
             </div>
           </div>
@@ -881,84 +918,103 @@ export default function ScannerPage() {
 
         <div className="grid grid-cols-2 border-b border-border md:grid-cols-3 xl:grid-cols-6">
           <RibbonCell label="Bot Durumu" value={health.label} tone={health.tone} />
-          <RibbonCell label="Screener Satiri" value={formatCount(sortedRows.length)} />
-          <RibbonCell label="Universe" value={formatCount(screenerRows.length)} />
-          <RibbonCell label="24s Sinyal" value={formatCount(signals24h)} />
-          <RibbonCell label="AL / SAT" value={`${formatCount(buyCountFiltered)} / ${formatCount(sellCountFiltered)}`} tone={buyCountFiltered >= sellCountFiltered ? "profit" : "loss"} />
+          <RibbonCell label="Gösterilen sembol" value={hasSignalSnapshot ? formatCount(sortedRows.length) : "—"} />
+          <RibbonCell label="Yüklenen sembol" value={hasSignalSnapshot ? formatCount(screenerRows.length) : "—"} />
+          <RibbonCell label="Kayıtlarda son 24s" value={hasSignalSnapshot ? formatCount(signals24h) : "—"} />
+          <RibbonCell label="Seçimde AL / SAT" value={hasSignalSnapshot ? `${formatCount(buyCountFiltered)} / ${formatCount(sellCountFiltered)}` : "—"} />
           <RibbonCell label="Log Risk" value={`${errorLogCount} err | ${warningLogCount} warn`} tone={errorLogCount > 0 ? "loss" : warningLogCount > 0 ? "neutral" : "profit"} />
         </div>
 
         <div className="border-b border-border px-3 py-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <Select value={marketFilter} onChange={(event) => setMarketFilter(event.target.value as MarketFilter)} className="min-w-[130px]">
-              <option value="ALL">Pazar: Tum</option>
-              <option value="BIST">Pazar: BIST</option>
-              <option value="Kripto">Pazar: Kripto</option>
-            </Select>
-            <Select value={strategyFilter} onChange={(event) => setStrategyFilter(event.target.value as StrategyFilter)} className="min-w-[150px]">
-              <option value="ALL">Strateji: Tum</option>
-              <option value="COMBO">Strateji: COMBO</option>
-              <option value="HUNTER">Strateji: HUNTER</option>
-            </Select>
-            <Select value={signalFilter} onChange={(event) => setSignalFilter(event.target.value as SignalFilter)} className="min-w-[120px]">
-              <option value="ALL">Tip: Tum</option>
-              <option value="AL">Tip: AL</option>
-              <option value="SAT">Tip: SAT</option>
-            </Select>
-            <Select value={activeWatchlist?.id ?? ""} onChange={(event) => setActiveWatchlistId(event.target.value)} className="min-w-[180px]">
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <label className="min-w-0 space-y-1 text-xs text-muted-foreground">Piyasa
+              <Select value={marketFilter} onChange={(event) => setMarketFilter(event.target.value as MarketFilter)} className="min-h-[44px]" style={{ fontSize: 16 }}>
+                <option value="ALL">Tümü</option><option value="BIST">BIST</option><option value="Kripto">Kripto</option>
+              </Select>
+            </label>
+            <label className="min-w-0 space-y-1 text-xs text-muted-foreground">Son strateji
+              <Select value={strategyFilter} onChange={(event) => setStrategyFilter(event.target.value as StrategyFilter)} className="min-h-[44px]" style={{ fontSize: 16 }}>
+                <option value="ALL">Tümü</option><option value="COMBO">COMBO</option><option value="HUNTER">HUNTER</option>
+              </Select>
+            </label>
+            <label className="min-w-0 space-y-1 text-xs text-muted-foreground">Son sinyal yönü
+              <Select value={signalFilter} onChange={(event) => setSignalFilter(event.target.value as SignalFilter)} className="min-h-[44px]" style={{ fontSize: 16 }}>
+                <option value="ALL">Tümü</option><option value="AL">AL</option><option value="SAT">SAT</option>
+              </Select>
+            </label>
+            <label className="min-w-0 space-y-1 text-xs text-muted-foreground">İzleme listesi
+            <Select value={activeWatchlist?.id ?? ""} onChange={(event) => setActiveWatchlistId(event.target.value)} className="min-h-[44px]" style={{ fontSize: 16 }}>
               {watchlists.map((watchlist) => (
                 <option key={watchlist.id} value={watchlist.id}>
                   {watchlist.name}
                 </option>
               ))}
             </Select>
-            <button type="button" onClick={() => setWatchOnly((prev) => !prev)} className={cn("h-8 rounded-sm border px-2 text-xs", watchOnly ? "border-foreground bg-raised text-foreground" : "border-border bg-base text-muted-foreground")}>
-              Sadece liste
+            </label>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">Her piyasanın en son 700 sinyal kaydı içindeki semboller gösterilir. Strateji, yön ve periyot sembolün son sinyaline göre süzülür.</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" aria-pressed={watchOnly} onClick={() => setWatchOnly((prev) => !prev)} className={cn("min-h-[44px] rounded-sm border px-3 text-xs", watchOnly ? "border-foreground bg-raised text-foreground" : "border-border bg-base text-muted-foreground")}>
+              Yalnız seçili liste
             </button>
-            <button type="button" onClick={() => { setShowWatchlistPanel((prev) => !prev); setShowColumnPanel(false) }} className={cn("inline-flex h-8 items-center gap-1 rounded-sm border px-2 text-xs", showWatchlistPanel ? "border-foreground bg-raised text-foreground" : "border-border bg-base text-muted-foreground")}>
+            <button type="button" aria-expanded={showWatchlistPanel} aria-controls="scanner-watchlists" onClick={() => { setShowWatchlistPanel((prev) => !prev); setShowColumnPanel(false) }} className={cn("inline-flex min-h-[44px] items-center gap-1 rounded-sm border px-3 text-xs", showWatchlistPanel ? "border-foreground bg-raised text-foreground" : "border-border bg-base text-muted-foreground")}>
               <ListPlus className="h-3.5 w-3.5" />
-              Watchlist
+              Listeleri düzenle
             </button>
-            <button type="button" onClick={() => { setShowColumnPanel((prev) => !prev); setShowWatchlistPanel(false) }} className={cn("inline-flex h-8 items-center gap-1 rounded-sm border px-2 text-xs", showColumnPanel ? "border-foreground bg-raised text-foreground" : "border-border bg-base text-muted-foreground")}>
+            <button type="button" aria-expanded={showColumnPanel} aria-controls="scanner-columns" onClick={() => { setShowColumnPanel((prev) => !prev); setShowWatchlistPanel(false) }} className={cn("inline-flex min-h-[44px] items-center gap-1 rounded-sm border px-3 text-xs", showColumnPanel ? "border-foreground bg-raised text-foreground" : "border-border bg-base text-muted-foreground")}>
               <Settings2 className="h-3.5 w-3.5" />
-              Kolonlar
-            </button>
-            <button type="button" onClick={() => { setSearchQuery(""); setMarketFilter("ALL"); setStrategyFilter("ALL"); setSignalFilter("ALL"); setTimeframeFilter([]); setColumnFilterInputs({}); setWatchOnly(false) }} className="h-8 rounded-sm border border-border bg-base px-2 text-xs text-muted-foreground hover:text-foreground">
-              Filtre sifirla
+              Sütunlar
             </button>
           </div>
 
-          <div className="mt-2 flex flex-wrap gap-2">
-            {timeframeOptions.slice(0, 9).map((timeframe) => {
+          <fieldset className="mt-3">
+            <legend className="mb-1 text-xs text-muted-foreground">Son sinyal periyodu · birden fazla seçilebilir</legend>
+            <div className="flex flex-wrap gap-2">
+            {timeframeOptions.map((timeframe) => {
               const isActive = timeframeFilter.includes(timeframe)
               return (
-                <button key={timeframe} type="button" onClick={() => toggleTimeframe(timeframe)} className={cn("inline-flex h-7 items-center rounded-sm border px-2 text-[11px]", isActive ? "border-foreground bg-raised text-foreground" : "border-border bg-base text-muted-foreground")}>
+                <button key={timeframe} type="button" aria-pressed={isActive} onClick={() => toggleTimeframe(timeframe)} className={cn("inline-flex min-h-[44px] items-center rounded-sm border px-3 text-xs", isActive ? "border-foreground bg-raised text-foreground" : "border-border bg-base text-muted-foreground")}>
                   {timeframe}
                 </button>
               )
             })}
-          </div>
+            {timeframeOptions.length === 0 ? <span className="text-xs text-muted-foreground">Periyot seçenekleri kayıtlar geldiğinde görünür.</span> : null}
+            </div>
+          </fieldset>
 
-          <div className="mt-2 flex flex-wrap gap-2">
+          <fieldset className="mt-3">
+            <legend className="mb-1 text-xs text-muted-foreground">Tablo görünümü</legend>
+            <div className="flex flex-wrap gap-2">
             {(Object.keys(VIEW_PRESETS) as ViewKey[]).map((view) => {
               const isActive = view === activeView
               return (
-                <button key={view} type="button" onClick={() => applyViewPreset(view)} className={cn("inline-flex h-8 items-center rounded-sm border px-3 text-xs", isActive ? "border-foreground bg-raised text-foreground" : "border-border bg-base text-muted-foreground")}>
+                <button key={view} type="button" aria-pressed={isActive} onClick={() => applyViewPreset(view)} className={cn("inline-flex min-h-[44px] items-center rounded-sm border px-3 text-xs", isActive ? "border-foreground bg-raised text-foreground" : "border-border bg-base text-muted-foreground")}>
                   {VIEW_PRESETS[view].label}
                 </button>
               )
             })}
+            </div>
+          </fieldset>
+          <div className="mt-3 border-t border-border pt-3" aria-label="Etkin filtreler">
+            <p className="text-xs text-muted-foreground">{activeFilters.length ? `${activeFilters.length} etkin filtre · kaldırmak için seçin` : "Etkin filtre yok"}</p>
+            {activeFilters.length > 0 ? <div className="mt-2 flex flex-wrap gap-2">
+              {activeFilters.map((filter) => <button key={filter.id} type="button" aria-label={`${filter.label} filtresini kaldır`} onClick={() => { filter.clear(); document.getElementById("scanner-search")?.focus() }} className="inline-flex min-h-[44px] max-w-full items-center gap-2 break-all rounded-sm border border-border bg-raised px-3 py-2 text-left text-xs">
+                {filter.label}<X className="h-3 w-3 shrink-0" aria-hidden="true" />
+              </button>)}
+              <Button type="button" variant="ghost" className="min-h-[44px]" onClick={resetFilters}>Tüm filtreleri temizle</Button>
+            </div> : null}
           </div>
+          <p className="mt-2 text-xs text-muted-foreground">{storageNotice ? "Tarayıcı tercihleri okunamadı veya kaydedilemedi. Değişiklikleri bu oturumda kullanabilirsiniz; yeniden açıldığında hatırlanmayabilir." : "Filtreler, görünüm ve izleme listeleri bu tarayıcıda hatırlanır; arama metni kaydedilmez."}</p>
         </div>
 
         {showColumnPanel ? (
-          <div className="border-b border-border px-3 py-2">
-            <div className="label-uppercase">Kolon Gosterimi</div>
+          <div id="scanner-columns" className="border-b border-border px-3 py-2">
+            <div className="label-uppercase">Sütun gösterimi</div>
             <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
               {COLUMN_ORDER.map((column) => {
                 const enabled = visibleColumnsSafe.includes(column)
                 return (
-                  <button key={column} type="button" onClick={() => toggleColumn(column)} title={COLUMN_HELP[column]} className={cn("flex h-8 items-center justify-between rounded-sm border px-2 text-xs", enabled ? "border-foreground bg-raised text-foreground" : "border-border bg-base text-muted-foreground", LOCKED_COLUMNS.has(column) && "cursor-default")}>
+                  <button key={column} type="button" aria-pressed={enabled} disabled={LOCKED_COLUMNS.has(column)} onClick={() => toggleColumn(column)} title={COLUMN_HELP[column]} className={cn("flex min-h-[44px] items-center justify-between rounded-sm border px-2 text-xs", enabled ? "border-foreground bg-raised text-foreground" : "border-border bg-base text-muted-foreground", LOCKED_COLUMNS.has(column) && "cursor-default opacity-60")}>
                     <span>{COLUMN_META[column].label}</span>
                     {enabled ? <Check className="h-3.5 w-3.5" /> : null}
                   </button>
@@ -969,51 +1025,63 @@ export default function ScannerPage() {
         ) : null}
 
         {showWatchlistPanel ? (
-          <div className="border-b border-border px-3 py-2">
+          <div id="scanner-watchlists" className="border-b border-border px-3 py-2">
             <div className="flex flex-wrap items-center gap-2">
-              <Input value={watchlistDraft} onChange={(event) => setWatchlistDraft(event.target.value)} className="h-8 max-w-[220px] text-xs" placeholder="Sembol ekle (THYAO veya Kripto:BTCUSDT)" onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addDraftToWatchlist() } }} />
-              <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={addDraftToWatchlist}>Ekle</Button>
-              <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={createWatchlist}>Yeni Liste</Button>
-              <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={renameWatchlist}>Isim Degistir</Button>
-              <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={deleteWatchlist}>Liste Sil</Button>
+              <Input aria-label="Listeye eklenecek sembol" value={watchlistDraft} onChange={(event) => setWatchlistDraft(event.target.value)} className="min-h-[44px] max-w-[300px]" style={{ fontSize: 16 }} placeholder="THYAO veya Kripto:BTCUSDT" onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); addDraftToWatchlist() } }} />
+              <Button type="button" variant="outline" size="sm" className="min-h-[44px] text-xs" onClick={addDraftToWatchlist}>Ekle</Button>
+              <Button type="button" variant="outline" size="sm" className="min-h-[44px] text-xs" onClick={createWatchlist}>Yeni liste</Button>
+              <Button type="button" variant="outline" size="sm" className="min-h-[44px] text-xs" onClick={renameWatchlist}>İsim değiştir</Button>
+              <Button type="button" variant="outline" size="sm" className="min-h-[44px] text-xs" onClick={deleteWatchlist}>Liste sil</Button>
             </div>
-            {watchlistNotice ? <div className="mt-2 text-[11px] text-muted-foreground">{watchlistNotice}</div> : null}
+            {watchlistNotice ? <div role="status" className="mt-2 text-[11px] text-muted-foreground">{watchlistNotice}</div> : null}
           </div>
         ) : null}
       </section>
 
-      <section className="border border-border bg-surface">
+      <section className="min-w-0 border border-border bg-surface" aria-labelledby="scanner-results-title">
         <div className="border-b border-border px-3 py-2">
-          <div className="flex items-center justify-between gap-2">
-            <div className="label-uppercase">Tarama Tablosu</div>
-            <div className="mono-numbers text-[11px] text-muted-foreground">{formatCount(sortedRows.length)} satir | Sort: {COLUMN_META[sortBy].label} ({sortDirection})</div>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 id="scanner-results-title" className="text-sm font-semibold">Tarama sonuçları</h2>
+            <p role="status" className="mono-numbers text-xs text-muted-foreground">{hasSignalSnapshot ? `${formatCount(sortedRows.length)} / ${formatCount(screenerRows.length)} yüklenen sembol` : "Kayıtlar bekleniyor"}</p>
           </div>
+          <p className="mt-1 text-xs text-muted-foreground">Sıralama: {COLUMN_META[sortBy].label} ({sortDirection === "desc" ? "azalan" : "artan"}). Sütunları görmek için tabloyu yatay kaydırın.</p>
         </div>
 
-        {isScreenerDataLoading ? (
-          <div className="space-y-2 px-3 py-3">
+        {hasScreenerDataError && screenerRows.length > 0 ? <div role="status" className="border-b border-loss/30 bg-loss/10 px-3 py-3 text-xs">
+          <p className="font-semibold">Verilerin bir bölümü yenilenemedi</p>
+          <p className="mt-1 break-words text-muted-foreground">{screenerDataErrorMessage} Mevcut kayıtlar gösteriliyor; eksik veya eski olabilir.</p>
+        </div> : null}
+        {isScreenerDataLoading && screenerRows.length > 0 ? <p role="status" className="px-3 py-2 text-xs text-muted-foreground">{isScreenerDataPaused ? "Bağlantı bekleniyor; mevcut sonuçlar eksik veya eski olabilir." : "Diğer kayıtlar ve fiyat bilgileri yükleniyor; mevcut sonuçlar gösteriliyor."}</p> : null}
+        {isScreenerDataLoading && screenerRows.length === 0 ? (
+          <div role="status" className="space-y-2 px-3 py-3">
+            <p className="text-xs text-muted-foreground">{isScreenerDataPaused ? "Bağlantı bekleniyor; henüz kayıt alınmadı." : "Tarama kayıtları yükleniyor…"}</p>
             {Array.from({ length: 8 }).map((_, index) => (
               <div key={`scanner-skeleton-${index}`} className="h-7 animate-pulse border border-border bg-base" />
             ))}
           </div>
-        ) : hasScreenerDataError ? (
-          <div className="flex flex-col items-center justify-center gap-3 px-3 py-12 text-center">
+        ) : hasScreenerDataError && screenerRows.length === 0 ? (
+          <div role="alert" className="flex flex-col items-center justify-center gap-3 px-3 py-12 text-center">
             <div className="flex h-10 w-10 items-center justify-center border border-loss/40 bg-loss/10 text-loss">
               <AlertTriangle className="h-4 w-4" />
             </div>
             <div className="space-y-1">
-              <p className="text-xs font-semibold text-loss">Tarama verisi yuklenemedi.</p>
-              <p className="max-w-3xl text-[11px] text-muted-foreground">{screenerDataErrorMessage}</p>
+              <p className="text-sm font-semibold">Tarama kayıtları yüklenemedi</p>
+              <p className="max-w-3xl break-words text-xs text-muted-foreground">{screenerDataErrorMessage}</p>
             </div>
-            <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={() => void refreshAll()}>
+            <Button type="button" variant="outline" size="sm" className="min-h-[44px] text-xs" disabled={isRefreshing} onClick={() => void refreshAll()}>
               Tekrar dene
             </Button>
           </div>
         ) : sortedRows.length === 0 ? (
-          <div className="px-3 py-12 text-center text-xs text-muted-foreground">Filtreye uygun kayit bulunamadi.</div>
+          <div className="space-y-3 px-3 py-12 text-center">
+            <p className="text-sm font-semibold">{screenerRows.length === 0 ? "Henüz tarama kaydı yok" : watchOnly && activeWatchSet.size === 0 ? "Seçili izleme listesi boş" : "Filtrelere uygun sembol yok"}</p>
+            <p className="text-xs text-muted-foreground">{screenerRows.length === 0 ? "Son yüklenen kayıtlarda gösterilecek sembol bulunmuyor. Yeni kayıtlar geldiğinde burada görünür." : "Yukarıdaki etkin filtreleri kaldırarak sonucu genişletebilirsiniz. Filtreleri temizlemek izleme listelerini silmez."}</p>
+            {activeFilters.length > 0 ? <Button type="button" variant="outline" className="min-h-[44px]" onClick={resetFilters}>Filtreleri temizle</Button> : null}
+          </div>
         ) : (
-          <div className="max-h-[640px] overflow-auto">
-            <table className="w-full min-w-[1680px] text-[11px]">
+          <div role="region" aria-label="Tarama sonuçları tablosu, yatay kaydırılabilir" tabIndex={0} className="max-h-[640px] overflow-auto focus-visible:outline-2 focus-visible:outline-ring">
+            <table className="w-full text-[11px]">
+              <caption className="sr-only">Yüklenen sinyallerden sembol özeti. Satırı seçerek alt bölümde son sinyallerini görüntüleyin.</caption>
               <thead className="sticky top-0 z-20 bg-surface">
                 <tr className="border-b border-border">
                   {visibleColumnsSafe.map((column) => {
@@ -1022,9 +1090,9 @@ export default function ScannerPage() {
                     const columnFilter = numericColumn ? columnFilterInputs[numericColumn] : null
                     const hasFilter = columnFilter && hasColumnFilterInput(columnFilter)
                     return (
-                      <th key={column} className={cn("px-2 py-2", meta.align === "right" ? "text-right" : "text-left")}>
+                      <th key={column} scope="col" aria-sort={sortBy === column ? sortDirection === "desc" ? "descending" : "ascending" : "none"} className={cn("whitespace-nowrap px-2 py-2", meta.align === "right" ? "text-right" : "text-left")}>
                         <div className={cn("flex flex-col gap-1", meta.align === "right" ? "items-end" : "items-start")}>
-                          <button type="button" onClick={() => handleSort(column)} title={COLUMN_HELP[column]} className={cn("inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.04em]", sortBy === column ? "text-foreground" : "text-muted-foreground")}>
+                          <button type="button" onClick={() => handleSort(column)} title={COLUMN_HELP[column]} className={cn("inline-flex min-h-[44px] items-center gap-1 text-[10px] font-semibold uppercase tracking-[0.04em]", sortBy === column ? "text-foreground" : "text-muted-foreground")}>
                             <span>{meta.label}</span>
                             <span className="mono-numbers text-[10px]">{sortIconForColumn(column)}</span>
                             <span className="cursor-help text-[9px] text-muted-foreground/70 hover:text-muted-foreground" title={COLUMN_HELP[column]}>?</span>
@@ -1038,12 +1106,14 @@ export default function ScannerPage() {
                                   applyColumnFilterPrompt(numericColumn)
                                 }}
                                 className={cn(
-                                  "h-5 rounded-sm border px-1.5 text-[10px]",
+                                  "min-h-[44px] rounded-sm border px-2 text-[11px]",
                                   hasFilter
                                     ? "border-foreground/70 bg-raised text-foreground"
                                     : "border-border bg-base text-muted-foreground hover:text-foreground"
                                 )}
                                 title={`${COLUMN_META[numericColumn].label} filtresi`}
+                                aria-label={`${COLUMN_META[numericColumn].label} filtresini düzenle`}
+                                aria-haspopup="dialog"
                               >
                                 {hasFilter ? summarizeColumnFilterInput(columnFilter) : "filtre"}
                               </button>
@@ -1054,8 +1124,8 @@ export default function ScannerPage() {
                                     event.stopPropagation()
                                     clearColumnFilterInput(numericColumn)
                                   }}
-                                  className="h-5 rounded-sm border border-border bg-base px-1 text-[10px] text-muted-foreground hover:text-foreground"
-                                  title="Filtreyi kaldir"
+                                  className="min-h-[44px] min-w-[44px] rounded-sm border border-border bg-base px-1 text-[10px] text-muted-foreground hover:text-foreground"
+                                  aria-label={`${COLUMN_META[numericColumn].label} filtresini kaldır`}
                                 >
                                   x
                                 </button>
@@ -1076,6 +1146,7 @@ export default function ScannerPage() {
                       key={row.key}
                       onClick={() => setSelectedRowKey(row.key)}
                       onKeyDown={(event) => {
+                        if (event.target !== event.currentTarget) return
                         if (event.key === "Enter" || event.key === " ") {
                           event.preventDefault()
                           setSelectedRowKey(row.key)
@@ -1090,7 +1161,7 @@ export default function ScannerPage() {
                       )}
                     >
                       {visibleColumnsSafe.map((column) => (
-                        <td key={`${row.key}:${column}`} className={cn("px-2 py-2", COLUMN_META[column].align === "right" ? "text-right" : "text-left")}>
+                        <td key={`${row.key}:${column}`} className={cn("whitespace-nowrap px-2 py-2", COLUMN_META[column].align === "right" ? "text-right" : "text-left")}>
                           {renderCellContent(column, row, activeWatchSet, toggleWatchSymbol)}
                         </td>
                       ))}
@@ -1104,7 +1175,7 @@ export default function ScannerPage() {
       </section>
 
       <section className="grid min-h-0 gap-3 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <Panel title="Secili Sembol Akisi" subtitle="Son 16 sinyal kaydi">
+        <Panel title="Seçili sembolün sinyalleri" subtitle="Yüklenen kayıtlardaki son 16 sinyal">
           {selectedRow ? (
             <div className="space-y-2">
               <div className="grid gap-2 border border-border bg-base p-2 md:grid-cols-4">
@@ -1136,11 +1207,11 @@ export default function ScannerPage() {
               </div>
             </div>
           ) : (
-            <div className="px-2 py-8 text-center text-xs text-muted-foreground">Satir seciniz.</div>
+            <div className="px-2 py-8 text-center text-xs text-muted-foreground">Sonuçlar geldiğinde incelemek için bir satır seçin.</div>
           )}
         </Panel>
 
-        <Panel title="Sistem Sagligi" subtitle="Tarama ritmi ve kritik log ozetleri">
+        <Panel title="Sistem sağlığı" subtitle="Tarama ritmi ve kritik günlük özetleri">
           <div className="space-y-2">
             <div className={cn("border p-2", specialTagHealth?.missing_total ? "border-[rgba(255,77,109,0.4)] bg-[rgba(97,26,40,0.35)]" : "border-border bg-base")}>
               <div className="mb-2 flex items-center justify-between gap-2">
@@ -1278,7 +1349,7 @@ export default function ScannerPage() {
         }
         description={
           dialogState?.type === "columnFilter"
-            ? "Ornek: >= 7, <= 10, = 30, 20..40. Bos birakirsan filtre kaldirilir."
+            ? "Örnek: >= 7, <= 10, = 30, 20..40. Boş bırakırsanız filtre kaldırılır. Eksik değerler sayısal filtrelere dahil edilmez."
             : dialogState?.type === "deleteWatchlist"
               ? `${dialogState.watchlistName} listesini silmek istiyor musunuz?`
               : "Deger girip onaylayin."
@@ -1304,7 +1375,7 @@ export default function ScannerPage() {
                   ? "Sil"
                   : "Onayla"
         }
-        cancelLabel="Vazgec"
+        cancelLabel="Vazgeç"
         onValueChange={(value) =>
           setDialogState((prev) => (prev && "value" in prev ? { ...prev, value } : prev))
         }
@@ -1317,7 +1388,7 @@ export default function ScannerPage() {
 
 function Panel({ title, subtitle, children }: { title: string; subtitle?: string; children: ReactNode }) {
   return (
-    <section className="border border-border bg-surface">
+    <section className="min-w-0 border border-border bg-surface">
       <div className="border-b border-border px-3 py-2">
         <div className="label-uppercase">{title}</div>
         {subtitle ? <div className="mt-1 text-[10px] text-muted-foreground">{subtitle}</div> : null}
@@ -1350,7 +1421,7 @@ function renderCellContent(column: ColumnId, row: ScreenerRow, watchSet: Set<str
     case "symbol":
       return (
         <div className="flex min-w-[190px] items-center gap-2">
-          <button type="button" onClick={(event) => { event.stopPropagation(); onToggleWatch(row.key) }} className="inline-flex h-5 w-5 items-center justify-center text-muted-foreground hover:text-foreground" aria-label="Watchlist toggle">
+          <button type="button" onClick={(event) => { event.stopPropagation(); onToggleWatch(row.key) }} className="inline-flex h-[44px] w-[44px] shrink-0 items-center justify-center text-muted-foreground hover:text-foreground" aria-pressed={watchSet.has(row.key)} aria-label={`${row.symbol} ${row.marketType} izleme listesi`}>
             {watchSet.has(row.key) ? <Star className="h-3.5 w-3.5 fill-current" /> : <StarOff className="h-3.5 w-3.5" />}
           </button>
           <span className="font-medium text-foreground">{row.symbol}</span>

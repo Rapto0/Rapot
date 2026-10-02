@@ -1,6 +1,6 @@
 # Rapot Devam Planı
 
-**Güncel özet: 21 Eylül 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
+**Güncel özet: 2 Ekim 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
 Çalışma kuralı: **incele → düzelt → doğrula → belgeyi güncelle**.
 Teknik ayrıntılar [belge indeksinde](README.md), çalışma kuralları
 [AGENTS.md](../AGENTS.md), önceki planın eksiksiz metni
@@ -9,6 +9,13 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Kaldığımız nokta
 
+- **UI-3: Sinyaller ve Tarayıcı yerel kabulü tamam.** Etiketli filtreler,
+  tekli/tümü temizleme, yüklenen kayıt kapsamı, ayrı boş/hata/bekleme durumları
+  ve klavye erişimi eklendi. Tarayıcı yenileme hatasında mevcut satırları korur;
+  bozuk/engellenen tarayıcı depolaması açıklanır. 37 yeni regresyonla **192
+  frontend testi**, lint/typecheck, build/standalone ve 320/768/1280 px yerel
+  tarayıcı kabulü geçti. CI ve üretim yayını henüz tamamlanmadı.
+  [Davranış ve sınırlar](FRONTEND.md#sinyaller-ve-tarayıcı--ui-3).
 - **Arayüz UI-2 tamamlandı ve üretimde.** Ana sayfada yükleme,
   eksik/boş yanıt, hata, son başarılı yanıt ve kripto akışı durumu görünür;
   elle yenileme var. 36 yeni regresyonla 155 frontend testi, lint/typecheck,
@@ -46,8 +53,8 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Sıradaki işler ve ertelenen kabul
 
-P0–P3 geliştirme listesi ve arayüz UI-1/UI-2 kapalıdır. Sonraki arayüz adayı sinyal/tarayıcı
-ekranlarında filtreler ve boş sonuç anlatımıdır; henüz incelenmiş eksiklik listesi değildir.
+P0–P3 geliştirme listesi ve arayüz UI-1/UI-2 kapalıdır. Kullanıcı 2 Ekim'de
+Sinyaller/Tarayıcı arayüzünü seçti; UI-3'ün doğrulama ve yayını yürütülüyor.
 Kapatılmış işleri veya eski onay bekleme kayıtlarını yeniden başlatma.
 
 | Konu | Durum / devam koşulu |
