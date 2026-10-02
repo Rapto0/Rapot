@@ -1,6 +1,6 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-Kaynaklarla son karşılaştırma: **21 Eylül 2026 / P3 kapanışı ve repo temizliği**. İş sırası, kullanıcı
+Kaynaklarla son karşılaştırma: **2 Ekim 2026 / UI-3 ve frontend güvenlik yamaları**. İş sırası, kullanıcı
 yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DEVAM_PLANI.md)
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 Teknik rehberler [docs dizininde](docs/README.md) listelenir.
@@ -50,7 +50,7 @@ gerekir; [takvim](docs/WRAPPER_DEPRECATION_SCHEDULE.md) otomatik silme emri değ
 
 - Python **3.12** (`.python-version`, `pyproject.toml`); yerelde doğrulanan 3.12.8.
 - Node **20.20.2**, npm **10.9.9** (`.nvmrc`, `frontend/package.json`).
-- Frontend: Next.js **16.3.5**, React **19.2.3**, TypeScript **5.9.3**, Tailwind
+- Frontend: Next.js **16.3.8**, React **19.2.3**, TypeScript **5.9.3**, Tailwind
   **4.1.18**, Lightweight Charts **5.1.0**, Zustand **5.0.10**, React Query **5.90.19**.
 - Backend: FastAPI/Uvicorn, SQLAlchemy/Pydantic, pandas/NumPy/ta, python-binance,
   isyatirimhisse/yfinance, google-genai, python-telegram-bot, Flask, Alembic/psycopg.

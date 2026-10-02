@@ -16,6 +16,10 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
   frontend testi**, lint/typecheck, build/standalone ve 320/768/1280 px yerel
   tarayıcı kabulü geçti. CI ve üretim yayını henüz tamamlanmadı.
   [Davranış ve sınırlar](FRONTEND.md#sinyaller-ve-tarayıcı--ui-3).
+  İlk kaynak `bc9bdc0` / CI `36989001597` mevcut npm lock bulgularıyla durdu;
+  Next/eslint 16.3.8 ve brace-expansion 1.1.21/2.1.7 yamaları uygulandı;
+  yeni tam audit **482 paket / 0 bulgu**. Test/lint/typecheck ve build yamalı
+  ortamda da geçti. Başarısız kaynak üretime alınmadı; audit kapısı korunuyor.
 - **Arayüz UI-2 tamamlandı ve üretimde.** Ana sayfada yükleme,
   eksik/boş yanıt, hata, son başarılı yanıt ve kripto akışı durumu görünür;
   elle yenileme var. 36 yeni regresyonla 155 frontend testi, lint/typecheck,

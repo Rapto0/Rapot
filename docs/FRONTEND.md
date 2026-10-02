@@ -86,7 +86,7 @@ platform paketi için ürettiği `npm ls` uyarısı
 
 ## 🛠️ Teknolojiler
 
-- **Framework:** Next.js 16.3.5 (App Router)
+- **Framework:** Next.js 16.3.8 (App Router)
 - **Dil:** TypeScript
 - **Stil:** Tailwind CSS v4
 - **UI:** Shadcn/UI
@@ -237,6 +237,11 @@ başarılı boş yanıtta eski satırlar kaldırılır.
   odak, Tab/Shift+Tab sınırı, Escape ve kapanınca tetikleyiciye dönüş sağlar.
   Bekleyen işlemde yeniden gönderme/iptal engellenir. Tarayıcı ve Alarmlar
   mevcut props sözleşmesini kullanmaya devam eder.
+
+İlk UI-3 CI'sinde mevcut lock için güvenlik bulguları yayın kapısını durdurdu.
+Next/eslint-config-next 16.3.8 ve dar brace-expansion 1.1.21/2.1.7 yamaları
+aynı yayına dahil edildi; [advisory ve lock incelemesi](FRONTEND_DEPENDENCY_SECURITY.md)
+ayrıntıları içerir. Audit kapısı gevşetilmedi.
 
 API istekleri, sorgu sıklıkları, fiyat/gösterge hesapları ve strateji eşikleri
 değişmedi. Tarayıcı metrik yardımcısının bazı parça hatalarını boş/kısmi haritaya

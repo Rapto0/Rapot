@@ -1,12 +1,60 @@
-# Frontend bağımlılık güvenliği — P1-G2
+# Frontend bağımlılık güvenliği
 
-İnceleme tarihi: **13 Eylül 2026**. Başlangıç kaynak sürümü
+İlk inceleme tarihi: **13 Eylül 2026**; son takip **2 Ekim 2026**. İlk kaynak sürümü
 `d79f4cc841b3de411777730eb91a245ade96cd6e`; frontend kodu ve lock,
 P3-1 dördüncü adım kapanışındaki durumdur. İş sırası ve üretim kabulü
 [devam planında](RAPOT_DEVAM_PLANI.md#p1-g2--frontend-bağımlılık-güvenliği-takibi)
 tutulur.
 
-## Sonuç ve kapsam
+## 2 Ekim 2026 — UI3 yayın öncesi güvenlik düzeltmesi
+
+`bc9bdc0e008cb815650037d754fd50adb0654d92` kaynağının
+[CI 36989001597](https://github.com/Rapto0/Rapot/actions/runs/36989001597)
+frontend işi tam bağımlılık audit'inde durdu. Aynı **482 paket düğümü** için
+yerel raporda iki, CI raporunda üç etkilenmiş paket adı görüldü: `next`,
+`brace-expansion` ve CI'de bunun üst bağımlılığı `minimatch`. Sonuncusu ayrı
+bir advisory değildir. Brace kayıtları üç benzersiz advisory'nin iki sürüm
+dalı için yinelenen altı kaydıdır; Next kaydıyla toplam dört benzersiz advisory
+vardır. Önceki tarihli sıfır bulgu sonuçları bu yeni taramanın yerine geçmez.
+
+| Dar güncelleme | Önce | Sonra | Gerekçe |
+|---|---|---|---|
+| `next`, `eslint-config-next` | 16.3.5 | **16.3.8** | [22 Eylül kritik `next/og` düzeltmesi](https://nextjs.org/blog/nextjs-security-update-september-22-2026) 16.3.6'da gelir; [30 Eylül güvenlik sürümü](https://nextjs.org/blog/september-2026-security-release) 16.3.8 ayrıca bir high, beş medium ve bir low düzeltme içerir. |
+| `minimatch@3.1.5` altındaki `brace-expansion` | 1.1.18 | **1.1.21** | Mevcut dar override aynı ana sürümde tutulur. |
+| `minimatch@9.0.9` altındaki `brace-expansion` | 2.1.4 | **2.1.7** | Mevcut dar override aynı ana sürümde tutulur. |
+
+Brace için bakımcı kayıtları
+[parser özyinelemesi](https://github.com/juliangruber/brace-expansion/security/advisories/GHSA-6j4f-fj2g-mc7p),
+[iç içe gruplar](https://github.com/juliangruber/brace-expansion/security/advisories/GHSA-qhr7-859c-m2p7)
+ve [karesel işlem süresi](https://github.com/juliangruber/brace-expansion/security/advisories/GHSA-q2hr-2g5m-vwhr)
+olarak ayrıdır; seçilen 1.1.21/2.1.7 üç kaydın etkilenen aralıkları dışındadır.
+Paket bulgusu, ilgili saldırı yolunun Rapot'ta çalıştırıldığı anlamına gelmez.
+Bu düzeltmede exploit testi, güvenlik istisnası veya audit atlaması yapılmadı.
+
+Node **20.20.2** / npm **10.9.9** ile hedefli
+`npm install --ignore-scripts --no-audit --no-fund` çalıştırıldı. Ardından
+ayrı `npm run audit:dependencies`, prod/dev/optional/peer kapsamındaki
+**482/482 düğümü, 0 bulguyla** doğruladı. Kurulumdaki `--no-audit`, zorunlu
+ayrı tam audit kontrolünü kaldırmaz. Lock'ta paket ekleme/çıkarma yoktur;
+yalnız **14 paket düğümü** değişti: Next ailesinin 12 düğümü (sekiz platform
+SWC paketi dahil) ve iki brace düğümü. Kök Next/ESLint sürüm referansları da
+güncellendi; başka bağımlılık, sürüm veya metadata değişimi yoktur.
+
+Yeni lock **250.387 B**, SHA256
+`3c3a47fce67f43df5484e78729f640ab8169bb407ca2021314dd44cf6f6b7be8`.
+Git dışı yerel kanıtlar:
+
+- Başarısız CI artifact'i: `runtime-data/ui3-ci-bc9bdc0e-npm.zip`, SHA256
+  `d7bda99a290f96b88d5efc64a6dda01b7161493d7677ce24bbcb75b9c0154fa5`.
+- Tam alan bazlı lock farkı: `runtime-data/ui3-20261002-dependency-lock-delta.json`.
+- Yeni ham audit, kapsam manifesti ve özet:
+  `runtime-data/ui3-20261002-security-fix-audit/`.
+
+Bu bölüm yerel güvenlik düzeltmesini kaydeder. Son kaynak için uygulama/CI,
+imaj ve üretim kabulü [devam planında](RAPOT_DEVAM_PLANI.md) ayrıca tutulur;
+bu sonuç tek başına üretimin yeni sürüme geçtiğini göstermez.
+
+## 13 Eylül incelemesinin sonucu ve kapsamı
 
 Başlangıç `npm audit` raporu **11 etkilenmiş paket adı ve 46 benzersiz advisory**
 bildirdi. Bir paket birden fazla advisory içerir; `minimatch` kendi yeni advisory'si
