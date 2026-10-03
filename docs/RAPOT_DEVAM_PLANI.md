@@ -28,6 +28,10 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
   bağımlılığının dar uyarlamasıyla tam audit 469/469 paket, sıfır bulgu verdi;
   bütün Next kuralları ve gerçek tüketici davranışı sınandı.
   [Güvenlik düzeltmesi](FRONTEND_DEPENDENCY_SECURITY.md). İlk kaynak üretime alınmaz.
+  Son uygulama kaynağı **`4b15335`** için beş CI işi ve iki imaj yayın işi geçti.
+  Özel yerel yedek ayrı veritabanında doğrulandı. Sunucuya geçiş, aşağıdaki
+  **iki eski frontend imajına özel temizlik onayını** bekler; silme/pull/restart
+  yapılmadı. Mevcut üretim sürümü korunuyor.
 - **Sunucu alarmları tamamlandı ve üretimde:** Kullanıcı, TradingView benzeri alarm
   yönetiminin bütünüyle kendi sitesinden yapılmasını seçti. `/alarms` artık
   yöneticiye ait kalıcı kuralları ve teslim geçmişini yönetir; API kapalı mumları
@@ -105,7 +109,7 @@ Kapatılmış işleri veya eski onay bekleme kayıtlarını yeniden başlatma.
 | Konu | Durum / devam koşulu |
 |---|---|
 | Borsapy canlı kabulü | TradingView oturumu, gerçek fiyat/mum zamanı, tarihsel kapsam ve şirket işlemleri piyasa açıkken karşılaştırılacak. EVDS/X ayrı kimlik ve kabul ister. |
-| Borsapy üretim yayını | Önceki source-only API delta yolu uygun değildir. Ayrı `Dockerfile.borsapy-runtime`, 98 paketi/dosya hash'lerini koruyup 22 paket ekleyen Linux imaj kabulünden geçti. İlk kaynakta ek unpacked katmanlar 218.790.228 bayttır; registry/host alan hesabı ayrıca gerekir. 3 Ekim 22:33 UTC (4 Ekim 01:33 TSİ) ölçümünde 986.927.104 bayt boştu. Exact son imaj ve 528 MiB rezerv hesabı olmadan pull/deploy yapılmaz; eski imaj/veri silinmedi. |
+| Borsapy üretim yayını | Son `4b15335` kaynağının CI ve yayın kanıtları hazır. 528 MiB rezerv, 64 MiB WAL/log ve 2 MiB kanıt payıyla 1.083.183.536 bayt gerekir; 985.182.208 bayt boş, 98.001.329 bayt eksik. Aşağıdaki iki eski frontend imajının kaldırılması için özel onay beklenir. Exact imaj maliyeti ve rezerv kontrolü temizlikten sonra yenilenir; sunucu planı yükseltilmez. |
 | Eski Python pinlerinin yeni güvenlik bildirimleri | 134 paketlik report-only taramada 5 paket/16 ham bulgu; 22 borsapy ek paketinde bulgu yok. anyio/PyJWT/soupsieve/urllib3 runtime ve virtualenv geliştirme pinleri için ayrı taban imaj güncellemesi gerekir. [İnceleme ve düzeltme sınırları](BORSAPY_INTEGRATION.md). Yeşil güvenlik işi sıfır bulgu değildir. |
 | Canlı veri yükleme gecikmesi | UI-3 kabulünde Tarayıcı ek fiyat/metrikleri bekledi; Sinyaller tekrar açılışta bekledikten sonra 300 kaydı yükledi. Arayüz durumları doğru gösterildi; gecikmenin nedeni ve sağlayıcı performansı bu pakette çözülmedi. |
 | Gerçek TradingView alarmının webhook'a teslimi | Erteli; kullanıcı yeniden seçtiğinde ele alınır. Webhook URL erişimi için şu an yanıt beklenmiyor. |
@@ -159,6 +163,50 @@ açılmadı. Bu taslak sınırlar kendi başına emir veya alıcıyı açma yetk
   Yerel/sentetik test, gerçek ortam gözlemi ve dış kabul birbirinin yerine geçmez.
 
 ## Son üretim ve yayın kanıtları
+
+### 4 Ekim — borsapy yayına hazır, sunucu değişikliği bekliyor
+
+- Uygulama kaynağı `4b15335f00f30e65a21899e73af47c508f395706`.
+  [CI 37159767810](https://github.com/Rapto0/Rapot/actions/runs/37159767810)
+  beş başarılı iş; [imaj yayını 37159767909](https://github.com/Rapto0/Rapot/actions/runs/37159767909)
+  iki başarılı iş ve istenmemiş source-only API delta işi skipped.
+- API: `ghcr.io/rapto0/rapot/backend@sha256:b9695f5f78ccb6f16112578c54fb9fb2de7ce6a3dc4c0836c3da7deacf7adf14`.
+  Frontend: `ghcr.io/rapto0/rapot/frontend@sha256:f569c7e24e9d7a9efb8918406e0fcc05137146c96fe3715a2d0f308b4c06428e`.
+  Linux kabulü 98 mevcut paketin sürüm/dosya hash'ini korudu, tam 22 paket
+  ekledi; 255 kaynak dosyası, native import, şifreleme, SQLite ve 8 araştırma/
+  yerel gösterge kontrolü ağsız geçti. Bu, gerçek sağlayıcı kabulü değildir.
+- Offhost yedek 149.948.452 bayt; SHA256
+  `4703b369249a1f6da32fc6697ac294d9e491d15bb4418e57b8e32a02fbdbfbf3`.
+  Bağımsız özel yerel restore 1.128.845.312 bayt; 10 tablonun şeması, integrity
+  ve tipli satır fingerprint'leri eşleşti. Üretim DB'si geri yüklenmedi.
+- 3 Ekim 23:01:54 UTC / 4 Ekim 02:01:54 TSİ ölçümü: boş alan 985.182.208,
+  iki imajın ek maliyeti 460.329.392, toplam gerekli alan 1.083.183.536 bayt.
+  Katmanların sıkıştırılmış ve açılmış hash'leri doğrulandı; ölçüm sırasında
+  sunucuya imaj indirilmedi. Beş mevcut servis sağlıklı; DRY_RUN korunuyor.
+- İncelenen temizlik **yalnız** şu iki kullanılmayan frontend imajıdır:
+  `sha256:e312d7aa5e682a7835e4dc7ba3e1b4263f04a64f872f47037814ec4b0ba1f4d0`
+  (`bbd9377`, 13 Eylül build) ve
+  `sha256:a24bbefa443cf30f77af55161c19520f6febf1c977ef55a044fd030189bd0b41`
+  (`13e5fbb`, 21 Eylül build). İkisinin de çalışan/durmuş container referansı
+  sıfırdır. Mevcut API/frontend, ortak backend, PostgreSQL ve önceki frontend
+  geri dönüş imajı `feaa0325…` korunur. Tahmini benzersiz kazanım 196.446.914
+  bayttır; ortak katmanlar çift sayılmadı. Gerçek disk kazanımı garanti değildir.
+- **Bu kayıt silme yetkisi değildir.** Teklif hash'i
+  `e853b8419a957243910928212b4c1752015b6b8b75791f749ae7d8c881990722`.
+  Onaydan sonra referanslar/container'lar tekrar doğrulanır; yalnız iki tam
+  registry digest referansı `docker image rm --no-prune` ile kaldırılabilir.
+  Genel prune, force, volume/DB/dosya silme kapsam dışıdır. Yeni boş alan yeterli
+  değilse pull yapılmaz. Ardından yalnız API/frontend, mevcut geri dönüş
+  imajlarıyla güncellenir; bot ve BIST scanner anahtarı mevcut durumda kalır.
+- Tekrarlama kanıtları ignored `runtime-data/borsapy-deploy/` içindedir:
+  `capacity.json` SHA256 `62421b30317d8b0422ff638da86b05c49cb42e6c63cfd74585bb7440be0413f8`,
+  `backup-verified.json` SHA256 `34b1e8499f59af928731fa0fe29b9be9aed4f81997f6c4210f80fb874e81346b`.
+  `cleanup.py` yalnız onaylı iki imaja sınırlıdır; `deploy_operator.py` yeni
+  source/digest/CI/kanıt pinlerini taşır. Varsayılanları işlem yapmaz. Canlı
+  guard'lar yeniden çalıştırılmalı; yedek kabulü rollout sırasında iki saatten
+  eskiyse yenilenmelidir. Hiçbir gerçek hesap, piyasa, alarm veya emir testi yapılmadı.
+
+### Mevcut üretim
 
 Bunlar **son kaydedilmiş kabulün** değerleridir; yeni yayın için taze sunucu
 kontrolü gerekir. Uygulama Docker Compose ile çalışır; eski PM2/API launcher'ları
