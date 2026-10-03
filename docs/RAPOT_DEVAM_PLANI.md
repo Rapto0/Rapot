@@ -1,6 +1,6 @@
 # Rapot Devam Planı
 
-**Güncel özet: 2 Ekim 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
+**Güncel özet: 4 Ekim 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
 Çalışma kuralı: **incele → düzelt → doğrula → belgeyi güncelle**.
 Teknik ayrıntılar [belge indeksinde](README.md), çalışma kuralları
 [AGENTS.md](../AGENTS.md), önceki planın eksiksiz metni
@@ -9,6 +9,21 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Kaldığımız nokta
 
+- **Borsapy entegrasyonu:** Kullanıcı, mevcut TradingView Premium + BIST veri
+  paketiyle README'deki 22 özellik ailesini kendi sitesinde istedi. borsapy
+  0.11.0 sabitlendi; yönetici `/research` ekranına 51 işlem, bağlantı yönetimi,
+  kayıtlı sorgu/portföy, grafik/replay ve akış/Pine gösterge kimliği yüzeyleri
+  eklendi. `/chart` özel TradingView kaynağını seçebilir. Scanner ve günlük BIST
+  alarm adaptörü hazır; `BORSAPY_USE_FOR_BIST` varsayılan false kalır. Genel Pine
+  kaynak çalıştırıcısı veya gün içi BIST alarm takvimi eklenmedi. Kimlikler
+  sunucuda şifrelenir; özel fiyatlar genel grafik/önbellek yoluna taşınmaz.
+  [Kapsam ve kabul](BORSAPY_INTEGRATION.md). Canlı hesap/piyasa testi kullanıcının
+  isteğiyle piyasa açılışına ertelidir. Tam yerel paket 1.177 Python testiyle
+  geçti; sonradan eklenen dağıtım doğrulayıcısının 27 testi de geçti. 222 frontend
+  testi, lint/typecheck, build/standalone ve sentetik tarayıcı kabulü geçti.
+  Tarayıcıda 51 işlem, kayıt, replay, akış başlat/durdur, özel grafik kaynağı,
+  bağlantı sekmesi ve 320 px görünüm kontrol edildi. Bu kayıt henüz üretim
+  yayını değildir.
 - **Sunucu alarmları tamamlandı ve üretimde:** Kullanıcı, TradingView benzeri alarm
   yönetiminin bütünüyle kendi sitesinden yapılmasını seçti. `/alarms` artık
   yöneticiye ait kalıcı kuralları ve teslim geçmişini yönetir; API kapalı mumları
@@ -77,15 +92,16 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Sıradaki işler ve ertelenen kabul
 
-P0–P3 geliştirme listesi ve arayüz UI-1/UI-2/UI-3 kapalıdır. Kullanıcının
-2 Ekim'deki yeni seçimi, site üzerinden yönetilen kalıcı sunucu alarmlarıdır.
-Bu kapsamın geliştirme, doğrulama ve API/frontend yayını tamamlandı. Kullanıcı
-kurallarını yönetici oturumuyla `/alarms` üzerinden oluşturabilir; keyfi Pine
-çalıştırma veya gerçek Telegram teslim kabulü bu pakete dahil değildir.
+P0–P3 geliştirme listesi ve arayüz UI-1/UI-2/UI-3 kapalıdır. 2 Ekim sunucu
+alarmları üretimdedir; son kullanıcı seçimi 4 Ekim borsapy araştırma ve veri
+entegrasyonudur. Kullanıcı canlı piyasa testlerini daha sonra yapmayı seçti.
+Yerel doğrulama, imaj/disk bütçesi ve yayın kaydı birbirinden ayrı tutulur.
 Kapatılmış işleri veya eski onay bekleme kayıtlarını yeniden başlatma.
 
 | Konu | Durum / devam koşulu |
 |---|---|
+| Borsapy canlı kabulü | TradingView oturumu, gerçek fiyat/mum zamanı, tarihsel kapsam ve şirket işlemleri piyasa açıkken karşılaştırılacak. EVDS/X ayrı kimlik ve kabul ister. |
+| Borsapy üretim yayını | Önceki source-only API delta yolu uygun değildir. Ayrı `Dockerfile.borsapy-runtime` mevcut 98 paketi/dosya hash'lerini koruyup 22 paket ekleyen yolu doğrular; Linux imaj kanıtı yayın işinde üretilecektir. 4 Ekim salt okunur ölçümünde 990.040.064 bayt boş, 553.648.128 bayt rezervden sonra 436.391.936 bayt kalıyordu. Exact imaj ve alan hesabı olmadan pull/deploy yapılmaz; eski imaj/veri silinmedi. |
 | Canlı veri yükleme gecikmesi | UI-3 kabulünde Tarayıcı ek fiyat/metrikleri bekledi; Sinyaller tekrar açılışta bekledikten sonra 300 kaydı yükledi. Arayüz durumları doğru gösterildi; gecikmenin nedeni ve sağlayıcı performansı bu pakette çözülmedi. |
 | Gerçek TradingView alarmının webhook'a teslimi | Erteli; kullanıcı yeniden seçtiğinde ele alınır. Webhook URL erişimi için şu an yanıt beklenmiyor. |
 | ALL/FIRST, saat filtresi, futures/standart olmayan grafik korumaları | Güncel kaynağın bu runtime matrisi erteli. BTCUSDT/standart mum kabulü bunları kapsamaz. |
@@ -111,6 +127,10 @@ açılmadı. Bu taslak sınırlar kendi başına emir veya alıcıyı açma yetk
 - Kullanıcı geliştirme, doğrulama, otomatik commit/push ve uygun zamanda
   doğrulanmış deploy yetkisi verdi. Aynı kapsam için yeniden onay istenmez.
   Root SSH erişim kurulumu ve alan adı olmadan IP HTTPS kurulumu 9 Eylül'de onaylandı.
+- 4 Ekim: borsapy README özelliklerinin siteye eklenmesi istendi. Mevcut
+  TradingView Premium ve BIST paketi kullanılacak, yeni abonelik alınmayacak.
+  Gerçek hesap/sağlayıcı testleri piyasa açılışına erteli; çevrimdışı yazılım
+  doğrulamaları gerçek veri kabulü sayılmaz.
 - 10 Eylül kararıyla borsayı ilgilendiren dış kabul ertelendi. Bu karar
   testnet/gerçek emir yetkisi vermez; diğer geliştirme işleri devam edebilir.
 - **Ücretli yükseltme yapılmayacak; mevcut $6/ay plan korunur.** Her yayın

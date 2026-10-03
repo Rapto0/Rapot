@@ -165,6 +165,13 @@ commit does not change the running application images.
   | `POST /analyze/{symbol}` | Admin JWT | 2/minute |
   | `GET /ops/strategy-inspector` | User/admin JWT | 30/minute |
   | `GET /market/analysis`, `GET /api/market/analysis` | User/admin JWT | Shared 2/minute |
+  | `/borsapy/*` research, saved inputs and provider connections | Admin JWT; private, no-store | Query 20/minute; candles 30/minute; stream 120/minute |
+
+- The private `/research` workspace exposes the reviewed borsapy feature catalog;
+  `/chart` has an authenticated BIST TradingView source option. Provider credentials
+  are encrypted on the server and are never returned to the browser. See the
+  [integration contract](docs/BORSAPY_INTEGRATION.md) for feature coverage and pending
+  live-market acceptance.
 
 - Existing dashboard reads and stored analyses remain public; the dashboard is not
   entirely private. Production HTTPS/auth/proxy acceptance is recorded in P1-2/P1-6

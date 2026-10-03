@@ -374,6 +374,10 @@ def cached_get_bist_data(symbol: str, start_date: str = "01-01-2015") -> pd.Data
     """
     from data_loader import get_bist_data, is_suspicious_bist_ohlcv
 
+    if settings.borsapy_use_for_bist:
+        # Account-entitled data must never enter the public dashboard's cache.
+        return get_bist_data(symbol, start_date)
+
     # Cache'e bak
     cached = price_cache.get(symbol, "BIST")
     if cached is not None:

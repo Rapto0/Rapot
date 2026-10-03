@@ -9,6 +9,10 @@ on:
         description: Publish API source update on the pinned production runtime (unchanged dependencies only)
         type: boolean
         default: false
+      publish_borsapy_runtime:
+        description: Publish the separately verified additive borsapy API runtime (no server deployment)
+        type: boolean
+        default: false
 
 env:
   REGISTRY: ghcr.io
@@ -220,5 +224,178 @@ jobs:
         with:
           name: api-delta-evidence-${{ github.sha }}
           path: ${{ runner.temp }}/api-delta-proof/
+          if-no-files-found: error
+          retention-days: 14
+
+  publish-borsapy-runtime:
+    name: Verify and publish additive borsapy runtime
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_borsapy_runtime
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      API_BASE_SOURCE: 279aa9fea99b520e661b43f104a2bf4791893ac3
+      API_BASE_IMAGE: ghcr.io/rapto0/rapot/backend@sha256:9be0fdb6097f52bf97730f44c86d28c24e2c0cea1fe181e7e8fd668177fdb034
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Verify unchanged base inputs and prepare canonical extension source
+        id: source
+        shell: bash
+        run: |
+          git diff --exit-code "$API_BASE_SOURCE" HEAD -- Dockerfile .python-version requirements-security.txt
+          test -z "$(git status --porcelain)"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "repository=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          mkdir "$RUNNER_TEMP/borsapy-context" "$RUNNER_TEMP/borsapy-proof"
+          git archive --format=tar HEAD | tar -x -C "$RUNNER_TEMP/borsapy-context"
+          python - <<'PY'
+          import hashlib, json, os, pathlib, subprocess
+          files = subprocess.check_output(["git", "ls-files", "-z"]).decode().split("\0")
+          wanted = [name for name in files if name.endswith(".py") and not name.startswith(".")]
+          wanted += ["Dockerfile", "Dockerfile.borsapy-runtime", ".python-version", "requirements.txt",
+                     "requirements-security.txt", "requirements-dev.lock"]
+          result = {name: hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest() for name in wanted}
+          target = pathlib.Path(os.environ["RUNNER_TEMP"]) / "borsapy-proof/source-sha256.json"
+          target.write_text(json.dumps(result, sort_keys=True), encoding="utf-8")
+          PY
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build extension on the pinned installed runtime
+        uses: docker/build-push-action@v7
+        with:
+          context: ${{ runner.temp }}/borsapy-context
+          file: ${{ runner.temp }}/borsapy-context/Dockerfile.borsapy-runtime
+          platforms: linux/amd64
+          load: true
+          push: false
+          tags: ghcr.io/${{ steps.source.outputs.repository }}/backend:borsapy-${{ steps.source.outputs.sha }}
+          labels: org.opencontainers.image.revision=${{ steps.source.outputs.sha }}
+
+      - name: Verify exact additions, unchanged installed files, pins and shared layers
+        shell: bash
+        env:
+          API_IMAGE: ghcr.io/${{ steps.source.outputs.repository }}/backend:borsapy-${{ steps.source.outputs.sha }}
+        run: |
+          docker pull "$API_BASE_IMAGE"
+          docker run --rm --network none --read-only --tmpfs /tmp:rw,size=64m \
+            --mount "type=bind,source=$RUNNER_TEMP/borsapy-context/scripts/verify_borsapy_runtime.py,target=/verifier.py,readonly" \
+            --mount "type=bind,source=$RUNNER_TEMP/borsapy-proof,target=/proof" \
+            "$API_BASE_IMAGE" python /verifier.py capture --output /proof/base-inventory.json
+          docker run --rm --network none --read-only --tmpfs /tmp:rw,size=64m \
+            --mount "type=bind,source=$RUNNER_TEMP/borsapy-proof,target=/proof" \
+            "$API_IMAGE" python -m scripts.verify_borsapy_runtime capture --output /proof/extension-inventory.json
+          docker image inspect "$API_BASE_IMAGE" --format '{"size_bytes":{{.Size}},"layers":{{json .RootFS.Layers}}}' > "$RUNNER_TEMP/borsapy-proof/base-layers.json"
+          docker image inspect "$API_IMAGE" --format '{"size_bytes":{{.Size}},"layers":{{json .RootFS.Layers}}}' > "$RUNNER_TEMP/borsapy-proof/extension-layers.json"
+          docker run --rm --network none --read-only --tmpfs /tmp:rw,size=64m \
+            --mount "type=bind,source=$RUNNER_TEMP/borsapy-proof,target=/proof" \
+            "$API_IMAGE" python -m scripts.verify_borsapy_runtime verify \
+            --before /proof/base-inventory.json --after /proof/extension-inventory.json --root /app \
+            --base-layers /proof/base-layers.json --extension-layers /proof/extension-layers.json \
+            --output /proof/runtime-verification.json
+
+      - name: Verify image sources, imports, crypto, SQLite and indicators without network
+        shell: bash
+        env:
+          API_IMAGE: ghcr.io/${{ steps.source.outputs.repository }}/backend:borsapy-${{ steps.source.outputs.sha }}
+        run: |
+          docker run --rm -i --network none --read-only --tmpfs /tmp:rw,size=96m --workdir /tmp \
+            --mount "type=bind,source=$RUNNER_TEMP/borsapy-proof,target=/proof" \
+            -e PYTHONPATH=/app -e TELEGRAM_TOKEN=ci-test-token -e TELEGRAM_CHAT_ID=ci-test-chat \
+            -e APP_ENV=test -e AI_ENABLED=0 -e RUN_EMBEDDED_BOT=false -e SERVER_ALARMS_ENABLED=false \
+            -e BORSAPY_ENABLED=false -e JWT_SECRET_KEY=ci-only-secret-not-used-for-real-sessions \
+            -e DATABASE_PATH=/tmp/trading.sqlite3 -e CACHE_DATABASE_PATH=/tmp/cache.sqlite3 \
+            -e MW_WEBHOOK_AUTH_TOKEN=ci-test-webhook \
+            "$API_IMAGE" python - <<'PY'
+          import hashlib, json, pathlib
+          from datetime import UTC, datetime
+          expected = json.loads(pathlib.Path("/proof/source-sha256.json").read_text())
+          for name, digest in expected.items():
+              source = pathlib.Path("/app") / name
+              assert hashlib.sha256(source.read_bytes()).hexdigest() == digest, name
+              if name.endswith(".py"):
+                  compile(source.read_bytes(), str(source), "exec")
+          import borsapy as bp
+          import cryptography.fernet
+          import openai, pymupdf, pymupdf4llm, onnxruntime, Scweet
+          import ai_evaluation, api.main, middleware.api.main
+          import numpy as np
+          import pandas as pd
+          from db_session import init_db
+          from infrastructure.repositories.borsapy_secret_store import BorsapySecretStore
+          from application.services.borsapy_research import run_operation
+          from application.services.server_alarm_evaluator import evaluate_closed_alarm_bars
+          init_db()
+          store = BorsapySecretStore(pathlib.Path("/tmp/credentials-test/store.enc"), "x" * 48)
+          store.save({"test": "synthetic-only"})
+          assert store.load() == {"test": "synthetic-only"}
+          assert b"synthetic-only" not in store.path.read_bytes()
+          store.clear()
+          axis = np.arange(161)
+          close = 100 + axis / 10 + np.sin(axis / 3) * 5
+          frame = pd.DataFrame({"Open": close + .2, "High": close + 2, "Low": close - 2,
+                                "Close": close, "Volume": 1000. + axis},
+                               index=pd.date_range(end="2026-10-02T12:00:00Z", periods=161, freq="1h"))
+          original_ticker = bp.Ticker
+          class FixtureTicker:
+              def __init__(self, symbol):
+                  self.symbol = symbol
+              def history(self, **kwargs):
+                  return frame.copy()
+          try:
+              bp.Ticker = FixtureTicker
+              for operation in ("history", "replay", "heikin_ashi", "ta.indicators"):
+                  result = run_operation(bp, operation, {})
+                  assert len(result["candles"]) == 161
+                  json.dumps(result, allow_nan=False)
+          finally:
+              bp.Ticker = original_ticker
+          frame.attrs["timeframe"] = "1h"
+          for indicator, threshold in (("rsi", 30), ("wr", -80), ("combo", 3), ("hunter", 7)):
+              result = evaluate_closed_alarm_bars(frame, market_type="Kripto", timeframe="1h",
+                        indicator=indicator, side="dip", threshold=threshold,
+                        now=datetime(2026, 10, 2, 12, 30, tzinfo=UTC))
+              assert result["bar_time"] == "2026-10-02T11:00:00Z"
+          proof = {"status": "passed", "network": "disabled", "source_files_verified": len(expected),
+                   "new_native_imports": "passed", "encrypted_store_roundtrip": "passed",
+                   "sqlite_initialization": "passed", "research_operations": 4, "native_indicators": 4}
+          pathlib.Path("/proof/offline-smoke.json").write_text(json.dumps(proof, sort_keys=True))
+          print(json.dumps(proof))
+          PY
+
+      - name: Publish verified additive API runtime
+        shell: bash
+        env:
+          API_IMAGE: ghcr.io/${{ steps.source.outputs.repository }}/backend:borsapy-${{ steps.source.outputs.sha }}
+        run: |
+          docker push "$API_IMAGE"
+          docker image inspect "$API_IMAGE" --format '{{json .RepoDigests}}' > "$RUNNER_TEMP/borsapy-proof/published-digests.json"
+          docker buildx imagetools inspect "$API_IMAGE" --raw > "$RUNNER_TEMP/borsapy-proof/registry-manifest.json"
+          {
+            echo '## Additive borsapy runtime published; server deployment not performed'
+            echo "API image: $API_IMAGE"
+            echo "Preserved runtime base: $API_BASE_IMAGE"
+            echo 'Existing distribution versions and file hashes are unchanged; exactly 22 reviewed additions match the lock.'
+            echo 'All base layers are reused. Offline imports, encryption, SQLite and indicator checks passed.'
+            echo 'Registry layer sizes, live capacity including the fixed reserve, and a verified offhost backup remain deployment gates.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Preserve additive runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: borsapy-runtime-evidence-${{ github.sha }}
+          path: ${{ runner.temp }}/borsapy-proof/
           if-no-files-found: error
           retention-days: 14

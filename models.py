@@ -370,6 +370,20 @@ class ScanHistory(Base):
         }
 
 
+class ResearchWorkspace(Base):
+    """Private saved research inputs; never stores provider credentials or results."""
+
+    __tablename__ = "research_workspaces"
+
+    id = Column(String(36), primary_key=True)
+    owner = Column(String(80), nullable=False, index=True)
+    name = Column(String(80), nullable=False)
+    operation = Column(String(80), nullable=False)
+    params_json = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=utc_now_naive, nullable=False)
+    updated_at = Column(DateTime, default=utc_now_naive, nullable=False)
+
+
 class BotStat(Base):
     """
     Bot istatistikleri modeli.

@@ -487,7 +487,9 @@ async def build_candles_payload(
                     try:
                         from data_loader import get_bist_data
 
-                        df = get_bist_data(symbol, start_date="01-01-2010")
+                        # This endpoint and its cache are public; account-entitled
+                        # TradingView data is served only by /borsapy/candles.
+                        df = get_bist_data(symbol, start_date="01-01-2010", use_borsapy=False)
                         source = str(getattr(df, "attrs", {}).get("source_hint", "isyatirim"))
 
                         if df is not None and not df.empty:

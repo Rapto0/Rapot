@@ -88,6 +88,23 @@ class PublicAlarmDataProvider:
             frame.index = pd.DatetimeIndex(index)
             frame.attrs["source"] = "binance"
         else:
+            from settings import settings
+
+            if settings.borsapy_use_for_bist:
+                from application.services.borsapy_gateway import get_borsapy_gateway
+
+                try:
+                    frame = get_borsapy_gateway().history(symbol, interval=timeframe, period="2y")
+                except Exception:
+                    raise AlarmEvaluationError(
+                        "TradingView bağlantısı veya mum verisi alınamadı; başka kaynağa geçilmedi."
+                    ) from None
+                frame = frame.copy()
+                if timeframe == "1d":
+                    frame.index = frame.index.tz_convert(_ISTANBUL).normalize()
+                frame.attrs.update(source="borsapy_tradingview", timeframe=timeframe)
+                return frame.tail(301).copy()
+
             import yfinance as yf
 
             ticker = symbol if symbol.endswith(".IS") else f"{symbol}.IS"

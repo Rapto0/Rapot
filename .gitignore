@@ -35,6 +35,7 @@ runtime-data/
 /security-reports/
 *.bot.lock
 server-alarms.lock
+.borsapy/
 
 # Backtest outputs
 backtest_*.xlsx

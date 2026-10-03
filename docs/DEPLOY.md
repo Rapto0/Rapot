@@ -142,6 +142,29 @@ The final recorded free space was 1,056,694,272 bytes, above the fixed 528 MiB
 reserve. Exact evidence hashes and acceptance boundaries are in the
 [continuation plan](RAPOT_DEVAM_PLANI.md#son-üretim-ve-yayın-kanıtları).
 
+### Borsapy runtime extension
+
+`Dockerfile.borsapy-runtime` is a separate additive dependency path. It reuses the
+same immutable `279aa9f` backend image and installs the complete production
+requirements against the reviewed lock. It does not relax `api-delta`'s unchanged
+dependency guard. The optional `publish_borsapy_runtime` job requires all 98 base
+distributions and their installed-file hashes to remain unchanged, with exactly
+22 reviewed additions. `scripts/verify_borsapy_runtime.py` also checks the full
+lock, security constraints, `pip check` and the complete shared layer prefix.
+
+Before publication, the Linux image must pass source hashes, native imports,
+encrypted-store roundtrip, temporary SQLite initialization and synthetic
+research/native-indicator checks with networking disabled. Evidence is saved as
+`borsapy-runtime-evidence-<source-sha>`; the resulting tag is
+`backend:borsapy-<source-sha>`. Local verifier tests do not prove that a Linux
+image has passed these gates.
+
+Registry compressed-layer sizes, added unpacked sizes, fresh server capacity,
+the fixed 528 MiB reserve, a verified offhost database backup and rollback images
+remain mandatory deployment gates. No image pruning is implied. API/frontend
+can be updated while the bot stays on its accepted source; the BIST scanner
+switch remains off until the separately deferred live acceptance.
+
 ### Frontend-only releases on the current VPS
 
 The historical P2-1 archive procedure below applies to changes confined to frontend

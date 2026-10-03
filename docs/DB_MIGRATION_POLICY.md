@@ -23,6 +23,10 @@ Son kaynak doğrulaması: **13 Eylül 2026 / P2-4**. Rapot'un iki ayrı veritaba
   model metadata'sı üzerinden eklenir. Mevcut sinyal/trade satırlarına backfill
   uygulanmaz. Eski uygulamaya geri dönüş ek tabloları korur; kurallar eski
   imajda değerlendirilmez. [Alarm sözleşmesi](SERVER_ALARMS.md) yaşam döngüsünü açıklar.
+- Borsapy araştırmaları: `research_workspaces` tablosu yöneticiye bağlı sorgu ve
+  sanal portföy girdilerini tutar. Sağlayıcı sırları veya sonuçlar bu tabloya
+  yazılmaz. Mevcut tablolara backfill uygulanmaz; önceki imaja dönüş ek tabloyu
+  korur. Tekrarlı `init_db()` ve önceki kayıt korunumu izole SQLite ile sınanır.
 
 `ensure_sqlite_columns()` mevcut sütun adlarını `PRAGMA table_info` ile karşılaştırır; eksik sütuna `ALTER TABLE ... ADD COLUMN`, tanımlı indekse `CREATE INDEX IF NOT EXISTS` uygular. Mevcut sütunun tipini/constraint'ini veya bütün şemanın doğruluğunu karşılaştırmaz. `create_all()` da var olan tabloları modelle tamamen eşitlemez.
 

@@ -1,6 +1,6 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-Kaynaklarla son karşılaştırma: **2 Ekim 2026 / sunucu alarmları canlı kabulü**. İş sırası, kullanıcı
+Kaynaklarla son karşılaştırma: **4 Ekim 2026 / borsapy araştırma entegrasyonu**. İş sırası, kullanıcı
 yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DEVAM_PLANI.md)
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 Teknik rehberler [docs dizininde](docs/README.md) listelenir.
@@ -36,13 +36,21 @@ Anahtar, parola, .env içeriği ve gerçek veritabanları rapora/Git'e alınmaz.
 | Container girişleri | `scripts/runtime.py`: init-main-db, api, bot, migrate-middleware, middleware |
 
 Ana dashboard `/`; diğer sayfalar `/signals`, `/trades`, `/scanner`, `/health`,
-`/settings`, `/chart`, `/alarms`, `/ai`, `/calendar`, `/tradingview`, `/login`.
+`/settings`, `/chart`, `/research`, `/alarms`, `/ai`, `/calendar`, `/tradingview`, `/login`.
 Ayarlar sayfası sunucu/tarayıcı ayarlarının kapsamını açıklar; tarayıcı tercihleri
 ilgili ekranlardan düzenlenir. `/alarms` yöneticiye ait kalıcı sunucu kurallarını
 yönetir; API alarm motoru tarayıcıdan bağımsız çalışır. Eski yerel kurallar
 `/alarms/local` sayfası açıkken değerlendirilir ve otomatik taşınmaz.
 [Sunucu alarm sözleşmesi](docs/SERVER_ALARMS.md) periyot, hesaplayıcı ve teslim
 sınırlarını açıklar; keyfi Pine çalıştırma desteği değildir.
+
+`/research` borsapy 0.11.0 katalog/form/tablo/grafik, sanal portföy, replay ve
+hesap bağlantılarını yöneticiye sunar. `/borsapy/*` özel API'dir. TradingView/EVDS/X
+kimlikleri sunucuda şifrelenir; `research_workspaces` yalnız kullanıcı girdilerini
+tutar. `/chart` BIST için ayrı Borsapy/TradingView seçimi sunar. Scanner ve günlük
+BIST alarm geçişi `BORSAPY_USE_FOR_BIST` ile açıkça seçilir; varsayılan kapalıdır.
+Canlı piyasa kabulü ertelidir; bağlantı açık olması gecikmesiz fiyat kanıtı değildir.
+[Entegrasyon sözleşmesi](docs/BORSAPY_INTEGRATION.md) kapsam ve sınırları açıklar.
 
 Canonical import ve compatibility listesi [paketleme haritasındadır](docs/PACKAGING_REFACTOR_MAP.md).
 `application.scanner.signal_handlers` gerçek uygulamadır; `scanner_side_effects`

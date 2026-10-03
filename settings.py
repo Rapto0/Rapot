@@ -37,6 +37,12 @@ class Settings(BaseSettings):
     app_env: str = Field("production", description="Runtime env: production/development/test")
     run_embedded_bot: bool = Field(False, description="Run scheduler inside API process")
     server_alarms_enabled: bool = Field(True, description="Run persistent alarms in the API")
+    borsapy_credentials_path: str | None = Field(
+        None, description="Encrypted borsapy credentials file; defaults beside the main database"
+    )
+    borsapy_max_streams: int = Field(3, ge=1, le=5, description="Maximum isolated chart streams")
+    borsapy_use_for_bist: bool = Field(False, description="Use authenticated borsapy for BIST jobs")
+    borsapy_stream_idle_seconds: int = Field(120, ge=30, le=600, description="Chart lease lifetime")
     bot_lock_path: str | None = Field(None, description="Shared bot instance lock file path")
     cors_allow_origins: str = Field(
         "http://localhost:3000,http://127.0.0.1:3000",

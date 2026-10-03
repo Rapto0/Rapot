@@ -85,6 +85,11 @@ try {
   assert.deepEqual(await proxied.json(), { service: 'api', path: '/auth/me?smoke=1', authorization: 'Bearer local-smoke' });
   const health = await localFetch(origin + '/health-api/health');
   assert.deepEqual(await health.json(), { service: 'bot-health', path: '/health' });
+  const research = await localFetch(origin + '/research');
+  assert.equal(research.status, 200);
+  assert.ok((await research.text()).includes('Araştırma'));
+  const researchProxy = await localFetch(origin + '/api/borsapy/catalog', { headers: { Authorization: 'Bearer local-research-smoke' } });
+  assert.deepEqual(await researchProxy.json(), { service: 'api', path: '/borsapy/catalog', authorization: 'Bearer local-research-smoke' });
   // Exercise Next's actual async searchParams contract, not just the page function.
   for (const [query, symbol, market] of [
     ['symbol=BTCUSDT&market=Kripto', 'BTCUSDT', 'Kripto'],

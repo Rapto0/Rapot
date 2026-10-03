@@ -42,6 +42,7 @@ venv/
 runtime-data/
 runtime-logs/
 server-alarms.lock
+**/.borsapy/
 
 # Database (Mount edilmeli)
 *.db

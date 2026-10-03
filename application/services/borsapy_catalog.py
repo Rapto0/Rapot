@@ -1,0 +1,662 @@
+"""Public, secret-free catalog for the explicitly supported borsapy operations."""
+
+from copy import deepcopy
+from typing import Any
+
+
+def _text(name: str, label: str, default: str = "", *, required: bool = True) -> dict:
+    return {"name": name, "label": label, "type": "text", "default": default, "required": required}
+
+
+def _select(name: str, label: str, values: list[str], default: str | None = None) -> dict:
+    return {
+        "name": name,
+        "label": label,
+        "type": "select",
+        "default": default or values[0],
+        "required": True,
+        "options": [{"value": value, "label": value} for value in values],
+    }
+
+
+def _number(name: str, label: str, default: float, minimum: float, maximum: float) -> dict:
+    return {
+        "name": name,
+        "label": label,
+        "type": "number",
+        "default": default,
+        "required": True,
+        "min": minimum,
+        "max": maximum,
+    }
+
+
+SYMBOL = _text("symbol", "BIST sembolü", "THYAO")
+PERIOD = _select("period", "Geçmiş aralığı", ["1mo", "3mo", "6mo", "1y", "2y"], "1y")
+SHORT_PERIOD = _select("period", "Geçmiş aralığı", ["1mo", "3mo", "6mo", "1y"], "1mo")
+HISTORY_PERIOD = _select(
+    "period", "Geçmiş aralığı", ["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y"], "1y"
+)
+CRYPTO_PERIOD = _select("period", "Geçmiş aralığı", ["1d", "5d", "1mo", "3mo", "6mo", "1y"], "1mo")
+INTERVAL = _select(
+    "interval", "Mum periyodu", ["1m", "5m", "15m", "30m", "1h", "4h", "1d", "1wk"], "1d"
+)
+LIMIT = _number("limit", "En fazla kayıt", 20, 1, 100)
+FUND = _text("fund_code", "Fon kodu", "YAY")
+FUND_TYPE = _select("fund_type", "Fon türü", ["YAT", "EMK"])
+
+GROUPS = [
+    {"id": "streaming", "label": "Canlı akış ve Pine", "description": "TradingView akış oturumu."},
+    {"id": "market", "label": "Fiyat ve grafik", "description": "Geçmiş mumlar, döviz ve kripto."},
+    {"id": "company", "label": "Şirket ve KAP", "description": "Finansallar ve şirket olayları."},
+    {"id": "technical", "label": "Teknik analiz", "description": "Göstergeler ve taramalar."},
+    {
+        "id": "portfolio",
+        "label": "Portföy ve deney",
+        "description": "Sanal portföy ve sabit strateji.",
+    },
+    {
+        "id": "funds",
+        "label": "Yatırım fonları",
+        "description": "TEFAS fiyat, dağılım ve karşılaştırma.",
+    },
+    {"id": "economy", "label": "Ekonomi", "description": "Enflasyon, EVDS, faiz ve takvim."},
+    {
+        "id": "derivatives",
+        "label": "VİOP ve tahvil",
+        "description": "Kontrat ve borçlanma araçları.",
+    },
+    {"id": "discovery", "label": "Arama", "description": "Sembol ve sosyal içerik araması."},
+]
+
+
+def _op(
+    operation: str,
+    group: str,
+    label: str,
+    description: str,
+    source: str,
+    fields: list[dict] | None = None,
+    *,
+    view: str = "table",
+    requires: list[str] | None = None,
+    transport: str = "query",
+) -> dict[str, Any]:
+    return {
+        "id": operation,
+        "group": group,
+        "label": label,
+        "description": description,
+        "source": source,
+        "fields": deepcopy(fields or []),
+        "requires": requires or [],
+        "view": view,
+        "transport": transport,
+    }
+
+
+OPERATIONS = [
+    _op(
+        "stream.quote",
+        "streaming",
+        "Canlı fiyat akışı",
+        "Erişim ve gecikme kaynak aboneliğine bağlıdır.",
+        "TradingView",
+        [_text("symbol", "BIST sembolü", "THYAO")],
+        view="stream",
+        requires=["tradingview"],
+        transport="stream",
+    ),
+    _op(
+        "stream.chart",
+        "streaming",
+        "Canlı mum akışı",
+        "TradingView mum güncellemeleri; veri hakkı ayrıca gerekir.",
+        "TradingView",
+        [_text("symbol", "BIST sembolü", "THYAO"), INTERVAL],
+        view="stream",
+        requires=["tradingview"],
+        transport="stream",
+    ),
+    _op(
+        "stream.study",
+        "streaming",
+        "Pine gösterge akışı",
+        "TradingView'de erişilebilen gösterge kimliği; Python veya Pine kodu yükleme alanı değildir.",
+        "TradingView",
+        [
+            _text("symbol", "BIST sembolü", "THYAO"),
+            INTERVAL,
+            _text("study", "TradingView gösterge kimliği"),
+        ],
+        view="stream",
+        requires=["tradingview"],
+        transport="stream",
+    ),
+    _op(
+        "search",
+        "discovery",
+        "Sembol ara",
+        "Hisse, döviz, kripto, endeks ve vadeli sembolleri arar.",
+        "TradingView",
+        [
+            _text("query", "Arama", "THY"),
+            _select("kind", "Piyasa", ["all", "bist", "crypto", "forex", "index", "viop"]),
+            LIMIT,
+        ],
+    ),
+    _op(
+        "company.list",
+        "discovery",
+        "BIST şirketleri",
+        "Şirket adında veya kodunda arama.",
+        "İş Yatırım",
+        [_text("query", "Şirket adı veya kodu", "", required=False)],
+    ),
+    _op(
+        "history",
+        "market",
+        "BIST geçmiş mumlar",
+        "Sağlayıcının düzeltilmiş OHLCV geçmişi; aralık ve mum sayısı sınırlıdır.",
+        "TradingView",
+        [SYMBOL, HISTORY_PERIOD, INTERVAL],
+        view="chart",
+        requires=["tradingview"],
+    ),
+    _op(
+        "replay",
+        "market",
+        "Mum tekrarı",
+        "Geçmiş mumları zaman sırasıyla inceleme; canlı emir veya veri akışı üretmez.",
+        "TradingView",
+        [SYMBOL, HISTORY_PERIOD, INTERVAL],
+        view="replay",
+        requires=["tradingview"],
+    ),
+    _op(
+        "heikin_ashi",
+        "market",
+        "Heikin Ashi",
+        "Standart OHLCV'den türetilen sentetik mumlar, işlem fiyatı değildir.",
+        "borsapy / TradingView",
+        [SYMBOL, HISTORY_PERIOD, INTERVAL],
+        view="chart",
+        requires=["tradingview"],
+    ),
+    _op(
+        "company.info",
+        "company",
+        "Şirket özeti",
+        "Şirket bilgileri, oranlar ve sahiplik bilgileri.",
+        "İş Yatırım",
+        [SYMBOL],
+    ),
+    _op(
+        "company.financials",
+        "company",
+        "Finansal tablolar",
+        "Sağlayıcı yıllık veya çeyreklik tabloları; kalem birimi ve dönem başlıklarını birlikte okuyun.",
+        "İş Yatırım",
+        [
+            SYMBOL,
+            _select("statement", "Tablo", ["balance_sheet", "income_stmt", "cashflow"]),
+            _select("frequency", "Dönem", ["annual", "quarterly"]),
+            _number("last_n", "Son dönem sayısı", 4, 1, 12),
+        ],
+    ),
+    _op(
+        "company.actions",
+        "company",
+        "Temettü ve sermaye işlemleri",
+        "Temettü, bölünme ve birleşik olay tablosu. Yüzde ile bölünme katsayısı aynı değildir.",
+        "İş Yatırım",
+        [SYMBOL],
+    ),
+    _op(
+        "company.holders",
+        "company",
+        "Ortaklık ve analist görüşleri",
+        "Büyük ortaklar ve sağlayıcı analist tavsiyeleri.",
+        "İş Yatırım",
+        [SYMBOL],
+    ),
+    _op(
+        "etf_holders",
+        "company",
+        "ETF sahipliği",
+        "Hisseyi portföyünde tutan yabancı ETF kayıtları.",
+        "TradingView",
+        [SYMBOL],
+    ),
+    _op(
+        "kap.news",
+        "company",
+        "KAP bildirimleri",
+        "Kaynağın sunduğu son bildirim başlıkları ve bağlantıları.",
+        "KAP",
+        [SYMBOL],
+    ),
+    _op(
+        "kap.calendar",
+        "company",
+        "Şirket takvimi",
+        "Yaklaşan şirket olayları ve bilanço tarihleri; kapsam kaynakla sınırlıdır.",
+        "KAP / İş Yatırım",
+        [SYMBOL],
+    ),
+    _op(
+        "ta.signals",
+        "technical",
+        "TradingView teknik özeti",
+        "Seçilen periyot için alış/satış teknik özetleri; özel Pine hesaplaması değildir.",
+        "TradingView Scanner",
+        [SYMBOL, INTERVAL],
+    ),
+    _op(
+        "ta.indicators",
+        "technical",
+        "Yerel teknik göstergeler",
+        "Sabit gösterge listesiyle OHLCV üzerinde borsapy hesaplaması; Rapot COMBO/HUNTER ile eşdeğerlik iddiası yoktur.",
+        "borsapy / TradingView",
+        [
+            SYMBOL,
+            HISTORY_PERIOD,
+            INTERVAL,
+            _select(
+                "indicator",
+                "Gösterge",
+                [
+                    "rsi",
+                    "sma",
+                    "ema",
+                    "macd",
+                    "bollinger",
+                    "atr",
+                    "stochastic",
+                    "obv",
+                    "vwap",
+                    "adx",
+                    "supertrend",
+                    "tilson_t3",
+                    "hhv",
+                    "llv",
+                    "mom",
+                    "roc",
+                    "wma",
+                    "dema",
+                    "tema",
+                ],
+            ),
+            _number("length", "Uzunluk (uygulanan göstergelerde)", 14, 2, 200),
+        ],
+        view="chart",
+        requires=["tradingview"],
+    ),
+    _op(
+        "screener.fundamental",
+        "technical",
+        "Temel tarama",
+        "İş Yatırım'ın hazır tarama şablonları.",
+        "İş Yatırım",
+        [
+            _select(
+                "template",
+                "Şablon",
+                [
+                    "low_pe",
+                    "high_dividend",
+                    "high_roe",
+                    "high_net_margin",
+                    "small_cap",
+                    "mid_cap",
+                    "large_cap",
+                    "high_upside",
+                    "high_volume",
+                    "buy_recommendation",
+                ],
+            )
+        ],
+    ),
+    _op(
+        "screener.criteria",
+        "technical",
+        "Tarama ölçütleri",
+        "Kullanılabilir sektör, endeks ve temel ölçütler.",
+        "İş Yatırım / BIST",
+    ),
+    _op(
+        "screener.technical",
+        "technical",
+        "Teknik tarama",
+        "En fazla 20 sembolde seçili hazır koşulu tarar.",
+        "TradingView Scanner",
+        [
+            _text("symbols", "Semboller (virgülle)", "THYAO,AKBNK,ASELS"),
+            _select(
+                "condition",
+                "Koşul",
+                [
+                    "rsi_below_30",
+                    "rsi_above_70",
+                    "close_above_sma50",
+                    "sma20_crosses_sma50",
+                    "macd_above_signal",
+                ],
+            ),
+            INTERVAL,
+        ],
+    ),
+    _op(
+        "portfolio",
+        "portfolio",
+        "Sanal portföy analizi",
+        "En fazla 10 varlığın değeri ve geçmişi. Emir göndermez; fiyatların zamanı farklı olabilir.",
+        "borsapy / varlık sağlayıcıları",
+        [
+            {
+                "name": "positions",
+                "label": "Pozisyonlar",
+                "type": "textarea",
+                "required": True,
+                "default": '[{"symbol":"THYAO","shares":10,"cost":300,"asset_type":"stock"}]',
+            },
+            SHORT_PERIOD,
+            _number("risk_free_rate", "Yıllık risksiz getiri (0.30 = %30)", 0, 0, 5),
+        ],
+        view="portfolio",
+        requires=["tradingview"],
+    ),
+    _op(
+        "backtest",
+        "portfolio",
+        "Deneysel SMA 20/50 backtest",
+        "Yalnız sabit SMA 20/50 stratejisi. borsapy aynı mum kapanışında işlem varsayar; Rapot'un yerel backtest motorundan ayrıdır.",
+        "borsapy deneysel backtest / TradingView",
+        [
+            SYMBOL,
+            _select("period", "Günlük geçmiş", ["6mo", "1y", "2y"], "1y"),
+            _number("capital", "Başlangıç sermayesi", 100000, 100, 10000000),
+            _number("commission", "Komisyon oranı (0.001 = %0.1)", 0.001, 0, 0.02),
+        ],
+        view="backtest",
+        requires=["tradingview"],
+    ),
+    _op(
+        "fx.current",
+        "market",
+        "Döviz ve kıymetli maden",
+        "Seçilen varlığın güncel kaynak bilgisi.",
+        "Doviz.com",
+        [_text("asset", "Varlık", "USD")],
+    ),
+    _op(
+        "fx.history",
+        "market",
+        "Döviz geçmişi",
+        "Günlük ve gün içi döviz/maden geçmişi; dakika verisi her varlıkta bulunmayabilir.",
+        "TradingView / Doviz.com / Canlı Döviz",
+        [_text("asset", "Varlık", "USD"), HISTORY_PERIOD, INTERVAL],
+        view="chart",
+    ),
+    _op(
+        "fx.banks",
+        "market",
+        "Banka kurları",
+        "Varlığın banka ve kurum alış/satış fiyatları; işlem teklifi değildir.",
+        "Doviz.com",
+        [_text("asset", "Varlık", "USD")],
+    ),
+    _op(
+        "crypto.pairs",
+        "market",
+        "Kripto çiftleri",
+        "BtcTurk işlem çiftleri.",
+        "BtcTurk",
+        [_select("quote", "Karşıt para", ["TRY", "USDT"])],
+    ),
+    _op(
+        "crypto.current",
+        "market",
+        "Kripto fiyatı",
+        "BtcTurk kaynak fiyatı; diğer borsalardan farklı olabilir.",
+        "BtcTurk",
+        [_text("pair", "İşlem çifti", "BTCTRY")],
+    ),
+    _op(
+        "crypto.history",
+        "market",
+        "Kripto geçmişi",
+        "BtcTurk OHLCV geçmişi.",
+        "BtcTurk",
+        [_text("pair", "İşlem çifti", "BTCTRY"), CRYPTO_PERIOD, INTERVAL],
+        view="chart",
+    ),
+    _op(
+        "fund.search",
+        "funds",
+        "Fon ara",
+        "TEFAS fon kodu ve adı araması.",
+        "TEFAS",
+        [_text("query", "Fon adı veya kodu", "altın"), LIMIT],
+    ),
+    _op(
+        "fund.info",
+        "funds",
+        "Fon ayrıntıları",
+        "Fon kimliği, performans ve yönetim ücreti.",
+        "TEFAS",
+        [FUND],
+    ),
+    _op(
+        "fund.history",
+        "funds",
+        "Fon fiyat geçmişi",
+        "Günlük birim pay değerleri; OHLC değildir.",
+        "TEFAS",
+        [FUND, PERIOD],
+    ),
+    _op(
+        "fund.allocation",
+        "funds",
+        "Fon varlık dağılımı",
+        "Varlık türü dağılımı; tek tek portföy hisseleri listesi değildir.",
+        "TEFAS",
+        [FUND, _select("period", "Dağılım geçmişi", ["1mo", "3mo"])],
+    ),
+    _op(
+        "fund.screen",
+        "funds",
+        "Fon tara",
+        "Fon türü ve asgari yıllık getirisine göre tarar.",
+        "TEFAS",
+        [FUND_TYPE, _number("min_return_1y", "Asgari yıllık getiri (%)", 0, -100, 10000), LIMIT],
+    ),
+    _op(
+        "fund.compare",
+        "funds",
+        "Fon karşılaştır",
+        "En fazla 10 fonun sağlayıcı performansını karşılaştırır.",
+        "TEFAS",
+        [_text("fund_codes", "Fon kodları (virgülle)", "YAY,AFT")],
+    ),
+    _op(
+        "fund.fees",
+        "funds",
+        "Fon yönetim ücretleri",
+        "Sağlayıcının bildirdiği fon ücretleri.",
+        "TEFAS",
+        [FUND_TYPE],
+    ),
+    _op(
+        "fund.tax",
+        "funds",
+        "Fon stopaj referansı",
+        "borsapy'nin sabit tarihli stopaj tablosu; güncel vergi teyidi yerine geçmez.",
+        "borsapy sabit referans tablosu",
+        [
+            FUND,
+            {"name": "purchase_date", "label": "Alım tarihi", "type": "date", "required": True},
+            _number("holding_days", "Elde tutma günü", 0, 0, 36500),
+        ],
+    ),
+    _op(
+        "inflation",
+        "economy",
+        "Enflasyon serileri",
+        "TÜFE veya ÜFE aylık seri.",
+        "TCMB",
+        [_select("kind", "Seri", ["tufe", "ufe"]), _number("limit", "Son ay sayısı", 24, 1, 240)],
+    ),
+    _op(
+        "inflation.calculate",
+        "economy",
+        "Enflasyon hesaplayıcı",
+        "TÜFE ile iki ay arasında satın alma gücü karşılaştırması.",
+        "TCMB",
+        [
+            _number("amount", "Tutar", 1000, 0.01, 1000000000),
+            _text("start", "Başlangıç ayı (YYYY-MM)", "2024-01"),
+            _text("end", "Bitiş ayı (YYYY-MM)", "2025-01"),
+        ],
+    ),
+    _op(
+        "evds.categories",
+        "economy",
+        "EVDS kategori kataloğu",
+        "TCMB EVDS kategori listesi; katalog okuması için anahtar gerekmez.",
+        "TCMB EVDS3",
+    ),
+    _op(
+        "evds.groups",
+        "economy",
+        "EVDS veri grupları",
+        "Kategori numarasına ait veri grupları.",
+        "TCMB EVDS3",
+        [_number("category_id", "Kategori numarası", 1, 1, 10000)],
+    ),
+    _op(
+        "evds.search",
+        "economy",
+        "EVDS seri ara",
+        "Yerel EVDS kataloğunda seri araması.",
+        "TCMB EVDS3",
+        [_text("query", "Arama", "dolar")],
+    ),
+    _op(
+        "evds.series",
+        "economy",
+        "EVDS veri indir",
+        "En fazla beş seri. EVDS anahtarı sunucuda saklanır.",
+        "TCMB EVDS3",
+        [
+            _text("codes", "Seri kodları (virgülle)", "TP.DK.USD.A.YTL"),
+            PERIOD,
+            _select(
+                "frequency",
+                "Sıklık",
+                ["daily", "weekly", "monthly", "quarterly", "annual"],
+                "monthly",
+            ),
+        ],
+        requires=["evds"],
+    ),
+    _op(
+        "bonds",
+        "derivatives",
+        "Devlet tahvili getirileri",
+        "2, 5 ve 10 yıllık gösterge tahvil getirileri.",
+        "Doviz.com",
+    ),
+    _op(
+        "tcmb.rates",
+        "economy",
+        "TCMB faizleri",
+        "Politika, gecelik ve geç likidite faizleri.",
+        "TCMB",
+    ),
+    _op(
+        "tcmb.history",
+        "economy",
+        "TCMB faiz geçmişi",
+        "Seçili faiz türünün geçmiş değişimleri.",
+        "TCMB",
+        [_select("rate_type", "Faiz türü", ["policy", "overnight", "late_liquidity"]), PERIOD],
+    ),
+    _op(
+        "eurobonds",
+        "derivatives",
+        "Eurobond listesi",
+        "Kaynak alış/satış fiyat ve getirileri.",
+        "Ziraat Bankası",
+        [_select("currency", "Para birimi", ["USD", "EUR"])],
+    ),
+    _op(
+        "eurobond.history",
+        "derivatives",
+        "Eurobond geçmişi",
+        "En çok bir aylık kaynak arşivi; tarih kapsamı sınırlı olabilir.",
+        "Ziraat Bankası",
+        [_text("isin", "ISIN", "US900123AL40"), _select("period", "Geçmiş aralığı", ["1mo"])],
+    ),
+    _op(
+        "viop",
+        "derivatives",
+        "VİOP kontratları",
+        "Vadeli ve opsiyon kontratlarının kaynak tablosu.",
+        "İş Yatırım",
+        [
+            _select(
+                "kind",
+                "Kontrat türü",
+                [
+                    "futures",
+                    "stock_futures",
+                    "index_futures",
+                    "currency_futures",
+                    "commodity_futures",
+                    "options",
+                    "stock_options",
+                    "index_options",
+                ],
+            )
+        ],
+    ),
+    _op(
+        "viop.contracts",
+        "derivatives",
+        "VİOP dayanak araması",
+        "Dayanak sembolün TradingView kontratları.",
+        "TradingView",
+        [_text("base_symbol", "Dayanak", "XU030")],
+    ),
+    _op(
+        "calendar",
+        "economy",
+        "Ekonomik takvim",
+        "Kaynağın mevcut takvim aralığıyla sınırlı ekonomik olaylar.",
+        "Doviz.com / Investing",
+        [
+            _select("period", "Aralık", ["1d", "1w", "1mo"], "1w"),
+            _select("country", "Ülke", ["all", "TR", "US", "EU", "DE", "GB", "JP", "CN"], "TR"),
+            _select("importance", "Önem", ["all", "low", "mid", "high"]),
+        ],
+    ),
+    _op(
+        "twitter.search",
+        "discovery",
+        "Twitter / X ara",
+        "Sunucuda yetkilendirilmiş hesabın erişebildiği içerik. Paylaşım yapmaz.",
+        "Twitter / X",
+        [
+            _text("query", "Arama", "$THYAO"),
+            _select("period", "Geçmiş", ["1d", "3d", "7d"], "7d"),
+            _number("limit", "En fazla kayıt", 20, 1, 50),
+        ],
+        requires=["twitter"],
+    ),
+]
+
+
+def get_catalog() -> dict[str, Any]:
+    """Return an independent copy, never credentials or provider runtime state."""
+    return {"version": 1, "groups": deepcopy(GROUPS), "operations": deepcopy(OPERATIONS)}

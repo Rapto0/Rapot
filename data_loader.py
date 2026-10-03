@@ -592,11 +592,31 @@ def resample_market_data(
     return resample_data(df, timeframe)
 
 
-def get_bist_data(symbol: str, start_date: str = "01-01-2015") -> pd.DataFrame | None:
+def get_bist_data(
+    symbol: str, start_date: str = "01-01-2015", *, use_borsapy: bool | None = None
+) -> pd.DataFrame | None:
     """
     BIST Verisi Çeker (Retry Mekanizmalı)
     Hata alırsa 3 kez tekrar dener.
     """
+    if settings.borsapy_use_for_bist if use_borsapy is None else use_borsapy:
+        from application.services.borsapy_gateway import get_borsapy_gateway
+
+        # Explicit provider selection never silently falls back to delayed data.
+        start = pd.to_datetime(start_date, format="%d-%m-%Y").to_pydatetime()
+        frame = get_borsapy_gateway().history(symbol, interval="1d", start=start)
+        frame = frame.copy()
+        frame.index = frame.index.tz_convert("Europe/Istanbul").normalize().tz_localize(None)
+        frame.attrs.update(
+            source="borsapy_tradingview",
+            source_hint="borsapy_tradingview",
+            open_quality="provider",
+            adjustment="splits",
+            fetched_at_ts=time.time(),
+            fetched_at_iso=utc_now_naive().isoformat(),
+        )
+        return frame
+
     ensure_isyatirim_ca_bundle()
 
     global _bist_force_yfinance_fallback

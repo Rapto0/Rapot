@@ -15,6 +15,8 @@ import {
     type EconomicCalendarEvent,
 } from "@/lib/api/client"
 import { useBinanceTicker } from "@/lib/hooks/use-binance-ticker"
+import { useSession } from "@/lib/hooks/use-session"
+import { BORSAPY_INTERVALS, fetchBorsapyCandles, fetchBorsapyChartSnapshot, mergeBorsapyCandles, releaseBorsapyChart } from "@/lib/api/borsapy-chart-api"
 import { cn } from "@/lib/utils"
 import { ActionDialog } from "@/components/ui/action-dialog"
 import { IconButton } from "@/components/ui/icon-button"
@@ -716,6 +718,12 @@ export function AdvancedChartPage({
     const [symbol, setSymbol] = useState(initialSymbol)
     const [marketType, setMarketType] = useState<MarketType>(initialMarket)
     const [timeframe, setTimeframe] = useState("1d")
+    const session = useSession()
+    const [bistSource, setBistSource] = useState<"legacy" | "borsapy">("legacy")
+    const useBorsapy = marketType === "BIST" && bistSource === "borsapy"
+    const canUseBorsapy = Boolean(session?.user.is_admin && !session.user.disabled)
+    const chartSubscriber = useRef("")
+    const bistTimeframes = useBorsapy ? BORSAPY_INTERVALS : BIST_ALLOWED_TIMEFRAMES
     const [showSymbolSearch, setShowSymbolSearch] = useState(false)
     const [showTimeframeMenu, setShowTimeframeMenu] = useState(false)
     const [searchQuery, setSearchQuery] = useState("")
@@ -877,21 +885,21 @@ export function AdvancedChartPage({
         return TIMEFRAME_CATEGORIES
             .map((category) => ({
                 ...category,
-                items: category.items.filter((item) => BIST_ALLOWED_TIMEFRAMES.has(item.value)),
+                items: category.items.filter((item) => bistTimeframes.has(item.value)),
             }))
             .filter((category) => category.items.length > 0)
-    }, [marketType])
+    }, [marketType, bistTimeframes])
 
     const availableQuickTimeframes = useMemo(() => {
         if (marketType !== "BIST") return QUICK_TIMEFRAMES
-        return QUICK_TIMEFRAMES.filter((item) => BIST_ALLOWED_TIMEFRAMES.has(item.value))
-    }, [marketType])
+        return QUICK_TIMEFRAMES.filter((item) => bistTimeframes.has(item.value))
+    }, [marketType, bistTimeframes])
 
     useEffect(() => {
         if (marketType !== "BIST") return
-        if (BIST_ALLOWED_TIMEFRAMES.has(timeframe)) return
+        if (bistTimeframes.has(timeframe)) return
         setTimeframe("1d")
-    }, [marketType, timeframe])
+    }, [marketType, timeframe, bistTimeframes])
 
     useEffect(() => {
         activeToolRef.current = activeTool
@@ -1261,10 +1269,31 @@ export function AdvancedChartPage({
         isFetching: isCandlesFetching,
         refetch: refetchCandles,
     } = useQuery({
-        queryKey: ['chart-candles', symbol, marketType, timeframe],
-        queryFn: () => fetchCandles(symbol, marketType, timeframe, 1000),
+        queryKey: ['chart-candles', symbol, marketType, timeframe, useBorsapy ? 'borsapy' : 'legacy', useBorsapy ? session?.user.username : null, useBorsapy ? session?.expiresAt : null],
+        queryFn: ({ signal }) => useBorsapy ? fetchBorsapyCandles(symbol, timeframe, signal) : fetchCandles(symbol, marketType, timeframe, 1000, { signal }),
+        enabled: !useBorsapy || (canUseBorsapy && BORSAPY_INTERVALS.has(timeframe)),
         refetchInterval: 60000,
+        retry: false,
     })
+
+    const streamEnabled = useBorsapy && canUseBorsapy && BORSAPY_INTERVALS.has(timeframe) && Boolean(candlesResponse)
+    const chartStream = useQuery({
+        queryKey: ['borsapy-chart-stream', symbol, timeframe, session?.user.username, session?.expiresAt],
+        queryFn: ({ signal }) => {
+            chartSubscriber.current ||= crypto.randomUUID()
+            return fetchBorsapyChartSnapshot(symbol, timeframe, signal, chartSubscriber.current)
+        },
+        enabled: streamEnabled,
+        refetchInterval: 3000,
+        retry: false,
+    })
+
+    useEffect(() => {
+        if (!streamEnabled) return
+        return () => {
+            if (chartSubscriber.current) void releaseBorsapyChart(symbol, timeframe, chartSubscriber.current).catch(() => { /* lease expires if disconnected */ })
+        }
+    }, [streamEnabled, symbol, timeframe])
 
     const candlesErrorMessage =
         candlesError instanceof Error ? candlesError.message : "Grafik verisi alinamadi."
@@ -1370,7 +1399,10 @@ export function AdvancedChartPage({
     })
 
     const candles: Candle[] = useMemo(() => {
-        const rawCandles = candlesResponse?.candles || []
+        if (useBorsapy && !canUseBorsapy) return []
+        const rawCandles = useBorsapy && candlesResponse
+            ? mergeBorsapyCandles(candlesResponse.candles, chartStream.data?.candles ?? [])
+            : candlesResponse?.candles || []
         if (rawCandles.length === 0) return []
 
         const deduped = new Map<number, Candle>()
@@ -1382,7 +1414,7 @@ export function AdvancedChartPage({
         return Array.from(deduped.entries())
             .sort((a, b) => a[0] - b[0])
             .map((entry) => entry[1])
-    }, [candlesResponse?.candles])
+    }, [candlesResponse, chartStream.data?.candles, useBorsapy, canUseBorsapy])
     const dataSource = candlesResponse?.source || "loading"
 
     const candlesSignature = useMemo(() => {
@@ -2732,6 +2764,14 @@ export function AdvancedChartPage({
 
                     {/* Timeframe & Controls */}
                     <div className="flex flex-wrap items-center gap-3">
+                        {marketType === "BIST" && <label className="flex items-center gap-2 text-xs">
+                            Veri kaynağı
+                            <select aria-label="BIST grafik veri kaynağı" value={bistSource} onChange={event => { setBistSource(event.target.value as "legacy" | "borsapy"); setTimeframe("1d") }} className="max-w-48 rounded border border-border bg-surface p-2">
+                                <option value="legacy">İş Yatırım / Yahoo</option>
+                                <option value="borsapy">Borsapy / TradingView</option>
+                            </select>
+                        </label>}
+                        {useBorsapy && <Link className="text-xs text-primary underline" href={canUseBorsapy ? "/research?tab=connection" : "/login?next=%2Fchart"}>{canUseBorsapy ? "Hesap bağlantısı" : "TradingView verisi için giriş yap"}</Link>}
                         {/* Quick Timeframes */}
                         <div className="flex items-center bg-muted/30 rounded-sm p-1">
                             {availableQuickTimeframes.map((tf) => (
@@ -3110,7 +3150,9 @@ export function AdvancedChartPage({
                 {/* Status Bar */}
                 <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-4 py-2 border-t border-border/30 text-xs text-muted-foreground">
                     <div className="flex flex-wrap items-center gap-4">
-                        <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-profit animate-pulse" />Canlı</span>
+                        <span className="flex items-center gap-1.5">{useBorsapy
+                            ? !canUseBorsapy ? "Yönetici girişi gerekli" : chartStream.isError ? "Akış alınamadı · son mumlar gösteriliyor" : chartStream.data?.message || "TradingView akışı bekleniyor"
+                            : isCandlesError ? "Veri alınamadı" : isCandlesFetching ? "Güncelleniyor" : "Periyodik veri"}</span>
                         <span>{candles.length} mum</span>
                         <span>Periyot: {currentTimeframeLabel}</span>
                         {activeIndicators.length > 0 && <span className="flex items-center gap-1"><LineChart className="h-3 w-3 text-primary" />{activeIndicators.length} indikatör</span>}

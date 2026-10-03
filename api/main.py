@@ -24,6 +24,8 @@ from api.rate_limit import limiter  # noqa: E402
 from api.realtime import router as realtime_router  # noqa: E402
 from api.routes.alarm_routes import router as alarm_router
 from api.routes.auth_routes import router as auth_router  # noqa: E402
+from api.routes.borsapy_connection_routes import router as borsapy_connection_router
+from api.routes.borsapy_routes import router as borsapy_router
 from api.routes.calendar_routes import router as calendar_router  # noqa: E402
 from api.routes.symbols_routes import router as symbols_router  # noqa: E402
 from api.routes.system_routes import router as system_router  # noqa: E402
@@ -103,6 +105,9 @@ async def lifespan(app: FastAPI):
             await stop_server_alarms()
         finally:
             await _stop_realtime_services()
+            from application.services.borsapy_gateway import get_borsapy_gateway
+
+            await asyncio.to_thread(get_borsapy_gateway().close)
         logger.info("API shutting down.")
         logger.info("Otonom Analiz API kapatildi")
 
@@ -137,6 +142,8 @@ app.include_router(calendar_router)
 app.include_router(symbols_router)
 app.include_router(system_router)
 app.include_router(alarm_router)
+app.include_router(borsapy_router)
+app.include_router(borsapy_connection_router)
 
 # ==================== SCHEMAS ====================
 

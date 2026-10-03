@@ -1,0 +1,23 @@
+# Separately verified additive runtime; the source-only api-delta path stays strict.
+FROM ghcr.io/rapto0/rapot/backend@sha256:9be0fdb6097f52bf97730f44c86d28c24e2c0cea1fe181e7e8fd668177fdb034
+
+LABEL org.opencontainers.image.base.name="ghcr.io/rapto0/rapot/backend@sha256:9be0fdb6097f52bf97730f44c86d28c24e2c0cea1fe181e7e8fd668177fdb034" \
+      org.opencontainers.image.base.digest="sha256:9be0fdb6097f52bf97730f44c86d28c24e2c0cea1fe181e7e8fd668177fdb034" \
+      io.rapot.runtime.extension="borsapy-0.11.0-v1"
+
+# Resolve the complete production requirement set against the same reviewed pins.
+# Existing distributions must remain byte-identical: the separate publication
+# job compares inventories and installed-file hashes before permitting a push.
+COPY requirements.txt requirements-security.txt requirements-dev.lock /tmp/runtime-inputs/
+RUN python -m pip install --no-cache-dir --no-compile --only-binary=:all: \
+        -r /tmp/runtime-inputs/requirements.txt -c /tmp/runtime-inputs/requirements-dev.lock \
+    && python -m pip check \
+    && rm -rf /tmp/runtime-inputs
+
+# Remove obsolete source inside the BUILD image, never a production volume.
+WORKDIR /
+RUN python -c "import pathlib, shutil; source = pathlib.Path('/app'); assert source.is_dir() and not source.is_symlink(); shutil.rmtree(source); source.mkdir()"
+WORKDIR /app
+COPY . .
+
+CMD ["python", "-m", "scripts.runtime", "api"]

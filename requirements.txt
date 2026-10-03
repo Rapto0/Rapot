@@ -28,3 +28,6 @@ yfinance>=1.2.1
 python-dotenv>=1.2.2
 alembic>=1.13.2
 psycopg[binary]>=3.2.0
+# Reviewed borsapy API contract; upgrades require the offline provider contract tests.
+borsapy[twitter]==0.11.0
+cryptography>=46.0.0
