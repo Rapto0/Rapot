@@ -18,12 +18,16 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
   kaynak çalıştırıcısı veya gün içi BIST alarm takvimi eklenmedi. Kimlikler
   sunucuda şifrelenir; özel fiyatlar genel grafik/önbellek yoluna taşınmaz.
   [Kapsam ve kabul](BORSAPY_INTEGRATION.md). Canlı hesap/piyasa testi kullanıcının
-  isteğiyle piyasa açılışına ertelidir. Tam yerel paket 1.177 Python testiyle
-  geçti; sonradan eklenen dağıtım doğrulayıcısının 27 testi de geçti. 222 frontend
+  isteğiyle piyasa açılışına ertelidir. Python CI'da **1.204 test geçti**, bir
+  performans testi atlandı; üç eski bağımlılık uyarısı kaldı. 227 frontend
   testi, lint/typecheck, build/standalone ve sentetik tarayıcı kabulü geçti.
   Tarayıcıda 51 işlem, kayıt, replay, akış başlat/durdur, özel grafik kaynağı,
   bağlantı sekmesi ve 320 px görünüm kontrol edildi. Bu kayıt henüz üretim
-  yayını değildir.
+  yayını değildir. İlk `39d4243` kaynağının Python/lint işleri ve Linux borsapy
+  runtime kabulü geçti; frontend CI yeni `braces` bildirimiyle durdu. Next lint
+  bağımlılığının dar uyarlamasıyla tam audit 469/469 paket, sıfır bulgu verdi;
+  bütün Next kuralları ve gerçek tüketici davranışı sınandı.
+  [Güvenlik düzeltmesi](FRONTEND_DEPENDENCY_SECURITY.md). İlk kaynak üretime alınmaz.
 - **Sunucu alarmları tamamlandı ve üretimde:** Kullanıcı, TradingView benzeri alarm
   yönetiminin bütünüyle kendi sitesinden yapılmasını seçti. `/alarms` artık
   yöneticiye ait kalıcı kuralları ve teslim geçmişini yönetir; API kapalı mumları
@@ -101,7 +105,8 @@ Kapatılmış işleri veya eski onay bekleme kayıtlarını yeniden başlatma.
 | Konu | Durum / devam koşulu |
 |---|---|
 | Borsapy canlı kabulü | TradingView oturumu, gerçek fiyat/mum zamanı, tarihsel kapsam ve şirket işlemleri piyasa açıkken karşılaştırılacak. EVDS/X ayrı kimlik ve kabul ister. |
-| Borsapy üretim yayını | Önceki source-only API delta yolu uygun değildir. Ayrı `Dockerfile.borsapy-runtime` mevcut 98 paketi/dosya hash'lerini koruyup 22 paket ekleyen yolu doğrular; Linux imaj kanıtı yayın işinde üretilecektir. 4 Ekim salt okunur ölçümünde 990.040.064 bayt boş, 553.648.128 bayt rezervden sonra 436.391.936 bayt kalıyordu. Exact imaj ve alan hesabı olmadan pull/deploy yapılmaz; eski imaj/veri silinmedi. |
+| Borsapy üretim yayını | Önceki source-only API delta yolu uygun değildir. Ayrı `Dockerfile.borsapy-runtime`, 98 paketi/dosya hash'lerini koruyup 22 paket ekleyen Linux imaj kabulünden geçti. İlk kaynakta ek unpacked katmanlar 218.790.228 bayttır; registry/host alan hesabı ayrıca gerekir. 3 Ekim 22:33 UTC (4 Ekim 01:33 TSİ) ölçümünde 986.927.104 bayt boştu. Exact son imaj ve 528 MiB rezerv hesabı olmadan pull/deploy yapılmaz; eski imaj/veri silinmedi. |
+| Eski Python pinlerinin yeni güvenlik bildirimleri | 134 paketlik report-only taramada 5 paket/16 ham bulgu; 22 borsapy ek paketinde bulgu yok. anyio/PyJWT/soupsieve/urllib3 runtime ve virtualenv geliştirme pinleri için ayrı taban imaj güncellemesi gerekir. [İnceleme ve düzeltme sınırları](BORSAPY_INTEGRATION.md). Yeşil güvenlik işi sıfır bulgu değildir. |
 | Canlı veri yükleme gecikmesi | UI-3 kabulünde Tarayıcı ek fiyat/metrikleri bekledi; Sinyaller tekrar açılışta bekledikten sonra 300 kaydı yükledi. Arayüz durumları doğru gösterildi; gecikmenin nedeni ve sağlayıcı performansı bu pakette çözülmedi. |
 | Gerçek TradingView alarmının webhook'a teslimi | Erteli; kullanıcı yeniden seçtiğinde ele alınır. Webhook URL erişimi için şu an yanıt beklenmiyor. |
 | ALL/FIRST, saat filtresi, futures/standart olmayan grafik korumaları | Güncel kaynağın bu runtime matrisi erteli. BTCUSDT/standart mum kabulü bunları kapsamaz. |

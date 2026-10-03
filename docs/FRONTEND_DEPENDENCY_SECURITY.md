@@ -1,10 +1,72 @@
 # Frontend bağımlılık güvenliği
 
-İlk inceleme tarihi: **13 Eylül 2026**; son takip **2 Ekim 2026**. İlk kaynak sürümü
+İlk inceleme tarihi: **13 Eylül 2026**; son takip **4 Ekim 2026**. İlk kaynak sürümü
 `d79f4cc841b3de411777730eb91a245ade96cd6e`; frontend kodu ve lock,
 P3-1 dördüncü adım kapanışındaki durumdur. İş sırası ve üretim kabulü
 [devam planında](RAPOT_DEVAM_PLANI.md#p1-g2--frontend-bağımlılık-güvenliği-takibi)
 tutulur.
+
+## 4 Ekim 2026 — Next ESLint glob bağımlılığı
+
+`39d4243e915f945790a322f5c978e9800875a17e` kaynağının
+[CI 37158727645](https://github.com/Rapto0/Rapot/actions/runs/37158727645)
+frontend işi audit aşamasında durdu. Node **20.20.2** / npm **10.9.9** ile
+yerelde tekrar edilen tam audit **482 düğüm / 5 high** verdi. Bunlar tek
+[GHSA-vfj7-8cjw-p6xm / CVE-2026-93687](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)
+kaydının `braces → micromatch → fast-glob → @next/eslint-plugin-next →
+eslint-config-next` geliştirme bağımlılığı zincirine yansımasıdır.
+Güvenilmeyen, derin iç içe glob girdisi özyinelemeli işlemde stack taşmasına
+yol açabilir. Bu tarama Rapot'ta üretim istismarı gerçekleştiği anlamına gelmez.
+
+İnceleme anında resmî npm `braces` son sürümü **3.0.3**, düzeltilmiş sürüm
+alanı boş ve [upstream düzeltme PR'ı](https://github.com/micromatch/braces/pull/72)
+açıktı. Next **16.3.8** ve canary kaynağında aynı bağımlılık vardı.
+Audit'in önerdiği `eslint-config-next@14.2.35` geri dönüşü uygulanmadı;
+Next/React/ESLint sürümleri, kuralları ve audit başarısızlık politikası korundu.
+
+Yalnız `@next/eslint-plugin-next@16.3.8` altındaki `fast-glob` yolu,
+`npm:tinyglobby@0.2.15` alias'ına sabitlendi. Bu, etkilenmiş paketi yeniden
+adlandırmak değildir: `braces` ve `micromatch` kodları lock'tan çıkarılır;
+yerine ayrı `tinyglobby` uygulaması, `fdir@6.5.0` ve zaten güvenli aralığa
+sabitlenmiş `picomatch@4.0.4` kullanılır. Registry URL, integrity ve gerçek
+paket adı lock'ta görünür; bu üç düğüm de tam audit kapsamındadır.
+
+[Next'in tek tüketicisi](https://github.com/vercel/next.js/blob/v16.3.8/packages/eslint-plugin-next/src/utils/get-root-dirs.ts)
+`globSync(rootDir, { onlyDirectories: true })` çağrısıdır. Düz alias yeterli
+değildir: tinyglobby varsayılan olarak literal dizinin altına da genişler;
+[bakımcı geçiş rehberi](https://superchupu.dev/tinyglobby/migration)
+`expandDirectories: false` ister. [Dar uyumluluk katmanı](../frontend/scripts/next-eslint-glob-compat.mjs)
+bu seçeneği uygular, literal dizin yazımını ve mutlak/bağıl sonuçları korur,
+glob sonuçlarının son `/` karakterini eski biçime getirir. Yalnız Next'in
+özel, iç içe alias'ının süreç belleğindeki CJS export'u değiştirilir; ortak
+tinyglobby, `node_modules` dosyaları ve diğer tüketiciler değiştirilmez.
+Postinstall veya yerel paket yoktur; mevcut Docker `npm ci` ve kaynak kopyası
+yeterlidir. Bu katman genel bir fast-glob yeniden uygulaması değildir.
+
+Katman exact Next/alias sürümü ve özel kurulum yolu değişirse hata verir;
+yeni çağrı biçimlerini sessizce kabul etmez. Next güvenli upstream bağımlılık
+yoluna geçtiğinde override ve katman birlikte kaldırılmalı; tüketici ve tam
+Next lint kuralları tekrar doğrulanmalıdır.
+
+Lock farkı **16 kaldırılan / 3 eklenen düğüm** ile sınırlıdır; kalan düğümlerin
+sürüm veya metadata'sı değişmedi. Tam audit **469/469 düğüm, 0 bulgu** verdi.
+Yeni lock **251.746 B**, SHA256
+`806ca1675438a0a677871f02ae04fccd3c4543030054d81039b84748436c7c74`.
+Beş yeni çevrimdışı regresyon gerçek `getRootDirs`, direct/brace/glob/array ve
+eksik dizinleri, `no-html-link-for-pages` hatasını, paylaşılan tinyglobby'nin
+korunmasını ve bütün Next recommended/Core Web Vitals kurallarını doğrular.
+Ayrı yerel karşılaştırmada **27/27** girdi eski fast-glob ile aynı dizin
+listesini verdi. Bu temsilî kapsam, bütün glob söz dizimlerinin eşdeğerliği
+veya güvenlik açığına karşı exploit testi iddiası değildir.
+
+Yamalı ortamda **227 frontend testi**, tam lint/typecheck, Next **16.3.8**
+build ve standalone HTTP/proxy kontrolü geçti. Temiz `npm ci` ardından audit
+yeniden **469/469, 0 bulgu** verdi; 13 odaklı audit/uyumluluk testi ve değişen
+araç dosyalarının lint kontrolü tekrar geçti. Ham önce/sonra audit ve kapsam manifestleri
+`runtime-data/borsapy-deploy/npm-audit-before/`, `npm-audit-after/` altında;
+temiz kurulum raporu `npm-audit-after-ci/`, karşılaştırma
+`next-eslint-glob-comparison.json` dosyasındadır. Bu yerel
+sonuçlar yeni CI/imaj veya üretim kabulünün yerine geçmez.
 
 ## 2 Ekim 2026 — UI3 güvenlik düzeltmesi ve üretim kabulü
 

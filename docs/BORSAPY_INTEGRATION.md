@@ -45,11 +45,29 @@ veya sağlayıcının bütün metotlarına serbest erişim değildir.
 Şirket finansalları ve temettü/sermaye işlemleri de sunulur. Her aile için web
 yüzeyi bulunması, bütün sağlayıcıların canlı kabul edildiği anlamına gelmez.
 
-Yerel çevrimdışı kabul: 1.177 Python testi, ayrıca 27 dağıtım doğrulayıcı testi;
-222 frontend testi, lint/typecheck, build ve standalone proxy kontrolü geçti.
+Çevrimdışı kabul: CI'da 1.204 Python testi (bir performans testi atlandı);
+227 frontend testi, lint/typecheck, build ve standalone proxy kontrolü geçti.
 Sentetik tarayıcı oturumunda katalog/formlar, kaydetme, replay, akış kontrolleri,
 özel grafik kaynağı, bağlantı sekmesi ve 320 px görünüm sınandı. Sağlayıcı,
 TradingView oturumu, gerçek fiyat gecikmesi veya bildirim teslimi sınanmadı.
+Linux runtime yayın işi, 98 mevcut paketin sürüm/dosya hash'lerini koruyup 22
+ek paketi, native importları ve ağsız uygulama kontrolünü doğruladı. Yayınlanmış
+imaj, sunucunun güncellendiği anlamına gelmez; son durum devam planındadır.
+
+Python güvenlik işi report-only sözleşmesini korur: 134 pakette 5 etkilenen
+paket / 16 ham bulgu (12 benzersiz bildirim) raporlandı. 22 ek paketin tamamı
+kapsamdadır ve bunlarda bulgu yoktur. Etkilenen eski pinler `anyio 4.12.1`,
+`PyJWT 2.14.0`, `soupsieve 2.8.4`, `urllib3 2.7.0` ve yalnız geliştirmedeki
+`virtualenv 21.7.8`'dir. Bunlar önceki sıfır bulgulu kabulden sonra yayımlanan
+bildirimlerdir; önceden kabul edilmiş risk olarak sınıflanmaz.
+Önerilen düzeltme alt sınırları sırasıyla 4.14.2, 2.15.0, 2.9.0, 2.8.0 ve
+21.7.13'tür. Runtime pinlerinin yenilenmesi, mevcut 98 paketi koruyan ek imaj
+yolundan ayrı test edilmiş taban imaj çalışması gerektirir. Sabit ASCII sağlayıcı
+hedefleri, doğrulanan HS256 ve dış CSS seçicisi sunulmaması bazı önkoşulları
+sınırlar; özellikle dış HTTP istemcisinin tam erişilemezliği kanıtlanmadı.
+[AnyIO](https://github.com/advisories/GHSA-82r6-8w77-94w6),
+[PyJWT](https://github.com/advisories/GHSA-42vr-xj54-vc7v) ve
+[urllib3](https://github.com/advisories/GHSA-vxq7-64xx-v4gw) bildirimleri.
 
 `/chart` BIST kaynağı olarak Borsapy/TradingView seçimini sunar. Özel
 `/borsapy/candles/{symbol}` ve `/borsapy/stream` kullanılır. Göstergeler mevcut

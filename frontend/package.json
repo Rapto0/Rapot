@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "node --test tests/auth-client.test.mjs tests/realtime-url.test.mjs tests/scan-history.test.mjs tests/realtime-connection.test.mjs tests/browser-preferences.test.mjs tests/health-status.test.mjs tests/trade-metrics.test.mjs tests/chart-route.test.mjs tests/signal-export.test.mjs tests/local-alarms.test.mjs tests/chart-alarm-storage.test.mjs tests/header-clock.test.mjs tests/special-notifications.test.mjs tests/dependency-audit.test.mjs tests/symbol-search.test.mjs tests/market-feed.test.mjs tests/binance-ticker.test.mjs tests/signals-page.test.mjs tests/scanner-page.test.mjs tests/action-dialog.test.mjs tests/server-alarms.test.mjs tests/borsapy-chart.test.mjs tests/borsapy-research.test.mjs",
+    "test": "node --test tests/auth-client.test.mjs tests/realtime-url.test.mjs tests/scan-history.test.mjs tests/realtime-connection.test.mjs tests/browser-preferences.test.mjs tests/health-status.test.mjs tests/trade-metrics.test.mjs tests/chart-route.test.mjs tests/signal-export.test.mjs tests/local-alarms.test.mjs tests/chart-alarm-storage.test.mjs tests/header-clock.test.mjs tests/special-notifications.test.mjs tests/dependency-audit.test.mjs tests/symbol-search.test.mjs tests/market-feed.test.mjs tests/binance-ticker.test.mjs tests/signals-page.test.mjs tests/scanner-page.test.mjs tests/action-dialog.test.mjs tests/server-alarms.test.mjs tests/borsapy-chart.test.mjs tests/borsapy-research.test.mjs tests/next-eslint-glob-compat.test.mjs",
     "test:standalone": "node tests/standalone-proxy-smoke.mjs",
     "audit:dependencies": "node scripts/audit-dependencies.mjs"
   },
@@ -18,6 +18,9 @@
   },
   "packageManager": "npm@10.9.9",
   "overrides": {
+    "@next/eslint-plugin-next@16.3.8": {
+      "fast-glob": "npm:tinyglobby@0.2.15"
+    },
     "minimatch@3.1.5": {
       "brace-expansion": "1.1.21"
     },
