@@ -5,7 +5,8 @@ paketiyle kişisel Rapot sitesinde borsapy README'sindeki özellik ailelerini
 istedi. Sonraki kapsam grafik, dashboard, izleme listesi, scanner ve ekonomik
 takvimin ortak kişisel veri altyapısını da içerir. Canlı piyasa kabulü
 piyasa açıkken yapılmak üzere ertelendi. Sonraki bağlantı yardım talimatı,
-kayıtlı TradingView oturumunun doğrulanmasını ayrıca yetkilendirdi.
+kayıtlı TradingView oturumunun doğrulanmasını ayrıca yetkilendirdi; bu hesap
+kabulü `876f3f3` yayını sonrasında tamamlandı. Canlı piyasa kabulü hâlâ ertelidir.
 
 Kaynak: borsapy 0.11.0,
 [`a9e41ae398fc2d25b35f864a5c7028d5f98862c3`](https://github.com/saidsurucu/borsapy/tree/a9e41ae398fc2d25b35f864a5c7028d5f98862c3).
@@ -74,9 +75,22 @@ katman önekini korur; API/bot aynı imajı `BORSAPY_USE_FOR_BIST=true` ile kull
 08:02:47 UTC ayrı salt okunur kabulde 45 anonim özel GET'in 401/no-store sınırı,
 Flask erişim ayrımı, WS kimlik doğrulaması, beş SSR sayfası, 22 JS/CSS dosyası ve
 11 değişmeyen tablo şeması doğrulandı. Middleware, PostgreSQL, özel ayarlar,
-Nginx ve Compose/current kaynağı korundu. TradingView/EVDS/X bağlantıları hâlâ
-tanımsızdır; gerçek fiyat/mum, bölünme ve hesap kabulü ertelidir. Normal başlangıç
+Nginx ve Compose/current kaynağı korundu. Bu kabulde TradingView/EVDS/X bağlantıları
+tanımsızdı; hesap kabulü daha sonra aşağıdaki düzeltmeyle tamamlandı. Normal başlangıç
 trafiği ölçülmedi. Yedek, kapasite ve imaj kimliklerinin kanıtları devam planında tutulur.
+
+4 Ekim 09:06:07 UTC'de `876f3f37b9d56624d17c46ab924684de559c5530`
+bağlantı düzeltmesi API/bot/frontend'e yayımlandı.
+[CI 37190406726](https://github.com/Rapto0/Rapot/actions/runs/37190406726)
+beş iş, [imaj yayını 37190433460](https://github.com/Rapto0/Rapot/actions/runs/37190433460)
+iki iş başarılı; API delta işi atlandı. Yerelde 1.421 Python testi (bir atlama/üç uyarı),
+262 Python dosyasında lint/format ve 256 frontend testi/lint/typecheck/build/standalone
+geçti. 09:08:31 UTC ayrı salt okunur kabul beş sağlıklı servisi, API/bot içinde
+30 canonical dosya/120 paketi, 51 işlem/9 grubu, 45 yerel ve 45 dış anonim
+401/no-store yanıtını, beş HTTPS sayfasını, 22 statik dosyayı ve değişmeyen
+11 tablo şemasını doğruladı. Son boş alan 696.680.448 bayt; 528 MiB rezerv korundu.
+Yeni temizlik, migration veya yedek alma işlemi yapılmadı. Exact imajlar ve kabul
+hash'leri [devam planındadır](RAPOT_DEVAM_PLANI.md#son-üretim-ve-yayın-kanıtları).
 
 Python güvenlik işi report-only sözleşmesini korur: 134 pakette 5 etkilenen
 paket / 16 ham bulgu (12 benzersiz bildirim) raporlandı. 22 ek paketin tamamı
@@ -129,7 +143,15 @@ Başarılı ve başarısız işlemlerden sonra ortak bağlantı durumu yenilenir
 “Kayıtlı · doğrulanmadı” ile “Yapılandırılmadı” ayrılır. Durum alınamıyorsa eski
 başarı kartı gösterilmez. Oturum kapanmış, değişmiş veya süresi dolmuşsa eski
 işlemin sonucu yeni oturuma taşınmaz. Depolama hatasında açık onayla kaydı
-kaldırma yolu korunur. Bu düzeltmelerin yayın/kabul durumu devam planındadır.
+kaldırma yolu korunur.
+
+Düzeltme üretime alındıktan sonra mevcut şifreli kayıtla gerçek site üzerindeki
+**Oturumu doğrula** eylemi **Oturum doğrulandı** sonucunu verdi. Kullanıcının
+kayıtlı bilgileri geçerliydi; TradingView bilgileri yeniden kaydedilmedi.
+Sır içermeyen UI/API kanıtı `runtime-data/borsapy-auth-fix-deploy/account-ui-acceptance.json`,
+ekran kanıtı `runtime-data/borsapy-auth-connected.jpg` içinde, Git dışında tutulur.
+Bu hesap kabulü gecikmesiz BIST veri yetkisi, fiyat/mum veya bölünme doğrulaması
+değildir; `realtime_verified=false` korunur.
 
 ## Kalıcılık ve erişim
 
@@ -258,12 +280,14 @@ Mevcut alarm kalıcılığı, sahiplik, Telegram sınırları ve DRY_RUN/emir ay
 
 ## Ertelenen canlı kabul
 
-1. Kullanıcının mevcut TradingView oturumunun kendi sunucusundan doğrulanması.
-2. İşlem gören hisselerde fiyat, sağlayıcı işlem zamanı, 1m/5m/günlük mumların
+TradingView oturumunun Rapot sunucusundan doğrulanması tamamlandı. Aşağıdaki
+piyasa ve diğer sağlayıcı kontrolleri bundan ayrıdır:
+
+1. İşlem gören hisselerde fiyat, sağlayıcı işlem zamanı, 1m/5m/günlük mumların
    TradingView ekranıyla karşılaştırılması.
-3. Çoklu bağlantı ayrımı, bağlantı kaybı/yenileme ve oturum sona ermesi.
-4. Tarihsel kapsam, bölünme/bedelli/temettü düzeltmeleri ve geçmiş revizyonları.
-5. EVDS/X bağlantıları; ekonomik takvim saat dilimi ve KAP bildirim kapsamı.
+2. Çoklu bağlantı ayrımı, bağlantı kaybı/yenileme ve oturum sona ermesi.
+3. Tarihsel kapsam, bölünme/bedelli/temettü düzeltmeleri ve geçmiş revizyonları.
+4. EVDS/X bağlantıları; ekonomik takvim saat dilimi ve KAP bildirim kapsamı.
    Bilanço beklenen son tarihi kesin yayın anı değildir.
 
 Üretim öncesinde yeni bağımlılıkların disk bütçesi ölçülür; mevcut $6/ay plan ve

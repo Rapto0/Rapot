@@ -9,15 +9,20 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Kaldığımız nokta
 
-- **4 Ekim — TradingView bağlantı düzeltmesi hazırlanıyor:** Kullanıcının
+- **4 Ekim — TradingView bağlantı düzeltmesi üretimde ve hesap doğrulandı:** Kullanıcının
   kaydettiği oturum geçerli; borsapy/httpx otomatik `www` → `tr` yönlendirmesinde
   elle gönderilen çerez başlığının kaybolduğu doğrulandı. Sınırlı, sır içermeyen
   sunucu tanısı hedefe oturumla ulaşıldığında kullanılabilir token bulunduğunu
   gösterdi. Güvenli yönlendirme adaptörü ve hata sonrası durumu yenileyen
-  frontend düzeltmesi hazırlanıyor; henüz üretime alınmış sayılmaz.
+  frontend düzeltmesi `876f3f3` ile 09:06:07 UTC'de API/bot/frontend'e yayımlandı.
+  09:08:31 UTC ayrı üretim kabulü geçti; gerçek bağlantı ekranındaki
+  **Oturumu doğrula** işlemi **Oturum doğrulandı** sonucunu verdi. Kayıtlı bilgiler
+  yeniden girilmedi. Yerelde 1.421 Python testi (bir atlama/üç uyarı), 262 Python
+  dosyasında lint/format ve 256 frontend testi/lint/typecheck/build/standalone geçti;
+  kaynakla eşleşen CI'ın beş işi ve imaj yayınının iki işi başarılı.
   [Neden ve bağlantı sözleşmesi](BORSAPY_INTEGRATION.md#tradingview-oturum-yönlendirmesi).
-  Bu iş yalnız hesap bağlantısının kabulünü açar; canlı fiyat/mum, bölünme,
-  alarm teslimi ve emir kabulü hâlâ ertelidir.
+  Hesap bağlantısı kabulü tamamdır; `realtime_verified=false` korunur. Canlı fiyat/mum,
+  bölünme, alarm teslimi ve emir kabulü hâlâ ertelidir.
 - **4 Ekim — Borsapy ortak piyasa altyapısı:** Kullanıcı Borsapy verisini grafik,
   tarayıcı ve ekonomik takvimde istedi. Yeni kaynakta BIST varsayılanı Borsapy;
   grafik/izleme listesi/piyasa kartları ortak, sınırlı TradingView fiyat havuzunu
@@ -33,8 +38,8 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
   doğruladı. Canlı salt okunur kabulde özel HTTP/WS ve bot sağlık erişimi,
   beş HTTPS sayfası, 22 statik dosya ve değişmeyen 11 tablo şeması doğrulandı.
   Anonim bot sağlık yanıtı yalnız hizmet durumunu verir; ayrıntılar aynı yönetici
-  oturumunu ister. TradingView/EVDS/X bağlantıları henüz yapılandırılmamış;
-  gerçek hesap, sağlayıcı ve piyasa kabulü erteli.
+  oturumunu ister. Bu ilk ortak altyapı kabulünde TradingView/EVDS/X bağlantıları
+  yapılandırılmamıştı; hesap kabulü sonraki `876f3f3` yayınıyla tamamlandı.
 - **Borsapy araştırma merkezinin ilk yayını üretimde:** Kullanıcı, mevcut TradingView
   Premium + BIST veri paketiyle README'deki 22 özellik ailesini kendi sitesinde istedi. borsapy
   0.11.0 sabitlendi; yönetici `/research` ekranına 51 işlem, bağlantı yönetimi,
@@ -43,8 +48,8 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
   alarm adaptörü hazırdı; o yayında `BORSAPY_USE_FOR_BIST` varsayılan false idi. Genel Pine
   kaynak çalıştırıcısı veya gün içi BIST alarm takvimi eklenmedi. Kimlikler
   sunucuda şifrelenir; özel fiyatlar genel grafik/önbellek yoluna taşınmaz.
-  [Kapsam ve kabul](BORSAPY_INTEGRATION.md). Canlı hesap/piyasa testi kullanıcının
-  isteğiyle piyasa açılışına ertelidir. Python CI'da **1.204 test geçti**, bir
+  [Kapsam ve kabul](BORSAPY_INTEGRATION.md). O yayında canlı hesap/piyasa testi
+  kullanıcının isteğiyle ertelenmişti. Python CI'da **1.204 test geçti**, bir
   performans testi atlandı; üç eski bağımlılık uyarısı kaldı. 227 frontend
   testi, lint/typecheck, build/standalone ve sentetik tarayıcı kabulü geçti.
   Tarayıcıda 51 işlem, kayıt, replay, akış başlat/durdur, özel grafik kaynağı,
@@ -54,12 +59,12 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
   bağımlılığının dar uyarlamasıyla tam audit 469/469 paket, sıfır bulgu verdi;
   bütün Next kuralları ve gerçek tüketici davranışı sınandı.
   [Güvenlik düzeltmesi](FRONTEND_DEPENDENCY_SECURITY.md). İlk kaynak üretime alınmaz.
-  Son uygulama kaynağı **`4b15335`** için beş CI işi ve iki imaj yayın işi geçti.
+  İlk araştırma yayınının kaynağı **`4b15335`** için beş CI işi ve iki imaj yayın işi geçti.
   Kullanıcının özel onayıyla iki eski frontend imajı kaldırıldı; güncel yedek
   ayrı veritabanında doğrulandı ve yalnız API/frontend güncellendi. Canlı yönetici
   GET'lerinde 51 işlem/9 grup, borsapy 0.11.0, HTTPS/statik dosyalar ve erişim
   sınırı geçti. Mevcut 10 tablonun şeması korundu; araştırma tablosu eklendi.
-  TradingView/EVDS/X bağlantıları henüz tanımlı değil; veri kabulü erteli kalır.
+  Bu kabulde TradingView/EVDS/X bağlantıları tanımlı değildi; veri kabulü ertelendi.
 - **Sunucu alarmları tamamlandı ve üretimde:** Kullanıcı, TradingView benzeri alarm
   yönetiminin bütünüyle kendi sitesinden yapılmasını seçti. `/alarms` artık
   yöneticiye ait kalıcı kuralları ve teslim geçmişini yönetir; API kapalı mumları
@@ -136,7 +141,8 @@ Kapatılmış işleri veya eski onay bekleme kayıtlarını yeniden başlatma.
 
 | Konu | Durum / devam koşulu |
 |---|---|
-| Borsapy canlı kabulü | TradingView oturumu, gerçek fiyat/mum zamanı, tarihsel kapsam ve şirket işlemleri piyasa açıkken karşılaştırılacak. EVDS/X ayrı kimlik ve kabul ister. |
+| TradingView hesap bağlantısı | Tamamlandı: `876f3f3` API/bot/frontend, 4 Ekim 09:06 UTC; mevcut kayıtlı oturumla sitedeki doğrulama başarılı. Canlı piyasa verisi bu kabulün dışındadır. |
+| Borsapy canlı kabulü | Gerçek fiyat/mum zamanı, tarihsel kapsam ve şirket işlemleri piyasa açıkken karşılaştırılacak. `realtime_verified=false` korunur. EVDS/X ayrı kimlik ve kabul ister. |
 | Borsapy ortak piyasa altyapısı yayını | Tamamlandı: `ab18dc4` API/bot/frontend, 4 Ekim 08:02 UTC. İki runtime'da BIST kaynak seçimi açık; yeni temizlik veya plan yükseltmesi yapılmadı. Güncel 11 tablo yedeği ve bağımsız restore, kapasite, runtime/HTTP/WS/şema kabulü geçti. Son boş alan 804.610.048 bayt; 528 MiB rezerv korundu. |
 | Borsapy araştırma merkezi ilk yayını | Tamamlandı: `4b15335` API/frontend, 4 Ekim 06:21 UTC. Özel onaylı iki imaj kaldırıldı; güncel yedek, kapasite, runtime/şema/HTTPS kabulü geçti. Son boş alan 839.430.144 bayt; sabit 528 MiB rezerv ve mevcut sunucu planı korundu. Bu tarihsel yayının kabulü kapalı; yeni ortak piyasa geçişi üstte ayrı izlenir. |
 | Eski Python pinlerinin yeni güvenlik bildirimleri | 134 paketlik report-only taramada 5 paket/16 ham bulgu; 22 borsapy ek paketinde bulgu yok. anyio/PyJWT/soupsieve/urllib3 runtime ve virtualenv geliştirme pinleri için ayrı taban imaj güncellemesi gerekir. [İnceleme ve düzeltme sınırları](BORSAPY_INTEGRATION.md). Yeşil güvenlik işi sıfır bulgu değildir. |
@@ -204,6 +210,43 @@ açılmadı. Bu taslak sınırlar kendi başına emir veya alıcıyı açma yetk
   Yerel/sentetik test, gerçek ortam gözlemi ve dış kabul birbirinin yerine geçmez.
 
 ## Son üretim ve yayın kanıtları
+
+### 4 Ekim — TradingView bağlantı düzeltmesi ve hesap kabulü tamamlandı
+
+- Kaynak `876f3f37b9d56624d17c46ab924684de559c5530`;
+  [CI 37190406726](https://github.com/Rapto0/Rapot/actions/runs/37190406726)
+  beş başarılı iş, [imaj yayını 37190433460](https://github.com/Rapto0/Rapot/actions/runs/37190433460)
+  iki başarılı iş; istenmeyen API delta işi skipped. Yerel tam paket 1.421 Python
+  testiyle geçti; bir isteğe bağlı test atlandı, üç bağımlılık uyarısı kaldı.
+  262 Python dosyasının lint/format kontrolü ve 256 frontend testi,
+  lint/typecheck/build/standalone geçti.
+- API ve bot ortak imajı:
+  `ghcr.io/rapto0/rapot/backend@sha256:a6d0e72e9430d99d01e31409b347000d175cf1d116b0b83d6298079a2fd869d5`.
+  Frontend:
+  `ghcr.io/rapto0/rapot/frontend@sha256:18a15abed812a356df102980c8a520b8f03707d1ef2d8e84a739d1c879903787`.
+  Source-only backend doğrudan önceki kabul edilmiş `384674f3…` / `ab18dc4`
+  imajına dayanır; 120 paket dosya envanteri ve tam taban katman öneki korunur.
+- 09:06:07 UTC / 12:06:07 TSİ dağıtım tamamlandı. Dağıtım kaydı SHA256:
+  `a0692c0726493dbc4864f42dd71173d59190579f285c7aada3650609d46857ce`.
+  Yeni temizlik, migration veya yedek alma işlemi yapılmadı; önceki bağımsız
+  doğrulanmış yedek korundu. Son boş alan **696.680.448 bayt**, sabit rezerv 528 MiB.
+- 09:08:31 UTC ayrı salt okunur kabul: beş servis healthy/restart0; API/bot içinde
+  30 canonical dosya ve 120 paket, katalogda 51 işlem/9 grup doğrulandı.
+  45 yerel ve 45 dış anonim özel GET 401/no-store verdi. Beş HTTPS sayfası ve
+  22 statik dosya geçti; 11 tablonun şeması değişmedi. Kanıt
+  `runtime-data/borsapy-auth-fix-deploy/acceptance.json`, SHA256:
+  `21ea67843d1191a2d9c60f696f16255c814ac6c29a81b68fc202340f2da0d85a`.
+- Ayrı etkileşimli hesap kabulünde kullanıcının mevcut şifreli kaydıyla sitedeki
+  **Oturumu doğrula** eylemi **Oturum doğrulandı** sonucunu gösterdi. Kayıtlı
+  oturum bilgileri geçerliydi; sorun yönlendirmede çerez başlığının kaybıydı.
+  Sır içermeyen UI/API kanıtı ignored
+  `runtime-data/borsapy-auth-fix-deploy/account-ui-acceptance.json`, ekran kanıtı
+  `runtime-data/borsapy-auth-connected.jpg` dosyasında. Operatör hazırlık kaydı
+  `deployed_and_acceptance_verified`; `reexecution_allowed=false` ile kapatıldı.
+  Bu, gerçek zamanlı fiyat/mum veya BIST paket yetkisi ölçümü değildir;
+  `realtime_verified=false` kalır. Fiyat/mum, bölünme, alarm teslimi ve emir
+  kabulü ertelidir. Önceki `ab18dc4` kaydındaki tanımsız bağlantı durumu tarihsel
+  gözlemdir; güncel hesap bağlantısı kabulünü geri almaz.
 
 ### 4 Ekim — site geneli Borsapy üretim kabulü tamamlandı
 
@@ -331,15 +374,16 @@ repodan kaldırıldı. Dağıtım ve geri dönüş adımları [DEPLOY.md](DEPLOY
 | Alan | Son kayıt |
 |---|---|
 | Sunucu / erişim | `root@138.68.71.27`, IP üzerinden HTTPS |
-| API / bot / frontend kaynak | `ab18dc48881964f6211dc9d9a63ebe33cec9c785` |
-| API / bot imaj | `sha256:384674f3a7230ae4a6b182ac26e6114808627555988cb3305e7ed906b7d59def` |
-| Frontend imaj | `sha256:bbb7bb3821811618641127ead98d08130804c88aec8bd11591692ba90ca3e7ba` |
-| API / bot doğrudan Borsapy tabanı | `sha256:b9695f5f78ccb6f16112578c54fb9fb2de7ce6a3dc4c0836c3da7deacf7adf14` (`4b15335`) |
+| API / bot / frontend kaynak | `876f3f37b9d56624d17c46ab924684de559c5530` |
+| API / bot imaj | `sha256:a6d0e72e9430d99d01e31409b347000d175cf1d116b0b83d6298079a2fd869d5` |
+| Frontend imaj | `sha256:18a15abed812a356df102980c8a520b8f03707d1ef2d8e84a739d1c879903787` |
+| API / bot doğrudan Borsapy tabanı | `sha256:384674f3a7230ae4a6b182ac26e6114808627555988cb3305e7ed906b7d59def` (`ab18dc4`) |
 | Middleware / Compose / current kaynak | `279aa9fea99b520e661b43f104a2bf4791893ac3` |
 | Middleware / ortak eski backend tabanı imajı | `sha256:9be0fdb6097f52bf97730f44c86d28c24e2c0cea1fe181e7e8fd668177fdb034` |
 | Veri / kaynak pointer | `/var/lib/rapot/main` ve `/opt/rapot/current`; operator kaynak kopyası bunlardan ayrıdır |
 | Çalışma modu | `MW_EXECUTION_MODE=DRY_RUN`, `MW_TRADING_ENABLED=false`, `MW_BINANCE_LIVE_ENABLED=false`; AI kapalı; API/bot `BORSAPY_USE_FOR_BIST=true` |
-| Son uzak kabul | 4 Ekim 08:02:47 UTC; beş servis sağlıklı/restart0, HTTPS/API/WS/11 tablo şeması kabulü geçti; boş alan 804.610.048 bayt |
+| Son uzak kabul | 4 Ekim 09:08:31 UTC; beş servis sağlıklı/restart0, HTTPS/erişim/11 tablo şeması kabulü geçti; boş alan 696.680.448 bayt |
+| TradingView bağlantısı | Mevcut kayıtlı oturum siteden doğrulandı; canlı fiyat/mum/bölünme kabulü erteli, `realtime_verified=false` |
 
 Son kayıtlar:
 

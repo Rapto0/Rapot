@@ -1,6 +1,6 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-Kaynaklarla son karşılaştırma: **4 Ekim 2026 / kişisel Borsapy veri altyapısı**. İş sırası, kullanıcı
+Kaynaklarla son karşılaştırma: **4 Ekim 2026 / TradingView oturum kabulü**. İş sırası, kullanıcı
 yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DEVAM_PLANI.md)
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 Teknik rehberler [docs dizininde](docs/README.md) listelenir.
@@ -61,14 +61,21 @@ Canlı piyasa kabulü ertelidir; bağlantı açık olması gecikmesiz fiyat kan�
 4 Ekim 06:21 UTC'de `4b15335` API/frontend üretime alındı; 51 işlem/9 grup, özel GET'ler,
 HTTPS/statik dosyalar ve ek araştırma tablosu doğrulandı. TradingView/EVDS/X
 bağlantıları bu kabulde henüz tanımlı değildi. Bot/middleware/Compose/current
-`279aa9f` korundu; gerçek hesap ve piyasa kabulü hâlâ ertelidir. İmaj/kanıt
+`279aa9f` korundu; o aşamada gerçek hesap ve piyasa kabulü erteliydi. İmaj/kanıt
 kimlikleri ve tamamlanmış iki-imaj temizlik onayı devam planındadır.
 Ardından 08:02:14 UTC'de `ab18dc4` API/bot/frontend'e yayımlandı; 08:02:47 UTC
 ayrı salt okunur kabul erişim sınırlarını, WS kimliğini, SSR/statik dosyaları ve
 11 tablonun değişmeyen şemasını doğruladı. API/bot `BORSAPY_USE_FOR_BIST=true`
 ile aynı kaynak imajını kullanır; middleware/Compose/current `279aa9f` korundu.
-TradingView/EVDS/X bağlantıları hâlâ tanımsızdır; gerçek hesap, fiyat/mum ve
-şirket işlemleri kabulü ertelidir. Son boş alan 804.610.048 bayt, rezerv 528 MiB'dir.
+Bu kabulde TradingView/EVDS/X bağlantıları tanımsızdı; boş alan 804.610.048 bayttı.
+09:06 UTC'de `876f3f3` API/bot/frontend'e alındı: TradingView yerel dil
+yönlendirmesinde oturumun kaybolmasını sınırlı bir adaptör düzeltir; başarısız
+kaydetme/doğrulama sonrası arayüz kayıt durumunu yeniler. 09:08 UTC bağımsız
+kabul ve mevcut yönetici ekranından doğrulama, TradingView oturumunun başarılı
+olduğunu gösterdi. 1.421 Python ve 256 frontend testi geçti. Beş servis sağlıklı,
+11 tablo şeması ve şifreli kimlik kaydı korundu; temizlik/migration yapılmadı.
+Son boş alan 696.680.448 bayt, sabit rezerv 528 MiB'dir. EVDS/X tanımsız;
+canlı fiyat/mum, şirket işlemleri ve alarm/emir kabulü hâlâ ertelidir.
 
 Canonical import ve compatibility listesi [paketleme haritasındadır](docs/PACKAGING_REFACTOR_MAP.md).
 `application.scanner.signal_handlers` gerçek uygulamadır; `scanner_side_effects`
