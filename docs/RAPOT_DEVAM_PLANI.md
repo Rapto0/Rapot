@@ -9,6 +9,28 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Kaldığımız nokta
 
+- **4 Ekim — gelişmiş kalıcı alarm ve grafik çalışması sürüyor:** Kullanıcı gün içi
+  fiyat tetikleri, kalıcı BIST takibi, ayrı ayrı 1.000 fiyat/teknik/izleme listesi
+  alarmı, çok koşullu/süresiz kurallar, saniyelik akış, dakika geçmişi ve 20'den
+  fazla çizim aracını açıkça istedi. Yeni geliştirme eski günlük alarm motorunu
+  koruyan ayrı sözleşmeyle ilerliyor. Gerçek piyasa gecikmesi/kapsamı ve Telegram
+  teslim kabulü piyasa açıkken yapılacak; ağsız regresyon, kopma/yeniden başlatma
+  ve yük testleri şimdi yapılır. Yeni kullanıcı kuralı veya deneme mesajı
+  kendiliğinden oluşturulmaz. Uygulama yayını tamamlanana kadar mevcut üretim
+  sürümleri aşağıdaki kayıttır; yerel kod tamamlanmış üretim kabulü sayılmaz.
+  Uygulama tamamlandı: ayrı kalıcı kurallar/listeler/olaylar, tek sahipli saniyelik
+  motor, BIST WebSocket işçileri, sınırlı dakika önbelleği, Telegram teslim
+  kuyruğu ve 26 çizim aracı. 291 frontend testi, lint/typecheck/build/standalone
+  ve sentetik tarayıcıda fiyat/çok koşullu/liste alarmı ile çizim kabulü geçti.
+  Mum kapanışı sınır düzeltmesiyle Python tam paketinde 1.601 test geçti
+  (bir atlama, üç mevcut uyarı); 278 kaynakta Ruff temiz. Son bağlantı sessizliği
+  watchdog düzeltmesi ayrıca sınanır ve yayımlanan kaynak CI'da tekrar kontrol edilir.
+  Eski 11 tablonun şema/veri parmak izleri bağımsız
+  geri yüklemeyle doğrulanan, sunucu dışında özel bilgisayarda tutulan yedek hazırdır.
+  Yayın yalnız API/frontend içindir; bot/middleware/PostgreSQL ve 528 MiB disk
+  rezervi korunur. 3.000 kota sınırsız işlem kapasitesi değildir; fiyat döngüsü
+  1 saniye hedefler, teknik geçmiş 1m için 30/diğerleri için 60 saniye hedefler.
+  [Güncel sözleşme](SERVER_ALARMS.md) kesinti/kuyruk ve canlı kabul sınırlarını açıklar.
 - **4 Ekim — kullanım dışı sunucu kaynakları temizlendi:** Yeni açık kullanıcı
   talimatıyla 24 eski Docker imajı, dokuz eski kaynak kopyası, beş yeniden
   üretilebilir önbellek/derleme dizini ve 90 kullanım dışı PM2 günlüğü kaldırıldı.

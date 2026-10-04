@@ -246,6 +246,14 @@ değişmez. Araştırma işlemleri borsaya emir veya kullanıcı adına alarm g�
 
 ## Scanner ve sunucu alarmları
 
+Gelişmiş `/advanced-alarms` motoru, tarayıcının kısa süreli akış kiralarından
+bağımsız BIST abonelikleri ve gerçek dakika geçmişi tutar. Kayıtlı kimliği
+gateway üzerinden kullanır; kopma/kimlik değişiminde önceki gözlemleri geçersiz
+kılar. Son fiyat kotasyonlarıyla OHLCV uydurulmaz. Süresiz, çok koşullu kurallar,
+saniyelik tur hedefi, veri ısınması/kapsamı ve sınırlı disk/bellek politikası
+[alarm sözleşmesinde](SERVER_ALARMS.md) açıklanır. Günlük scanner/önceki alarm
+motoru aşağıdaki sözleşmeyi korur.
+
 `BORSAPY_USE_FOR_BIST` varsayılan true'dur: `get_bist_data`, sync/async scanner ve
 günlük BIST alarm sağlayıcısı kimlikli gateway'i kullanır. False eski sağlayıcı
 yolunu açıkça seçer. Kimlik veya sağlayıcı hatasında başka kaynağa sessiz fallback

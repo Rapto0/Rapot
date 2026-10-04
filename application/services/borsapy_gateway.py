@@ -24,6 +24,7 @@ VERSION = "0.11.0"
 INTERVALS = {"1m", "5m", "15m", "30m", "1h", "4h", "1d", "1wk", "1mo"}
 PERIODS = {"1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max"}
 SECRET_FIELDS = {"session", "session_sign", "evds_key", "twitter_auth_token", "twitter_ct0"}
+ALARM_TRANSPORT_SILENCE_SECONDS = 90
 _AUTH_LOCK = threading.RLock()
 
 
@@ -33,6 +34,38 @@ class BorsapyGatewayError(Exception):
     def __init__(self, message: str, status_code: int = 503):
         super().__init__(message)
         self.status_code = status_code
+
+
+class AlarmQuoteConnection:
+    """Opaque server-owned connection; credentials never leave the gateway."""
+
+    def __init__(self, entry: dict, epoch: int, *, clock: Callable):
+        self._entry = entry
+        self.epoch = epoch
+        self._clock = clock
+
+    @property
+    def connected(self) -> bool:
+        if self._clock() - self._entry["last_message"] >= ALARM_TRANSPORT_SILENCE_SECONDS:
+            # Latch expiry: a late packet cannot revive an observation generation
+            # after a transport gap. The hub will close/reconnect with its backoff.
+            self._entry["transport_expired"] = True
+        return bool(
+            not self._entry.get("closed")
+            and not self._entry.get("transport_expired")
+            and not self._entry["error"]
+            and not self._entry["auth_error"]
+            and self._entry["stream"].is_connected
+        )
+
+    @property
+    def auth_failed(self) -> bool:
+        return bool(self._entry["auth_error"])
+
+    def close(self) -> None:
+        self._entry["closed"] = True
+        with suppress(Exception):
+            self._entry["stream"].disconnect()
 
 
 class _Redact(logging.Filter):
@@ -108,6 +141,7 @@ class BorsapyGateway:
         self._message = "TradingView bağlantısı yapılandırılmamış."
         self._streams: dict[tuple, dict] = {}
         self._quotes: dict | None = None
+        self._alarm_quotes: list[AlarmQuoteConnection] = []
         self._quote_retry_after = 0.0
         self._data_epoch = 0
         self._retry_after: dict[tuple, float] = {}
@@ -439,6 +473,9 @@ class BorsapyGateway:
     def _close_streams(self) -> None:
         self._data_epoch += 1
         self._close_quotes()
+        for connection in self._alarm_quotes:
+            connection.close()
+        self._alarm_quotes.clear()
         self._quote_retry_after = 0
         for entry in self._streams.values():
             with suppress(Exception):
@@ -484,6 +521,7 @@ class BorsapyGateway:
         try:
             if self._store.revision() == self._credentials_revision:
                 return self._data_epoch
+
         except SecretStoreError:
             pass
         if not _AUTH_LOCK.acquire(timeout=1):
@@ -494,6 +532,10 @@ class BorsapyGateway:
         finally:
             _AUTH_LOCK.release()
 
+    def memory_epoch(self) -> int:
+        """Local account generation only; no file/stat/network I/O for alarm snapshots."""
+        return self._data_epoch
+
     def _close_quotes(self) -> None:
         if self._quotes:
             with suppress(Exception):
@@ -501,12 +543,14 @@ class BorsapyGateway:
             self._quotes = None
 
     def _new_quotes(self, bp) -> dict:
+        transport_clock = self._clock
         entry = {
             "symbols": {},
             "received": {},
             "errors": set(),
             "error": False,
             "auth_error": False,
+            "last_message": transport_clock(),
         }
 
         class QuoteStream(bp.TradingViewStream):
@@ -520,6 +564,15 @@ class BorsapyGateway:
                 self._connected.clear()
 
             def _on_message(self, ws, message):
+                # Transport health includes heartbeat/control frames, independently
+                # of whether this market is trading or any fresh quote arrived.
+                received = transport_clock()
+                if (
+                    entry.get("alarm_owned")
+                    and received - entry["last_message"] >= ALARM_TRANSPORT_SILENCE_SECONDS
+                ):
+                    entry["transport_expired"] = True
+                entry["last_message"] = received
                 for packet in self._parse_packets(message):
                     if isinstance(packet, dict) and packet.get("m") == "critical_error":
                         entry["auth_error"] = True
@@ -560,10 +613,77 @@ class BorsapyGateway:
             stream._should_reconnect = False
             if not stream.is_connected:
                 raise ValueError
+            # Allow the full first-heartbeat grace period after connection setup.
+            entry["last_message"] = transport_clock()
         except Exception:
             stream.disconnect()
             raise BorsapyGatewayError("Fiyat akışı bağlantısı kurulamadı.", 502) from None
         return entry
+
+    def create_alarm_quote_stream(
+        self, symbols: list[str], on_quote: Callable
+    ) -> AlarmQuoteConnection:
+        """Create an authenticated, autonomous BIST feed, separate from browser leases.
+
+        The alarm hub owns reconnect/backoff and close. Credential edits close this
+        handle immediately. Callbacks contain numeric observations, never raw packets.
+        """
+        if not 1 <= len(symbols) <= 2000 or len(set(symbols)) != len(symbols):
+            raise BorsapyGatewayError("Alarm fiyat evreni 1–2000 benzersiz sembol olmalı.", 422)
+        if any(not re.fullmatch(r"[A-Z0-9]{1,20}", symbol) for symbol in symbols):
+            raise BorsapyGatewayError("Alarm fiyat evreninde geçersiz sembol var.", 422)
+
+        def create(bp):
+            for item in self._alarm_quotes:
+                if not item.connected:
+                    item.close()
+            self._alarm_quotes = [item for item in self._alarm_quotes if item.connected]
+            if self._alarm_quotes:
+                raise BorsapyGatewayError("Kalıcı alarm fiyat bağlantısı zaten açık.", 429)
+            epoch = self._data_epoch
+            entry = self._new_quotes(bp)
+            entry["alarm_owned"] = True
+            connection = AlarmQuoteConnection(entry, epoch, clock=self._clock)
+
+            def received(symbol, raw):
+                if (
+                    epoch != self._data_epoch
+                    or entry.get("closed")
+                    or entry.get("transport_expired")
+                ):
+                    return
+                if symbol not in entry["symbols"]:
+                    return
+                on_quote(
+                    symbol,
+                    {
+                        "price": _number(raw.get("last")),
+                        "source_timestamp": _number(raw.get("timestamp")),
+                        "received_at": time.time(),
+                    },
+                )
+
+            entry["stream"].on_any_quote(received)
+            self._alarm_quotes.append(connection)
+            try:
+                for symbol in symbols:
+                    entry["symbols"][symbol] = ("BIST", self._clock())
+                    entry["stream"].subscribe(symbol, exchange="BIST")
+            except Exception:
+                connection.close()
+                raise BorsapyGatewayError("Alarm fiyat abonelikleri kurulamadı.", 502) from None
+            return connection
+
+        return self.run(create, require_auth=True)
+
+    def reset_alarm_auth(self, expected_epoch: int) -> None:
+        """Refresh a rejected stream token once through the existing auth boundary."""
+        with self._account_lock():
+            if self._data_epoch != expected_epoch:
+                return
+            self._close_streams()
+            self._authenticated, self._token, self._blocked = False, None, False
+            self._state, self._message = "auth_needed", "Alarm bağlantısı yeniden doğrulanacak."
 
     def quote_snapshot(self, symbols: list[tuple[str, str]]) -> dict[str, dict]:
         """One account-scoped socket for bounded dashboard/watchlist batches.

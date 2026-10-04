@@ -275,86 +275,6 @@
         "title": "AlarmSymbol",
         "type": "object"
       },
-      "AlarmWrite": {
-        "additionalProperties": false,
-        "properties": {
-          "enabled": {
-            "default": true,
-            "title": "Enabled",
-            "type": "boolean"
-          },
-          "indicator": {
-            "enum": [
-              "rsi",
-              "wr",
-              "combo",
-              "hunter"
-            ],
-            "title": "Indicator",
-            "type": "string"
-          },
-          "mode": {
-            "default": "on_enter",
-            "enum": [
-              "on_enter",
-              "once_per_bar"
-            ],
-            "title": "Mode",
-            "type": "string"
-          },
-          "name": {
-            "maxLength": 80,
-            "minLength": 1,
-            "title": "Name",
-            "type": "string"
-          },
-          "notify_telegram": {
-            "default": false,
-            "title": "Notify Telegram",
-            "type": "boolean"
-          },
-          "side": {
-            "enum": [
-              "dip",
-              "top"
-            ],
-            "title": "Side",
-            "type": "string"
-          },
-          "symbols": {
-            "items": {
-              "$ref": "#/components/schemas/AlarmSymbol"
-            },
-            "maxItems": 20,
-            "minItems": 1,
-            "title": "Symbols",
-            "type": "array"
-          },
-          "threshold": {
-            "title": "Threshold",
-            "type": "number"
-          },
-          "timeframe": {
-            "enum": [
-              "1h",
-              "4h",
-              "1d"
-            ],
-            "title": "Timeframe",
-            "type": "string"
-          }
-        },
-        "required": [
-          "name",
-          "symbols",
-          "indicator",
-          "timeframe",
-          "side",
-          "threshold"
-        ],
-        "title": "AlarmWrite",
-        "type": "object"
-      },
       "CandlePointResponse": {
         "description": "Single candle row.",
         "properties": {
@@ -1812,6 +1732,248 @@
         ],
         "title": "ValidationError",
         "type": "object"
+      },
+      "WatchlistWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "symbols": {
+            "items": {
+              "$ref": "#/components/schemas/AlarmSymbol"
+            },
+            "maxItems": 2000,
+            "title": "Symbols",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "WatchlistWrite",
+        "type": "object"
+      },
+      "api__routes__advanced_alarm_routes__AlarmWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "category": {
+            "enum": [
+              "price",
+              "technical",
+              "watchlist"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "condition": {
+            "additionalProperties": true,
+            "title": "Condition",
+            "type": "object"
+          },
+          "cooldown_seconds": {
+            "default": 60,
+            "maximum": 86400.0,
+            "minimum": 1.0,
+            "title": "Cooldown Seconds",
+            "type": "integer"
+          },
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "mode": {
+            "default": "on_enter",
+            "enum": [
+              "on_enter",
+              "once_per_bar",
+              "cooldown"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "notify_telegram": {
+            "default": false,
+            "title": "Notify Telegram",
+            "type": "boolean"
+          },
+          "revision": {
+            "anyOf": [
+              {
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revision"
+          },
+          "scope": {
+            "default": "symbols",
+            "enum": [
+              "symbols",
+              "watchlist",
+              "all_bist"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "symbols": {
+            "items": {
+              "$ref": "#/components/schemas/AlarmSymbol"
+            },
+            "maxItems": 2000,
+            "title": "Symbols",
+            "type": "array"
+          },
+          "timeframe": {
+            "default": "1d",
+            "enum": [
+              "1m",
+              "5m",
+              "15m",
+              "30m",
+              "1h",
+              "4h",
+              "1d",
+              "1wk",
+              "1mo"
+            ],
+            "title": "Timeframe",
+            "type": "string"
+          },
+          "trigger": {
+            "default": "intrabar",
+            "enum": [
+              "intrabar",
+              "bar_close"
+            ],
+            "title": "Trigger",
+            "type": "string"
+          },
+          "watchlist_id": {
+            "anyOf": [
+              {
+                "maxLength": 36,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Watchlist Id"
+          }
+        },
+        "required": [
+          "name",
+          "category",
+          "condition"
+        ],
+        "title": "AlarmWrite",
+        "type": "object"
+      },
+      "api__routes__alarm_routes__AlarmWrite": {
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "default": true,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "indicator": {
+            "enum": [
+              "rsi",
+              "wr",
+              "combo",
+              "hunter"
+            ],
+            "title": "Indicator",
+            "type": "string"
+          },
+          "mode": {
+            "default": "on_enter",
+            "enum": [
+              "on_enter",
+              "once_per_bar"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          },
+          "notify_telegram": {
+            "default": false,
+            "title": "Notify Telegram",
+            "type": "boolean"
+          },
+          "side": {
+            "enum": [
+              "dip",
+              "top"
+            ],
+            "title": "Side",
+            "type": "string"
+          },
+          "symbols": {
+            "items": {
+              "$ref": "#/components/schemas/AlarmSymbol"
+            },
+            "maxItems": 20,
+            "minItems": 1,
+            "title": "Symbols",
+            "type": "array"
+          },
+          "threshold": {
+            "title": "Threshold",
+            "type": "number"
+          },
+          "timeframe": {
+            "enum": [
+              "1h",
+              "4h",
+              "1d"
+            ],
+            "title": "Timeframe",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "symbols",
+          "indicator",
+          "timeframe",
+          "side",
+          "threshold"
+        ],
+        "title": "AlarmWrite",
+        "type": "object"
       }
     },
     "securitySchemes": {
@@ -1848,6 +2010,572 @@
         ]
       }
     },
+    "/advanced-alarms": {
+      "get": {
+        "operationId": "rules_advanced_alarms_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Rules Advanced Alarms Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Rules",
+        "tags": [
+          "Advanced alarms"
+        ],
+        "x-access-role": "admin"
+      },
+      "post": {
+        "operationId": "create_rule_advanced_alarms_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/api__routes__advanced_alarm_routes__AlarmWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Rule Advanced Alarms Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Rule",
+        "tags": [
+          "Advanced alarms"
+        ],
+        "x-access-role": "admin"
+      }
+    },
+    "/advanced-alarms/events": {
+      "get": {
+        "operationId": "events_advanced_alarms_events_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "after_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "After Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 100,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Events Advanced Alarms Events Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Events",
+        "tags": [
+          "Advanced alarms"
+        ],
+        "x-access-role": "admin"
+      }
+    },
+    "/advanced-alarms/history": {
+      "get": {
+        "operationId": "history_advanced_alarms_history_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "symbol",
+            "required": true,
+            "schema": {
+              "maxLength": 25,
+              "minLength": 1,
+              "title": "Symbol",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "market_type",
+            "required": false,
+            "schema": {
+              "default": "BIST",
+              "enum": [
+                "BIST",
+                "Kripto"
+              ],
+              "title": "Market Type",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "timeframe",
+            "required": false,
+            "schema": {
+              "default": "1m",
+              "enum": [
+                "1m",
+                "5m",
+                "15m",
+                "30m",
+                "1h",
+                "4h",
+                "1d",
+                "1wk",
+                "1mo"
+              ],
+              "title": "Timeframe",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 1000,
+              "maximum": 1500,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response History Advanced Alarms History Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "History",
+        "tags": [
+          "Advanced alarms"
+        ],
+        "x-access-role": "admin"
+      }
+    },
+    "/advanced-alarms/status": {
+      "get": {
+        "operationId": "status_advanced_alarms_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Status Advanced Alarms Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Status",
+        "tags": [
+          "Advanced alarms"
+        ],
+        "x-access-role": "admin"
+      }
+    },
+    "/advanced-alarms/watchlists": {
+      "get": {
+        "operationId": "watchlists_advanced_alarms_watchlists_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Watchlists Advanced Alarms Watchlists Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Watchlists",
+        "tags": [
+          "Advanced alarms"
+        ],
+        "x-access-role": "admin"
+      },
+      "post": {
+        "operationId": "create_watchlist_advanced_alarms_watchlists_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WatchlistWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Watchlist Advanced Alarms Watchlists Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Create Watchlist",
+        "tags": [
+          "Advanced alarms"
+        ],
+        "x-access-role": "admin"
+      }
+    },
+    "/advanced-alarms/watchlists/{watchlist_id}": {
+      "delete": {
+        "operationId": "remove_watchlist_advanced_alarms_watchlists__watchlist_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "watchlist_id",
+            "required": true,
+            "schema": {
+              "title": "Watchlist Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Remove Watchlist Advanced Alarms Watchlists  Watchlist Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Remove Watchlist",
+        "tags": [
+          "Advanced alarms"
+        ],
+        "x-access-role": "admin"
+      },
+      "put": {
+        "operationId": "update_watchlist_advanced_alarms_watchlists__watchlist_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "watchlist_id",
+            "required": true,
+            "schema": {
+              "title": "Watchlist Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WatchlistWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Watchlist Advanced Alarms Watchlists  Watchlist Id  Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Watchlist",
+        "tags": [
+          "Advanced alarms"
+        ],
+        "x-access-role": "admin"
+      }
+    },
+    "/advanced-alarms/{rule_id}": {
+      "delete": {
+        "operationId": "remove_rule_advanced_alarms__rule_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "title": "Rule Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Remove Rule Advanced Alarms  Rule Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Remove Rule",
+        "tags": [
+          "Advanced alarms"
+        ],
+        "x-access-role": "admin"
+      },
+      "put": {
+        "operationId": "update_rule_advanced_alarms__rule_id__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "rule_id",
+            "required": true,
+            "schema": {
+              "title": "Rule Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/api__routes__advanced_alarm_routes__AlarmWrite"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Rule Advanced Alarms  Rule Id  Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Update Rule",
+        "tags": [
+          "Advanced alarms"
+        ],
+        "x-access-role": "admin"
+      }
+    },
     "/alarms": {
       "get": {
         "operationId": "list_alarms_alarms_get",
@@ -1882,7 +2610,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AlarmWrite"
+                "$ref": "#/components/schemas/api__routes__alarm_routes__AlarmWrite"
               }
             }
           },
@@ -2043,7 +2771,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AlarmWrite"
+                "$ref": "#/components/schemas/api__routes__alarm_routes__AlarmWrite"
               }
             }
           },

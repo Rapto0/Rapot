@@ -18,6 +18,7 @@ import { useBinanceTicker } from "@/lib/hooks/use-binance-ticker"
 import { useSession } from "@/lib/hooks/use-session"
 import { MarketDataStatus } from "@/components/market-data-status"
 import { BORSAPY_INTERVALS, fetchBorsapyCandles, fetchBorsapyChartSnapshot, mergeBorsapyCandles, releaseBorsapyChart } from "@/lib/api/borsapy-chart-api"
+import { ChartDrawingTools } from "./chart-drawing-tools"
 import { chartTimeZone, createChartTimeFormatters, type ChartTimeZone } from "@/lib/chart-time"
 import { cn } from "@/lib/utils"
 import { ActionDialog } from "@/components/ui/action-dialog"
@@ -49,9 +50,7 @@ import {
     PanelRightOpen,
     PanelRightClose,
     LineChart,
-    Ruler,
     Pencil,
-    Type,
     Plus,
     RefreshCw,
     MoreHorizontal,
@@ -136,28 +135,6 @@ interface UtilityPanelItem {
     icon: any
 }
 
-interface ChartAnchorPoint {
-    time: number
-    price: number
-}
-
-interface RulerDrawing {
-    id: string
-    start: ChartAnchorPoint
-    end: ChartAnchorPoint
-}
-
-interface PencilDrawing {
-    id: string
-    points: ChartAnchorPoint[]
-}
-
-interface TextDrawing {
-    id: string
-    point: ChartAnchorPoint
-    text: string
-}
-
 interface WorkerComputationState {
     requestId: number
     computeMs: number
@@ -195,7 +172,6 @@ interface WatchlistSignalFeedItem {
 }
 
 type WatchlistDialogState =
-    | { type: "textDrawing"; anchor: ChartAnchorPoint; value: string }
     | { type: "addSymbol"; value: string }
     | { type: "renameWatchlist"; watchlistId: string; value: string }
     | { type: "createWatchlist"; value: string }
@@ -321,6 +297,8 @@ const TIMEFRAME_CATEGORIES = [
     {
         category: "Dakika",
         items: [
+            { label: "1D", value: "1m", description: "1 Dakika" },
+            { label: "5D", value: "5m", description: "5 Dakika" },
             { label: "15D", value: "15m", description: "15 Dakika" },
             { label: "30D", value: "30m", description: "30 Dakika" },
         ]
@@ -366,6 +344,8 @@ const TIMEFRAME_CATEGORIES = [
 
 // Quick timeframes for header
 const QUICK_TIMEFRAMES = [
+    { label: "1D", value: "1m" },
+    { label: "5D", value: "5m" },
     { label: "1S", value: "1h" },
     { label: "4S", value: "4h" },
     { label: "1G", value: "1d" },
@@ -446,6 +426,8 @@ const normalizeHorzTimeToUnix = (value: unknown): number | null => {
 
 const getTimeframeStepSeconds = (timeframe: string): number => {
     const mapping: Record<string, number> = {
+        "1m": 60,
+        "5m": 5 * 60,
         "15m": 15 * 60,
         "30m": 30 * 60,
         "1h": 60 * 60,
@@ -717,14 +699,9 @@ export function AdvancedChartPage({
     const [draftIndicatorParams, setDraftIndicatorParams] = useState<Record<string, number>>({})
     const [indicatorStateHydrated, setIndicatorStateHydrated] = useState(false)
 
-    // Drawing tools state
-    const [activeTool, setActiveTool] = useState<'none' | 'ruler' | 'pencil' | 'text'>('none')
-    const [rulerDrawings, setRulerDrawings] = useState<RulerDrawing[]>([])
-    const [rulerDraftStart, setRulerDraftStart] = useState<ChartAnchorPoint | null>(null)
-    const [rulerDraftEnd, setRulerDraftEnd] = useState<ChartAnchorPoint | null>(null)
-    const [pencilDrawings, setPencilDrawings] = useState<PencilDrawing[]>([])
-    const [activePencilPoints, setActivePencilPoints] = useState<ChartAnchorPoint[] | null>(null)
-    const [textDrawings, setTextDrawings] = useState<TextDrawing[]>([])
+    // Drawing interactions are independent of market-data acquisition.
+    const [activeTool, setActiveTool] = useState<'none' | 'drawing'>('none')
+    const [drawingPanelOpen, setDrawingPanelOpen] = useState(false)
     const [overlayRenderNonce, setOverlayRenderNonce] = useState(0)
     const [hoveredUnixTime, setHoveredUnixTime] = useState<number | null>(null)
 
@@ -753,7 +730,7 @@ export function AdvancedChartPage({
     const seriesInstance = useRef<any>(null)
     const markersInstance = useRef<any>(null) // v5 markers primitive
     const lastCrosshairUnixRef = useRef<number | null>(null)
-    const activeToolRef = useRef<'none' | 'ruler' | 'pencil' | 'text'>('none')
+    const activeToolRef = useRef<'none' | 'drawing'>('none')
     const lastMarkersHashRef = useRef<string>("")
     const lastCandleHashRef = useRef<string>("")
     const fullscreenContainerRef = useRef<HTMLDivElement>(null)
@@ -765,10 +742,6 @@ export function AdvancedChartPage({
         market: initialMarket,
     })
     const indicatorChartsRef = useRef<Map<string, any>>(new Map())
-    const isPointerDrawingRef = useRef(false)
-    const rulerDraftStartRef = useRef<ChartAnchorPoint | null>(null)
-    const rulerMoveRafRef = useRef<number | null>(null)
-    const pendingRulerAnchorRef = useRef<ChartAnchorPoint | null>(null)
     const overlaySyncRafRef = useRef<number | null>(null)
     const hasProjectedDrawingsRef = useRef(false)
     const indicatorWorkerRef = useRef<Worker | null>(null)
@@ -875,19 +848,8 @@ export function AdvancedChartPage({
         activeToolRef.current = activeTool
     }, [activeTool])
 
-    useEffect(() => {
-        hasProjectedDrawingsRef.current =
-            rulerDrawings.length > 0 ||
-            pencilDrawings.length > 0 ||
-            textDrawings.length > 0 ||
-            rulerDraftStart !== null ||
-            rulerDraftEnd !== null ||
-            activePencilPoints !== null
-    }, [rulerDrawings, pencilDrawings, textDrawings, rulerDraftStart, rulerDraftEnd, activePencilPoints])
-
-    useEffect(() => {
-        rulerDraftStartRef.current = rulerDraftStart
-    }, [rulerDraftStart])
+    const onDrawingMode = useCallback((active: boolean) => setActiveTool(active ? "drawing" : "none"), [])
+    const onDrawingCountChange = useCallback((count: number) => { hasProjectedDrawingsRef.current = count > 0 }, [])
 
     useEffect(() => {
         const updateClock = () => setServerClockLabel(new Date().toLocaleString("tr-TR"))
@@ -896,146 +858,8 @@ export function AdvancedChartPage({
         return () => window.clearInterval(timer)
     }, [])
 
-    const anchorFromClientPoint = useCallback((clientX: number, clientY: number): ChartAnchorPoint | null => {
-        if (!chartContainerRef.current || !chartInstance.current || !seriesInstance.current) return null
-        const rect = chartContainerRef.current.getBoundingClientRect()
-        const x = clientX - rect.left
-        const y = clientY - rect.top
-
-        if (x < 0 || y < 0 || x > rect.width || y > rect.height) return null
-
-        const timeValue = chartInstance.current.timeScale().coordinateToTime(x)
-        const unix = normalizeHorzTimeToUnix(timeValue)
-        const price = seriesInstance.current.coordinateToPrice(y)
-
-        if (unix === null || price === null || !Number.isFinite(price)) return null
-        return { time: unix, price }
-    }, [])
-
-    const projectAnchorToScreen = useCallback((point: ChartAnchorPoint): { x: number, y: number } | null => {
-        if (!chartInstance.current || !seriesInstance.current) return null
-        const x = chartInstance.current.timeScale().timeToCoordinate(point.time)
-        const y = seriesInstance.current.priceToCoordinate(point.price)
-        if (x === null || y === null || !Number.isFinite(x) || !Number.isFinite(y)) return null
-        return { x, y }
-    }, [])
-
-    const handleDrawingMouseDown = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-        if (activeTool === "none") return
-        const anchor = anchorFromClientPoint(event.clientX, event.clientY)
-        if (!anchor) return
-
-        if (activeTool === "ruler") {
-            const currentDraftStart = rulerDraftStartRef.current
-            if (!currentDraftStart) {
-                setRulerDraftStart(anchor)
-                setRulerDraftEnd(anchor)
-                rulerDraftStartRef.current = anchor
-            } else {
-                setRulerDrawings((prev) => [...prev, {
-                    id: `${Date.now().toString(36)}-${prev.length}`,
-                    start: currentDraftStart,
-                    end: anchor,
-                }])
-                setRulerDraftStart(null)
-                setRulerDraftEnd(null)
-                rulerDraftStartRef.current = null
-            }
-            return
-        }
-
-        if (activeTool === "pencil") {
-            isPointerDrawingRef.current = true
-            setActivePencilPoints([anchor])
-            return
-        }
-
-        if (activeTool === "text") {
-            setWatchlistDialog({
-                type: "textDrawing",
-                anchor,
-                value: "",
-            })
-        }
-    }, [activeTool, anchorFromClientPoint])
-
-    const handleDrawingMouseMove = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-        if (activeTool === "none") return
-        const anchor = anchorFromClientPoint(event.clientX, event.clientY)
-        if (!anchor) return
-
-        if (activeTool === "ruler" && rulerDraftStartRef.current) {
-            pendingRulerAnchorRef.current = anchor
-            if (rulerMoveRafRef.current === null) {
-                rulerMoveRafRef.current = window.requestAnimationFrame(() => {
-                    rulerMoveRafRef.current = null
-                    const nextAnchor = pendingRulerAnchorRef.current
-                    if (!nextAnchor) return
-                    setRulerDraftEnd((prev) => {
-                        if (prev && Math.abs(prev.time - nextAnchor.time) < 1 && Math.abs(prev.price - nextAnchor.price) < 0.01) {
-                            return prev
-                        }
-                        return nextAnchor
-                    })
-                })
-            }
-            return
-        }
-
-        if (activeTool === "pencil" && isPointerDrawingRef.current) {
-            setActivePencilPoints((prev) => {
-                if (!prev || prev.length === 0) return [anchor]
-                const last = prev[prev.length - 1]
-                if (Math.abs(last.time - anchor.time) < 1 && Math.abs(last.price - anchor.price) < 0.01) {
-                    return prev
-                }
-                return [...prev, anchor]
-            })
-        }
-    }, [activeTool, anchorFromClientPoint])
-
-    const handleDrawingMouseUp = useCallback(() => {
-        if (activeTool === "pencil" && isPointerDrawingRef.current) {
-            isPointerDrawingRef.current = false
-            setActivePencilPoints((prev) => {
-                if (!prev || prev.length < 2) return null
-                setPencilDrawings((existing) => [...existing, {
-                    id: `${Date.now().toString(36)}-${existing.length}`,
-                    points: prev,
-                }])
-                return null
-            })
-        }
-    }, [activeTool])
-
-    useEffect(() => {
-        if (activeTool !== "ruler") {
-            if (rulerMoveRafRef.current !== null) {
-                window.cancelAnimationFrame(rulerMoveRafRef.current)
-                rulerMoveRafRef.current = null
-            }
-            pendingRulerAnchorRef.current = null
-            setRulerDraftStart(null)
-            setRulerDraftEnd(null)
-            rulerDraftStartRef.current = null
-        }
-        if (activeTool !== "pencil") {
-            isPointerDrawingRef.current = false
-            setActivePencilPoints(null)
-        }
-    }, [activeTool])
-
-    useEffect(() => {
-        return () => {
-            if (overlaySyncRafRef.current !== null) {
-                window.cancelAnimationFrame(overlaySyncRafRef.current)
-                overlaySyncRafRef.current = null
-            }
-            if (rulerMoveRafRef.current !== null) {
-                window.cancelAnimationFrame(rulerMoveRafRef.current)
-                rulerMoveRafRef.current = null
-            }
-        }
+    useEffect(() => () => {
+        if (overlaySyncRafRef.current !== null) window.cancelAnimationFrame(overlaySyncRafRef.current)
     }, [])
 
     useEffect(() => {
@@ -1254,7 +1078,7 @@ export function AdvancedChartPage({
             return fetchBorsapyChartSnapshot(symbol, timeframe, signal, chartSubscriber.current)
         },
         enabled: streamEnabled,
-        refetchInterval: 3000,
+        refetchInterval: 1000,
         retry: false,
     })
 
@@ -1368,7 +1192,7 @@ export function AdvancedChartPage({
 
     // Live crypto prices for watchlist
     const cryptoPrices = useBinanceTicker(watchlistCryptoSymbols, {
-        paused: !canUseBorsapy || activeTool !== "none",
+        paused: !canUseBorsapy,
         flushIntervalMs: 320,
     })
 
@@ -2046,91 +1870,6 @@ export function AdvancedChartPage({
         [activeIndicators, editingIndicatorId]
     )
 
-    const projectedDrawings = useMemo(() => {
-        // Force recalculation when projection refresh nonce increments.
-        void overlayRenderNonce
-        const stepSeconds = getTimeframeStepSeconds(timeframe)
-
-        const projectRuler = (ruler: RulerDrawing) => {
-            const start = projectAnchorToScreen(ruler.start)
-            const end = projectAnchorToScreen(ruler.end)
-            if (!start || !end) return null
-
-            const priceDiff = ruler.end.price - ruler.start.price
-            const pct = ruler.start.price !== 0 ? (priceDiff / ruler.start.price) * 100 : 0
-            const bars = Math.max(1, Math.round(Math.abs(ruler.end.time - ruler.start.time) / stepSeconds))
-            const midpoint = {
-                x: (start.x + end.x) / 2,
-                y: (start.y + end.y) / 2,
-            }
-
-            return {
-                id: ruler.id,
-                start,
-                end,
-                label: `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}%  ${priceDiff >= 0 ? "+" : ""}${priceDiff.toFixed(2)} (${bars} bar)`,
-                midpoint,
-            }
-        }
-
-        const rulerItems = rulerDrawings
-            .map(projectRuler)
-            .filter((item): item is NonNullable<ReturnType<typeof projectRuler>> => item !== null)
-
-        let rulerDraft: ReturnType<typeof projectRuler> | null = null
-        if (rulerDraftStart && rulerDraftEnd) {
-            rulerDraft = projectRuler({
-                id: "draft-ruler",
-                start: rulerDraftStart,
-                end: rulerDraftEnd,
-            })
-        }
-
-        const pencilItems = pencilDrawings
-            .map((stroke) => {
-                const points = stroke.points
-                    .map((point) => projectAnchorToScreen(point))
-                    .filter((point): point is { x: number, y: number } => point !== null)
-                if (points.length < 2) return null
-                return { id: stroke.id, points }
-            })
-            .filter((item): item is { id: string, points: { x: number, y: number }[] } => item !== null)
-
-        const activePencil = (activePencilPoints || [])
-            .map((point) => projectAnchorToScreen(point))
-            .filter((point): point is { x: number, y: number } => point !== null)
-
-        const textItems = textDrawings
-            .map((drawing) => {
-                const point = projectAnchorToScreen(drawing.point)
-                if (!point) return null
-                return {
-                    id: drawing.id,
-                    point,
-                    text: drawing.text,
-                }
-            })
-            .filter((item): item is { id: string, point: { x: number, y: number }, text: string } => item !== null)
-
-        return {
-            rulerItems,
-            rulerDraft,
-            pencilItems,
-            activePencil,
-            textItems,
-        }
-    }, [
-        timeframe,
-        projectAnchorToScreen,
-        rulerDrawings,
-        rulerDraftStart,
-        rulerDraftEnd,
-        pencilDrawings,
-        activePencilPoints,
-        textDrawings,
-        overlayRenderNonce,
-    ])
-
     const activeWatchlist = useMemo(
         () => watchlists.find((watchlist) => watchlist.id === activeWatchlistId) || watchlists[0] || null,
         [watchlists, activeWatchlistId]
@@ -2474,25 +2213,6 @@ export function AdvancedChartPage({
     const confirmWatchlistDialog = useCallback(() => {
         if (!watchlistDialog) return
 
-        if (watchlistDialog.type === "textDrawing") {
-            const text = watchlistDialog.value.trim()
-            if (!text) {
-                addToast({
-                    type: "error",
-                    title: "Metin gerekli",
-                    message: "Grafige eklenecek metni bos birakamazsiniz.",
-                })
-                return
-            }
-            setTextDrawings((prev) => [...prev, {
-                id: `${Date.now().toString(36)}-${prev.length}`,
-                point: watchlistDialog.anchor,
-                text,
-            }])
-            closeWatchlistDialog()
-            return
-        }
-
         if (watchlistDialog.type === "addSymbol") {
             if (!activeWatchlist) {
                 closeWatchlistDialog()
@@ -2647,20 +2367,6 @@ export function AdvancedChartPage({
     const handleRemoveAlarmRule = useCallback((ruleId: string) => {
         commitAlarmRuleChange({ type: "remove", id: ruleId })
     }, [commitAlarmRuleChange])
-
-    const handleClearChartDrawings = useCallback(() => {
-        setRulerDrawings([])
-        setPencilDrawings([])
-        setTextDrawings([])
-        setRulerDraftStart(null)
-        setRulerDraftEnd(null)
-        setActivePencilPoints(null)
-        rulerDraftStartRef.current = null
-        isPointerDrawingRef.current = false
-        setActiveTool("none")
-        requestOverlayProjectionRefresh()
-        showWatchlistToast("Cizimler temizlendi.")
-    }, [requestOverlayProjectionRefresh, showWatchlistToast])
 
     const handleHidePaneIndicators = useCallback(() => {
         setActiveIndicators((prev) =>
@@ -2873,27 +2579,15 @@ export function AdvancedChartPage({
                                     </div>
                                 )}
                             </div>
-                            <IconButton
-                                onClick={() => setActiveTool(activeTool === "ruler" ? "none" : "ruler")}
-                                className={cn("p-2 rounded-sm transition-all", activeTool === "ruler" ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/50")}
-                                label="Ölçüm cetvelini aç"
-                            >
-                                <Ruler className="h-4 w-4" />
-                            </IconButton>
-                            <IconButton
-                                onClick={() => setActiveTool(activeTool === "pencil" ? "none" : "pencil")}
-                                className={cn("p-2 rounded-sm transition-all", activeTool === "pencil" ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/50")}
-                                label="Çizim aracını aç"
+                            <button
+                                onClick={() => setDrawingPanelOpen((value) => !value)}
+                                className={cn("flex items-center gap-1.5 rounded-md px-2 py-2 text-xs transition-all", drawingPanelOpen ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/50")}
+                                aria-label="26 çizim aracını aç"
+                                aria-expanded={drawingPanelOpen}
                             >
                                 <Pencil className="h-4 w-4" />
-                            </IconButton>
-                            <IconButton
-                                onClick={() => setActiveTool(activeTool === "text" ? "none" : "text")}
-                                className={cn("p-2 rounded-sm transition-all", activeTool === "text" ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-muted/50")}
-                                label="Grafiğe metin ekleme aracını aç"
-                            >
-                                <Type className="h-4 w-4" />
-                            </IconButton>
+                                <span>Çizimler</span><span className="rounded bg-muted px-1 text-[10px]">26</span>
+                            </button>
                         </div>
 
                         <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/30 rounded-sm text-xs">
@@ -2944,18 +2638,6 @@ export function AdvancedChartPage({
                             <Clock className="h-3 w-3" />
                             <span>{crosshairData ? timeFormatters.timeFormatter(crosshairData.time) : 'Son Mum'}</span>
                         </div>
-                    </div>
-                )}
-
-                {/* Active Tool Info */}
-                {activeTool !== 'none' && (
-                    <div className="flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary text-sm">
-                        {activeTool === 'ruler' && "Ölçüm modu aktif. Grafikte iki nokta seçin."}
-                        {activeTool === 'pencil' && "Çizim modu aktif. Grafikte serbest çizim yapabilirsiniz."}
-                        {activeTool === 'text' && "Metin modu aktif. Grafikte bir noktaya tıklayarak metin ekleyin."}
-                        <IconButton onClick={() => setActiveTool("none")} className="ml-auto hover:text-white" label="Aktif aracı kapat">
-                            <X className="h-4 w-4" />
-                        </IconButton>
                     </div>
                 )}
 
@@ -3024,100 +2706,24 @@ export function AdvancedChartPage({
                         style={{ touchAction: 'none' }}
                     />
 
-                    <div
-                        className={cn(
-                            "absolute inset-0 z-[12]",
-                            activeTool === "none" ? "pointer-events-none" : "pointer-events-auto cursor-crosshair"
-                        )}
-                        onMouseDown={handleDrawingMouseDown}
-                        onMouseMove={handleDrawingMouseMove}
-                        onMouseUp={handleDrawingMouseUp}
-                        onMouseLeave={handleDrawingMouseUp}
-                    >
-                        <svg className="h-full w-full">
-                            {projectedDrawings.rulerItems.map((ruler) => (
-                                <g key={ruler.id}>
-                                    <line x1={ruler.start.x} y1={ruler.start.y} x2={ruler.end.x} y2={ruler.end.y} stroke="#9ca3af" strokeWidth={1.5} />
-                                    <circle cx={ruler.start.x} cy={ruler.start.y} r={3} fill="#9ca3af" />
-                                    <circle cx={ruler.end.x} cy={ruler.end.y} r={3} fill="#9ca3af" />
-                                    <rect x={ruler.midpoint.x - 88} y={ruler.midpoint.y - 24} width={176} height={18} rx={4} fill="rgba(17,24,39,0.85)" />
-                                    <text x={ruler.midpoint.x} y={ruler.midpoint.y - 11} fill="#e5e7eb" fontSize={11} textAnchor="middle">
-                                        {ruler.label}
-                                    </text>
-                                </g>
-                            ))}
-
-                            {projectedDrawings.rulerDraft && (
-                                <g>
-                                    <line
-                                        x1={projectedDrawings.rulerDraft.start.x}
-                                        y1={projectedDrawings.rulerDraft.start.y}
-                                        x2={projectedDrawings.rulerDraft.end.x}
-                                        y2={projectedDrawings.rulerDraft.end.y}
-                                        stroke="#60a5fa"
-                                        strokeWidth={1.5}
-                                        strokeDasharray="4 3"
-                                    />
-                                    <rect
-                                        x={projectedDrawings.rulerDraft.midpoint.x - 88}
-                                        y={projectedDrawings.rulerDraft.midpoint.y - 24}
-                                        width={176}
-                                        height={18}
-                                        rx={4}
-                                        fill="rgba(30,58,138,0.82)"
-                                    />
-                                    <text
-                                        x={projectedDrawings.rulerDraft.midpoint.x}
-                                        y={projectedDrawings.rulerDraft.midpoint.y - 11}
-                                        fill="#dbeafe"
-                                        fontSize={11}
-                                        textAnchor="middle"
-                                    >
-                                        {projectedDrawings.rulerDraft.label}
-                                    </text>
-                                </g>
-                            )}
-
-                            {projectedDrawings.pencilItems.map((stroke) => (
-                                <polyline
-                                    key={stroke.id}
-                                    points={stroke.points.map((point) => `${point.x},${point.y}`).join(" ")}
-                                    fill="none"
-                                    stroke="#fbbf24"
-                                    strokeWidth={1.6}
-                                    strokeLinejoin="round"
-                                    strokeLinecap="round"
-                                />
-                            ))}
-
-                            {projectedDrawings.activePencil.length > 1 && (
-                                <polyline
-                                    points={projectedDrawings.activePencil.map((point) => `${point.x},${point.y}`).join(" ")}
-                                    fill="none"
-                                    stroke="#fcd34d"
-                                    strokeWidth={1.6}
-                                    strokeLinejoin="round"
-                                    strokeLinecap="round"
-                                />
-                            )}
-
-                            {projectedDrawings.textItems.map((item) => (
-                                <g key={item.id}>
-                                    <rect
-                                        x={item.point.x - 4}
-                                        y={item.point.y - 17}
-                                        width={Math.max(52, item.text.length * 6.2)}
-                                        height={18}
-                                        rx={4}
-                                        fill="rgba(31,41,55,0.88)"
-                                    />
-                                    <text x={item.point.x + 2} y={item.point.y - 5} fill="#e5e7eb" fontSize={11}>
-                                        {item.text}
-                                    </text>
-                                </g>
-                            ))}
-                        </svg>
-                    </div>
+                    {canUseBorsapy && <ChartDrawingTools
+                        key={`${marketType}:${symbol}:${timeframe}:${session?.user.username ?? "anonymous"}`}
+                        chartRef={chartInstance}
+                        seriesRef={seriesInstance}
+                        containerRef={chartContainerRef}
+                        ready={chartReady}
+                        market={marketType}
+                        symbol={symbol}
+                        timeframe={timeframe}
+                        step={getTimeframeStepSeconds(timeframe)}
+                        candles={candles}
+                        parseTime={parseChartTimeToUnix}
+                        projectionVersion={overlayRenderNonce}
+                        open={drawingPanelOpen}
+                        onOpenChange={setDrawingPanelOpen}
+                        onDrawingMode={onDrawingMode}
+                        onCountChange={onDrawingCountChange}
+                    />}
                 </div>
 
                 {/* Indicator Panels */}
@@ -3347,7 +2953,7 @@ export function AdvancedChartPage({
                                     <div className="space-y-3">
                                         <div className="space-y-2 rounded border border-primary/40 bg-base p-3">
                                             <div className="font-semibold">Sunucu alarmları</div>
-                                            <p className="text-muted-foreground">Tarayıcı kapalıyken de izlenen kuralları alarm merkezinde oluşturun. Yalnız kapanmış mumlar değerlendirilir.</p>
+                                            <p className="text-muted-foreground">Tarayıcı kapalıyken de izlenen kuralları alarm merkezinde oluşturun. Veri geldikçe veya mum kapanışında değerlendirmeyi seçebilirsiniz.</p>
                                             <Link href={`/alarms?symbol=${encodeURIComponent(symbol)}&market=${encodeURIComponent(marketType)}`} className="flex min-h-11 items-center justify-between rounded border border-border px-2 hover:bg-raised">
                                                 <span>{symbol} için sunucu alarmı oluştur</span><ArrowUpRight className="h-4 w-4 shrink-0" />
                                             </Link>
@@ -3587,10 +3193,10 @@ export function AdvancedChartPage({
                                                 {isFullscreen ? "Kucult" : "Tam ekran"}
                                             </button>
                                             <button
-                                                onClick={handleClearChartDrawings}
+                                                onClick={() => setDrawingPanelOpen(true)}
                                                 className="rounded border border-border px-2 py-1 text-[11px] hover:bg-raised"
                                             >
-                                                Cizimleri temizle
+                                                Çizimleri yönet
                                             </button>
                                             <button
                                                 onClick={handleHidePaneIndicators}
@@ -3750,9 +3356,7 @@ export function AdvancedChartPage({
             <ActionDialog
                 open={watchlistDialog !== null}
                 title={
-                    watchlistDialog?.type === "textDrawing"
-                        ? "Grafik notu ekle"
-                        : watchlistDialog?.type === "addSymbol"
+                    watchlistDialog?.type === "addSymbol"
                             ? "Watchlist sembol ekle"
                             : watchlistDialog?.type === "renameWatchlist"
                                 ? "Watchlist adini degistir"
@@ -3767,9 +3371,7 @@ export function AdvancedChartPage({
                                                 : ""
                 }
                 description={
-                    watchlistDialog?.type === "textDrawing"
-                        ? "Grafige eklenecek aciklama metnini girin."
-                        : watchlistDialog?.type === "addSymbol"
+                    watchlistDialog?.type === "addSymbol"
                             ? "Ornek: BTCUSDT, ETH/USD veya THYAO"
                             : watchlistDialog?.type === "deleteWatchlist"
                                 ? `${watchlistDialog.watchlistName} listesini silmek istiyor musunuz?`
@@ -3795,18 +3397,14 @@ export function AdvancedChartPage({
                 }
                 value={watchlistDialog && "value" in watchlistDialog ? watchlistDialog.value : ""}
                 placeholder={
-                    watchlistDialog?.type === "textDrawing"
-                        ? "Not metni"
-                        : watchlistDialog?.type === "addSymbol"
+                    watchlistDialog?.type === "addSymbol"
                             ? "Sembol"
                             : watchlistDialog?.type === "renameWatchlist" || watchlistDialog?.type === "createWatchlist"
                                 ? "Watchlist adi"
                                 : undefined
                 }
                 confirmLabel={
-                    watchlistDialog?.type === "textDrawing"
-                        ? "Ekle"
-                        : watchlistDialog?.type === "addSymbol"
+                    watchlistDialog?.type === "addSymbol"
                             ? "Ekle"
                             : watchlistDialog?.type === "renameWatchlist"
                                 ? "Guncelle"

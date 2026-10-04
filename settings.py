@@ -37,6 +37,16 @@ class Settings(BaseSettings):
     app_env: str = Field("production", description="Runtime env: production/development/test")
     run_embedded_bot: bool = Field(False, description="Run scheduler inside API process")
     server_alarms_enabled: bool = Field(True, description="Run persistent alarms in the API")
+    advanced_alarms_enabled: bool = Field(True, description="Run persistent advanced alarm engine")
+    advanced_alarm_market_enabled: bool = Field(True, description="Run server-owned market input")
+    advanced_alarm_all_bist_enabled: bool = Field(True, description="Maintain the BIST universe")
+    advanced_alarm_cache_path: str | None = Field(None, description="Private advanced market cache")
+    advanced_alarm_max_symbols: int = Field(2000, ge=1, le=2000)
+    advanced_alarm_quote_stale_seconds: int = Field(120, ge=10, le=600)
+    advanced_alarm_history_workers: int = Field(2, ge=1, le=4)
+    advanced_alarm_eval_budget_seconds: float = Field(0.2, ge=0.02, le=0.5)
+    advanced_alarm_eval_batch: int = Field(5000, ge=100, le=5000)
+    advanced_alarm_state_cache: int = Field(15000, ge=1000, le=20000)
     borsapy_credentials_path: str | None = Field(
         None, description="Encrypted borsapy credentials file; defaults beside the main database"
     )

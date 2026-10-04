@@ -136,7 +136,7 @@ function harness({ session = { user: { username: 'admin', is_admin: true }, expi
     };
   }
   class Clock extends Date { static now() { return now; } }
-  const Page = load('../src/app/alarms/page.tsx', {
+  const Page = load('../src/app/alarms/legacy/page.tsx', {
     react: hooks, 'react/jsx-runtime': jsxRuntime, 'next/link': { default: 'a' },
     '@tanstack/react-query': {
       useQuery(config) { configs.push(config); return config.queryKey[0] === 'server-alarms' ? queries.rules : queries.events; },

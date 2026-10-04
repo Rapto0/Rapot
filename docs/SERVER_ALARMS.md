@@ -1,6 +1,105 @@
 # Sunucuda çalışan alarmlar
 
-`/alarms`, yönetici oturumuyla kalıcı alarm kuralları oluşturur, düzenler,
+## Gelişmiş gün içi alarm merkezi — 4 Ekim 2026
+
+Yeni `/alarms` ekranı `/advanced-alarms` API'sini kullanır. Önceki günlük motor
+`/alarms/legacy`, tarayıcıya bağlı eski kurallar `/alarms/local` altındadır.
+Bu üç sistemin kuralları otomatik taşınmaz. Aşağıdaki **Önceki günlük motor**
+bölümü yalnız eski API `/alarms` sözleşmesini açıklar.
+
+### Kural ve bildirim sözleşmesi
+
+- Yönetici başına **1.000 fiyat, 1.000 teknik ve 1.000 izleme listesi alarmı**;
+  kurallar süresizdir. Açık sembol listesi, kalıcı sunucu listesi veya tüm BIST
+  evreni seçilir. Kural/liste başına 2.000 sembol, 1.000 sunucu listesi sınırı
+  vardır. Liste değişikliği bağlı kuralların sürümünü yeniler.
+- VE/VEYA grupları en fazla 32 karşılaştırma ve dört seviye içerir. Fiyat/OHLCV,
+  RSI, EMA, SMA, MACD/sinyal, ATR, Williams %R, COMBO ve HUNTER alanları sabit
+  sayı veya başka alanla karşılaştırılır; yukarı/aşağı kesişme desteklenir.
+  Her alan farklı periyot seçebilir: `1m`, `5m`, `15m`, `30m`, `1h`, `4h`,
+  `1d`, `1wk`, `1mo`. Bu bir Pine kaynak kodu çalıştırıcısı değildir.
+- Veri geldikçe/mum içinde veya kapanmış mum seçilir. `on_enter`, koşula yeni
+  girişte; `once_per_bar`, gerçek sağlayıcı mumu başına; `cooldown`, bekleme
+  süresi dolunca yeni gözlemle tekrar üretir. Tüm kiplerde seçilen en az
+  bildirim aralığı uygulanır. İlk geçerli gözlem başlangıç durumudur;
+  yeniden başlatma, hesap değişimi ve veri kopmasından fiyat kesişmesi türetilmez.
+- Eksik, eski, sonlu olmayan veya periyodu/saat dilimi tutarsız veri `unknown`
+  sayılır. VEYA grubundaki eksik dal da gizlenmez. Mum içi göstergeler değişebilir.
+  Python/TypeScript/Pine gösterge eşitliği varsayılmaz.
+- Telegram seçimi varsayılan kapalıdır. Açıkça seçilen alarm mevcut sunucu
+  hedefine gider; token/chat ID tarayıcıya dönmez. Olay ve teslim kuyruğu
+  kalıcıdır; beş deneme, 429 bekleme süresi, teslim kira süresi ve en az gönderim
+  aralığı uygulanır. En fazla 10.000 bekleyen teslim; tamamlanan geçmiş
+  30 gün/100.000 olaydır. Bekleyen kayıtlar geçmiş temizliğinde silinmez.
+  İsteğin kabul edilip yanıtın kaybolması tekrar teslim yaratabilir; uçtan uca
+  tam bir kez teslim veya kesintideki bütün tetikleri yakalama garantisi yoktur.
+
+### Tarayıcıdan bağımsız veri ve motor
+
+API, `advanced-alarms.lock` ile tek motorun sahibi olur. Ayrı veri işçileri,
+değerlendirme ve Telegram döngüleri tarayıcıdan bağımsız çalışır. Compose API
+yeniden başladığında kayıtlı etkin kurallar yeniden yüklenir. API/sunucu kapalı
+olduğunda değerlendirme yapılamaz; geri dönüşte eski fiyatlardan toplu tetik üretilmez.
+
+BIST için kayıtlı Borsapy/TradingView hesabıyla sürekli fiyat aboneliği ve
+dakikalık mum geçmişi tutulur. Yetki/oturum hatası anonim veya Yahoo verisiyle
+gizlenmez. Kripto açıkça Binance kullanır. Fiyatın sağlayıcı zamanı ve alınma
+zamanı ayrıdır; bağlantının açık olması gecikmesiz fiyat kanıtı değildir.
+Kopma, tekrar bağlanma, güncel/bayat sembol sayıları ve bekleyen geçmiş işleri
+ekranda gösterilir. `realtime_verified=false` canlı kabul tamamlanana dek korunur.
+Socket açık görünse bile 90 saniye boyunca hiçbir taşıma mesajı/kalp atışı
+gelmezse bağlantı yenilenir; kapalı piyasada fiyat gelmemesi tek başına kopma değildir.
+
+Fiyat koşulları gelen fiyat gözlemlerini kullanır. Teknik koşullar gerçek
+sağlayıcı OHLCV'sinden hesaplanır; fiyat kotasyonlarından uydurma mum oluşturulmaz.
+Gösterge geçmişinin yenileme hedefi 1m için 30, diğer periyotlar için 60
+saniyedir; kuyruk ve sağlayıcı süreleri bunu uzatabilir. Isınma süresi de
+fiyat akışından farklıdır.
+BIST'te bir mumun kapandığını sonraki gerçek sağlayıcı mumu doğrular; yarım gün
+ve tatil kapanışı tahmin edilmez. Son seans mumu bir sonraki gerçek muma kadar
+bekleyebilir. Kriptoda yerel UTC aralık sınırı kullanılır.
+
+Değerlendirme ve ekran yenileme hedefi bir saniyedir. Tur en fazla 5.000
+kural-sembol karşılaştırması, 0,2 saniye hesaplama bütçesi ve 250 kalıcı değişimle
+sınırlıdır; sıra sonraki turda devam eder. Bunlar katı uçtan uca süre garantisi
+değildir: DB/sağlayıcı gecikmeleri ve büyük liste çarpımları süreyi uzatabilir.
+Ekrandaki hazır/kontrol sayısı **son turdur**, tüm evrenin aynı saniyede tarandığı
+anlamına gelmez. 3.000 kural kotası sınırsız donanım kapasitesi değildir.
+
+Sıcak ham geçmiş 128 seri × 500 mum, hesaplanmış son gözlemler 4.096 seri/120.000 değer hücresi ve
+durum belleği 15.000 kural-sembol kaydıyla sınırlıdır. Dakikalık gerçek sağlayıcı
+geçmişi ayrı, sınırlı SQLite önbelleğindedir; sınırsız tarih arşivi değildir.
+Ana alarm yazıları 592 MiB boş alan eşiğinde durur; 528 MiB işletim rezervi
+korunur. Kapasite nedeniyle bekleyen işler başarı olarak gösterilmez.
+
+`ADVANCED_ALARMS_ENABLED`, `ADVANCED_ALARM_MARKET_ENABLED` ve
+`ADVANCED_ALARM_ALL_BIST_ENABLED` varsayılan açıktır. Test ortamı bunları kapatır
+ve sahte sağlayıcı kullanır. Kullanıcının ertelediği canlı kabul, üretimde
+normal veri servisinin çalışmasını kapatmaz.
+
+### Kalıcılık, erişim ve grafik
+
+`advanced_alarm_rules`, `advanced_alarm_states`, `advanced_alarm_events` ve
+`advanced_alarm_watchlists` tabloları ana DB'ye uyumlu olarak eklenir. Eski
+sinyal/trade/alarmlar değiştirilmez. API yönetici ve kayıt sahibi denetimi,
+özel önbelleksiz yanıt, sürümle çakışma kontrolü ve girdi sınırları uygular.
+Duraklatma/düzenleme/silme, henüz teslim işçisi almamış bildirimleri iptal eder.
+
+Grafikte 1m/5m seçenekleri ve 26 çizim aracı vardır: çizgi/ışın, şekil, kanal,
+Fibonacci, ölçüm, pozisyon planlama ve not araçları. Çizimler zaman/fiyat
+koordinatlarıyla **tarayıcıda**, sembol/periyot başına en fazla 80 adet saklanır;
+sunucu alarmı oluşturmaz. Seçme/sürükleme, mıknatıs, stil, kilit/gizleme,
+nesne listesi, geri al/yinele desteklenir. Cihazlar arasında çizim eşitlemesi
+bu sözleşmenin parçası değildir.
+
+Sentetik testler erişim, girdi, fiyat kesişmesi, veri boşluğu, yeniden başlatma,
+kuyruk/429, kota, disk koruması ve çizimleri kapsar. Gerçek piyasa kapsamı,
+gecikme, bölünme uyumu ve Telegram teslimi piyasa açıkken kabul edilir.
+Yayın ve kanıtların güncel durumu [devam planındadır](RAPOT_DEVAM_PLANI.md).
+
+## Önceki günlük motor
+
+`/alarms/legacy`, yönetici oturumuyla kalıcı alarm kuralları oluşturur, düzenler,
 duraklatır ve siler. Kural sunucuya kaydedildikten sonra tarayıcı, bilgisayar
 veya oturum kapansa da API'nin alarm motoru değerlendirmeye devam eder.
 TradingView alarmı veya webhook'u gerekmez. Varsayılan BIST veri kaynağı için
@@ -105,7 +204,7 @@ gerçek Telegram teslimi veya gerçek sağlayıcı kabulü değildir.
 
 Alarm motorunun yayını API ve frontend değişikliği gerektirir; sonraki ortak
 Borsapy veri geçişi scanner nedeniyle botun da yenilenmesini gerektirir.
-Bu site geneli geçişin API/frontend/bot yayını henüz tamamlanmadı. Ana DB için doğrulanmış yedek,
+Bu site geneli Borsapy geçişi `ab18dc4` ile tamamlandı. Ana DB için doğrulanmış yedek,
 tam kaynak SHA'sının CI/imajı ve 528 MiB disk rezervi kontrol edilir. İlk açılış
 boş alarm tablolarıyla gelir; kullanıcının yerine canlı alarm oluşturulmaz.
 Geri dönüş eski API/frontend imajlarını kullanır ve uyumlu ek tabloları korur;

@@ -23,6 +23,7 @@ from api.contracts.health_contract import build_health_payload  # noqa: E402
 from api.private_data_access import PrivateDataAccessMiddleware
 from api.rate_limit import limiter  # noqa: E402
 from api.realtime import router as realtime_router  # noqa: E402
+from api.routes.advanced_alarm_routes import router as advanced_alarm_router
 from api.routes.alarm_routes import router as alarm_router
 from api.routes.auth_routes import router as auth_router  # noqa: E402
 from api.routes.borsapy_connection_routes import router as borsapy_connection_router
@@ -31,6 +32,7 @@ from api.routes.borsapy_routes import router as borsapy_router
 from api.routes.calendar_routes import router as calendar_router  # noqa: E402
 from api.routes.symbols_routes import router as symbols_router  # noqa: E402
 from api.routes.system_routes import router as system_router  # noqa: E402
+from api.runtime.advanced_alarms import start_advanced_alarms, stop_advanced_alarms
 from api.runtime.realtime_bootstrap import (  # noqa: E402
     start_realtime_services as runtime_start_realtime_services,
 )
@@ -80,7 +82,10 @@ async def lifespan(app: FastAPI):
     await _start_realtime_services()
     try:
         await start_server_alarms()
+        await start_advanced_alarms()
     except BaseException:
+        await stop_advanced_alarms()
+        await stop_server_alarms()
         await _stop_realtime_services()
         raise
 
@@ -104,7 +109,10 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         try:
-            await stop_server_alarms()
+            try:
+                await stop_advanced_alarms()
+            finally:
+                await stop_server_alarms()
         finally:
             await _stop_realtime_services()
             from application.services.borsapy_gateway import get_borsapy_gateway
@@ -143,6 +151,7 @@ app.add_middleware(
 # Include Real-time WebSocket Router
 app.include_router(realtime_router)
 app.include_router(auth_router)
+app.include_router(advanced_alarm_router)
 app.include_router(calendar_router)
 app.include_router(symbols_router)
 app.include_router(system_router)

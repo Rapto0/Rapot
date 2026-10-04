@@ -39,10 +39,18 @@ Ana dashboard `/`; diğer sayfalar `/signals`, `/trades`, `/scanner`, `/health`,
 `/settings`, `/chart`, `/research`, `/alarms`, `/ai`, `/calendar`, `/tradingview`, `/login`.
 Ayarlar sayfası sunucu/tarayıcı ayarlarının kapsamını açıklar; tarayıcı tercihleri
 ilgili ekranlardan düzenlenir. `/alarms` yöneticiye ait kalıcı sunucu kurallarını
-yönetir; API alarm motoru tarayıcıdan bağımsız çalışır. Eski yerel kurallar
+yönetir; `/advanced-alarms` API'si 1.000'er fiyat/teknik/izleme listesi alarmı,
+çok koşullu ve süresiz kurallar sunar. Ayrı süreç kilidiyle API motoru ve
+kalıcı veri takibi tarayıcıdan bağımsız çalışır. Saniyelik tur hedefi, bütün
+kural-sembol çarpımını aynı saniyede değerlendirme garantisi değildir; son tur,
+veri tazeliği ve kapasite beklemeleri gösterilir. Dört `advanced_alarm_*` tablosu
+ve ayrı sınırlı dakika önbelleği kullanılır. Önceki günlük motor `/alarms/legacy`
+altındadır; `/alarms` eski API yolu korunur. Eski yerel kurallar
 `/alarms/local` sayfası açıkken değerlendirilir ve otomatik taşınmaz.
 [Sunucu alarm sözleşmesi](docs/SERVER_ALARMS.md) periyot, hesaplayıcı ve teslim
 sınırlarını açıklar; keyfi Pine çalıştırma desteği değildir.
+Grafik 26 çizim aracı ve 1m/5m periyot sunar. Çizimler sembol/periyot başına
+tarayıcıda saklanır; sunucu alarmı veya emir oluşturmaz.
 
 `/research` borsapy 0.11.0 katalog/form/tablo/grafik, sanal portföy, replay ve
 hesap bağlantılarını yöneticiye sunar. Kişisel dashboard HTTP verileri yöneticiye

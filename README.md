@@ -25,8 +25,11 @@ The [documentation index](docs/README.md) groups the current technical guides an
 | Order middleware | `middleware/api/main.py` → `middleware/services/trading_service.py`; separate PostgreSQL/Alembic schema |
 
 Main dashboard trades/stats and middleware orders/positions are separate datasets.
-The `/alarms` page manages persistent admin-owned server alarms; the API evaluates
-closed candles even when the browser is closed. Legacy `/alarms/local` rules still
+The `/alarms` page manages 1,000 each of price, technical and watchlist alarms,
+including compound conditions and intrabar or confirmed-candle triggers. The API
+owns bounded market tracking and evaluation even when the browser is closed;
+one-second cycles do not guarantee full-universe latency. Previous daily server
+rules remain at `/alarms/legacy`. Legacy `/alarms/local` rules still
 run only while that page is open. See the [alarm contract](docs/SERVER_ALARMS.md)
 for supported indicators, timeframes and delivery limits. The settings page explains configuration scope; browser preferences
 are edited in their respective screens. Signal CSV exports include the

@@ -29,6 +29,97 @@ class Base(DeclarativeBase):
     pass
 
 
+class AdvancedAlarmWatchlist(Base):
+    """Persistent private membership, independent of browser storage."""
+
+    __tablename__ = "advanced_alarm_watchlists"
+    id = Column(String(36), primary_key=True)
+    owner = Column(String(80), nullable=False, index=True)
+    name = Column(String(80), nullable=False)
+    symbols_json = Column(Text, nullable=False)
+    revision = Column(Integer, nullable=False, default=1)
+    created_at = Column(DateTime, nullable=False, default=utc_now_naive)
+    updated_at = Column(DateTime, nullable=False, default=utc_now_naive)
+
+
+class AdvancedAlarmRule(Base):
+    """Versioned rules with no automatic expiry; legacy alarm tables remain separate."""
+
+    __tablename__ = "advanced_alarm_rules"
+    id = Column(String(36), primary_key=True)
+    owner = Column(String(80), nullable=False, index=True)
+    name = Column(String(80), nullable=False)
+    category = Column(String(16), nullable=False, index=True)
+    scope = Column(String(16), nullable=False)
+    watchlist_id = Column(String(36), nullable=True, index=True)
+    symbols_json = Column(Text, nullable=False)
+    condition_json = Column(Text, nullable=False)
+    timeframe = Column(String(8), nullable=False)
+    trigger = Column(String(16), nullable=False)
+    mode = Column(String(16), nullable=False)
+    cooldown_seconds = Column(Integer, nullable=False, default=60)
+    enabled = Column(Boolean, nullable=False, default=True)
+    notify_telegram = Column(Boolean, nullable=False, default=False)
+    revision = Column(Integer, nullable=False, default=1)
+    created_at = Column(DateTime, nullable=False, default=utc_now_naive)
+    updated_at = Column(DateTime, nullable=False, default=utc_now_naive)
+    last_triggered_at = Column(DateTime, nullable=True)
+    last_error = Column(String(240), nullable=True)
+    deleted_at = Column(DateTime, nullable=True, index=True)
+
+
+class AdvancedAlarmState(Base):
+    """Only meaningful state transitions are checkpointed; quote ticks stay in memory."""
+
+    __tablename__ = "advanced_alarm_states"
+    rule_id = Column(String(36), primary_key=True)
+    revision = Column(Integer, primary_key=True)
+    symbol = Column(String(25), primary_key=True)
+    market_type = Column(String(10), primary_key=True)
+    observation_id = Column(String(160), nullable=True)
+    continuity_id = Column(String(160), nullable=True)
+    matched = Column(Boolean, nullable=True)
+    ready = Column(Boolean, nullable=False, default=False)
+    last_bar = Column(String(64), nullable=True)
+    last_triggered_at = Column(DateTime, nullable=True)
+    updated_at = Column(DateTime, nullable=False, default=utc_now_naive)
+
+
+class AdvancedAlarmEvent(Base):
+    """Durable notification outbox. Failed deliveries remain visible."""
+
+    __tablename__ = "advanced_alarm_events"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    owner = Column(String(80), nullable=False, index=True)
+    rule_id = Column(String(36), nullable=False, index=True)
+    revision = Column(Integer, nullable=False)
+    rule_name = Column(String(80), nullable=False)
+    category = Column(String(16), nullable=False)
+    symbol = Column(String(25), nullable=False)
+    market_type = Column(String(10), nullable=False)
+    observation_id = Column(String(160), nullable=False)
+    value = Column(Float, nullable=True)
+    values_json = Column(Text, nullable=False, default="{}")
+    bar_time = Column(String(64), nullable=True)
+    observed_at = Column(String(64), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=utc_now_naive, index=True)
+    delivery_status = Column(String(20), nullable=False)
+    delivery_attempts = Column(Integer, nullable=False, default=0)
+    next_attempt_at = Column(DateTime, nullable=True)
+    delivery_error = Column(String(240), nullable=True)
+    __table_args__ = (
+        UniqueConstraint(
+            "rule_id",
+            "revision",
+            "symbol",
+            "market_type",
+            "observation_id",
+            name="uq_advanced_alarm_observation",
+        ),
+        Index("idx_advanced_alarm_delivery", "delivery_status", "next_attempt_at"),
+    )
+
+
 class ServerAlarmRule(Base):
     """Administrator-owned rules evaluated independently of browser sessions."""
 
