@@ -384,7 +384,113 @@ def test_bad_candles_never_enter_indicator_pipeline(mutation):
     else:
         value.attrs["timeframe"] = "1d"
     with pytest.raises(SeriesError):
-        validate_frame(value, "1m", "BIST", NOW)
+        validate_frame(value, "1m", "Kripto" if mutation == "gap" else "BIST", NOW)
+
+
+@pytest.mark.parametrize("timeframe,seconds", [("1m", 90), ("5m", 420)])
+def test_bist_sparse_bars_still_reject_non_integral_interval(timeframe, seconds):
+    raw = frame(timeframe, count=3, last=NOW - 600)
+    raw.index = raw.index[:-1].append(
+        pd.DatetimeIndex([raw.index[-2] + pd.Timedelta(seconds=seconds)])
+    )
+    with pytest.raises(SeriesError) as raised:
+        validate_frame(raw, timeframe, "BIST", NOW)
+    assert raised.value.reason == "gap"
+
+
+def test_native_sparse_bist_sessions_are_cached_without_fabricated_bars(hub, tmp_path):
+    # Native provider shape: continuous session, no-trade/auction interval,
+    # then a new session. The retained 500 bars still span both auction gaps.
+    index = pd.date_range("2026-10-01 17:30", periods=30, freq="min", tz="Europe/Istanbul")
+    index = index.append(
+        pd.DatetimeIndex(["2026-10-01 18:08", "2026-10-01 18:09"], tz="Europe/Istanbul")
+    )
+    index = index.append(
+        pd.date_range("2026-10-02 10:00", periods=480, freq="min", tz="Europe/Istanbul")
+    )
+    index = index.append(
+        pd.DatetimeIndex(["2026-10-02 18:08", "2026-10-02 18:09"], tz="Europe/Istanbul")
+    )
+    raw = frame(count=len(index))
+    raw.index = index
+    hub._provider.frames["1m"] = raw
+    hub.time[0] = pd.Timestamp("2026-10-04T12:00:00Z").timestamp()
+    valid = validate_frame(raw, "1m", "BIST", hub.time[0])
+    assert len(valid) == 500
+    assert valid.index.equals(raw.tail(500).index.tz_convert("UTC"))
+    np.testing.assert_array_equal(valid.to_numpy(), raw.tail(500).to_numpy())
+    assert len(valid.attrs["native_gap_starts"]) == 2
+    calculated = calculate_series(valid, "1m", "BIST", [{"field": "close"}], hub.time[0])
+    assert calculated.points[-2].confirmed and not calculated.points[-1].confirmed
+    assert len(calculated.gaps) == 1  # Compact long-lived series retain only the latest gap.
+    cache = MarketCache(tmp_path / "native-sparse.sqlite3", reserve=0)
+    hub._cache = cache
+    try:
+        selected = rule("close", trigger="bar_close")
+        load(hub, selected)
+        rows, _ = cache.load("BIST:THYAO:1m")
+        assert [row["time"] for row in rows] == [int(stamp.timestamp()) for stamp in valid.index]
+        assert [row["close"] for row in rows] == valid.Close.tolist()
+        status = hub.status()
+        assert status["history_cached"] == 1 and status["history_ready"] == 0
+        assert status["cache_bytes"] > 0
+        assert status["history_failures_by_reason"] == {"provider": 0, "gap": 0, "invalid_data": 0}
+        assert snapshot(hub, selected)["continuity_reason"] == "stale"
+    finally:
+        cache.close()
+
+
+def test_new_native_gap_resets_once_and_never_crosses_unobserved_interval(hub):
+    selected = rule("close", trigger="bar_close")
+    crossed = rule("close", trigger="bar_close", op="crossed_above")
+    raw = frame(last=NOW - 60)
+    raw.loc[:, ["Open", "High", "Low", "Close"]] = [99, 102, 98, 99]
+    hub._provider.frames["1m"] = raw
+    load(hub, selected)
+    baseline = snapshot(hub, selected)
+    assert baseline["ready"] and baseline["matched"] is False
+    # 08:00 is absent in native history. Seeing 08:01 does not bridge that gap.
+    for offset in (60, 120, 180):
+        stamp = pd.Timestamp(NOW + offset, unit="s", tz="UTC")
+        raw.loc[stamp] = [101, 102, 98, 101, 1]
+        hub.time[0] = NOW + offset + 1
+        hub._provider.frames["1m"] = raw.copy()
+        load(hub, selected)
+        current = snapshot(hub, selected)
+        if offset == 60:
+            assert current["continuity_reason"] == "gap"
+            after_gap = current["continuity_id"]
+            assert after_gap != baseline["continuity_id"]
+        else:
+            assert current["continuity_id"] == after_gap
+            assert current["ready"] and current["matched"] is True
+            crossing = snapshot(hub, crossed)
+            if offset == 120:
+                assert not crossing["ready"]  # Previous closed bar belongs to the old segment.
+            else:
+                assert crossing["ready"] and crossing["matched"] is False
+    load(hub, selected)
+    assert snapshot(hub, selected)["continuity_id"] == after_gap
+
+
+@pytest.mark.parametrize("reason", ["provider", "gap", "invalid_data"])
+def test_history_failure_status_is_bounded_and_distinguishes_invalid_data(hub, reason):
+    if reason == "provider":
+        hub._provider.failure = RuntimeError("private provider error")
+    elif reason == "gap":
+        raw = frame()
+        raw.index = raw.index[:-1].append(
+            pd.DatetimeIndex([raw.index[-1] - pd.Timedelta(seconds=30)])
+        )
+        hub._provider.frames["1m"] = raw
+    else:
+        hub._provider.frames["1m"].iloc[-1, 3] = np.nan
+    load(hub, rule("close"))
+    status = hub.status()
+    assert status["history_cached"] == 0
+    assert status["history_failures_by_reason"][reason] == 1
+    assert sum(status["history_failures_by_reason"].values()) == 1
+    assert "private provider error" not in str(status)
 
 
 def test_timezone_equivalence_crypto_finality_and_calendar_month():
@@ -656,7 +762,8 @@ def test_status_counts_never_observed_and_blocks_dead_connection(hub):
     assert "diske kaydedilemiyor" in hub.status()["message"]
 
 
-def test_daily_primary_can_resolve_previous_session_minute_within_history_window(hub):
+@pytest.mark.parametrize("today_gap", [False, True])
+def test_daily_primary_can_resolve_previous_session_minute_within_history_window(hub, today_gap):
     selected = rule("close", timeframe="1d", trigger="bar_close")
     selected["condition"]["right"] = {"field": "close", "timeframe": "1m"}
     hub.configure([selected])
@@ -667,6 +774,8 @@ def test_daily_primary_can_resolve_previous_session_minute_within_history_window
     minute.index = pd.date_range(
         "2026-10-04 13:00", periods=300, freq="min", tz="Europe/Istanbul"
     ).append(pd.date_range("2026-10-05 10:01", periods=60, freq="min", tz="Europe/Istanbul"))
+    if today_gap:
+        minute = minute.drop(minute.index[-5])
     hub._provider.frames["1m"] = minute
     for tf in ("1d", "1m"):
         key = ("BIST", "THYAO", tf)

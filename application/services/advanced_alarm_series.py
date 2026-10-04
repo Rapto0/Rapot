@@ -27,7 +27,9 @@ SECONDS = {"1m": 60, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "4h": 14400
 
 
 class SeriesError(ValueError):
-    pass
+    def __init__(self, message: str, *, reason="invalid_data"):
+        super().__init__(message)
+        self.reason = reason
 
 
 def utc(value: float | None) -> str | None:
@@ -74,21 +76,31 @@ def validate_frame(raw: pd.DataFrame, timeframe: str, market: str, now: float) -
     if frame.index[-1].timestamp() > now + 5:
         raise SeriesError("Mum zamanı gelecekte.")
     local = frame.index.tz_convert("Europe/Istanbul" if market == "BIST" else "UTC")
+    native_gaps = []
     for previous, current in zip(local[:-1], local[1:], strict=True):
         if market == "BIST" and previous.date() != current.date():
             # Actual provider session sequence, not an invented holiday calendar.
             continue
-        if (
-            timeframe in SECONDS
-            and current.timestamp() - previous.timestamp() != SECONDS[timeframe]
-        ):
-            raise SeriesError("Mum dizisinde periyot boşluğu var.")
+        if timeframe in SECONDS:
+            distance = current.timestamp() - previous.timestamp()
+            if (
+                market == "BIST"
+                and distance > SECONDS[timeframe]
+                and distance % SECONDS[timeframe] == 0
+            ):
+                # Native exchange bars may omit no-trade/auction intervals. Keep
+                # the actual observations, without resampling or fabricated bars.
+                # Mark the new segment so a live crossing cannot bridge the gap.
+                native_gaps.append(current.timestamp())
+            elif distance != SECONDS[timeframe]:
+                raise SeriesError("Mum dizisinde periyot boşluğu veya örtüşmesi var.", reason="gap")
         if (
             market == "Kripto"
             and timeframe not in SECONDS
             and current.timestamp() != bar_end(previous, timeframe, market)
         ):
-            raise SeriesError("Mum dizisinde periyot boşluğu var.")
+            raise SeriesError("Mum dizisinde periyot boşluğu var.", reason="gap")
+    frame.attrs["native_gap_starts"] = tuple(native_gaps)
     return frame
 
 
@@ -98,6 +110,7 @@ class Point:
     end: float
     confirmed: bool
     values: dict[str, float | None]
+    segment: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,6 +121,7 @@ class Series:
     source: str
     version: str
     changed: float
+    gaps: tuple[float, ...] = ()
 
 
 def _finite(value: Any) -> float | None:
@@ -177,23 +191,26 @@ def calculate_series(
             for item in values:
                 item[key] = None
     points = []
+    gaps = frame.attrs.get("native_gap_starts", ())
     for offset, index in enumerate(indices):
         stamp = frame.index[index]
         end = bar_end(stamp, timeframe, market)
         following = index + 1 < len(frame) and frame.index[index + 1].timestamp() >= end
         confirmed = end <= now and (following or market == "Kripto")
-        points.append(Point(stamp.timestamp(), end, confirmed, values[offset]))
+        segment = max((gap for gap in gaps if gap <= stamp.timestamp()), default=None)
+        points.append(Point(stamp.timestamp(), end, confirmed, values[offset], segment))
     # Values, not receipt time, identify a genuine provider update.
     import hashlib
 
     version = hashlib.sha256(frame.tail(4).to_numpy().tobytes()).hexdigest()[:16]
     return Series(
-        tuple(points),
-        now,
-        frame.index[-1].timestamp(),
-        "borsapy_tradingview" if market == "BIST" else "binance",
-        version,
-        now,
+        points=tuple(points),
+        received=now,
+        source_time=frame.index[-1].timestamp(),
+        source="borsapy_tradingview" if market == "BIST" else "binance",
+        version=version,
+        changed=now,
+        gaps=tuple(gaps[-1:]),
     )
 
 

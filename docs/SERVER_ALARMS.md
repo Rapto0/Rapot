@@ -55,6 +55,13 @@ sağlayıcı OHLCV'sinden hesaplanır; fiyat kotasyonlarından uydurma mum oluş
 Gösterge geçmişinin yenileme hedefi 1m için 30, diğer periyotlar için 60
 saniyedir; kuyruk ve sağlayıcı süreleri bunu uzatabilir. Isınma süresi de
 fiyat akışından farklıdır.
+BIST sağlayıcısının işlem olmayan dakikaları atlayan doğal mum serisi korunur;
+tam periyot katı olan boşluklara yapay mum eklenmez. Geçmiş bu haliyle saklanır
+ve hesaplanır; yeni gözlemlerde aşılan boşluk alarm devamlılığını sıfırlar ve
+boşluğun iki tarafındaki değerlerden kesişme üretilmez. Kripto aralık doğrulaması
+kesintisiz kalır. `history_cached`, eski ama önbellekte bulunan seri sayısını;
+`history_ready`, şu an alarm için güncel seri sayısını; `history_failures_by_reason`
+ise sağlayıcı/boşluk/geçersiz veri ayrımını gösterir.
 BIST'te bir mumun kapandığını sonraki gerçek sağlayıcı mumu doğrular; yarım gün
 ve tatil kapanışı tahmin edilmez. Son seans mumu bir sonraki gerçek muma kadar
 bekleyebilir. Kriptoda yerel UTC aralık sınırı kullanılır.

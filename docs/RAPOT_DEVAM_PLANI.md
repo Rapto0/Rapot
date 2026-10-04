@@ -9,28 +9,24 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Kaldığımız nokta
 
-- **4 Ekim — gelişmiş kalıcı alarm ve grafik çalışması sürüyor:** Kullanıcı gün içi
-  fiyat tetikleri, kalıcı BIST takibi, ayrı ayrı 1.000 fiyat/teknik/izleme listesi
-  alarmı, çok koşullu/süresiz kurallar, saniyelik akış, dakika geçmişi ve 20'den
-  fazla çizim aracını açıkça istedi. Yeni geliştirme eski günlük alarm motorunu
-  koruyan ayrı sözleşmeyle ilerliyor. Gerçek piyasa gecikmesi/kapsamı ve Telegram
-  teslim kabulü piyasa açıkken yapılacak; ağsız regresyon, kopma/yeniden başlatma
-  ve yük testleri şimdi yapılır. Yeni kullanıcı kuralı veya deneme mesajı
-  kendiliğinden oluşturulmaz. Uygulama yayını tamamlanana kadar mevcut üretim
-  sürümleri aşağıdaki kayıttır; yerel kod tamamlanmış üretim kabulü sayılmaz.
-  Uygulama tamamlandı: ayrı kalıcı kurallar/listeler/olaylar, tek sahipli saniyelik
-  motor, BIST WebSocket işçileri, sınırlı dakika önbelleği, Telegram teslim
-  kuyruğu ve 26 çizim aracı. 291 frontend testi, lint/typecheck/build/standalone
-  ve sentetik tarayıcıda fiyat/çok koşullu/liste alarmı ile çizim kabulü geçti.
-  Mum kapanışı sınır düzeltmesiyle Python tam paketinde 1.601 test geçti
-  (bir atlama, üç mevcut uyarı); 278 kaynakta Ruff temiz. Son bağlantı sessizliği
-  watchdog düzeltmesi ayrıca sınanır ve yayımlanan kaynak CI'da tekrar kontrol edilir.
-  Eski 11 tablonun şema/veri parmak izleri bağımsız
-  geri yüklemeyle doğrulanan, sunucu dışında özel bilgisayarda tutulan yedek hazırdır.
-  Yayın yalnız API/frontend içindir; bot/middleware/PostgreSQL ve 528 MiB disk
-  rezervi korunur. 3.000 kota sınırsız işlem kapasitesi değildir; fiyat döngüsü
-  1 saniye hedefler, teknik geçmiş 1m için 30/diğerleri için 60 saniye hedefler.
-  [Güncel sözleşme](SERVER_ALARMS.md) kesinti/kuyruk ve canlı kabul sınırlarını açıklar.
+- **4 Ekim — gelişmiş gün içi alarm merkezi ve 26 çizim aracı üretimde:**
+  `9592c69`, 15:28:51 UTC'de yalnız API/frontend'e yayımlandı; 15:29:22 UTC ayrı
+  salt okunur kabul geçti. `/alarms` ayrı ayrı 1.000 fiyat/teknik/izleme listesi
+  alarmı, VE/VEYA, çoklu periyot, süresiz kurallar ve kalıcı Telegram teslim
+  kuyruğu sunar. Eski günlük motor `/alarms/legacy`, yerel kurallar `/alarms/local`.
+  Sunucu takip/motor servisi tarayıcıdan bağımsız; sessiz kalan WebSocket için
+  90 saniyelik kalp atışı denetimi ve yeniden bağlanma var. 1m/5m grafik ve
+  26 çizim aracı eklendi. Kaynakla eşleşen CI'da **1.605 Python testi** (bir
+  atlama, üç mevcut uyarı), 291 frontend testi, lint/typecheck/build/standalone
+  geçti. Sentetik tarayıcı CRUD/çizim, kesinti/yeniden başlatma ve karma yük
+  kontrolleri tamamlandı. Eski 11 tablonun şeması korundu, dört yeni boş tablo
+  doğrulandı; gerçek kural/olay/Telegram mesajı oluşturulmadı. Bot/middleware/
+  PostgreSQL kimlikleri, ayarlar, hesap bilgileri ve 528 MiB rezerv korundu.
+  Kabul anında takip servisi 805 sembole aboneydi fakat taze sembol sayısı
+  sıfırdı; bu canlı veri kabulü değildir. Piyasa kapsamı/gecikmesi ve Telegram
+  teslimi kullanıcı isteğiyle piyasa açıkken sınanacak. 3.000 kota sınırsız
+  kapasite değildir: fiyat döngüsü 1 saniye, teknik geçmiş 1m için 30/diğerleri
+  için 60 saniye hedefler; kuyruk bunu uzatabilir. [Sözleşme](SERVER_ALARMS.md).
 - **4 Ekim — kullanım dışı sunucu kaynakları temizlendi:** Yeni açık kullanıcı
   talimatıyla 24 eski Docker imajı, dokuz eski kaynak kopyası, beş yeniden
   üretilebilir önbellek/derleme dizini ve 90 kullanım dışı PM2 günlüğü kaldırıldı.
@@ -184,13 +180,14 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 ## Sıradaki işler ve ertelenen kabul
 
 P0–P3 geliştirme listesi ve arayüz UI-1/UI-2/UI-3 kapalıdır. 2 Ekim sunucu
-alarmları üretimdedir; son kullanıcı seçimi 4 Ekim borsapy araştırma ve veri
-entegrasyonudur. Kullanıcı canlı piyasa testlerini daha sonra yapmayı seçti.
+alarmları üretimdedir; son kullanıcı seçimi 4 Ekim gelişmiş gün içi alarm ve
+kalıcı veri takibidir. Kullanıcı canlı piyasa testlerini daha sonra yapmayı seçti.
 Yerel doğrulama, imaj/disk bütçesi ve yayın kaydı birbirinden ayrı tutulur.
 Kapatılmış işleri veya eski onay bekleme kayıtlarını yeniden başlatma.
 
 | Konu | Durum / devam koşulu |
 |---|---|
+| Gelişmiş gün içi alarmlar ve çizimler | `9592c69` API/frontend üretimde; 4 Ekim 15:29 UTC şema/motor/HTTPS kabulü geçti. Fiyat/teknik/liste kotası 1.000'er, 26 çizim aracı. Canlı saniyelik kapsam, dakika tarihçesinin sağlayıcı kapsamı ve gerçek Telegram teslimi piyasa açıkken ayrı kabul edilecek. |
 | Kullanım dışı sunucu kaynaklarının temizliği | Tamamlandı: 4 Ekim 10:58 UTC son envanter. 24 imaj, dokuz eski kaynak dizini, beş önbellek/derleme dizini ve yedeklenmiş 90 PM2 günlüğü kaldırıldı; beş servis sağlıklı/restart0, boş alan yaklaşık 7,67 GB. Yeni silme adayı otomatik varsayılmaz. |
 | BIST grafik saat gösterimi | Tamamlandı: `57aed91` yalnız frontend, 4 Ekim 10:08 UTC. Ana grafik/gösterge/araştırma eksen ve imleci Türkiye saatinde; sentetik 07:00Z → 10:00 kabulü geçti. Canlı piyasa doğruluğu aşağıdaki ayrı kabuldür. |
 | TradingView hesap bağlantısı | Tamamlandı: `876f3f3` API/bot/frontend, 4 Ekim 09:06 UTC; mevcut kayıtlı oturumla sitedeki doğrulama başarılı. Canlı piyasa verisi bu kabulün dışındadır. |
@@ -270,6 +267,65 @@ açılmadı. Bu taslak sınırlar kendi başına emir veya alıcıyı açma yetk
   Yerel/sentetik test, gerçek ortam gözlemi ve dış kabul birbirinin yerine geçmez.
 
 ## Son üretim ve yayın kanıtları
+
+### 4 Ekim — gelişmiş gün içi alarmlar ve çizim araçları
+
+- **Yayın sonrası dar API düzeltmesi:** Salt okunur durum gözleminde geçmiş
+  önbelleği henüz oluşmamıştı. Kaynak incelemesinde, yerel doğrulamanın BIST'teki
+  gerçek seyrek mumları (işlemsiz dakika/kapanış aralığı) tümüyle reddedebildiği
+  bulundu. Sağlayıcının zaman/fiyat dizisi korunarak tam periyot katı boşluklar
+  kabul edilir; boşluk sonrası alarm devamlılığı sıfırlanır, boşluk üzerinden
+  kesişme türetilmez. Kripto, gelecek mum ve kapanış korumaları korunur. Yeni
+  cached/failure sayaçları eski geçmişi sağlayıcı hatasından ayırır. Bu kodun
+  son API-only yayını ve kabulü tamamlanınca aşağıya ayrıca kaydedilecek;
+  mevcut üretim tablosu henüz `9592c69` kabulünü gösterir.
+- Kaynak `9592c69adb355f907b6c84642bed5259fbbe6ba1`;
+  [CI 37212519520](https://github.com/Rapto0/Rapot/actions/runs/37212519520) beş işi,
+  [yayın 37212533457](https://github.com/Rapto0/Rapot/actions/runs/37212533457) üç işi
+  başarıyla bitirdi; API delta işi beklenen şekilde atlandı. Son kaynakta
+  1.605 Python testi/1 atlama/3 eski uyarı, 291 frontend testi ve bütün zorunlu
+  derleme/lint/tip/standalone kontrolleri geçti. Güvenlik işi report-only Python
+  bulgularını sıfırladığı anlamına gelmez.
+- API imajı `sha256:d08c27c439a477c4134e34dbba5335dcc03a44251fd4a525809c56e10bc7a994`,
+  frontend `sha256:43c1755eaf03d66e2d9b222cfc08bc269d78d51b2e23228972ca016bbf5e7376`.
+  API, `384674f` Borsapy tabanını; frontend `18a15ab` tabanını kullanır.
+  Bağımsız kanıt 120 kurulu paketi, değişmeyen runtime dosyalarını ve 285 kaynak
+  dosyasını Git/GHCR/artifact hash'leriyle eşleştirdi. Frontend dosya sistemi ve
+  runtime config eşitliği de doğrulandı. İlave imaj bütçesi 21.146.649 bayt;
+  temizlik veya sunucu planı değişikliği yapılmadı.
+- Yayın öncesi sunucu dışındaki özel yedek, ayrı SQLite'a geri yüklenerek
+  bütün eski 11 tablonun şema/veri parmak izleri, integrity ve FK kontrollerinden
+  geçti. Arşiv SHA256 `45da730980a1caf1fe1f55f7afab8fe11ce2b1d618996dff461116a93b990cff`;
+  bağımsız kabul `5c90fcdb9627c6946a933026290d867f6866e0df1485b75d9f21a21493b5f3ad`.
+  Üretim geri yüklemesi yapılmadı. Sentetik iki kez init kabulü eski veriyi
+  korudu; canlı kabul eski veri satırlarını yeniden taramadı veya eşitlik iddia etmedi.
+- Tek kullanımlık `/root/rapot-ops/20261004-advanced-alarms/deployment.json`,
+  15:28:51 UTC **verified_health_ssr_auth_boundary**;
+  SHA256 `d30776a84d84ecf9e80bb394d4f4489c80bcffcb7f083de41114b350b5a1d949`.
+  Ayrı 15:29:22 UTC kabul SHA256
+  `2e53375cde13e7f2adb589aa4ca76bc3e9d4f6bbd7541ee209d605df38b300cd`.
+  Eski 11 tablo şeması yedekle aynı; yeni dört tablo kanonik DDL/index/FK/kolon
+  tanımlarıyla aynı ve boş. Dört yönetici GET, çalışan motor, 18 runtime kaynak
+  dosyası, üç sağlık yanıtı, beş HTTPS sayfası, 13 JS/CSS örneği ve 11 anonim
+  401/özel no-store sınırı doğrulandı. Kabul yalnız bellek/DB/sağlık okudu;
+  sağlayıcı sorgusu, test alarmı, Telegram mesajı veya emir üretmedi.
+- Normal arka plan servisi açıktır. Kabul anında 805 evren/takip/abonelik,
+  0 taze sembol, 0 hazır geçmiş/805 istek/778 bekleyen iş görüldü; piyasa
+  doğruluğu veya gecikmesiz kapsam kanıtı değildir. `realtime_verified=false`
+  ve `one_second_coverage_guaranteed=false` korunur. Telegram yapılandırılmıştır,
+  teslim testi kullanıcı isteğiyle ertelidir.
+- 15:29:32 UTC kaynak gözleminde beş servis sağlıklı/restart0, OOM yok;
+  boş disk 7.644.327.936 bayt, sabit 528 MiB rezerv korundu. API yaklaşık
+  238,5 MiB kullanıyordu; tek anlık kaynak ölçümü sürdürülebilir piyasa yükü
+  kabulü değildir. Bot `876f3f3`, middleware/PostgreSQL/current/Compose `279aa9f`,
+  özel env/Nginx ve şifreli hesap dosyası korundu. Yeni kural/liste/olay sayısı sıfır.
+- Sentetik tarayıcı kabulü alarm oluşturma/duraklatma/çok koşul/liste ve çizim,
+  taşıma/geri al/stil/kilit/yenileme/periyot ayrımını doğruladı. Karma yük deneyi
+  1.000 fiyat + 1.000 teknik + 1.000 liste kuralını 600 sembolle (1,8 milyon
+  olası eşleşme) değerlendirdi: 10 turda 1.520 hazır değerlendirme, ilerleyen
+  sıra, sınırlı iş/durum belleği; tracemalloc tepe 37,3 MB. Sağlayıcı/Telegram
+  çağrısı yok. Bu yerel sentetik ölçüm bütün kapsamın saniyede işlendiğini veya
+  tek CPU'lu üretimin kapasitesini kanıtlamaz.
 
 ### 4 Ekim — TradingView bağlantı düzeltmesi ve hesap kabulü tamamlandı
 
@@ -519,16 +575,17 @@ repodan kaldırıldı. Dağıtım ve geri dönüş adımları [DEPLOY.md](DEPLOY
 | Alan | Son kayıt |
 |---|---|
 | Sunucu / erişim | `root@138.68.71.27`, IP üzerinden HTTPS |
-| API / bot kaynak | `876f3f37b9d56624d17c46ab924684de559c5530` |
-| Frontend kaynak | `57aed91895144cd1b915fa2e929d9712f8bf77cc` |
-| API / bot imaj | `sha256:a6d0e72e9430d99d01e31409b347000d175cf1d116b0b83d6298079a2fd869d5` |
-| Frontend imaj | `sha256:399ab9fa72a2944127169578344c9fbfd2334ebf5bbe074e2d645dfb51931745` |
+| API / frontend kaynak | `9592c69adb355f907b6c84642bed5259fbbe6ba1` |
+| Bot kaynak | `876f3f37b9d56624d17c46ab924684de559c5530` |
+| API imaj | `sha256:d08c27c439a477c4134e34dbba5335dcc03a44251fd4a525809c56e10bc7a994` |
+| Frontend imaj | `sha256:43c1755eaf03d66e2d9b222cfc08bc269d78d51b2e23228972ca016bbf5e7376` |
+| Bot imaj | `sha256:a6d0e72e9430d99d01e31409b347000d175cf1d116b0b83d6298079a2fd869d5` |
 | API / bot doğrudan Borsapy tabanı | `sha256:384674f3a7230ae4a6b182ac26e6114808627555988cb3305e7ed906b7d59def` (`ab18dc4`) |
 | Middleware / Compose / current kaynak | `279aa9fea99b520e661b43f104a2bf4791893ac3` |
 | Middleware / ortak eski backend tabanı imajı | `sha256:9be0fdb6097f52bf97730f44c86d28c24e2c0cea1fe181e7e8fd668177fdb034` |
 | Veri / kaynak pointer | `/var/lib/rapot/main` ve `/opt/rapot/current`; operator kaynak kopyası bunlardan ayrıdır |
 | Çalışma modu | `MW_EXECUTION_MODE=DRY_RUN`, `MW_TRADING_ENABLED=false`, `MW_BINANCE_LIVE_ENABLED=false`; AI kapalı; API/bot `BORSAPY_USE_FOR_BIST=true` |
-| Son uzak kabul | 4 Ekim 10:55:49 UTC temizlik sonrası sağlık; beş servis sağlıklı/restart0 ve kimlikleri aynı, dört sayfa/19 statik dosya/üç anonim 401 geçti. 10:58:08 UTC son envanterde boş alan 7.666.819.072 bayt ve başarısız systemd birimi sıfır; DB okunmadı. |
+| Son uzak kabul | 4 Ekim 15:29:22 UTC gelişmiş alarm: eski 11/yeni dört şema, motor ve özel GET, beş sayfa/13 statik/11 anonim 401 geçti. 15:29:32 UTC beş servis sağlıklı/restart0, OOM yok; boş alan 7.644.327.936 bayt. Bot/middleware/PostgreSQL kimlikleri korundu. |
 | TradingView bağlantısı | Mevcut kayıtlı oturum siteden doğrulandı; canlı fiyat/mum/bölünme kabulü erteli, `realtime_verified=false` |
 
 Son kayıtlar:

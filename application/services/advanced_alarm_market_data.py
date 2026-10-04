@@ -574,6 +574,11 @@ class AdvancedMarketData:
                 previous_sample = self._series.get(key, (None, None))[1]
                 old_frame = self._hot.get(key)
                 discontinuity = bool(previous and result.received - previous.received > 180)
+                # Sparse native history is valid input, but a newly traversed gap
+                # cannot connect old rule state to a later observed trading bar.
+                discontinuity |= bool(
+                    previous and any(gap > previous.source_time for gap in result.gaps)
+                )
                 if old_frame is not None:
                     overlap = old_frame.index[:-1].intersection(frame.index)
                     discontinuity |= bool(
@@ -625,7 +630,7 @@ class AdvancedMarketData:
                 work = self._requests.get(key)
                 if work:
                     work.failures += 1
-                    work.reason = "gap" if isinstance(exc, SeriesError) else "provider"
+                    work.reason = exc.reason if isinstance(exc, SeriesError) else "provider"
                     work.due = now + min(300, 10 * 2 ** min(work.failures, 5))
                     self._series.pop(key, None)
                     self._hot.pop(key, None)
@@ -646,6 +651,7 @@ class AdvancedMarketData:
             "warming": "Koşul için yeterli ve kapanışı doğrulanmış veri bekleniyor.",
             "capacity": "Bu periyodun verisi sınırlı iş kuyruğunda bekliyor.",
             "provider": "Sağlayıcı verisi şu anda kullanılamıyor.",
+            "invalid_data": "Sağlayıcının mum verisi doğrulanamadı.",
         }
         return {
             "ready": False,
@@ -725,6 +731,8 @@ class AdvancedMarketData:
             if not anchors:
                 return self._unknown(market, name, "warming")
             anchor, prior_anchor = anchors[-1], anchors[-2] if len(anchors) > 1 else None
+            if anchor.segment != data[timeframe][0].points[-1].segment:
+                return self._unknown(market, name, "gap")
             bar_time = anchor.time
 
             def resolve(ref):
@@ -737,6 +745,8 @@ class AdvancedMarketData:
                 ]
                 key = field_key(ref, timeframe)
                 sources.append(series.source_time)
+                if points and previous and points[-1].segment != previous[-1].segment:
+                    previous = []
                 return (
                     points[-1].values.get(key) if points else None,
                     previous[-1].values.get(key) if previous else None,
@@ -868,6 +878,11 @@ class AdvancedMarketData:
                 "fresh_symbols": fresh,
                 "stale_symbols": max(0, tracked - fresh),
                 "history_ready": len(valid_series),
+                "history_cached": len(self._series),
+                "history_failures_by_reason": {
+                    reason: sum(work.reason == reason for work in self._requests.values())
+                    for reason in ("provider", "gap", "invalid_data")
+                },
                 "history_requested": max(self._requested_total, len(self._requests)),
                 "history_scheduled": len(self._requests),
                 "history_pending": sum(
