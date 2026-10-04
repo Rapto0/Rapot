@@ -1,6 +1,6 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-Kaynaklarla son karşılaştırma: **4 Ekim 2026 / TradingView oturum kabulü**. İş sırası, kullanıcı
+Kaynaklarla son karşılaştırma: **4 Ekim 2026 / BIST grafik saati**. İş sırası, kullanıcı
 yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DEVAM_PLANI.md)
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 Teknik rehberler [docs dizininde](docs/README.md) listelenir.
@@ -74,8 +74,18 @@ kaydetme/doğrulama sonrası arayüz kayıt durumunu yeniler. 09:08 UTC bağıms
 kabul ve mevcut yönetici ekranından doğrulama, TradingView oturumunun başarılı
 olduğunu gösterdi. 1.421 Python ve 256 frontend testi geçti. Beş servis sağlıklı,
 11 tablo şeması ve şifreli kimlik kaydı korundu; temizlik/migration yapılmadı.
-Son boş alan 696.680.448 bayt, sabit rezerv 528 MiB'dir. EVDS/X tanımsız;
+Bu kabulde boş alan 696.680.448 bayt, sabit rezerv 528 MiB'dir. EVDS/X tanımsız;
 canlı fiyat/mum, şirket işlemleri ve alarm/emir kabulü hâlâ ertelidir.
+
+10:08:52 UTC'de yalnız frontend `57aed918` / `sha256:399ab9fa…` imajına geçti.
+BIST ana grafik, gösterge panelleri ve araştırma/replay eksenleri ile crosshair
+`Europe/Istanbul`, ana kripto grafiği UTC gösterir; kaynak zaman damgalarına ofset eklenmez.
+API/bot `876f3f3` / `sha256:a6d0e72e…`, middleware/Compose/current `279aa9f` korundu.
+1.487 Python ve 267 frontend testi, exact-source CI'nin beş işi ve iki yayın işi geçti;
+üretimde dört SSR sayfası, 19 statik dosya ve üç anonim isteğin 401 yanıtı doğrulandı.
+Son boş alan 686.026.752 bayt, sabit rezerv 528 MiB'dir. Bu gösterim kabulü gerçek
+piyasa verisinin saat/tazelik kabulü değildir; ayrıntılar ve ertelenen işler
+[devam planındadır](docs/RAPOT_DEVAM_PLANI.md).
 
 Canonical import ve compatibility listesi [paketleme haritasındadır](docs/PACKAGING_REFACTOR_MAP.md).
 `application.scanner.signal_handlers` gerçek uygulamadır; `scanner_side_effects`

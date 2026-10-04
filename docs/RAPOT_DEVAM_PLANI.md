@@ -9,19 +9,23 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Kaldığımız nokta
 
-- **4 Ekim — BIST grafik saat düzeltmesi:** Kullanıcı Türkiye'de 10:00 olan
+- **4 Ekim — BIST grafik saat düzeltmesi üretimde:** Kullanıcı Türkiye'de 10:00 olan
   açılışın grafikte farklı görünmesini bildirdi. Borsapy'nin saat dilimli verisi
-  doğru; UTC eksen/imleç gösterimi Türkiye saatine uyarlanıyor. Mum/sinyal
-  zamanları değiştirilmeden ana grafik, gösterge panelleri ve araştırma grafiği
-  aynı gösterimi kullanacak. Kripto UTC ve günlük takvim tarihleri korunur.
+  doğru; UTC eksen/imleç gösterimi `Europe/Istanbul` olarak düzeltildi. Mum/sinyal
+  zamanları değiştirilmeden ana grafik, gösterge panelleri ve araştırma/replay
+  grafiği aynı gösterimi kullanır. Kripto UTC ve günlük takvim tarihleri korunur.
   Panel ekle/kaldır işleminde ana grafik yeniden oluşturulmaz; mumlar ve
   yakınlaştırma korunur. 1.487 Python testi (bir atlama, üç mevcut uyarı),
   267 frontend testi, 264 Python dosyasının lint/format kontrolü, frontend
   lint/typecheck/build/standalone ve sentetik grafikte 07:00Z → 10:00 ana/RSI/
-  araştırma imleç ve eksen kabulü geçti. Yalnız frontend yayını hazırlanıyor;
-  henüz üretim kabulü sayılmaz. Mevcut disk rezervine uymak için değişmeyen frontend runtime'ını
-  koruyan, normal imajla tam dosya/config eşitliği doğrulanan kaynak imajı
-  hazırlanıyor. Yeni sunucu temizliği veya plan yükseltmesi yetkisi yoktur.
+  araştırma imleç ve eksen kabulü geçti. `57aed91`, 10:08:52 UTC'de yalnız
+  frontend'e yayımlandı; 10:09:03 UTC ayrı kabul dört sayfa, 19 statik dosya,
+  üç anonim özel endpoint'in 401 yanıtı ve korunan dört servisi doğruladı.
+  Canlı ekranda yeni saat etiketi görüldü; sürüm geçişinde bellek oturumu
+  sıfırlandığından girişli canlı mum/imleç kontrolü yapılmadı. Sentetik görsel
+  kabul ayrı tutulur. Tam dosya/config eşitliği doğrulanmış kaynak imajı,
+  mevcut runtime katmanlarını korudu; sunucu temizliği veya plan yükseltmesi
+  gerekmedi. Yayın kanıtları aşağıdaki ayrı kayıttadır.
 - **4 Ekim — TradingView bağlantı düzeltmesi üretimde ve hesap doğrulandı:** Kullanıcının
   kaydettiği oturum geçerli; borsapy/httpx otomatik `www` → `tr` yönlendirmesinde
   elle gönderilen çerez başlığının kaybolduğu doğrulandı. Sınırlı, sır içermeyen
@@ -154,6 +158,7 @@ Kapatılmış işleri veya eski onay bekleme kayıtlarını yeniden başlatma.
 
 | Konu | Durum / devam koşulu |
 |---|---|
+| BIST grafik saat gösterimi | Tamamlandı: `57aed91` yalnız frontend, 4 Ekim 10:08 UTC. Ana grafik/gösterge/araştırma eksen ve imleci Türkiye saatinde; sentetik 07:00Z → 10:00 kabulü geçti. Canlı piyasa doğruluğu aşağıdaki ayrı kabuldür. |
 | TradingView hesap bağlantısı | Tamamlandı: `876f3f3` API/bot/frontend, 4 Ekim 09:06 UTC; mevcut kayıtlı oturumla sitedeki doğrulama başarılı. Canlı piyasa verisi bu kabulün dışındadır. |
 | Borsapy canlı kabulü | Gerçek fiyat/mum zamanı, tarihsel kapsam ve şirket işlemleri piyasa açıkken karşılaştırılacak. `realtime_verified=false` korunur. EVDS/X ayrı kimlik ve kabul ister. |
 | Borsapy ortak piyasa altyapısı yayını | Tamamlandı: `ab18dc4` API/bot/frontend, 4 Ekim 08:02 UTC. İki runtime'da BIST kaynak seçimi açık; yeni temizlik veya plan yükseltmesi yapılmadı. Güncel 11 tablo yedeği ve bağımsız restore, kapasite, runtime/HTTP/WS/şema kabulü geçti. Son boş alan 804.610.048 bayt; 528 MiB rezerv korundu. |
@@ -378,6 +383,40 @@ açılmadı. Bu taslak sınırlar kendi başına emir veya alıcıyı açma yetk
   `cleanup-run.json` tamamlanmış iki-imaj işlemini kaydeder; operator betikleri
   önceki kanıtlarla tekrar çalıştırılmaz. Yeni yayın ayrı taze kabul gerektirir.
 
+### BIST grafik saati — 4 Ekim üretim kabulü
+
+- Kaynak `57aed91895144cd1b915fa2e929d9712f8bf77cc`;
+  [CI 37193523498](https://github.com/Rapto0/Rapot/actions/runs/37193523498)
+  beş iş ve [imaj yayını 37193536102](https://github.com/Rapto0/Rapot/actions/runs/37193536102)
+  iki seçili iş başarılı. Yerelde 1.487 Python testi (bir atlama/üç mevcut
+  bağımlılık uyarısı), 267 frontend testi, lint/typecheck/build/standalone geçti.
+- Frontend `sha256:399ab9fa72a2944127169578344c9fbfd2334ebf5bbe074e2d645dfb51931745`.
+  Kanıt artifact'i `11299104786`; ZIP SHA256
+  `6d7fa3347d5a13509f7995af95d27a39255a9644b127d27a79c3a7dc8ed8d05e`.
+  Normal adayla tam rootfs/config eşitliği, eski imajın 13 katmanının tam
+  öneki ve iki imajda ağsız üç sayfa/18 statik dosya kabulü doğrulandı.
+  Docker API'nin 11 boş/false/null varsayılan alanı yalnız kanıtlanan
+  biçimde tamamlandı; diğer alanlar korunarak exact CI config hash'i elde edildi.
+- Ölçülen ek imaj bütçesi 10.550.266 bayt; 528 MiB sabit rezerv, 64 MiB
+  çalışma payı ve 2 MiB kanıt payı korundu. Temizlik/yükseltme yapılmadı.
+  Eski `18a15abe…` frontend geri dönüş imajı duruyor.
+- 10:08:52 UTC makbuzu `/root/rapot-ops/20261004-chart-timezone/deployment.json`
+  **verified_frontend_only**; SHA256
+  `6960f3c9e42671d5359cb548c605fc726f7c017899e11219c9dc3ee696b8fad7`.
+  10:09:03 UTC ayrı kabul **verified**; SHA256
+  `e0c819da7e594e980e20e32a19aa5cc6358aafef6d3389e13ca79405169b5275`.
+  Dört SSR sayfası/19 statik dosya, üç anonim özel endpoint'te 401 ve
+  `private, no-store` geçti; son boş alan **686.026.752 bayt**.
+- API/bot `876f3f3`, middleware/PostgreSQL/current `279aa9f`, env/Nginx ve
+  şifreli TradingView kimlik dosyasının bayt/izinleri korundu. DB, migration,
+  sağlayıcı doğrulaması, alarm veya emir işlemi yapılmadı.
+- `runtime-data/chart-timezone-ui-acceptance.json` sabit sentetik 07:00Z
+  mumunun ana/RSI/araştırma imlecinde 10:00 gösterimini ve panel ekle/kaldırda
+  mumların korunmasını kaydeder. `chart-timezone-live.jpg` üretimdeki saat
+  etiketini gösterir; sürüm geçişi Rapot bellek oturumunu sıfırladığı için
+  üretimde girişli mum/imleç kabulü değildir. Kayıtlı TradingView bağlantısı
+  silinmedi. Canlı piyasa ve şirket işlemleri kabulü erteli kalır.
+
 ### Mevcut üretim
 
 Bunlar **son kaydedilmiş kabulün** değerleridir; yeni yayın için taze sunucu
@@ -387,15 +426,16 @@ repodan kaldırıldı. Dağıtım ve geri dönüş adımları [DEPLOY.md](DEPLOY
 | Alan | Son kayıt |
 |---|---|
 | Sunucu / erişim | `root@138.68.71.27`, IP üzerinden HTTPS |
-| API / bot / frontend kaynak | `876f3f37b9d56624d17c46ab924684de559c5530` |
+| API / bot kaynak | `876f3f37b9d56624d17c46ab924684de559c5530` |
+| Frontend kaynak | `57aed91895144cd1b915fa2e929d9712f8bf77cc` |
 | API / bot imaj | `sha256:a6d0e72e9430d99d01e31409b347000d175cf1d116b0b83d6298079a2fd869d5` |
-| Frontend imaj | `sha256:18a15abed812a356df102980c8a520b8f03707d1ef2d8e84a739d1c879903787` |
+| Frontend imaj | `sha256:399ab9fa72a2944127169578344c9fbfd2334ebf5bbe074e2d645dfb51931745` |
 | API / bot doğrudan Borsapy tabanı | `sha256:384674f3a7230ae4a6b182ac26e6114808627555988cb3305e7ed906b7d59def` (`ab18dc4`) |
 | Middleware / Compose / current kaynak | `279aa9fea99b520e661b43f104a2bf4791893ac3` |
 | Middleware / ortak eski backend tabanı imajı | `sha256:9be0fdb6097f52bf97730f44c86d28c24e2c0cea1fe181e7e8fd668177fdb034` |
 | Veri / kaynak pointer | `/var/lib/rapot/main` ve `/opt/rapot/current`; operator kaynak kopyası bunlardan ayrıdır |
 | Çalışma modu | `MW_EXECUTION_MODE=DRY_RUN`, `MW_TRADING_ENABLED=false`, `MW_BINANCE_LIVE_ENABLED=false`; AI kapalı; API/bot `BORSAPY_USE_FOR_BIST=true` |
-| Son uzak kabul | 4 Ekim 09:08:31 UTC; beş servis sağlıklı/restart0, HTTPS/erişim/11 tablo şeması kabulü geçti; boş alan 696.680.448 bayt |
+| Son uzak kabul | 4 Ekim 10:09:03 UTC; frontend sağlıklı/restart0, diğer dört servis kimliği korundu; dört sayfa/19 statik dosya/üç anonim 401 geçti; boş alan 686.026.752 bayt. Bu yayında DB okunmadı. |
 | TradingView bağlantısı | Mevcut kayıtlı oturum siteden doğrulandı; canlı fiyat/mum/bölünme kabulü erteli, `realtime_verified=false` |
 
 Son kayıtlar:
