@@ -122,6 +122,20 @@ platform paketi için ürettiği `npm ls` uyarısı
 
 ## Ekran davranışları ve sınırlar
 
+- **Grafik saati:** Borsapy BIST mumları saat dilimi içeren ISO tarihler ve
+  canlı güncellemelerde UTC epoch kullanır. Örneğin `10:00+03:00` ve `07:00Z`
+  aynı mumdur. Grafik ekseni, imleç bilgisi ve gösterge panelleri bu anı
+  `Europe/Istanbul` ile gösterir; görünür etiket **Türkiye saati (UTC+3)** olur.
+  Kripto grafiğinin UTC gösterimi korunur; araştırma mum/replay grafiği de
+  Türkiye saatini kullanır. Biçimlendirme, mum/sinyal/çizim zamanlarına ofset
+  eklemez ve hesaplama/kapalı mum takvimini değiştirmez. Günlük tarih dizeleri
+  ve `BusinessDay` takvim tarihleri saat diliminden bağımsız korunur. Tarayıcının
+  bulunduğu ülke gösterimi değiştirmez; tarihsel saat farkını IANA zaman dilimi
+  kuralları belirler. Eski API'nin saat dilimsiz BIST duvar saati bu grafik
+  yolunda kullanılmaz. Gösterge paneli ekle/kaldır işleminde ana grafiğin zaman
+  ekseni mevcut nesne üzerinde güncellenir; mumlar ve yakınlaştırma kaybolmaz.
+  Bu düzeltme gerçek zamanlı veri kabulü değildir.
+
 - **CSV:** `/signals` üzerindeki Dışa aktar, filtre/arama sonrası görünen satırları
   aynı sırayla indirir; veri kümesi en fazla yüklenen 300 sinyaldir. Tüm arşivi
   çekmez. UTF-8 BOM, Türkçe başlıklar, noktalı virgül ayırıcı, CSV kaçışları ve

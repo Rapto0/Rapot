@@ -13,6 +13,10 @@ on:
         description: Publish the separately verified additive borsapy API runtime (no server deployment)
         type: boolean
         default: false
+      publish_frontend_source:
+        description: Publish a verified frontend source update reusing the accepted runtime (no server deployment)
+        type: boolean
+        default: false
 
 env:
   REGISTRY: ghcr.io
@@ -21,6 +25,10 @@ jobs:
   publish-images:
     name: Publish backend and frontend images
     runs-on: ubuntu-latest
+    outputs:
+      source_sha: ${{ steps.source.outputs.sha }}
+      repository: ${{ steps.source.outputs.repository }}
+      frontend_digest: ${{ steps.frontend.outputs.digest }}
     permissions:
       contents: read
       packages: write
@@ -55,6 +63,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=backend
 
       - name: Publish frontend image at exact source SHA
+        id: frontend
         uses: docker/build-push-action@v7
         with:
           context: ./frontend
@@ -426,5 +435,122 @@ jobs:
         with:
           name: borsapy-runtime-evidence-${{ github.sha }}
           path: ${{ runner.temp }}/borsapy-proof/
+          if-no-files-found: error
+          retention-days: 14
+
+  publish-frontend-source:
+    name: Verify and publish frontend source image
+    needs: publish-images
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_frontend_source
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      FRONTEND_BASE_IMAGE: ghcr.io/rapto0/rapot/frontend@sha256:18a15abed812a356df102980c8a520b8f03707d1ef2d8e84a739d1c879903787
+      FRONTEND_CANDIDATE_IMAGE: ghcr.io/${{ needs.publish-images.outputs.repository }}/frontend@${{ needs.publish-images.outputs.frontend_digest }}
+      FRONTEND_SOURCE_IMAGE: ghcr.io/${{ needs.publish-images.outputs.repository }}/frontend:${{ needs.publish-images.outputs.source_sha }}-source
+      SOURCE_SHA: ${{ needs.publish-images.outputs.source_sha }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compare candidate runtime against the accepted frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          mkdir "$RUNNER_TEMP/frontend-source-proof"
+          docker pull "$FRONTEND_BASE_IMAGE"
+          docker pull "$FRONTEND_CANDIDATE_IMAGE"
+          python -m scripts.verify_frontend_source candidate \
+            --base-image "$FRONTEND_BASE_IMAGE" --candidate-image "$FRONTEND_CANDIDATE_IMAGE" \
+            --expected-source "$SOURCE_SHA" --output "$RUNNER_TEMP/frontend-source-proof/candidate.json"
+
+      - name: Build frontend source image using the accepted layers
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker build --network none -f Dockerfile.frontend-source \
+            --build-arg "FRONTEND_CANDIDATE_IMAGE=$FRONTEND_CANDIDATE_IMAGE" \
+            --label "org.opencontainers.image.revision=$SOURCE_SHA" \
+            --tag "$FRONTEND_SOURCE_IMAGE" .
+
+      - name: Verify complete filesystem and configuration equivalence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m scripts.verify_frontend_source verify \
+            --base-image "$FRONTEND_BASE_IMAGE" --candidate-image "$FRONTEND_CANDIDATE_IMAGE" \
+            --source-image "$FRONTEND_SOURCE_IMAGE" --expected-source "$SOURCE_SHA" \
+            --output "$RUNNER_TEMP/frontend-source-proof/verification.json"
+          docker image inspect "$FRONTEND_BASE_IMAGE" --format '{"size_bytes":{{.Size}},"layers":{{json .RootFS.Layers}},"labels":{{json .Config.Labels}}}' > "$RUNNER_TEMP/frontend-source-proof/base-layers.json"
+          docker image inspect "$FRONTEND_SOURCE_IMAGE" --format '{"size_bytes":{{.Size}},"layers":{{json .RootFS.Layers}},"labels":{{json .Config.Labels}}}' > "$RUNNER_TEMP/frontend-source-proof/source-layers.json"
+
+      - name: Verify both frontend containers without network
+        timeout-minutes: 4
+        shell: bash
+        run: |
+          set -euo pipefail
+          for kind in candidate source; do
+            image="$FRONTEND_CANDIDATE_IMAGE"
+            if [ "$kind" = source ]; then image="$FRONTEND_SOURCE_IMAGE"; fi
+            container="rapot-frontend-source-smoke-$kind"
+            trap 'docker rm -f "$container" >/dev/null 2>&1 || true' EXIT
+            docker run -d --name "$container" --network none "$image"
+            for attempt in $(seq 1 30); do
+              if docker exec "$container" node -e "fetch('http://127.0.0.1:3000/chart', {signal: AbortSignal.timeout(3000)}).then(async r => {await r.arrayBuffer(); if (!r.ok) process.exitCode = 1;}).catch(() => {process.exitCode = 1;})"; then break; fi
+              sleep 2
+            done
+            docker exec -i "$container" node <<'JS' | tee "$RUNNER_TEMP/frontend-source-proof/smoke-$kind.json"
+          const assert = require('node:assert/strict');
+          (async () => {
+            const origin = 'http://127.0.0.1:3000';
+            const assets = new Set();
+            for (const route of ['/chart', '/research', '/login']) {
+              const response = await fetch(origin + route, {signal: AbortSignal.timeout(5000)});
+              assert.equal(response.status, 200);
+              const html = await response.text();
+              for (const match of html.matchAll(/(?:src|href)="(\/_next\/static\/[^" ]+\.(?:js|css))"/g)) assets.add(match[1]);
+            }
+            assert.ok(assets.size > 0);
+            for (const asset of assets) {
+              const response = await fetch(origin + asset, {signal: AbortSignal.timeout(5000)});
+              assert.equal(response.status, 200);
+              assert.ok((await response.arrayBuffer()).byteLength > 0);
+            }
+            console.log(JSON.stringify({status: 'passed', pages: 3, assets: assets.size, network: 'none'}));
+          })().catch(error => {console.error(error); process.exitCode = 1;});
+          JS
+            docker rm -f "$container" >/dev/null
+            trap - EXIT
+          done
+
+      - name: Publish verified frontend source image
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker push "$FRONTEND_SOURCE_IMAGE"
+          docker image inspect "$FRONTEND_SOURCE_IMAGE" --format '{{json .RepoDigests}}' > "$RUNNER_TEMP/frontend-source-proof/published-digests.json"
+          docker buildx imagetools inspect "$FRONTEND_SOURCE_IMAGE" --raw > "$RUNNER_TEMP/frontend-source-proof/registry-manifest.json"
+          {
+            echo '## Frontend source image published; server deployment not performed'
+            echo "Source: $SOURCE_SHA"
+            echo "Image: $FRONTEND_SOURCE_IMAGE"
+            echo 'The merged filesystem and image configuration match the ordinary frontend image.'
+            echo 'The complete accepted layer prefix is reused; production capacity remains a separate gate.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Preserve frontend source evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: frontend-source-proof-${{ github.sha }}
+          path: ${{ runner.temp }}/frontend-source-proof/
           if-no-files-found: error
           retention-days: 14

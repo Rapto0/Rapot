@@ -61,6 +61,21 @@ and WebSockets use `/api`, health uses `/health-api`. Local npm builds default t
 
 ## Release
 
+For a frontend-only change with unchanged runtime files, the optional
+`publish_frontend_source` workflow input publishes a smaller source image.
+The ordinary image is built first at the exact source commit. The source image
+derives from the pinned accepted frontend and replaces only `/app/.next`,
+`/app/public`, `/app/server.js`, and `/app/package.json` inside the build;
+these replacements do not delete production host files. Its complete merged
+filesystem (content, type, ownership, permissions, links) and image configuration
+must match the ordinary image. Files outside those paths must also match the
+accepted base, and the entire base layer prefix must remain present. Archive
+ordering and modification times are excluded from this comparison. Both images
+must serve pages and assets with network access disabled before the source image
+is published. Publication preserves `frontend-source-proof-<sha>` evidence.
+This path does not relax exact-source CI, live capacity, reserve, protected-service,
+or production acceptance checks; it neither deploys nor cleans up the server.
+
 Complete tests, lint/types, builds and required CI for the exact commit. P1-7 and P1-2
 initial-release checks are recorded as complete in the plan. `scripts/deploy.ps1` checks
 clean tree/branch/full SHA, optionally pushes, then prints server commands. It does not stage, commit, stash, reset

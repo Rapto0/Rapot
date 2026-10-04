@@ -18,6 +18,7 @@ import { useBinanceTicker } from "@/lib/hooks/use-binance-ticker"
 import { useSession } from "@/lib/hooks/use-session"
 import { MarketDataStatus } from "@/components/market-data-status"
 import { BORSAPY_INTERVALS, fetchBorsapyCandles, fetchBorsapyChartSnapshot, mergeBorsapyCandles, releaseBorsapyChart } from "@/lib/api/borsapy-chart-api"
+import { chartTimeZone, createChartTimeFormatters, type ChartTimeZone } from "@/lib/chart-time"
 import { cn } from "@/lib/utils"
 import { ActionDialog } from "@/components/ui/action-dialog"
 import { IconButton } from "@/components/ui/icon-button"
@@ -507,12 +508,10 @@ const buildMarkerHash = (markers: Array<{ time: string | number, text?: string, 
     return `${markers.length}:${hash}`
 }
 
-// Helper to parse backend time string into chart timestamp.
-// IMPORTANT:
-// - BIST intraday timestamps come as TR exchange wall-time.
-// - Crypto intraday timestamps come as UTC wall-time.
-// Lightweight Charts expects UTC timestamps; we therefore encode the provided wall-time
-// as UTC to keep backend grouping boundaries stable on every client timezone.
+// Keep data timestamps unchanged: Borsapy BIST supplies offset-aware ISO values,
+// and stream epochs refer to the same instant. Timezone-free legacy crypto values
+// remain UTC; daily date strings preserve their calendar date. Exchange-time labels
+// are formatted separately. Legacy naive BIST wall-times are not used by this UI.
 const parseChartTimeToUnix = (timeStr: string): number => {
     const value = timeStr.trim()
     const intradayMatch = value.match(INTRADAY_RE)
@@ -549,38 +548,6 @@ const formatTime = (timeStr: string): string | number => {
         return parseChartTimeToUnix(timeStr)
     }
     return timeStr
-}
-
-const formatCrosshairTime = (value: unknown): string => {
-    if (typeof value === "number") {
-        return new Intl.DateTimeFormat("tr-TR", {
-            timeZone: "UTC",
-            year: "2-digit",
-            month: "short",
-            day: "2-digit",
-            hour: "2-digit",
-            minute: "2-digit",
-        }).format(new Date(value * 1000))
-    }
-
-    if (typeof value === "string") {
-        if (value.trim().length === 0) return value
-        const unix = parseChartTimeToUnix(value)
-        return formatCrosshairTime(unix)
-    }
-
-    if (value && typeof value === "object" && "year" in value && "month" in value && "day" in value) {
-        const typed = value as { year: number, month: number, day: number }
-        const unix = Math.floor(Date.UTC(typed.year, typed.month - 1, typed.day, 0, 0, 0) / 1000)
-        return new Intl.DateTimeFormat("tr-TR", {
-            timeZone: "UTC",
-            year: "2-digit",
-            month: "short",
-            day: "2-digit",
-        }).format(new Date(unix * 1000))
-    }
-
-    return String(value ?? "")
 }
 
 // Helper to deduplicate and sort candle data by time
@@ -719,6 +686,8 @@ export function AdvancedChartPage({
     // Basic state
     const [symbol, setSymbol] = useState(initialSymbol)
     const [marketType, setMarketType] = useState<MarketType>(initialMarket)
+    const timeFormatters = useMemo(() => createChartTimeFormatters(chartTimeZone(marketType)), [marketType])
+    const timeFormattersRef = useRef(timeFormatters)
     const [timeframe, setTimeframe] = useState("1d")
     const session = useSession()
     const useBorsapy = marketType === "BIST"
@@ -764,7 +733,7 @@ export function AdvancedChartPage({
 
     // Crosshair data
     const [crosshairData, setCrosshairData] = useState<{
-        time: string
+        time: unknown
         open: number
         high: number
         low: number
@@ -1594,6 +1563,16 @@ export function AdvancedChartPage({
     )
 
     const showMainTimeScale = visiblePanelIndicators.length === 0
+    const showMainTimeScaleRef = useRef(showMainTimeScale)
+
+    // Adding a pane only moves the time axis; keep the populated main series and zoom.
+    useEffect(() => {
+        showMainTimeScaleRef.current = showMainTimeScale
+        chartInstance.current?.applyOptions({
+            timeScale: { visible: showMainTimeScale },
+            rightPriceScale: { scaleMargins: { top: 0.05, bottom: showMainTimeScale ? 0.05 : 0.2 } },
+        })
+    }, [showMainTimeScale])
 
     // Handle fullscreen toggle
     const toggleFullscreen = useCallback(() => {
@@ -1614,6 +1593,14 @@ export function AdvancedChartPage({
         document.addEventListener('fullscreenchange', handleFullscreenChange)
         return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
     }, [])
+
+    useEffect(() => {
+        timeFormattersRef.current = timeFormatters
+        chartInstance.current?.applyOptions({
+            localization: { locale: "tr-TR", timeFormatter: timeFormatters.timeFormatter },
+            timeScale: { tickMarkFormatter: timeFormatters.tickMarkFormatter },
+        })
+    }, [timeFormatters])
 
     // Create/update chart
     useEffect(() => {
@@ -1649,18 +1636,20 @@ export function AdvancedChartPage({
                 rightPriceScale: {
                     borderColor: chartColors.grid,
                     // Keep main price labels away from the indicator pane border.
-                    scaleMargins: { top: 0.05, bottom: showMainTimeScale ? 0.05 : 0.2 },
+                    scaleMargins: { top: 0.05, bottom: showMainTimeScaleRef.current ? 0.05 : 0.2 },
                     minimumWidth: 64,
                 },
                 timeScale: {
-                    visible: showMainTimeScale,
+                    visible: showMainTimeScaleRef.current,
                     borderColor: chartColors.grid,
                     timeVisible: true,
                     secondsVisible: false,
                     rightOffset: 12,
                     barSpacing: 6,
                     minBarSpacing: 2,
+                    tickMarkFormatter: timeFormattersRef.current.tickMarkFormatter,
                 },
+                localization: { locale: "tr-TR", timeFormatter: timeFormattersRef.current.timeFormatter },
                 crosshair: {
                     mode: CrosshairMode.Normal,
                     vertLine: {
@@ -1730,7 +1719,7 @@ export function AdvancedChartPage({
                 const candleData = param.seriesData.get(candlestickSeries)
                 if (candleData && 'open' in candleData) {
                     setCrosshairData({
-                        time: formatCrosshairTime(param.time),
+                        time: param.time,
                         open: candleData.open,
                         high: candleData.high,
                         low: candleData.low,
@@ -1783,7 +1772,7 @@ export function AdvancedChartPage({
                 }
             }
         })
-    }, [isFullscreen, requestOverlayProjectionRefresh, showMainTimeScale, syncIndicatorPanesToMainRange])
+    }, [isFullscreen, requestOverlayProjectionRefresh, syncIndicatorPanesToMainRange])
 
     // Update chart data
     useEffect(() => {
@@ -2772,6 +2761,7 @@ export function AdvancedChartPage({
                     {/* Timeframe & Controls */}
                     <div className="flex flex-wrap items-center gap-3">
                         {marketType === "BIST" && <span className="text-xs text-muted-foreground">Borsapy / TradingView</span>}
+                        <span className="rounded border border-border px-2 py-1 text-xs text-muted-foreground">{timeFormatters.label}</span>
                         {useBorsapy && <Link className="text-xs text-primary underline" href={canUseBorsapy ? "/research?tab=connection" : "/login?next=%2Fchart"}>{canUseBorsapy ? "Hesap bağlantısı" : "Grafik için yönetici girişi"}</Link>}
                         {/* Quick Timeframes */}
                         <div className="flex items-center bg-muted/30 rounded-sm p-1">
@@ -2952,7 +2942,7 @@ export function AdvancedChartPage({
                         </div>
                         <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
                             <Clock className="h-3 w-3" />
-                            <span>{crosshairData ? crosshairData.time : 'Son Mum'}</span>
+                            <span>{crosshairData ? timeFormatters.timeFormatter(crosshairData.time) : 'Son Mum'}</span>
                         </div>
                     </div>
                 )}
@@ -3143,6 +3133,7 @@ export function AdvancedChartPage({
                         }}
                         mainChartRef={chartInstance}
                         hoveredUnixTime={hoveredUnixTime}
+                        timeZone={timeFormatters.timeZone}
                         showTimeScale={index === visiblePanelIndicators.length - 1}
                         onChartReady={registerIndicatorChart}
                     />
@@ -3847,6 +3838,7 @@ interface IndicatorPaneProps {
     onRemove: () => void
     mainChartRef: React.MutableRefObject<any>
     hoveredUnixTime: number | null
+    timeZone: ChartTimeZone
     showTimeScale: boolean
     onChartReady?: (indicatorId: string, chart: any) => void
 }
@@ -3858,11 +3850,21 @@ function IndicatorPane({
     onRemove,
     mainChartRef,
     hoveredUnixTime,
+    timeZone,
     showTimeScale,
     onChartReady,
 }: IndicatorPaneProps) {
     const containerRef = useRef<HTMLDivElement>(null)
     const chartRef = useRef<any>(null)
+    const timeFormatters = useMemo(() => createChartTimeFormatters(timeZone), [timeZone])
+    const timeFormattersRef = useRef(timeFormatters)
+    useEffect(() => {
+        timeFormattersRef.current = timeFormatters
+        chartRef.current?.applyOptions({
+            localization: { locale: "tr-TR", timeFormatter: timeFormatters.timeFormatter },
+            timeScale: { tickMarkFormatter: timeFormatters.tickMarkFormatter },
+        })
+    }, [timeFormatters])
     const primarySeriesRef = useRef<any>(null)
     const primarySeriesPointsRef = useRef<Array<{ timeKey: number, rawTime: string | number, value: number }>>([])
     const isSyncingRef = useRef(false)
@@ -3950,7 +3952,9 @@ function IndicatorPane({
                     rightOffset: 12,
                     barSpacing: 6,
                     minBarSpacing: 2,
+                    tickMarkFormatter: timeFormattersRef.current.tickMarkFormatter,
                 },
+                localization: { locale: "tr-TR", timeFormatter: timeFormattersRef.current.timeFormatter },
                 crosshair: {
                     mode: CrosshairMode.Normal,
                     vertLine: { color: chartColors.crosshair, width: 1, style: 0 },

@@ -9,6 +9,19 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Kaldığımız nokta
 
+- **4 Ekim — BIST grafik saat düzeltmesi:** Kullanıcı Türkiye'de 10:00 olan
+  açılışın grafikte farklı görünmesini bildirdi. Borsapy'nin saat dilimli verisi
+  doğru; UTC eksen/imleç gösterimi Türkiye saatine uyarlanıyor. Mum/sinyal
+  zamanları değiştirilmeden ana grafik, gösterge panelleri ve araştırma grafiği
+  aynı gösterimi kullanacak. Kripto UTC ve günlük takvim tarihleri korunur.
+  Panel ekle/kaldır işleminde ana grafik yeniden oluşturulmaz; mumlar ve
+  yakınlaştırma korunur. 1.487 Python testi (bir atlama, üç mevcut uyarı),
+  267 frontend testi, 264 Python dosyasının lint/format kontrolü, frontend
+  lint/typecheck/build/standalone ve sentetik grafikte 07:00Z → 10:00 ana/RSI/
+  araştırma imleç ve eksen kabulü geçti. Yalnız frontend yayını hazırlanıyor;
+  henüz üretim kabulü sayılmaz. Mevcut disk rezervine uymak için değişmeyen frontend runtime'ını
+  koruyan, normal imajla tam dosya/config eşitliği doğrulanan kaynak imajı
+  hazırlanıyor. Yeni sunucu temizliği veya plan yükseltmesi yetkisi yoktur.
 - **4 Ekim — TradingView bağlantı düzeltmesi üretimde ve hesap doğrulandı:** Kullanıcının
   kaydettiği oturum geçerli; borsapy/httpx otomatik `www` → `tr` yönlendirmesinde
   elle gönderilen çerez başlığının kaybolduğu doğrulandı. Sınırlı, sır içermeyen

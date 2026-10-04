@@ -1,0 +1,19 @@
+# The normal candidate is independently verified before this source-only build.
+ARG FRONTEND_CANDIDATE_IMAGE
+FROM ${FRONTEND_CANDIDATE_IMAGE} AS candidate
+
+FROM ghcr.io/rapto0/rapot/frontend@sha256:18a15abed812a356df102980c8a520b8f03707d1ef2d8e84a739d1c879903787
+
+# Only build-image application assets are replaced; no server volume is involved.
+# The gate proves that every other path, including node_modules, is unchanged.
+USER root
+RUN test -d /app && test ! -L /app && \
+    rm -rf -- /app/.next /app/public /app/server.js /app/package.json
+COPY --from=candidate --chown=1001:1001 /app/.next /app/.next
+COPY --from=candidate --chown=0:0 /app/public /app/public
+COPY --from=candidate --chown=1001:1001 /app/server.js /app/server.js
+COPY --from=candidate --chown=1001:1001 /app/package.json /app/package.json
+USER nextjs
+
+# The build command sets only org.opencontainers.image.revision to the new SHA.
+# Entrypoint, command, environment and all other image settings are inherited.

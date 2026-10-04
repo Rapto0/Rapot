@@ -2,11 +2,14 @@
 
 import { useEffect, useRef, useState } from "react"
 import { Pause, Play, RotateCcw, StepForward } from "lucide-react"
-import type { IChartApi, ISeriesApi, Time, UTCTimestamp } from "lightweight-charts"
+import type { IChartApi, ISeriesApi, UTCTimestamp } from "lightweight-charts"
 import { Button } from "@/components/ui/button"
 import { Select } from "@/components/ui/select"
 import type { ResearchCandle } from "@/lib/api/borsapy-api"
+import { createChartTimeFormatters } from "@/lib/chart-time"
 import { formatResearchValue, researchDate, validResearchCandles } from "./research-utils"
+
+const researchTime = createChartTimeFormatters("Europe/Istanbul")
 
 export function ResearchChart({ candles }: { candles: ResearchCandle[] }) {
     const element = useRef<HTMLDivElement>(null)
@@ -32,8 +35,8 @@ export function ResearchChart({ candles }: { candles: ResearchCandle[] }) {
                 layout: { background: { type: ColorType.Solid, color: "#101218" }, textColor: "#9ca3af", attributionLogo: true },
                 grid: { vertLines: { color: "#20242e" }, horzLines: { color: "#20242e" } },
                 rightPriceScale: { borderColor: "#303540" },
-                timeScale: { borderColor: "#303540", timeVisible: true, secondsVisible: false },
-                localization: { locale: "tr-TR", timeFormatter: (time: Time) => researchDate(typeof time === "object" ? `${time.year}-${String(time.month).padStart(2, "0")}-${String(time.day).padStart(2, "0")}` : Number(time)) },
+                timeScale: { borderColor: "#303540", timeVisible: true, secondsVisible: false, tickMarkFormatter: researchTime.tickMarkFormatter },
+                localization: { locale: "tr-TR", timeFormatter: researchTime.timeFormatter },
             })
             series.current = chart.current.addSeries(CandlestickSeries, { upColor: "#22c55e", downColor: "#ef4444", borderVisible: false, wickUpColor: "#22c55e", wickDownColor: "#ef4444" })
             series.current.setData(current.current.map(candle => ({ ...candle, time: candle.time as UTCTimestamp })))
@@ -47,7 +50,7 @@ export function ResearchChart({ candles }: { candles: ResearchCandle[] }) {
     return <section className="min-w-0 overflow-hidden border border-border bg-surface" aria-label="Araştırma mum grafiği">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border p-3 text-xs"><span className="font-medium">{candles.length.toLocaleString("tr-TR")} mum</span>{last && <span className="font-mono text-muted-foreground">A {formatResearchValue(last.open)} · Y {formatResearchValue(last.high)} · D {formatResearchValue(last.low)} · K {formatResearchValue(last.close)}</span>}</div>
         {error ? <p role="alert" className="p-4 text-sm text-loss">Grafik yüklenemedi. Alınan kayıtları tablodan inceleyebilirsiniz.</p> : <div ref={element} className="h-[330px] w-full" />}
-        <p className="border-t border-border px-3 py-2 text-xs text-muted-foreground">Son gösterilen mum: {researchDate(last?.time)} (Türkiye). Açık mumun değerleri değişebilir.</p>
+        <p className="border-t border-border px-3 py-2 text-xs text-muted-foreground">{researchTime.label} · Son gösterilen mum: {researchDate(last?.time)}. Açık mumun değerleri değişebilir.</p>
     </section>
 }
 
