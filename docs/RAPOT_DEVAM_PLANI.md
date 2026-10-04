@@ -9,6 +9,17 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Kaldığımız nokta
 
+- **4 Ekim — kullanım dışı sunucu kaynakları temizlendi:** Yeni açık kullanıcı
+  talimatıyla 24 eski Docker imajı, dokuz eski kaynak kopyası, beş yeniden
+  üretilebilir önbellek/derleme dizini ve 90 kullanım dışı PM2 günlüğü kaldırıldı.
+  Günlüklerin özel bilgisayarda bağımsız doğrulanmış arşivi korundu. Aktif
+  `279aa9f` kaynağı, sekiz çalışan/geri dönüş imajı, veritabanları, kimlikler ve
+  yedek/kabul kayıtları yerinde. Beş servis sağlıklı/restart0; servis veya ayar
+  değişmedi. 10:55:49 UTC sağlık kabulü dört sayfa/19 statik dosya/üç anonim 401
+  kontrolünü geçti. 10:58:08 UTC son envanterde boş alan **7.666.819.072 bayt**,
+  başarısız systemd birimi sıfır; 528 MiB rezerv korundu. Önce/sonra sağlık
+  ölçümlerinde net boş alan artışı yaklaşık **6,98 GB**. İşlem tamamlandı;
+  aşağıdaki tek kullanımlık operator ve eski kanıtlar yeniden çalıştırılmaz.
 - **4 Ekim — BIST grafik saat düzeltmesi üretimde:** Kullanıcı Türkiye'de 10:00 olan
   açılışın grafikte farklı görünmesini bildirdi. Borsapy'nin saat dilimli verisi
   doğru; UTC eksen/imleç gösterimi `Europe/Istanbul` olarak düzeltildi. Mum/sinyal
@@ -158,6 +169,7 @@ Kapatılmış işleri veya eski onay bekleme kayıtlarını yeniden başlatma.
 
 | Konu | Durum / devam koşulu |
 |---|---|
+| Kullanım dışı sunucu kaynaklarının temizliği | Tamamlandı: 4 Ekim 10:58 UTC son envanter. 24 imaj, dokuz eski kaynak dizini, beş önbellek/derleme dizini ve yedeklenmiş 90 PM2 günlüğü kaldırıldı; beş servis sağlıklı/restart0, boş alan yaklaşık 7,67 GB. Yeni silme adayı otomatik varsayılmaz. |
 | BIST grafik saat gösterimi | Tamamlandı: `57aed91` yalnız frontend, 4 Ekim 10:08 UTC. Ana grafik/gösterge/araştırma eksen ve imleci Türkiye saatinde; sentetik 07:00Z → 10:00 kabulü geçti. Canlı piyasa doğruluğu aşağıdaki ayrı kabuldür. |
 | TradingView hesap bağlantısı | Tamamlandı: `876f3f3` API/bot/frontend, 4 Ekim 09:06 UTC; mevcut kayıtlı oturumla sitedeki doğrulama başarılı. Canlı piyasa verisi bu kabulün dışındadır. |
 | Borsapy canlı kabulü | Gerçek fiyat/mum zamanı, tarihsel kapsam ve şirket işlemleri piyasa açıkken karşılaştırılacak. `realtime_verified=false` korunur. EVDS/X ayrı kimlik ve kabul ister. |
@@ -201,6 +213,14 @@ açılmadı. Bu taslak sınırlar kendi başına emir veya alıcıyı açma yetk
   düzeltmeyi açıkça istedi; kayıtlı oturumla yalnız kimlik doğrulama tanısı ve
   doğrulaması bu kapsamdadır. Oturum sırları sohbete/Git'e/kanıta yazılmaz.
   Bu istek canlı piyasa veya testnet/gerçek emir kabulünü açmaz.
+- 4 Ekim grafik düzeltmesinden sonra kullanıcı **"Gereksiz eski kaynakları sil.
+  Sunucumda hata istemiyorum."** dedi. Bu yeni talimat, kullanım dışı ve yeniden
+  üretilebilir sunucu kaynaklarının kontrollü temizliğini kapsar; önceki iki-imaj
+  onayından bağımsızdır. Çalışan sürümler, uyumlu geri dönüş imajları, aktif
+  `279aa9f` Compose kaynağı, veritabanları, kimlikler ve yedek/kabul kayıtları
+  korunur. Eski PM2 günlükleri ancak bağımsız doğrulanmış özel bilgisayar
+  arşivinden ve taze kullanım kontrolünden sonra kaldırılır. Toplu prune,
+  volume/veritabanı silme veya servisleri yeniden başlatma bu işlemde seçilmedi.
 - 4 Ekim devamında kullanıcı, iki eski frontend imajını (`e312d7aa…` ve
   `a24bbefa…`) kaldırıp yayını tamamlama sorusuna **"yayını tamamlamama onay
   veriyorum"** yanıtını verdi. Yetki, aşağıdaki tam digest'ler ve teklif hash'i
@@ -417,6 +437,57 @@ açılmadı. Bu taslak sınırlar kendi başına emir veya alıcıyı açma yetk
   üretimde girişli mum/imleç kabulü değildir. Kayıtlı TradingView bağlantısı
   silinmedi. Canlı piyasa ve şirket işlemleri kabulü erteli kalır.
 
+### Kullanım dışı sunucu kaynakları — 4 Ekim temizlik kabulü
+
+- Yeni kullanıcı talimatı kapsamında üç ayrı, tek kullanımlık işlem tamamlandı.
+  Hiçbir servis yeniden oluşturulmadı veya yeniden başlatılmadı; uygulama sürümü,
+  Compose/current, env/Nginx ve şifreli TradingView kimlik dosyasının bayt/izinleri
+  korundu. Veritabanı, volume, sağlayıcı veya emir işlemi yapılmadı.
+- **24 Docker imajı:** Bütün konteyner referansları ve korunan imaj katmanları
+  denetlendi; kaldırılan her digest'in registry metadata/katman erişimi ve yerel
+  Git kaynağı doğrulandı. `docker image rm --no-prune` ile yalnız kesin adaylar
+  kaldırıldı. 32 imajdan sekizi kaldı: dört çalışan imaj ile `18a15abe…`,
+  `384674f3…`, onunla eşleşen `bbb7bb38…` frontend ve `b9695f5f…` tabanı.
+  İlk 25 adaylı taslak yerine eşleşen frontend'i de koruyan 24 adaylı plan
+  uygulandı. 10:42:56 UTC makbuzu:
+  `/root/rapot-ops/20261004-resource-cleanup-images/image-cleanup.json`, SHA256
+  `8b8887c371e837b61375ac0ac1b31dd3d450533b4aefdd88f8b58204f3e1e114`.
+- **14 dizin:** `/root/.npm/_cacache`, `/root/.npm/_npx`, `/root/.cache/pip`,
+  `/root/Rapot/frontend/node_modules`, `/root/Rapot/frontend/.next` ile
+  `/opt/rapot/releases/` altındaki `2cf05a8`, `8f60f8e`, `a513af9`, `aadde72`,
+  `bacbfab`, `ccd6154`, `db98915`, `f61e169`, `fce5d01` eski kaynakları kaldırıldı.
+  Dokuz kaynağın tam dosya listesi/Git içeriği ve `RELEASE_SHA` eşleşti; metinlerde
+  yalnız CRLF/LF normalizasyonuna izin verildi. Süreç, açık dosya, mmap, mount,
+  konteyner ve servis/cron kullanım kontrolü geçti. Aktif `279aa9f` kaynağı ve
+  benzersiz eski veri/ayar barındıran `/root/Rapot` kökü korundu. 10:44:32 UTC
+  makbuzu `/root/rapot-ops/20261004-filesystem-cleanup/filesystem-cleanup.json`, SHA256
+  `a05e389c9df3001aed75b6a86976884af4f4806f2e8bff89b5c6739ef334e4bd`.
+- **90 PM2 günlüğü:** `/root/.pm2/logs/` içindeki toplam 2.388.935.299 baytlık
+  kullanım dışı dosyalar, doğrudan bilgisayara sıkıştırılarak yedeklendi. Arşiv
+  139.575.947 bayt; tam 90 üye, boyut/izin/sahiplik/hash ve gzip CRC bağımsız
+  doğrulandı. Kaynakların yedek öncesi/sonrası eşitliği ve taze kullanım kontrolü
+  ardından yalnız bu dosyalar kaldırıldı. Özel Windows arşivi:
+  `C:/Users/memet/RapotBackups/20261004-resource-cleanup/pm2-logs-103221Z/pm2-logs.tar.gz`,
+  SHA256 `f0f354029e02c198d67d2b623c1cfdc4dd0fd4b55cd1adccf0fb6991c75cb854`.
+  ACL yalnız mevcut kullanıcı/SYSTEM; içerik Git'e veya sohbete alınmadı.
+  10:45:37 UTC makbuzu `/root/rapot-ops/20261004-pm2-logs-cleanup/receipt.json`, SHA256
+  `a59dc29d9089d22edbbb07fed6c7077285e8d09e3323cffc55e081afd2e3989c`.
+- **Bağımsız son kabul:** 10:30:24 UTC önceki sağlık ölçümünde 683.552.768 bayt,
+  10:55:49 UTC son sağlık ölçümünde 7.666.995.200 bayt boş alan vardı: net artış
+  **6.983.442.432 bayt**. Beş servis kimliği/imajı/başlangıcı/runtime hash'i aynı,
+  hepsi sağlıklı/restart0; dört SSR sayfası, 19 JS/CSS ve üç anonim özel endpoint'in
+  401/`private, no-store` kontrolleri geçti. `health-after.json` SHA256
+  `bbb0d29d775fea441ba3c4d78e9ee4b2c8bd772c609c38f7424de66c46f63206`.
+  10:58:08 UTC son envanter sekiz imajı, 14 dizin/90 günlüğün yokluğunu,
+  aktif kaynak pointer'ını ve sıfır başarısız systemd birimini doğruladı;
+  boş alan **7.666.819.072 bayt**. `final-inventory.json` SHA256
+  `5e44c23681829949769bc43095a0bcbd6eca2ecbf2328cdc6d62b219ee913d44`.
+- Makbuzların hash'i doğrulanmış yerel kopyaları ve denetimler
+  `runtime-data/server-cleanup-20261004/` içindedir; Git'e alınmaz. Sistem/auth
+  günlükleri, veriler, mevcut yedekler ve kabul kayıtları korunur. Uygulama kodu
+  değişmediği için tam uygulama testleri yeniden çalıştırılmadı; canlı piyasa,
+  alarm teslimi ve emir kabulü erteli kalır.
+
 ### Mevcut üretim
 
 Bunlar **son kaydedilmiş kabulün** değerleridir; yeni yayın için taze sunucu
@@ -435,7 +506,7 @@ repodan kaldırıldı. Dağıtım ve geri dönüş adımları [DEPLOY.md](DEPLOY
 | Middleware / ortak eski backend tabanı imajı | `sha256:9be0fdb6097f52bf97730f44c86d28c24e2c0cea1fe181e7e8fd668177fdb034` |
 | Veri / kaynak pointer | `/var/lib/rapot/main` ve `/opt/rapot/current`; operator kaynak kopyası bunlardan ayrıdır |
 | Çalışma modu | `MW_EXECUTION_MODE=DRY_RUN`, `MW_TRADING_ENABLED=false`, `MW_BINANCE_LIVE_ENABLED=false`; AI kapalı; API/bot `BORSAPY_USE_FOR_BIST=true` |
-| Son uzak kabul | 4 Ekim 10:09:03 UTC; frontend sağlıklı/restart0, diğer dört servis kimliği korundu; dört sayfa/19 statik dosya/üç anonim 401 geçti; boş alan 686.026.752 bayt. Bu yayında DB okunmadı. |
+| Son uzak kabul | 4 Ekim 10:55:49 UTC temizlik sonrası sağlık; beş servis sağlıklı/restart0 ve kimlikleri aynı, dört sayfa/19 statik dosya/üç anonim 401 geçti. 10:58:08 UTC son envanterde boş alan 7.666.819.072 bayt ve başarısız systemd birimi sıfır; DB okunmadı. |
 | TradingView bağlantısı | Mevcut kayıtlı oturum siteden doğrulandı; canlı fiyat/mum/bölünme kabulü erteli, `realtime_verified=false` |
 
 Son kayıtlar:
