@@ -51,6 +51,11 @@ tutar. `/chart` BIST için ayrı Borsapy/TradingView seçimi sunar. Scanner ve g
 BIST alarm geçişi `BORSAPY_USE_FOR_BIST` ile açıkça seçilir; varsayılan kapalıdır.
 Canlı piyasa kabulü ertelidir; bağlantı açık olması gecikmesiz fiyat kanıtı değildir.
 [Entegrasyon sözleşmesi](docs/BORSAPY_INTEGRATION.md) kapsam ve sınırları açıklar.
+4 Ekim'de `4b15335` API/frontend üretime alındı; 51 işlem/9 grup, özel GET'ler,
+HTTPS/statik dosyalar ve ek araştırma tablosu doğrulandı. TradingView/EVDS/X
+bağlantıları henüz tanımlı değil. Bot/middleware/Compose/current `279aa9f`
+korunur; gerçek hesap ve piyasa kabulü hâlâ ertelidir. İmaj/kanıt kimlikleri ve
+tamamlanmış iki-imaj temizlik onayı devam planındadır; yeniden deploy beklenmiyor.
 
 Canonical import ve compatibility listesi [paketleme haritasındadır](docs/PACKAGING_REFACTOR_MAP.md).
 `application.scanner.signal_handlers` gerçek uygulamadır; `scanner_side_effects`

@@ -9,8 +9,8 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Kaldığımız nokta
 
-- **Borsapy entegrasyonu:** Kullanıcı, mevcut TradingView Premium + BIST veri
-  paketiyle README'deki 22 özellik ailesini kendi sitesinde istedi. borsapy
+- **Borsapy entegrasyonu tamamlandı ve üretimde:** Kullanıcı, mevcut TradingView
+  Premium + BIST veri paketiyle README'deki 22 özellik ailesini kendi sitesinde istedi. borsapy
   0.11.0 sabitlendi; yönetici `/research` ekranına 51 işlem, bağlantı yönetimi,
   kayıtlı sorgu/portföy, grafik/replay ve akış/Pine gösterge kimliği yüzeyleri
   eklendi. `/chart` özel TradingView kaynağını seçebilir. Scanner ve günlük BIST
@@ -22,16 +22,18 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
   performans testi atlandı; üç eski bağımlılık uyarısı kaldı. 227 frontend
   testi, lint/typecheck, build/standalone ve sentetik tarayıcı kabulü geçti.
   Tarayıcıda 51 işlem, kayıt, replay, akış başlat/durdur, özel grafik kaynağı,
-  bağlantı sekmesi ve 320 px görünüm kontrol edildi. Bu kayıt henüz üretim
-  yayını değildir. İlk `39d4243` kaynağının Python/lint işleri ve Linux borsapy
-  runtime kabulü geçti; frontend CI yeni `braces` bildirimiyle durdu. Next lint
+  bağlantı sekmesi ve 320 px görünüm kontrol edildi. İlk `39d4243` kaynağının
+  Python/lint işleri ve Linux borsapy runtime kabulü geçti; frontend CI yeni
+  `braces` bildirimiyle durdu. Next lint
   bağımlılığının dar uyarlamasıyla tam audit 469/469 paket, sıfır bulgu verdi;
   bütün Next kuralları ve gerçek tüketici davranışı sınandı.
   [Güvenlik düzeltmesi](FRONTEND_DEPENDENCY_SECURITY.md). İlk kaynak üretime alınmaz.
   Son uygulama kaynağı **`4b15335`** için beş CI işi ve iki imaj yayın işi geçti.
-  Özel yerel yedek ayrı veritabanında doğrulandı. Sunucuya geçiş, aşağıdaki
-  **iki eski frontend imajına özel temizlik onayını** bekler; silme/pull/restart
-  yapılmadı. Mevcut üretim sürümü korunuyor.
+  Kullanıcının özel onayıyla iki eski frontend imajı kaldırıldı; güncel yedek
+  ayrı veritabanında doğrulandı ve yalnız API/frontend güncellendi. Canlı yönetici
+  GET'lerinde 51 işlem/9 grup, borsapy 0.11.0, HTTPS/statik dosyalar ve erişim
+  sınırı geçti. Mevcut 10 tablonun şeması korundu; araştırma tablosu eklendi.
+  TradingView/EVDS/X bağlantıları henüz tanımlı değil; veri kabulü erteli kalır.
 - **Sunucu alarmları tamamlandı ve üretimde:** Kullanıcı, TradingView benzeri alarm
   yönetiminin bütünüyle kendi sitesinden yapılmasını seçti. `/alarms` artık
   yöneticiye ait kalıcı kuralları ve teslim geçmişini yönetir; API kapalı mumları
@@ -109,7 +111,7 @@ Kapatılmış işleri veya eski onay bekleme kayıtlarını yeniden başlatma.
 | Konu | Durum / devam koşulu |
 |---|---|
 | Borsapy canlı kabulü | TradingView oturumu, gerçek fiyat/mum zamanı, tarihsel kapsam ve şirket işlemleri piyasa açıkken karşılaştırılacak. EVDS/X ayrı kimlik ve kabul ister. |
-| Borsapy üretim yayını | Son `4b15335` kaynağının CI ve yayın kanıtları hazır. 528 MiB rezerv, 64 MiB WAL/log ve 2 MiB kanıt payıyla 1.083.183.536 bayt gerekir; 985.182.208 bayt boş, 98.001.329 bayt eksik. Aşağıdaki iki eski frontend imajının kaldırılması için özel onay beklenir. Exact imaj maliyeti ve rezerv kontrolü temizlikten sonra yenilenir; sunucu planı yükseltilmez. |
+| Borsapy üretim yayını | Tamamlandı: `4b15335` API/frontend, 4 Ekim 06:21 UTC. Özel onaylı iki imaj kaldırıldı; güncel yedek, kapasite, runtime/şema/HTTPS kabulü geçti. Son boş alan 839.430.144 bayt; sabit 528 MiB rezerv ve mevcut sunucu planı korundu. Yeniden temizlik veya deploy beklenmiyor. |
 | Eski Python pinlerinin yeni güvenlik bildirimleri | 134 paketlik report-only taramada 5 paket/16 ham bulgu; 22 borsapy ek paketinde bulgu yok. anyio/PyJWT/soupsieve/urllib3 runtime ve virtualenv geliştirme pinleri için ayrı taban imaj güncellemesi gerekir. [İnceleme ve düzeltme sınırları](BORSAPY_INTEGRATION.md). Yeşil güvenlik işi sıfır bulgu değildir. |
 | Canlı veri yükleme gecikmesi | UI-3 kabulünde Tarayıcı ek fiyat/metrikleri bekledi; Sinyaller tekrar açılışta bekledikten sonra 300 kaydı yükledi. Arayüz durumları doğru gösterildi; gecikmenin nedeni ve sağlayıcı performansı bu pakette çözülmedi. |
 | Gerçek TradingView alarmının webhook'a teslimi | Erteli; kullanıcı yeniden seçtiğinde ele alınır. Webhook URL erişimi için şu an yanıt beklenmiyor. |
@@ -140,6 +142,10 @@ açılmadı. Bu taslak sınırlar kendi başına emir veya alıcıyı açma yetk
   TradingView Premium ve BIST paketi kullanılacak, yeni abonelik alınmayacak.
   Gerçek hesap/sağlayıcı testleri piyasa açılışına erteli; çevrimdışı yazılım
   doğrulamaları gerçek veri kabulü sayılmaz.
+- 4 Ekim devamında kullanıcı, iki eski frontend imajını (`e312d7aa…` ve
+  `a24bbefa…`) kaldırıp yayını tamamlama sorusuna **"yayını tamamlamama onay
+  veriyorum"** yanıtını verdi. Yetki, aşağıdaki tam digest'ler ve teklif hash'i
+  ile sınırlıdır; başka imaj/dosya/volume/DB silme yetkisi eklemez.
 - 10 Eylül kararıyla borsayı ilgilendiren dış kabul ertelendi. Bu karar
   testnet/gerçek emir yetkisi vermez; diğer geliştirme işleri devam edebilir.
 - **Ücretli yükseltme yapılmayacak; mevcut $6/ay plan korunur.** Her yayın
@@ -153,7 +159,7 @@ açılmadı. Bu taslak sınırlar kendi başına emir veya alıcıyı açma yetk
 - 21 Eylül repo temizliği talimatı, gereksiz **yerel proje** dosyalarını silmeyi
   ve Markdown rehberlerini toplamayı kapsadı; sunucu verisi/yedeği silme yetkisi eklemedi.
 - Planın sadeleştirilmesi `8a05b11` ile tamamlandı; eski metin arşivde bütünüyle
-  korunur. Son kullanıcı seçimi sunucu alarm yönetimidir. Bu seçim gerçek
+  korunur. O aşamadaki kullanıcı seçimi sunucu alarm yönetimiydi. Bu seçim gerçek
   işlem emri veya kullanıcının yerine canlı alarm oluşturma yetkisi değildir;
   TradingView/testnet dış kabul ertelemesi sürer.
 - Deploy yetkisi; gerçek/testnet emri, üretim verisi silme/geri yükleme,
@@ -164,7 +170,7 @@ açılmadı. Bu taslak sınırlar kendi başına emir veya alıcıyı açma yetk
 
 ## Son üretim ve yayın kanıtları
 
-### 4 Ekim — borsapy yayına hazır, sunucu değişikliği bekliyor
+### 4 Ekim — borsapy üretim kabulü tamamlandı
 
 - Uygulama kaynağı `4b15335f00f30e65a21899e73af47c508f395706`.
   [CI 37159767810](https://github.com/Rapto0/Rapot/actions/runs/37159767810)
@@ -175,36 +181,51 @@ açılmadı. Bu taslak sınırlar kendi başına emir veya alıcıyı açma yetk
   Linux kabulü 98 mevcut paketin sürüm/dosya hash'ini korudu, tam 22 paket
   ekledi; 255 kaynak dosyası, native import, şifreleme, SQLite ve 8 araştırma/
   yerel gösterge kontrolü ağsız geçti. Bu, gerçek sağlayıcı kabulü değildir.
-- Offhost yedek 149.948.452 bayt; SHA256
-  `4703b369249a1f6da32fc6697ac294d9e491d15bb4418e57b8e32a02fbdbfbf3`.
-  Bağımsız özel yerel restore 1.128.845.312 bayt; 10 tablonun şeması, integrity
-  ve tipli satır fingerprint'leri eşleşti. Üretim DB'si geri yüklenmedi.
-- 3 Ekim 23:01:54 UTC / 4 Ekim 02:01:54 TSİ ölçümü: boş alan 985.182.208,
-  iki imajın ek maliyeti 460.329.392, toplam gerekli alan 1.083.183.536 bayt.
-  Katmanların sıkıştırılmış ve açılmış hash'leri doğrulandı; ölçüm sırasında
-  sunucuya imaj indirilmedi. Beş mevcut servis sağlıklı; DRY_RUN korunuyor.
-- İncelenen temizlik **yalnız** şu iki kullanılmayan frontend imajıdır:
+- İlk gece yedeği ve kapasite ölçümü tarihsel kaldı; rollout öncesinde yenilendi.
+  4 Ekim 06:09:59 UTC snapshot'ı 149.978.197 bayt gzip; SHA256
+  `ae1f2a1962c37a5d7a33ed790592a5ad2baaae5ff60ca05d03ae6c42dd2d1ebd`.
+  Bağımsız özel yerel restore 1.129.062.400 bayt; 10 tablonun şeması, integrity
+  ve tipli satır fingerprint'leri eşleşti. Yedek OneDrive/repo dışında tutulur;
+  üretim DB'si geri yüklenmedi. Önceki yedek de korundu.
+- Kullanıcının bu turdaki özel onayıyla 06:12:06 UTC'de **yalnız** şu iki
+  kullanılmayan frontend imajı `docker image rm --no-prune` ile kaldırıldı:
   `sha256:e312d7aa5e682a7835e4dc7ba3e1b4263f04a64f872f47037814ec4b0ba1f4d0`
   (`bbd9377`, 13 Eylül build) ve
   `sha256:a24bbefa443cf30f77af55161c19520f6febf1c977ef55a044fd030189bd0b41`
-  (`13e5fbb`, 21 Eylül build). İkisinin de çalışan/durmuş container referansı
-  sıfırdır. Mevcut API/frontend, ortak backend, PostgreSQL ve önceki frontend
-  geri dönüş imajı `feaa0325…` korunur. Tahmini benzersiz kazanım 196.446.914
-  bayttır; ortak katmanlar çift sayılmadı. Gerçek disk kazanımı garanti değildir.
-- **Bu kayıt silme yetkisi değildir.** Teklif hash'i
+  (`13e5fbb`, 21 Eylül build). Çalışan/durmuş container referansları yeniden
+  kontrol edildi. Net boş alan kazanımı **196.517.888 bayt**; önceki API/frontend,
+  ortak backend, PostgreSQL ve eski frontend geri dönüş imajı `feaa0325…` korundu.
+  Genel prune/force, volume/DB/dosya silme yapılmadı. Teklif hash'i
   `e853b8419a957243910928212b4c1752015b6b8b75791f749ae7d8c881990722`.
-  Onaydan sonra referanslar/container'lar tekrar doğrulanır; yalnız iki tam
-  registry digest referansı `docker image rm --no-prune` ile kaldırılabilir.
-  Genel prune, force, volume/DB/dosya silme kapsam dışıdır. Yeni boş alan yeterli
-  değilse pull yapılmaz. Ardından yalnız API/frontend, mevcut geri dönüş
-  imajlarıyla güncellenir; bot ve BIST scanner anahtarı mevcut durumda kalır.
-- Tekrarlama kanıtları ignored `runtime-data/borsapy-deploy/` içindedir:
-  `capacity.json` SHA256 `62421b30317d8b0422ff638da86b05c49cb42e6c63cfd74585bb7440be0413f8`,
-  `backup-verified.json` SHA256 `34b1e8499f59af928731fa0fe29b9be9aed4f81997f6c4210f80fb874e81346b`.
-  `cleanup.py` yalnız onaylı iki imaja sınırlıdır; `deploy_operator.py` yeni
-  source/digest/CI/kanıt pinlerini taşır. Varsayılanları işlem yapmaz. Canlı
-  guard'lar yeniden çalıştırılmalı; yedek kabulü rollout sırasında iki saatten
-  eskiyse yenilenmelidir. Hiçbir gerçek hesap, piyasa, alarm veya emir testi yapılmadı.
+  Bu tamamlanmış onay başka bir temizliğe yetki vermez.
+- Temizlik sonrası 06:13:17 UTC ölçümü: boş alan 1.216.286.720, iki imajın ek
+  maliyeti 460.329.392, toplam gerekli alan 1.083.183.536 bayt. Bu tutar sabit
+  528 MiB rezerv + 64 MiB WAL/log + 2 MiB kanıt payını içerir. Registry katman
+  hash'leri ve containerd katman varlığı doğrulandı; pull sırasında bütçe korundu.
+- 06:21:23 UTC / 09:21:23 TSİ: yalnız API/frontend exact digest ile güncellendi.
+  `/root/rapot-ops/20261004-borsapy/deployment.json` durumu
+  `verified_health_ssr_auth_boundary`, SHA256
+  `8e86b9d53699392eb228185177f33122d385deeb6523ff9a20c036b65978f948`.
+  Bot/middleware/PostgreSQL container kimliği, başlangıcı ve restart sayısı;
+  özel ortamlar, Nginx, Compose kaynağı ve `current` korundu. Override'da yalnız
+  iki imaj alanı değişti. BIST scanner geçişi açılmadı; DRY_RUN korundu.
+- 06:21:54 UTC ayrı salt okunur kabul: üç yönetici GET'inde 51 işlem, 9 grup,
+  kurulu borsapy 0.11.0 ve `private, no-store`; üç anonim GET'te 401 doğrulandı.
+  `/research`, `/login?next=%2Fresearch`, `/chart` HTTPS SSR ve 17 JS/CSS geçti.
+  Mevcut 10 tablonun 41 şema nesnesi hash'i korundu; `research_workspaces`
+  yedi kolon, PK ve owner indeksiyle doğrulandı. Şema kabulünde tablo satırları
+  okunmadı. TradingView/EVDS/X yapılandırılmamış; kayıtlı araştırma sayısı sıfır.
+  Bu kabul etkileşimli canlı tarayıcı, sağlayıcı, hesap, alarm veya emir testi değildir.
+- Son 06:22:23 UTC gözlemi: beş servis healthy/restart0; boş alan
+  **839.430.144 bayt**, sabit rezerv üstünde. Sunucu planı değiştirilmedi.
+- Kanıtlar ignored `runtime-data/borsapy-deploy/` içindedir; gizli yedekler
+  Git'e alınmaz. Güncel SHA256'lar:
+  `capacity.json`: `5e852c27e515066488bffb8e6a74db5668d370630867e6735aa840b8d8fe0d5d`;
+  `backup-verified.json`: `6dabe7481c31be372abcebce955394c1607624753442a8167898cb2af72e69be`;
+  `acceptance.json`: `f773747918f9d4f98520550069cb54364948b800da14716c995aa7b943cddda0`;
+  `final-observation.json`: `3a99ec553bf8139fc17244ca0d1b6a2179256e6efbb11406b4999d63d994f7f1`.
+  `cleanup-run.json` tamamlanmış iki-imaj işlemini kaydeder; operator betikleri
+  önceki kanıtlarla tekrar çalıştırılmaz. Yeni yayın ayrı taze kabul gerektirir.
 
 ### Mevcut üretim
 
@@ -215,14 +236,14 @@ repodan kaldırıldı. Dağıtım ve geri dönüş adımları [DEPLOY.md](DEPLOY
 | Alan | Son kayıt |
 |---|---|
 | Sunucu / erişim | `root@138.68.71.27`, IP üzerinden HTTPS |
-| API / frontend kaynak | `d4d2b6588744dc82779ef240ef292241933a20ff` |
-| API imaj | `sha256:fb6bff3d29d6e8f8d088a0c23857e1eee8790742288616373249d2f8cc21026e` |
-| Frontend imaj | `sha256:d0403873d7fd836709f515efa5e4f3629cb6f4fee65d03c1a41f1d6b8c7e0a8f` |
+| API / frontend kaynak | `4b15335f00f30e65a21899e73af47c508f395706` |
+| API imaj | `sha256:b9695f5f78ccb6f16112578c54fb9fb2de7ce6a3dc4c0836c3da7deacf7adf14` |
+| Frontend imaj | `sha256:f569c7e24e9d7a9efb8918406e0fcc05137146c96fe3715a2d0f308b4c06428e` |
 | Bot / middleware / Compose / current kaynak | `279aa9fea99b520e661b43f104a2bf4791893ac3` |
 | Bot / middleware ve API bağımlılık tabanı imajı | `sha256:9be0fdb6097f52bf97730f44c86d28c24e2c0cea1fe181e7e8fd668177fdb034` |
 | Veri / kaynak pointer | `/var/lib/rapot/main` ve `/opt/rapot/current`; operator kaynak kopyası bunlardan ayrıdır |
 | Çalışma modu | `MW_EXECUTION_MODE=DRY_RUN`, `MW_TRADING_ENABLED=false`, `MW_BINANCE_LIVE_ENABLED=false`; AI kapalı |
-| Son uzak kabul | 2 Ekim 12:55:25 UTC; beş servis sağlıklı/restart0, HTTPS API/bot 200; boş alan 1.056.694.272 bayt |
+| Son uzak kabul | 4 Ekim 06:22:23 UTC; beş servis sağlıklı/restart0, HTTPS/API/şema kabulü geçti; boş alan 839.430.144 bayt |
 
 Son kayıtlar:
 

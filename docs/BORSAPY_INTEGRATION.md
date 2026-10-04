@@ -51,8 +51,15 @@ Sentetik tarayıcı oturumunda katalog/formlar, kaydetme, replay, akış kontrol
 özel grafik kaynağı, bağlantı sekmesi ve 320 px görünüm sınandı. Sağlayıcı,
 TradingView oturumu, gerçek fiyat gecikmesi veya bildirim teslimi sınanmadı.
 Linux runtime yayın işi, 98 mevcut paketin sürüm/dosya hash'lerini koruyup 22
-ek paketi, native importları ve ağsız uygulama kontrolünü doğruladı. Yayınlanmış
-imaj, sunucunun güncellendiği anlamına gelmez; son durum devam planındadır.
+ek paketi, native importları ve ağsız uygulama kontrolünü doğruladı.
+
+4 Ekim 06:21 UTC'de `4b15335` kaynağı yalnız API/frontend için üretime alındı.
+Salt okunur üretim kabulünde yönetici kataloğu 51 işlem/9 grup, kurulu borsapy
+0.11.0, özel endpointlerin erişim/cache sınırları, üç HTTPS sayfası ve 17 statik
+dosya doğrulandı. Eski 10 tablonun şeması korundu; araştırma tablosu ve indeksi
+eklendi. TradingView/EVDS/X bağlantıları henüz yapılandırılmamış; gerçek hesap,
+fiyat/mum akışı ve piyasa kabulü erteli. Ayrıntılı kaynak/imaj, yedek, temizlik ve
+kapasite kanıtları [devam planındadır](RAPOT_DEVAM_PLANI.md#son-üretim-ve-yayın-kanıtları).
 
 Python güvenlik işi report-only sözleşmesini korur: 134 pakette 5 etkilenen
 paket / 16 ham bulgu (12 benzersiz bildirim) raporlandı. 22 ek paketin tamamı

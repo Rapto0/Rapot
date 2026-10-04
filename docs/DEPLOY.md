@@ -165,6 +165,25 @@ remain mandatory deployment gates. No image pruning is implied. API/frontend
 can be updated while the bot stays on its accepted source; the BIST scanner
 switch remains off until the separately deferred live acceptance.
 
+The 4 October 2026 release deployed API/frontend source `4b15335` using this
+extension. Exact-source CI `37159767810` and publication `37159767909` passed.
+The user specifically approved removal of two unused frontend digests; only
+those references were removed, without prune/force. Capacity was measured again,
+and a fresh offhost SQLite snapshot was independently restored and verified.
+Only the two explicit image fields changed; bot/middleware/PostgreSQL, private
+environment files, Nginx, Compose source and `current` remained unchanged.
+
+`/root/rapot-ops/20261004-borsapy/deployment.json` records successful
+health/SSR/auth-boundary acceptance at 06:21:23 UTC. Separate read-only acceptance
+confirmed borsapy 0.11.0, 51 operations/9 groups, three authenticated local GETs,
+three HTTPS pages, 17 static assets and anonymous 401/no-store responses.
+All ten existing table schemas were preserved and the research workspace table,
+columns and index were verified. Connections were unconfigured; no provider,
+account, alarm or order test was performed. All five containers were healthy
+with zero restarts; final free space was 839,430,144 bytes, above the fixed
+528 MiB reserve. Exact digests, evidence hashes and remaining live acceptance
+are in the [continuation plan](RAPOT_DEVAM_PLANI.md#son-üretim-ve-yayın-kanıtları).
+
 ### Frontend-only releases on the current VPS
 
 The historical P2-1 archive procedure below applies to changes confined to frontend
