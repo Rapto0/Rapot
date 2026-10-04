@@ -52,11 +52,13 @@ def test_protected_routes_reject_before_work(
     inspect.assert_not_called()
 
 
-@pytest.mark.parametrize("method,path", PROTECTED[:2])
+@pytest.mark.parametrize("method,path", PROTECTED)
 def test_regular_user_cannot_access_admin_operations(
-    method, path, authenticated_api_client, manual_analysis
+    method, path, regular_api_client, manual_analysis
 ):
-    assert authenticated_api_client.request(method, path).status_code == 403
+    response = regular_api_client.request(method, path)
+    assert response.status_code == 403
+    assert response.headers["cache-control"] == "private, no-store"
     manual_analysis.assert_not_called()
 
 
@@ -132,7 +134,39 @@ def test_provider_errors_do_not_expose_secrets(
     assert secret not in caplog.text
 
 
-def test_public_market_reads_remain_available():
+def test_root_metadata_remains_public():
     client = TestClient(api_main.app)
     assert client.get("/").status_code == 200
-    assert client.get("/signals").status_code == 200
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/signals",
+        "/trades",
+        "/stats",
+        "/analyses",
+        "/market/overview",
+        "/market/indices",
+        "/market/ticker",
+        "/market/metrics?key=BIST:THYAO",
+        "/candles/THYAO",
+        "/calendar",
+        "/symbols/bist",
+        "/realtime/status",
+    ],
+)
+def test_personal_reads_deny_anonymous_and_regular_users_before_data_work(path, regular_api_client):
+    anonymous = TestClient(api_main.app).get(path)
+    regular = regular_api_client.get(path)
+    assert anonymous.status_code == 401
+    assert regular.status_code == 403
+    assert anonymous.headers["cache-control"] == "private, no-store"
+    assert regular.headers["cache-control"] == "private, no-store"
+
+
+@pytest.mark.parametrize("path", ["/signals", "/trades", "/stats", "/analyses"])
+def test_admin_personal_reads_are_available_and_never_cacheable(path, authenticated_api_client):
+    response = authenticated_api_client.get(path)
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "private, no-store"

@@ -302,6 +302,8 @@ test('bot dashboard and open positions apply the shared measured-source contract
     '@tanstack/react-query': query,
     '@/lib/api/client': { ...normalizers, fetchMarketOverview() {}, fetchTrades() {} },
     '@/lib/hooks/use-binance-ticker': { useBinanceTicker: () => ({}) },
+    '@/lib/hooks/use-private-market': { usePrivateMarket: () => ({ allowed: true, sessionKey: 'admin:123' }) },
+    '@/components/market-data-status': { MarketDataStatus: () => null },
     recharts: {},
   });
   const html = renderToStaticMarkup(React.createElement(positions.OpenPositions));

@@ -6,6 +6,8 @@ import { useQuery } from "@tanstack/react-query"
 import { fetchMarketOverview, fetchTrades, transformTrade } from "@/lib/api/client"
 import { formatMetric, formatMetricPercent, metricTextClass } from "@/lib/metric-display"
 import { useBinanceTicker } from "@/lib/hooks/use-binance-ticker"
+import { usePrivateMarket } from "@/lib/hooks/use-private-market"
+import { MarketDataStatus } from "@/components/market-data-status"
 import { TrendingUp, TrendingDown, Loader2, Zap } from "lucide-react"
 import {
     AreaChart,
@@ -14,12 +16,14 @@ import {
 } from "recharts"
 
 export function MarketOverview() {
+    const { allowed, sessionKey } = usePrivateMarket()
     // Live BTC price from Binance WebSocket
-    const cryptoPrices = useBinanceTicker(["BTCUSDT"])
+    const cryptoPrices = useBinanceTicker(["BTCUSDT"], { paused: !allowed })
 
     const { data: marketData, isLoading } = useQuery({
-        queryKey: ['marketOverview'],
+        queryKey: ['marketOverview', sessionKey],
         queryFn: fetchMarketOverview,
+        enabled: allowed,
         refetchInterval: 60000,
     })
 
@@ -36,17 +40,18 @@ export function MarketOverview() {
     }
 
     // Use live BTC data if available, otherwise use API data
-    const btcValue = liveBTC?.price || marketData?.crypto?.currentValue || 0
-    const btcChange = liveBTC?.change || marketData?.crypto?.change || 0
+    const btcValue = liveBTC?.price ?? marketData?.crypto?.currentValue ?? Number.NaN
+    const btcChange = liveBTC ? liveBTC.change ?? Number.NaN : marketData?.crypto?.change ?? Number.NaN
     const btcHistory = marketData?.crypto?.history || []
 
     // BIST data from API
-    const bistValue = marketData?.bist?.currentValue || 0
-    const bistChange = marketData?.bist?.change || 0
+    const bistValue = marketData?.bist?.currentValue ?? Number.NaN
+    const bistChange = marketData?.bist?.change ?? Number.NaN
     const bistHistory = marketData?.bist?.history || []
 
     return (
         <div className="grid gap-4 md:grid-cols-2">
+            <div className="md:col-span-2"><MarketDataStatus metadata={marketData?.bist} /></div>
             <MarketMiniChart
                 title="BIST 100"
                 data={bistHistory}
@@ -126,16 +131,15 @@ function MarketMiniChart({
                         ) : (
                             <TrendingDown className="h-3 w-3" />
                         )}
-                        {isPositive ? "+" : ""}
-                        {change.toFixed(2)}%
+                        {formatMetricPercent(Number.isFinite(change) ? change : null, 2, true)}
                     </div>
                 </div>
                 <div className="text-xl font-bold mono-numbers">
-                    {prefix}
-                    {currentValue.toLocaleString("tr-TR", {
+                    {Number.isFinite(currentValue) ? prefix : ""}
+                    {Number.isFinite(currentValue) ? currentValue.toLocaleString("tr-TR", {
                         minimumFractionDigits: 2,
                         maximumFractionDigits: prefix === "$" ? 2 : 2,
-                    })}
+                    }) : "—"}
                 </div>
             </CardHeader>
             <CardContent className="pb-2">

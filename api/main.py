@@ -20,11 +20,13 @@ from slowapi.errors import RateLimitExceeded  # noqa: E402
 
 from api.auth import get_current_admin_user, get_current_user
 from api.contracts.health_contract import build_health_payload  # noqa: E402
+from api.private_data_access import PrivateDataAccessMiddleware
 from api.rate_limit import limiter  # noqa: E402
 from api.realtime import router as realtime_router  # noqa: E402
 from api.routes.alarm_routes import router as alarm_router
 from api.routes.auth_routes import router as auth_router  # noqa: E402
 from api.routes.borsapy_connection_routes import router as borsapy_connection_router
+from api.routes.borsapy_market_routes import router as borsapy_market_router
 from api.routes.borsapy_routes import router as borsapy_router
 from api.routes.calendar_routes import router as calendar_router  # noqa: E402
 from api.routes.symbols_routes import router as symbols_router  # noqa: E402
@@ -106,7 +108,9 @@ async def lifespan(app: FastAPI):
         finally:
             await _stop_realtime_services()
             from application.services.borsapy_gateway import get_borsapy_gateway
+            from application.services.borsapy_market_data import get_borsapy_market_data
 
+            await asyncio.to_thread(get_borsapy_market_data().close)
             await asyncio.to_thread(get_borsapy_gateway().close)
         logger.info("API shutting down.")
         logger.info("Otonom Analiz API kapatildi")
@@ -124,6 +128,7 @@ app = FastAPI(
 
 # Rate Limit Handler
 app.state.limiter = limiter
+app.add_middleware(PrivateDataAccessMiddleware)
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS - Frontend erişimi için
@@ -143,7 +148,31 @@ app.include_router(symbols_router)
 app.include_router(system_router)
 app.include_router(alarm_router)
 app.include_router(borsapy_router)
+app.include_router(borsapy_market_router)
 app.include_router(borsapy_connection_router)
+
+
+def private_openapi():
+    """Document the same default-deny boundary enforced by the ASGI middleware."""
+    from fastapi.openapi.utils import get_openapi
+
+    from api.private_data_access import PUBLIC_PATHS
+
+    if app.openapi_schema is None:
+        schema = get_openapi(
+            title=app.title, version=app.version, description=app.description, routes=app.routes
+        )
+        for path, methods in schema["paths"].items():
+            if path not in PUBLIC_PATHS:
+                for operation in methods.values():
+                    if isinstance(operation, dict) and "responses" in operation:
+                        operation["security"] = [{"HTTPBearer": []}]
+                        operation["x-access-role"] = "admin"
+        app.openapi_schema = schema
+    return app.openapi_schema
+
+
+app.openapi = private_openapi
 
 # ==================== SCHEMAS ====================
 
@@ -326,8 +355,10 @@ class MarketHistoryPointResponse(BaseModel):
 class MarketSeriesResponse(BaseModel):
     """Market overview row."""
 
-    currentValue: float
-    change: float
+    model_config = ConfigDict(extra="allow")
+
+    currentValue: float | None
+    change: float | None
     history: list[MarketHistoryPointResponse]
 
 
@@ -341,26 +372,32 @@ class MarketOverviewResponse(BaseModel):
 class MarketIndexResponse(BaseModel):
     """Global index/ticker row for landing feed."""
 
+    model_config = ConfigDict(extra="allow")
+
     symbol: str
-    regularMarketPrice: float
-    regularMarketChangePercent: float
+    regularMarketPrice: float | None
+    regularMarketChangePercent: float | None
     shortName: str
 
 
 class MarketTickerResponse(BaseModel):
     """Ticker strip row."""
 
+    model_config = ConfigDict(extra="allow")
+
     symbol: str
     name: str
-    price: float
-    change: float
-    changePercent: float
+    price: float | None
+    change: float | None
+    changePercent: float | None
 
 
 class MarketMetricsItemResponse(BaseModel):
     """Scanner metrics row."""
 
-    latest_price: float
+    model_config = ConfigDict(extra="allow")
+
+    latest_price: float | None
     change_pct: float | None = None
     perf_7d: float | None = None
     perf_30d: float | None = None
@@ -375,11 +412,13 @@ class CandlePointResponse(BaseModel):
     high: float
     low: float
     close: float
-    volume: int
+    volume: float
 
 
 class CandlesResponse(BaseModel):
     """Candles endpoint response."""
+
+    model_config = ConfigDict(extra="allow")
 
     symbol: str
     market_type: str
@@ -863,7 +902,18 @@ async def get_signal_analysis(signal_id: int):
 
 @app.get("/market/overview", response_model=MarketOverviewResponse, tags=["Market Data"])
 @limiter.limit("5/minute")
-async def get_market_overview(request: Request):
+async def get_market_overview(
+    request: Request, source: str = Query("borsapy", pattern="^(borsapy|legacy)$")
+):
+    if source == "borsapy":
+        from application.services.borsapy_gateway import BorsapyGatewayError
+        from application.services.borsapy_market_data import get_borsapy_market_data
+
+        try:
+            return await asyncio.to_thread(get_borsapy_market_data().overview)
+        except BorsapyGatewayError as exc:
+            raise HTTPException(exc.status_code, str(exc)) from None
+
     """
     Piyasa genel bakış verilerini döndürür (BIST 100 ve Bitcoin).
     Son 24 saatlik mini grafik verisi içerir.
@@ -894,6 +944,7 @@ async def get_market_overview(request: Request):
 @limiter.limit("240/minute")
 async def get_market_indices(
     request: Request,
+    source: str = Query("borsapy", pattern="^(borsapy|legacy)$"),
     symbol: list[str] = Query(
         default=["^GSPC", "^NDX", "XU100.IS"],
         description="Global endeks sembolleri. Örnek: ?symbol=^GSPC&symbol=^NDX&symbol=XU100.IS",
@@ -902,6 +953,15 @@ async def get_market_indices(
     """
     Landing sayfası için global endeks özet verisi döndürür.
     """
+    if source == "borsapy":
+        from application.services.borsapy_gateway import BorsapyGatewayError
+        from application.services.borsapy_market_data import get_borsapy_market_data
+
+        try:
+            return await asyncio.to_thread(get_borsapy_market_data().quotes, symbol)
+        except BorsapyGatewayError as exc:
+            raise HTTPException(exc.status_code, str(exc)) from None
+
     try:
         from application.services.market_data_service import build_market_indices_payload
 
@@ -921,7 +981,26 @@ async def get_market_indices(
 
 @app.get("/market/ticker", response_model=list[MarketTickerResponse], tags=["Market Data"])
 @limiter.limit("20/minute")
-async def get_market_ticker(request: Request):
+async def get_market_ticker(
+    request: Request, source: str = Query("borsapy", pattern="^(borsapy|legacy)$")
+):
+    if source == "borsapy":
+        from application.services.borsapy_market_data import get_borsapy_market_data
+
+        rows = await asyncio.to_thread(
+            get_borsapy_market_data().quotes, ["XU100.IS", "THYAO.IS", "GARAN.IS", "AKBNK.IS"]
+        )
+        return [
+            {
+                **row,
+                "symbol": row["symbol"].removesuffix(".IS"),
+                "name": row["shortName"],
+                "price": row["regularMarketPrice"],
+                "changePercent": row["regularMarketChangePercent"],
+            }
+            for row in rows
+        ]
+
     """
     Header ticker için popüler sembol verilerini döndürür.
     """
@@ -1083,6 +1162,7 @@ def _get_market_data_provider():
 @limiter.limit("30/minute")
 async def get_market_metrics(
     request: Request,
+    source: str = Query("borsapy", pattern="^(borsapy|legacy)$"),
     key: list[str] | None = Query(
         None,
         description="Market key listesi (ornek: BIST:THYAO, Kripto:BTCUSDT)",
@@ -1092,6 +1172,25 @@ async def get_market_metrics(
     Scanner icin toplu piyasa metrikleri dondurur.
     Tek cagriyla birden fazla sembolun latest/change/perf7/perf30 degerini verir.
     """
+    if source == "borsapy":
+        from application.services.borsapy_gateway import BorsapyGatewayError
+        from application.services.borsapy_market_data import get_borsapy_market_data
+
+        if not key:
+            return {}
+        if len(key) > 50 or any(not value.startswith(("BIST:", "Kripto:")) for value in key):
+            raise HTTPException(422, "Bir istekte en fazla 50 BIST/Kripto sembolü gerekir.")
+        service = get_borsapy_market_data()
+        result = {}
+        try:
+            for prefix, method in (("BIST:", service.metrics), ("Kripto:", service.crypto_metrics)):
+                group = [value for value in key if value.startswith(prefix)]
+                if group:
+                    result.update(await asyncio.to_thread(method, group))
+            return result
+        except BorsapyGatewayError as exc:
+            raise HTTPException(exc.status_code, str(exc)) from None
+
     from application.services.market_data_service import build_market_metrics_payload
 
     return await build_market_metrics_payload(
@@ -1260,6 +1359,7 @@ def get_market_analysis(
 async def get_candles(
     request: Request,
     symbol: str,
+    source: str = Query("borsapy", pattern="^(borsapy|legacy)$"),
     market_type: str = Query("BIST", description="Piyasa türü (BIST/Kripto)"),
     timeframe: str = Query(
         "1d",
@@ -1267,6 +1367,17 @@ async def get_candles(
     ),
     limit: int = Query(500, description="Number of candles (max 2000)"),
 ):
+    if market_type == "BIST" and source == "borsapy":
+        from application.services.borsapy_gateway import BorsapyGatewayError
+        from application.services.borsapy_market_data import get_borsapy_market_data
+
+        try:
+            return await asyncio.to_thread(
+                get_borsapy_market_data().candles, symbol, timeframe, limit
+            )
+        except BorsapyGatewayError as exc:
+            raise HTTPException(exc.status_code, str(exc)) from None
+
     from application.services.market_data_service import build_candles_payload
 
     return await build_candles_payload(

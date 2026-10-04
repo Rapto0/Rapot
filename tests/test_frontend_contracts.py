@@ -36,7 +36,7 @@ def test_economic_calendar_page_uses_shared_api_client():
         'import { fetchEconomicCalendar, type EconomicCalendarEvent } from "@/lib/api/client"'
         in source
     )
-    assert "queryFn: () => fetchEconomicCalendar(" in source
+    assert "queryFn: ({ signal }) => fetchEconomicCalendar(" in source
     assert "http://localhost:8000" not in source
 
 

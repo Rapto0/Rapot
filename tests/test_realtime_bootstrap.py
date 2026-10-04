@@ -13,6 +13,8 @@ from infrastructure.persistence import signal_feed_repository as repository
 
 @pytest.fixture
 def fake_vendors(monkeypatch):
+    # The legacy-provider lifecycle remains available only by explicit selection.
+    monkeypatch.setattr(bootstrap.settings, "borsapy_use_for_bist", False)
     crypto = websocket_manager.BinanceWebSocketManager()
     bist = bist_service.BISTDataService()
     crypto.start = AsyncMock()
@@ -27,6 +29,27 @@ def fake_vendors(monkeypatch):
     monkeypatch.setattr(realtime, "_broadcast_loop", None)
     monkeypatch.setattr(signal_dispatcher, "_publisher", None)
     return crypto, bist
+
+
+@pytest.mark.asyncio
+async def test_borsapy_bootstrap_never_starts_legacy_bist_or_requires_account(
+    fake_vendors, monkeypatch
+):
+    crypto, bist = fake_vendors
+    monkeypatch.setattr(bootstrap.settings, "borsapy_use_for_bist", True)
+    state = {}
+    try:
+        await bootstrap.start_realtime_services(runtime_state=state, logger=Mock())
+        assert state["realtime_ready"]
+        crypto.start.assert_awaited_once()
+        bist.start.assert_not_awaited()
+        assert bist._callbacks == []
+        status = bootstrap.get_realtime_status()["providers"]
+        assert status["bist_source"] == "borsapy_tradingview"
+        assert status["bist_account_stream"] == "on_demand"
+    finally:
+        await bootstrap.stop_realtime_services(runtime_state=state, logger=Mock())
+    bist.stop.assert_not_awaited()
 
 
 @pytest.mark.asyncio

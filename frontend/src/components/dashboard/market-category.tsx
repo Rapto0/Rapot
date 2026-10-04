@@ -1,8 +1,9 @@
 import { RefreshCw, AlertCircle } from "lucide-react"
 import { finiteNumber, isFeedStale, receivedAge, type FeedNotice } from "@/lib/market-feed"
 import { cn } from "@/lib/utils"
+import type { MarketSourceMetadata } from "@/lib/api/types"
 
-export interface MarketRow {
+export interface MarketRow extends MarketSourceMetadata {
   key: string
   label: string
   value?: number
@@ -92,6 +93,9 @@ export function MarketStrip({ row, now, streaming, loading }: {
           {stale ? "Akış gecikti · " : "Son alım: "}{receivedAge(row.receivedAt, now)}
         </p>
       ) : null}
+      {row.source && <p className="mt-2 text-[10px] text-muted-foreground">{row.source}</p>}
+      {row.message && row.state !== "ok" && <p className="mt-1 text-[10px] text-amber-400">{row.message}</p>}
+      {row.provider_time && <p className="mt-1 text-[10px] text-muted-foreground">Sağlayıcı: {new Date(row.provider_time).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" })}</p>}
     </div>
   )
 }

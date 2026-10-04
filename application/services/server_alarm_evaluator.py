@@ -24,6 +24,7 @@ import numpy as np
 import pandas as pd
 from ta.momentum import rsi, williams_r
 
+from settings import settings
 from signals import calculate_combo_signal, calculate_hunter_signal
 
 _ISTANBUL = ZoneInfo("Europe/Istanbul")
@@ -62,7 +63,10 @@ class AlarmDataProvider(Protocol):
 
 
 class PublicAlarmDataProvider:
-    """Bounded public-data calls; no exchange account or order API is used."""
+    """Bounded market-data calls; BIST defaults to the private Borsapy gateway.
+
+    Binance market data is public. No exchange account or order API is used.
+    """
 
     def fetch_bars(self, *, symbol: str, market_type: str, timeframe: str) -> pd.DataFrame:
         if market_type == "Kripto":
@@ -88,8 +92,6 @@ class PublicAlarmDataProvider:
             frame.index = pd.DatetimeIndex(index)
             frame.attrs["source"] = "binance"
         else:
-            from settings import settings
-
             if settings.borsapy_use_for_bist:
                 from application.services.borsapy_gateway import get_borsapy_gateway
 
@@ -333,8 +335,13 @@ class ServerAlarmEvaluator:
 
     async def _fetch(self, symbol: str, market_type: str, timeframe: str) -> pd.DataFrame:
         key = (symbol, market_type, timeframe)
+        # The account gateway owns credential-revision-aware caching. An extra
+        # cache here could continue evaluating the old account after disconnect.
+        cache_allowed = not (market_type == "BIST" and settings.borsapy_use_for_bist)
         with self._lock:
-            cached = self._cache.get(key)
+            if not cache_allowed:
+                self._cache.pop(key, None)
+            cached = self._cache.get(key) if cache_allowed else None
             if cached and time.monotonic() - cached[0] < self.cache_seconds:
                 return cached[1].copy(deep=True)
             future = self._inflight.get(key)
@@ -370,11 +377,12 @@ class ServerAlarmEvaluator:
             ) from exc
         if not isinstance(raw, pd.DataFrame) or raw.empty:
             raise AlarmEvaluationError("Sağlayıcı mum verisi döndürmedi.")
-        with self._lock:
-            self._cache[key] = (time.monotonic(), raw.copy(deep=True))
-            self._cache.move_to_end(key)
-            while len(self._cache) > 128:
-                self._cache.popitem(last=False)
+        if cache_allowed:
+            with self._lock:
+                self._cache[key] = (time.monotonic(), raw.copy(deep=True))
+                self._cache.move_to_end(key)
+                while len(self._cache) > 128:
+                    self._cache.popitem(last=False)
         return raw.copy(deep=True)
 
     async def evaluate(

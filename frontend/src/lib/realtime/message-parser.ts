@@ -17,6 +17,18 @@ interface SignalMessageHandlers {
   onParseError?: (error: unknown) => void;
 }
 
+function parseTicker(data: unknown): TickerData | null {
+  if (!data || typeof data !== 'object') return null;
+  const ticker = data as Record<string, unknown>;
+  if (typeof ticker.symbol !== 'string' || !ticker.symbol ||
+      typeof ticker.price !== 'number' || !Number.isFinite(ticker.price) || ticker.price <= 0) return null;
+  const finiteOrNull = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? value : null;
+  return { ...ticker,
+    priceChange: finiteOrNull(ticker.priceChange),
+    priceChangePercent: finiteOrNull(ticker.priceChangePercent),
+  } as unknown as TickerData;
+}
+
 function parseSignal(data: unknown): SignalData {
   if (!data || typeof data !== 'object') throw new Error('Invalid signal payload');
   const signal = data as Record<string, unknown>;
@@ -48,15 +60,25 @@ export function dispatchTickerSocketMessage(
     const messageType = String(message.type ?? '');
 
     switch (messageType) {
-      case 'init':
+      case 'init': {
+        const crypto: Record<string, TickerData> = {};
+        if (message.crypto && typeof message.crypto === 'object') {
+          for (const value of Object.values(message.crypto)) {
+            const ticker = parseTicker(value);
+            if (ticker) crypto[ticker.symbol] = ticker;
+          }
+        }
         handlers.onInit({
-          crypto: (message.crypto as Record<string, unknown> | undefined) ?? undefined,
+          crypto,
           bist: message.bist,
         });
         break;
-      case 'ticker':
-        handlers.onTicker(message.data as TickerData);
+      }
+      case 'ticker': {
+        const ticker = parseTicker(message.data);
+        if (ticker) handlers.onTicker(ticker);
         break;
+      }
       case 'bist':
         handlers.onBist(message.data as BISTStock[]);
         break;

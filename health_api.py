@@ -6,7 +6,8 @@ from contextlib import contextmanager
 from datetime import UTC, datetime
 from typing import Any
 
-from flask import Flask, jsonify, request
+from fastapi import HTTPException
+from flask import Flask, g, jsonify, request
 
 from api.contracts.health_contract import build_health_payload, format_uptime
 from logger import get_logger
@@ -23,6 +24,35 @@ from state_keys import (
 
 logger = get_logger(__name__)
 app = Flask(__name__)
+
+
+@app.before_request
+def protect_personal_health_data():
+    """Keep probes public; the separate bot proxy must not bypass dashboard auth."""
+    g.private_health_data = False
+    if request.path in {"/", "/health"}:
+        return None
+    values = request.headers.getlist("Authorization")
+    if request.path == "/status" and not values:
+        return None
+    from api.private_data_access import admin_grant
+
+    value = values[0] if len(values) == 1 else ""
+    scheme, separator, token = value.partition(" ")
+    try:
+        admin_grant(token if separator and scheme.lower() == "bearer" else None)
+    except HTTPException as error:
+        return jsonify({"detail": error.detail}), error.status_code, error.headers or {}
+    g.private_health_data = True
+    return None
+
+
+@app.after_request
+def prevent_health_data_caching(response):
+    response.headers["Cache-Control"] = "private, no-store"
+    response.vary.add("Authorization")
+    return response
+
 
 BOT_START_TIME = datetime.now()
 
@@ -303,6 +333,30 @@ def health():
 def status():
     uptime = get_uptime_seconds()
     db_ok = _probe_database()
+    if not g.private_health_data:
+        # Deployment liveness needs no account. Do not load stored errors, scan
+        # history/counters or wrapper telemetry for this anonymous response.
+        runtime = _observe_bot_runtime()
+        running = runtime["is_running"] if db_ok else None
+        return jsonify(
+            {
+                "bot": {
+                    "is_running": running,
+                    "state": "running"
+                    if running is True
+                    else "stopped"
+                    if running is False
+                    else "unknown",
+                    "state_source": runtime["state_source"] if db_ok else "unavailable",
+                    "observed_at": runtime["observed_at"] if db_ok else None,
+                    "uptime_seconds": round(uptime, 2),
+                    "uptime_human": format_uptime(uptime),
+                    "started_at": BOT_START_TIME.isoformat(),
+                    "database": "connected" if db_ok else "disconnected",
+                },
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
     counters = _load_scanner_counters()
     runtime_state = _load_runtime_state_from_repo()
     running = runtime_state.get("is_running") if db_ok else None

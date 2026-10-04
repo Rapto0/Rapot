@@ -53,7 +53,7 @@ async def fetch_bist_data_async(
     """
     async with BIST_SEMAPHORE:
         try:
-            # isyatirimhisse sync kütüphane, thread pool'da çalıştır
+            # The selected BIST gateway is synchronous; keep it off the event loop.
             # Python 3.10+ uyumlu: get_running_loop() kullan
             try:
                 loop = asyncio.get_running_loop()
@@ -63,7 +63,7 @@ async def fetch_bist_data_async(
             df = await loop.run_in_executor(None, _fetch_bist_sync, symbol, start_date)
             return df
         except Exception as e:
-            logger.error(f"Async BIST veri hatası ({symbol}): {e}")
+            logger.error("Async BIST veri hatası (%s): %s", symbol, type(e).__name__)
             return None
 
 
@@ -72,7 +72,7 @@ def _fetch_bist_sync(symbol: str, start_date: str) -> pd.DataFrame | None:
     try:
         return get_bist_data(symbol=symbol, start_date=start_date)
     except Exception as e:
-        logger.debug(f"BIST sync hatası ({symbol}): {e}")
+        logger.debug("BIST sync hatası (%s): %s", symbol, type(e).__name__)
         return None
 
 

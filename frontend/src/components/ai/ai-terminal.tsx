@@ -16,6 +16,7 @@ import { useSignals, type Signal } from "@/lib/hooks/use-signals"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn, getTimeAgo } from "@/lib/utils"
+import { usePrivateMarket } from "@/lib/hooks/use-private-market"
 
 type MarketType = "AUTO" | "BIST" | "Kripto"
 type StrategyType = "COMBO" | "HUNTER"
@@ -38,6 +39,7 @@ type WatchRow = {
 const EMPTY_RESULT: StructuredAIAnalysisResponse | null = null
 
 export function AITerminal() {
+  const { allowed, sessionKey } = usePrivateMarket()
   const [selectedKey, setSelectedKey] = useState<string>("")
   const [symbol, setSymbol] = useState("")
   const [marketType, setMarketType] = useState<MarketType>("AUTO")
@@ -48,8 +50,9 @@ export function AITerminal() {
   const [isLoading, setIsLoading] = useState(false)
 
   const tickerQuery = useQuery({
-    queryKey: ["ticker", "ai-terminal"],
+    queryKey: ["ticker", "ai-terminal", sessionKey],
     queryFn: fetchTicker,
+    enabled: allowed,
     refetchInterval: 30_000,
   })
 
@@ -605,7 +608,7 @@ function buildWatchRows(signals: Signal[], tickers: TickerData[]): WatchRow[] {
       key,
       symbol: signal.symbol,
       marketType: signal.marketType,
-      price: ticker?.price ?? signal.price,
+      price: ticker?.price ?? Number.NaN,
       changePercent: typeof ticker?.changePercent === "number" ? ticker.changePercent : null,
       signalType: signal.signalType,
       strategy: signal.strategy,
@@ -622,6 +625,7 @@ function buildWatchRows(signals: Signal[], tickers: TickerData[]): WatchRow[] {
 }
 
 function formatInstrumentPrice(row: WatchRow): string {
+  if (!Number.isFinite(row.price)) return "—"
   const symbol = row.marketType === "Kripto" ? "$" : "₺"
   const maximumFractionDigits = row.marketType === "Kripto" ? 4 : 2
   return `${symbol}${row.price.toLocaleString("tr-TR", {

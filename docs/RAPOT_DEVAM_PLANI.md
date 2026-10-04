@@ -9,7 +9,23 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Kaldığımız nokta
 
-- **Borsapy entegrasyonu tamamlandı ve üretimde:** Kullanıcı, mevcut TradingView
+- **4 Ekim — Borsapy ortak piyasa altyapısı:** Kullanıcı Borsapy verisini grafik,
+  tarayıcı ve ekonomik takvimde istedi. Yeni kaynakta BIST varsayılanı Borsapy;
+  grafik/izleme listesi/piyasa kartları ortak, sınırlı TradingView fiyat havuzunu
+  kullanır. Borsapy temel/teknik tarama ekranı ve Borsapy/Doviz.com takvimi bağlandı.
+  Binance USDT enstrümanları Binance kaynağını korur; Yahoo yalnız gerektiğinde
+  bağımsız sinyal teyidi veya açıkça seçilen eski yol içindir. Kişisel HTTP verisi,
+  WebSocket ve SSE artık yönetici oturumu gerektirir; oturum bitince teslim kesilir.
+  Yeni kaynak **henüz üretim kabulü değildir**: API/frontend/bot birlikte yayın
+  hazırlığında; middleware, PostgreSQL ve emir ayarları kapsam dışıdır. Çevrimdışı
+  **1.359 Python testi / 1 isteğe bağlı atlama**, **250 frontend testi**, lint,
+  typecheck, build ve standalone geçti. Tarayıcıdaki sahte veri kabulü grafik, BIST
+  izleme listesi, iki tarama görünümü, takvim filtreleri ve çıkışta veri temizliğini
+  doğruladı. Son akış yarış koşulu için 26, ayrı bot sağlık servisinin kişisel
+  veri erişimi için 83 odaklı test ayrıca geçti. Anonim bot sağlık yanıtı yalnız
+  hizmet durumunu verir; ayrıntılar aynı yönetici oturumunu ister. Gerçek
+  sağlayıcı/piyasa kabulü erteli.
+- **Borsapy araştırma merkezinin ilk yayını üretimde:** Kullanıcı, mevcut TradingView
   Premium + BIST veri paketiyle README'deki 22 özellik ailesini kendi sitesinde istedi. borsapy
   0.11.0 sabitlendi; yönetici `/research` ekranına 51 işlem, bağlantı yönetimi,
   kayıtlı sorgu/portföy, grafik/replay ve akış/Pine gösterge kimliği yüzeyleri
@@ -111,7 +127,7 @@ Kapatılmış işleri veya eski onay bekleme kayıtlarını yeniden başlatma.
 | Konu | Durum / devam koşulu |
 |---|---|
 | Borsapy canlı kabulü | TradingView oturumu, gerçek fiyat/mum zamanı, tarihsel kapsam ve şirket işlemleri piyasa açıkken karşılaştırılacak. EVDS/X ayrı kimlik ve kabul ister. |
-| Borsapy üretim yayını | Tamamlandı: `4b15335` API/frontend, 4 Ekim 06:21 UTC. Özel onaylı iki imaj kaldırıldı; güncel yedek, kapasite, runtime/şema/HTTPS kabulü geçti. Son boş alan 839.430.144 bayt; sabit 528 MiB rezerv ve mevcut sunucu planı korundu. Yeniden temizlik veya deploy beklenmiyor. |
+| Borsapy araştırma merkezi ilk yayını | Tamamlandı: `4b15335` API/frontend, 4 Ekim 06:21 UTC. Özel onaylı iki imaj kaldırıldı; güncel yedek, kapasite, runtime/şema/HTTPS kabulü geçti. Son boş alan 839.430.144 bayt; sabit 528 MiB rezerv ve mevcut sunucu planı korundu. Bu tarihsel yayının kabulü kapalı; yeni ortak piyasa geçişi üstte ayrı izlenir. |
 | Eski Python pinlerinin yeni güvenlik bildirimleri | 134 paketlik report-only taramada 5 paket/16 ham bulgu; 22 borsapy ek paketinde bulgu yok. anyio/PyJWT/soupsieve/urllib3 runtime ve virtualenv geliştirme pinleri için ayrı taban imaj güncellemesi gerekir. [İnceleme ve düzeltme sınırları](BORSAPY_INTEGRATION.md). Yeşil güvenlik işi sıfır bulgu değildir. |
 | Canlı veri yükleme gecikmesi | UI-3 kabulünde Tarayıcı ek fiyat/metrikleri bekledi; Sinyaller tekrar açılışta bekledikten sonra 300 kaydı yükledi. Arayüz durumları doğru gösterildi; gecikmenin nedeni ve sağlayıcı performansı bu pakette çözülmedi. |
 | Gerçek TradingView alarmının webhook'a teslimi | Erteli; kullanıcı yeniden seçtiğinde ele alınır. Webhook URL erişimi için şu an yanıt beklenmiyor. |
@@ -142,6 +158,10 @@ açılmadı. Bu taslak sınırlar kendi başına emir veya alıcıyı açma yetk
   TradingView Premium ve BIST paketi kullanılacak, yeni abonelik alınmayacak.
   Gerçek hesap/sağlayıcı testleri piyasa açılışına erteli; çevrimdışı yazılım
   doğrulamaları gerçek veri kabulü sayılmaz.
+- Aynı gün devam talimatı, Borsapy'nin grafikler, tarayıcılar ve ekonomik takvim
+  dahil ortak veri altyapısına taşınmasını kapsar. Bu geçiş API/frontend yanında
+  scanner botunun da yeni kaynağı çalıştırmasını gerektirir. Genel doğrulanmış
+  yayın yetkisi sürer; önceki iki imaja özel silme yetkisi genişlemez.
 - 4 Ekim devamında kullanıcı, iki eski frontend imajını (`e312d7aa…` ve
   `a24bbefa…`) kaldırıp yayını tamamlama sorusuna **"yayını tamamlamama onay
   veriyorum"** yanıtını verdi. Yetki, aşağıdaki tam digest'ler ve teklif hash'i

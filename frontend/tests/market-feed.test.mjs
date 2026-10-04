@@ -27,6 +27,45 @@ function load(path, imports = {}, globals = {}) {
 }
 
 const feed = load('../src/lib/market-feed.ts');
+
+test('shared market status returns guests to the current page after login', () => {
+  let pathname = '/scanner', allowed = false;
+  const { MarketDataStatus } = load('../src/components/market-data-status.tsx', {
+    'react/jsx-runtime': jsxRuntime,
+    'next/link': { default: props => React.createElement('a', props) },
+    'next/navigation': { usePathname: () => pathname },
+    '@/lib/hooks/use-private-market': { usePrivateMarket: () => ({ allowed, connection: {} }) },
+  });
+  for (const current of ['/scanner', '/calendar', '/chart', '/', null]) {
+    pathname = current;
+    const html = renderToStaticMarkup(React.createElement(MarketDataStatus));
+    assert.ok(html.includes(`href="/login?next=${encodeURIComponent(current || '/')}"`), String(current));
+  }
+  allowed = true;
+  assert.match(renderToStaticMarkup(React.createElement(MarketDataStatus)), /href="\/research\?tab=connection"/);
+});
+
+test('private connection queries require an enabled admin and isolate their cache by session', () => {
+  let session = null, query;
+  const hook = load('../src/lib/hooks/use-private-market.ts', {
+    './use-session': { useSession: () => session },
+    '@/lib/api/borsapy-api': { fetchResearchConnection() { assert.fail('Queries are not executed during render'); } },
+    '@tanstack/react-query': { useQuery(options) { query = options; return {}; } },
+  });
+  assert.equal(hook.usePrivateMarket().allowed, false);
+  assert.equal(query.enabled, false);
+  session = { user: { username: 'reader', is_admin: false }, expiresAt: 1 };
+  assert.equal(hook.usePrivateMarket().allowed, false);
+  session = { user: { username: 'admin', is_admin: true }, expiresAt: 2 };
+  assert.equal(hook.usePrivateMarket().allowed, true);
+  const firstKey = [...query.queryKey];
+  session = { ...session, expiresAt: 3 };
+  hook.usePrivateMarket();
+  assert.notDeepEqual([...query.queryKey], firstKey);
+  session.user.disabled = true;
+  assert.equal(hook.usePrivateMarket().allowed, false);
+  assert.equal(query.enabled, false);
+});
 const plain = value => JSON.parse(JSON.stringify(value));
 const now = 1_800_000_000_000;
 const requestState = {
@@ -77,6 +116,45 @@ test('partial and empty successful responses never carry omitted symbols forward
   for (const payload of [null, undefined, {}, { data: [] }, '[]', 0]) {
     assert.throws(() => feed.normalizeMarketQuotes(payload, ['A']), /Geçersiz piyasa yanıtı/);
   }
+});
+
+test('waiting and stale metadata survives normalization without inventing a price or a realtime claim', () => {
+  const quotes = plain(feed.normalizeMarketQuotes([
+    { symbol: 'THYAO', regularMarketPrice: null, regularMarketChangePercent: null, state: 'waiting', source: 'borsapy', realtime_verified: false, message: 'Veri bekleniyor' },
+    { symbol: 'GARAN', regularMarketPrice: 0, regularMarketChangePercent: 0, state: 'stale', provider_time: '2026-10-02T15:00:00Z' },
+  ], ['THYAO', 'GARAN']));
+  assert.equal(quotes.THYAO.state, 'waiting');
+  assert.equal(quotes.THYAO.message, 'Veri bekleniyor');
+  assert.equal(Object.hasOwn(quotes.THYAO, 'value'), false);
+  assert.equal(Object.hasOwn(quotes.THYAO, 'change'), false);
+  assert.equal(quotes.GARAN.value, 0);
+  assert.equal(quotes.GARAN.provider_time, '2026-10-02T15:00:00Z');
+});
+
+test('market client separates BIST and Binance metric providers and never calls legacy fallback', async () => {
+  const calls = [];
+  const abort = new AbortController();
+  const api = load('../src/lib/api/market-api.ts', {
+    './core': { API_BASE_URL: '/api', fetchApi: async (url, options) => {
+      calls.push({ url: new URL(url, 'https://example.invalid'), options });
+      const key = calls.at(-1).url.searchParams.get('key');
+      return key ? { [key]: { latest_price: null, state: 'waiting' } } : { candles: [] };
+    } },
+  }, { URLSearchParams });
+  const result = await api.fetchMarketMetrics(['BIST:THYAO', 'Kripto:BTCUSDT'], { signal: abort.signal });
+  assert.deepEqual(calls.map(call => call.url.pathname), ['/api/borsapy/market/metrics', '/api/borsapy/market/crypto-metrics']);
+  assert.ok(calls.every(call => call.options.signal === abort.signal));
+  assert.equal(result['BIST:THYAO'].latest_price, null);
+  assert.equal(result['Kripto:BTCUSDT'].state, 'waiting');
+  await api.fetchCandles('THYAO', 'BIST', '1h', 320, { signal: abort.signal });
+  await api.fetchCandles('BTCUSDT', 'Kripto', '1h', 320, { signal: abort.signal });
+  assert.equal(calls[2].url.pathname, '/api/borsapy/candles/THYAO');
+  assert.equal(calls[3].url.pathname, '/api/candles/BTCUSDT');
+  const count = calls.length;
+  await assert.rejects(api.fetchMarketMetrics(Array.from({ length: 51 }, (_, i) => `BIST:S${i}`)), /50/);
+  await assert.rejects(api.fetchGlobalIndices(Array(51).fill('THYAO')), /50/);
+  await assert.rejects(api.fetchMarketMetrics(['US:AAPL']), /piyasa/);
+  assert.equal(calls.length, count);
 });
 
 test('initial loading, partial data, empty success and background refresh have distinct notices', () => {
@@ -210,6 +288,7 @@ function hookHarness(fetchImplementation) {
   const timers = new Map(), cleared = [], calls = [];
   let nextTimer = 0, options;
   const hook = load('../src/lib/hooks/use-market-snapshot.ts', {
+    './use-private-market': { usePrivateMarket: () => ({ allowed: true, sessionKey: 'admin:123' }) },
     '@tanstack/react-query': { useQuery(value) { options = value; return { query: 'sentinel' }; } },
     '@/lib/market-feed': feed,
     '@/lib/api/client': {
@@ -253,7 +332,7 @@ function assertCleaned(harness) {
   assert.ok(harness.calls.every(call => call.signal.aborted), 'Sibling requests must be cancelled');
 }
 
-test('snapshot requests at most thirty symbols per chunk and normalize partial data', async () => {
+test('snapshot requests at most fifty symbols per chunk and normalize partial data', async () => {
   const symbols = Array.from({ length: 65 }, (_, index) => `S${index}`);
   const h = hookHarness(chunk => Promise.resolve([
     { symbol: chunk[0], regularMarketPrice: 0, regularMarketChangePercent: 0 },
@@ -261,11 +340,11 @@ test('snapshot requests at most thirty symbols per chunk and normalize partial d
     { symbol: 'UNREQUESTED', regularMarketPrice: 100 },
   ]));
   const result = await h.hook.loadMarketSnapshot(symbols, h.signal);
-  assert.deepEqual(h.calls.map(call => call.symbols.length), [30, 30, 5]);
+  assert.deepEqual(h.calls.map(call => call.symbols.length), [50, 15]);
   assert.deepEqual(h.calls.flatMap(call => call.symbols), symbols);
   assert.equal(new Set(h.calls.map(call => call.signal)).size, 1);
   assert.deepEqual(plain(result), {
-    S0: { value: 0, change: 0 }, S30: { value: 0, change: 0 }, S60: { value: 0, change: 0 },
+    S0: { value: 0, change: 0 }, S50: { value: 0, change: 0 },
   });
   assert.equal(h.controller.signal.aborted, false);
   assertCleaned(h);
@@ -288,7 +367,7 @@ test('one failed or malformed chunk rejects the whole snapshot and cancels pendi
       : pendingUntilAbort(signal));
     await assert.rejects(h.hook.loadMarketSnapshot(Array.from({ length: 61 }, (_, i) => `S${i}`), h.signal),
       error => malformed ? /Geçersiz piyasa yanıtı/.test(error.message) : error === failure);
-    assert.equal(h.calls.length, 3);
+    assert.equal(h.calls.length, 2);
     assertCleaned(h);
   }
 });
@@ -326,7 +405,7 @@ test('query integration polls every ten seconds without retries and links the qu
   const h = hookHarness((chunk, signal) => pendingUntilAbort(signal));
   const symbols = ['A', 'B'];
   assert.deepEqual(plain(h.hook.useMarketSnapshot(symbols)), { query: 'sentinel' });
-  assert.deepEqual(plain(h.options.queryKey), ['home-market-snapshot', ['A', 'B']]);
+  assert.deepEqual(plain(h.options.queryKey), ['private-market-snapshot', 'admin:123', ['A', 'B']]);
   assert.equal(h.options.refetchInterval, 10_000);
   assert.equal(h.options.staleTime, 10_000);
   assert.equal(h.options.retry, false);
@@ -348,6 +427,6 @@ test('the market API forwards the cancellation signal and repeated symbol query 
   await api.fetchGlobalIndices(['^GSPC', 'EURUSD=X'], { signal: controller.signal });
   assert.equal(request.options.signal, controller.signal);
   const url = new URL(request.url, 'https://example.invalid');
-  assert.equal(url.pathname, '/api/market/indices');
+  assert.equal(url.pathname, '/api/borsapy/market/indices');
   assert.deepEqual(url.searchParams.getAll('symbol'), ['^GSPC', 'EURUSD=X']);
 });

@@ -1,6 +1,6 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-Kaynaklarla son karşılaştırma: **4 Ekim 2026 / borsapy araştırma entegrasyonu**. İş sırası, kullanıcı
+Kaynaklarla son karşılaştırma: **4 Ekim 2026 / kişisel Borsapy veri altyapısı**. İş sırası, kullanıcı
 yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DEVAM_PLANI.md)
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 Teknik rehberler [docs dizininde](docs/README.md) listelenir.
@@ -45,17 +45,25 @@ yönetir; API alarm motoru tarayıcıdan bağımsız çalışır. Eski yerel kur
 sınırlarını açıklar; keyfi Pine çalıştırma desteği değildir.
 
 `/research` borsapy 0.11.0 katalog/form/tablo/grafik, sanal portföy, replay ve
-hesap bağlantılarını yöneticiye sunar. `/borsapy/*` özel API'dir. TradingView/EVDS/X
-kimlikleri sunucuda şifrelenir; `research_workspaces` yalnız kullanıcı girdilerini
-tutar. `/chart` BIST için ayrı Borsapy/TradingView seçimi sunar. Scanner ve günlük
-BIST alarm geçişi `BORSAPY_USE_FOR_BIST` ile açıkça seçilir; varsayılan kapalıdır.
+hesap bağlantılarını yöneticiye sunar. Kişisel dashboard HTTP verileri yöneticiye
+özeldir ve `private, no-store` döner; WS ilk mesajla, SSE Bearer başlığıyla
+kimlik doğrular. TradingView/EVDS/X kimlikleri sunucuda şifrelenir;
+`research_workspaces` yalnız kullanıcı girdilerini tutar. `/chart`, dashboard
+ve izleme listelerinde BIST kaynağı Borsapy/TradingView'dur. Scanner ve günlük
+BIST alarmları için `BORSAPY_USE_FOR_BIST` varsayılan true'dur; false eski
+sağlayıcıları açıkça seçer. Kimlik/sağlayıcı hatası sessiz kaynak değişimi yapmaz.
+Ortak fiyat akışı en fazla 200 etkin sembol, istek başına 50 sembol taşır;
+geçmiş metrik işi tek worker, 100 bekleyen iş ve 200 bellek kaydıyla sınırlıdır.
+Kripto grafik/alarm ve Binance sembol kimliği korunur; BtcTurk ayrı araştırmadır.
+Ekonomik takvim Borsapy/Doviz.com kullanır; TradingView/Finnhub anahtarı istemez.
 Canlı piyasa kabulü ertelidir; bağlantı açık olması gecikmesiz fiyat kanıtı değildir.
 [Entegrasyon sözleşmesi](docs/BORSAPY_INTEGRATION.md) kapsam ve sınırları açıklar.
 4 Ekim'de `4b15335` API/frontend üretime alındı; 51 işlem/9 grup, özel GET'ler,
 HTTPS/statik dosyalar ve ek araştırma tablosu doğrulandı. TradingView/EVDS/X
-bağlantıları henüz tanımlı değil. Bot/middleware/Compose/current `279aa9f`
-korunur; gerçek hesap ve piyasa kabulü hâlâ ertelidir. İmaj/kanıt kimlikleri ve
-tamamlanmış iki-imaj temizlik onayı devam planındadır; yeniden deploy beklenmiyor.
+bağlantıları bu kabulde henüz tanımlı değildi. Bot/middleware/Compose/current
+`279aa9f` korundu; gerçek hesap ve piyasa kabulü hâlâ ertelidir. İmaj/kanıt
+kimlikleri ve tamamlanmış iki-imaj temizlik onayı devam planındadır. Sonraki
+kişisel veri altyapısı değişikliklerinin API/frontend/bot yayını henüz tamamlanmadı.
 
 Canonical import ve compatibility listesi [paketleme haritasındadır](docs/PACKAGING_REFACTOR_MAP.md).
 `application.scanner.signal_handlers` gerçek uygulamadır; `scanner_side_effects`
@@ -252,8 +260,16 @@ değişiklik eski satırları dönüştürmez veya API tarih biçimlerini topluc
 
 Ana API PyJWT ile yalnız HS256 ve zorunlu `exp` kullanır; frontend token'ı yalnız
 sekme belleğinde tutar. TestClient için dev-only httpx2, SDK'lar için httpx
-korunur; kök test izolasyonu ikisinin de HTTP transport'unu engeller. Yönetici
-işleri admin ister; dashboard okuma endpointlerinin tamamı özel değildir.
+korunur; kök test izolasyonu ikisinin de HTTP transport'unu engeller. Ana API'de
+kök/health, auth ve API belge yolları dışındaki HTTP yolları admin ister;
+dashboard okuması da bu sınırdadır. `/auth/me` kendi JWT kontrolünü korur.
+WS beş saniye içinde `{type: "auth", token}` bekler; `authenticated` yanıtından
+sonra abonelik başlar. Token URL'ye konmaz; süre dolumu ve çıkış özel veriyi temizler.
+Botun ayrı Flask yüzeyinde `/signals`, `/stats` ve varsa `/metrics` de admin ister.
+Başlıksız `/status` yalnız DB/yerel lifecycle durumunu verir; yönetici başlığıyla
+kişisel sayaç/hata ayrıntıları eklenir. Her iki yanıt `private, no-store` ve
+`Vary: Authorization` taşır. Frontend JWT'yi sağlık yüzeyinde yalnız aynı origin'deki
+yapılandırılmış `/status` yoluna ekler; başka sağlık sunucusuna göndermez.
 Middleware webhook token'ı ve X-Admin-Token yönetim kimliği ana JWT'den ayrıdır.
 [README erişim tablosu](README.md#security-notes) ve [middleware rehberi](docs/MIDDLEWARE.md)
 güncel sözleşmeyi gösterir. Gizli anahtarlar NEXT_PUBLIC değişkenlerine konmaz.

@@ -183,7 +183,7 @@ test('malformed, unrequested and nonfinite packets cannot replace a valid price 
   const malformed = ['{', 'null', '[]', 'true', '4', '{}', '{"data":null}', '{"data":[]}',
     quote('ETHUSDT'), { ...quote(), s: 1 }, { ...quote(), s: ' BTCUSDT ' }];
   for (const value of malformed) h.latest().message(value);
-  for (const field of ['c', 'p', 'P']) {
+  for (const field of ['c']) {
     for (const value of ['', ' ', 'NaN', 'Infinity', '-Infinity', '1garbage', '0x10', null,
       undefined, [], {}, true, false, NaN, Infinity, -Infinity]) {
       h.latest().message({ ...quote(), [field]: value });
@@ -202,6 +202,22 @@ test('finite decimal/exponent strings and numeric zero changes are valid', () =>
   h.latest().message({ ...quote('btcusdt', '1.25e2'), P: 0, p: '-.5' });
   h.advance(250);
   assert.deepEqual(plain(h.read().prices.BTCUSDT), { price: 125, change: 0, priceChange: -0.5 });
+});
+
+test('missing or invalid daily changes keep the latest valid price without reusing a previous change', () => {
+  const h = harness();
+  h.latest().open();
+  h.latest().message({ ...quote(), P: '3', p: '4' });
+  h.advance(250);
+  for (const value of [null, undefined, '', ' ', 'NaN', 'Infinity', '1garbage', {}, true]) {
+    h.latest().message({ s: 'BTCUSDT', c: '130', P: value, p: value });
+    h.advance(250);
+    assert.deepEqual(plain(h.read().prices.BTCUSDT), { price: 130, change: null, priceChange: null });
+    assert.ok(h.read().receivedAtBySymbol.BTCUSDT > 1_000_000);
+  }
+  h.latest().message({ s: 'BTCUSDT', c: '131', P: '0', p: '0' });
+  h.advance(250);
+  assert.deepEqual(plain(h.read().prices.BTCUSDT), { price: 131, change: 0, priceChange: 0 });
 });
 
 test('normal remote closes retry; socket error plus queued close owns only one retry', () => {

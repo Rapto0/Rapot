@@ -1,6 +1,7 @@
 import asyncio
 import inspect
 import json
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -8,6 +9,17 @@ from starlette.websockets import WebSocketDisconnect
 
 from api import realtime
 from api.runtime import realtime_bootstrap as bootstrap
+
+
+@pytest.fixture(autouse=True)
+def authenticated_transport(monkeypatch):
+    """These tests exercise transport; real credential boundaries have separate tests."""
+
+    async def authenticate(socket):
+        await socket.accept()
+        return SimpleNamespace(check=lambda: None, remaining=lambda: 60.0)
+
+    monkeypatch.setattr(realtime, "authenticate_websocket", authenticate)
 
 
 class Socket:

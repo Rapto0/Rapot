@@ -82,6 +82,21 @@ def api_auth_users(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.fixture
 def authenticated_api_client(api_auth_users) -> Iterator:
+    """Personal dashboard endpoints are administrator-only."""
+    from fastapi.testclient import TestClient
+
+    import api.main as api_main
+
+    token = api_auth_users.create_access_token({"sub": "admin"})
+    client = TestClient(api_main.app, headers={"Authorization": f"Bearer {token}"})
+    try:
+        yield client
+    finally:
+        client.close()
+
+
+@pytest.fixture
+def regular_api_client(api_auth_users) -> Iterator:
     from fastapi.testclient import TestClient
 
     import api.main as api_main

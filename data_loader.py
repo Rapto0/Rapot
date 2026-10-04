@@ -1,6 +1,9 @@
 import json
+import re
+import threading
 import time
 import unicodedata
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime
 from io import StringIO
@@ -9,7 +12,7 @@ from pathlib import Path
 import pandas as pd
 from isyatirimhisse import fetch_stock_data
 
-from config import rate_limits
+from config import rate_limits, signal_guard_settings
 from infrastructure.time import utc_now_naive
 from isyatirim_ssl import ensure_isyatirim_ca_bundle
 from logger import get_logger
@@ -243,11 +246,103 @@ def _load_bist_symbols() -> list[str]:
 
 # BIST sembolleri JSON'dan yükleniyor
 ALL_BIST_TICKERS = _load_bist_symbols()
+_BIST_SYMBOL_TTL_SECONDS = 3600
+_BIST_SYMBOL_TIMEOUT_SECONDS = 25
+_MAX_BIST_SYMBOLS = 2000
+_bist_symbols_lock = threading.Lock()
+_bist_symbols_executor: ThreadPoolExecutor | None = None
+_bist_symbols_future: Future | None = None
+_bist_symbols_cache: tuple[float, tuple[str, ...]] | None = None
+_bist_symbols_error: str | None = None
+
+
+class BistSymbolSourceError(RuntimeError):
+    """Safe source failure; no stale/static universe is substituted."""
+
+
+def _load_borsapy_symbols() -> tuple[str, ...]:
+    from application.services.borsapy_gateway import get_borsapy_gateway
+
+    frame = get_borsapy_gateway().run_public(lambda bp: bp.companies())
+    if (
+        not isinstance(frame, pd.DataFrame)
+        or frame.empty
+        or len(frame) > _MAX_BIST_SYMBOLS
+        or "ticker" not in frame
+    ):
+        raise BistSymbolSourceError("Borsapy şirket listesi boş veya geçersiz.")
+    symbols = []
+    for raw in frame["ticker"]:
+        if not isinstance(raw, str) or not re.fullmatch(r"[A-Z0-9]{1,20}", raw.strip().upper()):
+            raise BistSymbolSourceError("Borsapy şirket listesinde geçersiz sembol var.")
+        symbols.append(raw.strip().upper())
+    return tuple(sorted(set(symbols)))
 
 
 def get_all_bist_symbols() -> list[str]:
-    """Tum BIST hisse sembollerini dondurur."""
-    return ALL_BIST_TICKERS
+    """Lazy KAP universe through Borsapy; legacy JSON requires explicit selection.
+
+    One bounded worker avoids accumulating timed-out native requests. Neither
+    imports nor status checks contact a provider. No expired/static fallback.
+    """
+    global _bist_symbols_executor, _bist_symbols_future, _bist_symbols_cache, _bist_symbols_error
+    if not settings.borsapy_use_for_bist:
+        return list(ALL_BIST_TICKERS)
+    with _bist_symbols_lock:
+        if _bist_symbols_cache and (
+            time.monotonic() - _bist_symbols_cache[0] < _BIST_SYMBOL_TTL_SECONDS
+        ):
+            return list(_bist_symbols_cache[1])
+        if _bist_symbols_future is None:
+            if _bist_symbols_executor is None:
+                _bist_symbols_executor = ThreadPoolExecutor(
+                    max_workers=1, thread_name_prefix="bist-universe"
+                )
+            _bist_symbols_future = _bist_symbols_executor.submit(_load_borsapy_symbols)
+        pending = _bist_symbols_future
+    try:
+        symbols = pending.result(timeout=_BIST_SYMBOL_TIMEOUT_SECONDS)
+    except TimeoutError:
+        with _bist_symbols_lock:
+            _bist_symbols_error = "Borsapy şirket listesi zaman aşımına uğradı."
+        raise BistSymbolSourceError(_bist_symbols_error) from None
+    except Exception:
+        with _bist_symbols_lock:
+            if _bist_symbols_future is pending:
+                _bist_symbols_future = None
+            _bist_symbols_error = "Borsapy şirket listesi alınamadı; eski listeye geçilmedi."
+        raise BistSymbolSourceError(_bist_symbols_error) from None
+    with _bist_symbols_lock:
+        if _bist_symbols_future is pending:
+            _bist_symbols_cache = (time.monotonic(), symbols)
+            _bist_symbols_future = None
+        _bist_symbols_error = None
+    return list(symbols)
+
+
+def bist_symbols_status() -> dict[str, str | int | bool | None]:
+    """Inspect selection/cache state without triggering a provider request."""
+    if not settings.borsapy_use_for_bist:
+        return {"source": "legacy_json", "state": "selected", "count": len(ALL_BIST_TICKERS)}
+    with _bist_symbols_lock:
+        fresh = bool(
+            _bist_symbols_cache
+            and time.monotonic() - _bist_symbols_cache[0] < _BIST_SYMBOL_TTL_SECONDS
+        )
+        return {
+            "source": "borsapy_kap",
+            "state": "error"
+            if _bist_symbols_error
+            else "ready"
+            if fresh
+            else "loading"
+            if _bist_symbols_future
+            else "not_loaded",
+            "count": len(_bist_symbols_cache[1]) if fresh else 0,
+            "error": _bist_symbols_error,
+            "cache_ttl_seconds": _BIST_SYMBOL_TTL_SECONDS,
+            "provider_cache_ttl_seconds": 86400,
+        }
 
 
 def get_all_binance_symbols() -> list[str]:
@@ -596,8 +691,8 @@ def get_bist_data(
     symbol: str, start_date: str = "01-01-2015", *, use_borsapy: bool | None = None
 ) -> pd.DataFrame | None:
     """
-    BIST Verisi Çeker (Retry Mekanizmalı)
-    Hata alırsa 3 kez tekrar dener.
+    BIST daily primary source. Borsapy errors never fall back to another source.
+    Setting use_borsapy=False explicitly selects the legacy retry/fallback path.
     """
     if settings.borsapy_use_for_bist if use_borsapy is None else use_borsapy:
         from application.services.borsapy_gateway import get_borsapy_gateway
@@ -612,9 +707,9 @@ def get_bist_data(
             source_hint="borsapy_tradingview",
             open_quality="provider",
             adjustment="splits",
-            fetched_at_ts=time.time(),
-            fetched_at_iso=utc_now_naive().isoformat(),
         )
+        frame.attrs.setdefault("fetched_at_ts", time.time())
+        frame.attrs.setdefault("fetched_at_iso", utc_now_naive().isoformat())
         return frame
 
     ensure_isyatirim_ca_bundle()
@@ -750,6 +845,38 @@ def get_bist_data_secondary(symbol: str, start_date: str = "01-01-2015") -> pd.D
     Cift-kaynak dogrulama akisi icin kullanilir.
     """
     return _fetch_bist_data_yfinance(symbol, start_date)
+
+
+def bist_source_policy() -> dict[str, str | bool]:
+    """Selection and independent confirmation policy, not a validation result."""
+    return {
+        "primary_source": "borsapy_tradingview" if settings.borsapy_use_for_bist else "legacy",
+        "independent_confirmation_source": "yfinance_bist",
+        "independent_confirmation_required": signal_guard_settings.BIST_REQUIRE_SECOND_SOURCE_CONFIRMATION,
+        "independent_confirmation_scope": "special_signal_ai_and_notifications",
+        "independent_confirmation_note": (
+            "BIST özel sinyal AI/bildirim koşullarında bağımsız Yahoo teyidi korunur. "
+            "Bu politika, bir sinyalin teyit edildiği anlamına gelmez."
+        ),
+    }
+
+
+def signal_data_metadata(frame: pd.DataFrame, market_type: str) -> dict[str, str | bool]:
+    """Preserve observed source in signal details without claiming confirmation."""
+    source = frame.attrs.get("source_hint") or frame.attrs.get("source")
+    if not isinstance(source, str) or not source:
+        return {}
+    result: dict[str, str | bool] = {"DataSource": source}
+    if market_type == "BIST":
+        result.update(
+            IndependentConfirmationSource="yfinance_bist",
+            IndependentConfirmationScope="special_signal_ai_and_notifications",
+            IndependentConfirmationRequired=signal_guard_settings.BIST_REQUIRE_SECOND_SOURCE_CONFIRMATION,
+        )
+    adjustment = frame.attrs.get("adjustment")
+    if isinstance(adjustment, str):
+        result["DataAdjustment"] = adjustment
+    return result
 
 
 def get_crypto_data(symbol: str, start_str: str = "6 years ago") -> pd.DataFrame | None:

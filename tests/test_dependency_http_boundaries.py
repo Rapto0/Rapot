@@ -97,13 +97,14 @@ def test_login_requires_json_object_before_authenticating(
 
 
 def test_invalid_signal_limit_reports_documented_context_before_repository_work(
-    api_boundary, monkeypatch
+    api_boundary, monkeypatch, api_auth_users
 ):
     from application.services import signal_trade_service
 
     list_signals = Mock(side_effect=AssertionError("invalid pagination must not query records"))
     monkeypatch.setattr(signal_trade_service, "list_signals", list_signals)
-    response = api_boundary.get("/signals?limit=0")
+    token = api_auth_users.create_access_token({"sub": "admin"})
+    response = api_boundary.get("/signals?limit=0", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 422
     error = response.json()["detail"][0]
     assert error["loc"] == ["query", "limit"]

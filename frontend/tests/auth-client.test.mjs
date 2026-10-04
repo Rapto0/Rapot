@@ -8,8 +8,22 @@ import ts from 'typescript';
 
 const sourceRoot = fileURLToPath(new URL('../src/lib/', import.meta.url));
 
+test('private market and calendar requests stop before HTTP when the session is absent or expired', async () => {
+    const client = createClient();
+    for (const path of ['/api/borsapy/market/indices', '/api/borsapy/candles/THYAO', '/api/calendar?country=TR']) {
+        await assert.rejects(client.core.fetchApi(path), error => error.status === 401);
+    }
+    assert.equal(client.calls.length, 0);
+    client.login();
+    await client.core.fetchApi('/api/borsapy/market/indices');
+    assert.equal(client.calls[0].headers.get('Authorization'), 'Bearer test-token');
+    client.advance(61_000);
+    await assert.rejects(client.core.fetchApi('/api/calendar'), error => error.status === 401);
+    assert.equal(client.calls.length, 1);
+});
+
 // Run the real TS modules in memory with an offline fetch implementation.
-function createClient(apiBase = '/api') {
+function createClient(apiBase = '/api', healthBase = '/health-api') {
     const modules = new Map();
     const calls = [];
     let now = 1_800_000_000_000;
@@ -24,7 +38,7 @@ function createClient(apiBase = '/api') {
             localStorage: { setItem() { assert.fail('Credentials must not be persisted'); } },
             sessionStorage: { setItem() { assert.fail('Credentials must not be persisted'); } },
         },
-        process: { env: { NEXT_PUBLIC_API_URL: apiBase } },
+        process: { env: { NEXT_PUBLIC_API_URL: apiBase, NEXT_PUBLIC_HEALTH_API_URL: healthBase } },
         setTimeout: (callback) => { timers.set(++timerId, callback); return timerId; },
         clearTimeout: (id) => timers.delete(id),
         fetch: async (url, options) => {
@@ -51,6 +65,7 @@ function createClient(apiBase = '/api') {
         session,
         core: load(path.join(sourceRoot, 'api/core.ts')),
         auth: load(path.join(sourceRoot, 'api/auth-api.ts')),
+        ops: load(path.join(sourceRoot, 'api/ops-api.ts')),
         calls,
         respond(fn) { handler = fn; },
         advance(ms) { now += ms; },
@@ -116,6 +131,71 @@ test('absolute configured API base and Headers overrides are supported', async (
     assert.deepEqual(client.calls.map((call) => call.headers.get('Authorization')),
         ['Bearer test-token', null, 'Bearer explicit']);
     assert.equal(client.calls[2].headers.get('X-Request-ID'), 'test-id');
+});
+
+test('bot status attaches the session only to the configured same-origin status path', async () => {
+    for (const healthBase of ['/health-api', 'https://rapot.test/private-health/']) {
+        const client = createClient('/api', healthBase);
+        client.login();
+        await client.ops.fetchBotStatus();
+        const base = new URL(healthBase, 'https://rapot.test').pathname.replace(/\/$/, '');
+        for (const url of [`${base}/status?refresh=1`, `${base}/health`, `${base}/stats`,
+            `${base}-other/status`, `${base}/status/extra`, `${base}/../status`,
+            `https://external.invalid${base}/status`, `//external.invalid${base}/status`,
+            `https://rapot.test@external.invalid${base}/status`]) {
+            await client.core.fetchApi(url);
+        }
+        assert.deepEqual(client.calls.map(call => call.headers.get('Authorization')),
+            ['Bearer test-token', 'Bearer test-token', null, null, null, null, null, null, null, null]);
+        assert.ok(client.calls.every(call => call.cache === 'no-store'));
+    }
+});
+
+test('an external health base never receives the session or clears it on a 401', async () => {
+    for (const healthBase of ['https://external.invalid/health-api', '//external.invalid/health-api']) {
+        const client = createClient('/api', healthBase);
+        client.login();
+        client.respond(() => Response.json({}, { status: 401 }));
+        await assert.rejects(client.ops.fetchBotStatus(), error => error.status === 401);
+        assert.equal(client.calls[0].headers.get('Authorization'), null);
+        assert.equal(client.session.getAccessToken(), 'test-token');
+        client.respond(() => Response.json({}));
+        await client.core.fetchApi('/health-api/status');
+        assert.equal(client.calls[1].headers.get('Authorization'), null);
+    }
+});
+
+test('health status 401 clears only the session token used by that request', async () => {
+    const client = createClient();
+    client.login();
+    client.respond(() => Response.json({}, { status: 401 }));
+    await assert.rejects(client.ops.fetchBotStatus(), error => error.status === 401);
+    assert.equal(client.session.getSession(), null);
+    client.login('old-token');
+    let complete;
+    client.respond(() => new Promise(resolve => { complete = resolve; }));
+    const pending = client.ops.fetchBotStatus();
+    client.login('new-token');
+    complete(Response.json({}, { status: 401 }));
+    await assert.rejects(pending, error => error.status === 401);
+    assert.equal(client.session.getAccessToken(), 'new-token');
+    client.respond(() => Response.json({}, { status: 401 }));
+    await assert.rejects(client.core.fetchApi('/health-api/status', {
+        headers: { Authorization: 'Bearer explicit' },
+    }), error => error.status === 401);
+    assert.equal(client.session.getAccessToken(), 'new-token');
+});
+
+test('expired health status requests omit the token and notify session subscribers', async () => {
+    const client = createClient();
+    client.login();
+    let notifications = 0;
+    client.session.subscribeSession(() => { notifications++; });
+    client.advance(61_000);
+    await client.ops.fetchBotStatus();
+    assert.equal(client.calls[0].headers.get('Authorization'), null);
+    assert.equal(client.session.getSession(), null);
+    assert.equal(notifications, 1);
 });
 
 test('current 401 clears the session, while 403 preserves it', async () => {

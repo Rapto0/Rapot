@@ -81,9 +81,13 @@ Install the selected Python 3.12 / Node 20.20.2 / npm 10.9.9 development environ
    `JWT_SECRET_KEY`. Configure `ADMIN_PASSWORD` / `USER_PASSWORD` or their hash
    alternatives for the accounts you want to enable. Use an isolated development
    database path. Tests below need none of these real credentials.
-3. Optional integrations: `GEMINI_API_KEY` with `AI_ENABLED`, and `FINNHUB_API_KEY`
-   for the economic calendar. Without Finnhub configuration the calendar returns an
-   empty result with a warning. Binance public market data does not require enabling
+3. Optional AI uses `GEMINI_API_KEY` with `AI_ENABLED`. BIST charts and the default
+   BIST scanner/alarm source use the server-side Borsapy/TradingView connection
+   configured by an admin in `/research`. `BORSAPY_USE_FOR_BIST` defaults to true;
+   false explicitly selects legacy scanner/alarm providers. Provider or account
+   failure never silently selects a different BIST source. The economic calendar
+   uses public Borsapy/Doviz.com data without Finnhub or TradingView credentials.
+   Binance market data preserves its exchange identity and does not require enabling
    the middleware's order execution.
 4. Run services with the selected virtual environment activated:
    - API: `python -m uvicorn api.main:app --reload --port 8000`
@@ -163,19 +167,37 @@ commit does not change the running application images.
   | `POST /auth/token` | Login credentials | 5/minute |
   | `GET /logs` | Admin JWT; 1–500 rows | 30/minute |
   | `POST /analyze/{symbol}` | Admin JWT | 2/minute |
-  | `GET /ops/strategy-inspector` | User/admin JWT | 30/minute |
-  | `GET /market/analysis`, `GET /api/market/analysis` | User/admin JWT | Shared 2/minute |
+  | `GET /ops/strategy-inspector` | Admin JWT | 30/minute |
+  | `GET /market/analysis`, `GET /api/market/analysis` | Admin JWT | Shared 2/minute |
   | `/borsapy/*` research, saved inputs and provider connections | Admin JWT; private, no-store | Query 20/minute; candles 30/minute; stream 120/minute |
+  | Other personal dashboard HTTP reads and actions | Admin JWT; private, no-store | Route-specific |
+  | Backend WebSocket / SSE data | Admin JWT; rechecked during delivery | WS auth within 5 seconds |
 
 - The private `/research` workspace exposes the reviewed borsapy feature catalog;
-  `/chart` has an authenticated BIST TradingView source option. Provider credentials
+  `/chart`, dashboard quotes and watchlists use authenticated BIST TradingView data
+  through Borsapy. Provider credentials
   are encrypted on the server and are never returned to the browser. See the
   [integration contract](docs/BORSAPY_INTEGRATION.md) for feature coverage and pending
   live-market acceptance.
 
-- Existing dashboard reads and stored analyses remain public; the dashboard is not
-  entirely private. Production HTTPS/auth/proxy acceptance is recorded in P1-2/P1-6
-  of the continuation plan; verify these boundaries again when changing exposure.
+- Main API HTTP access defaults to admin-only, including stored analyses and market
+  data. Only `/`, `/health`, `/auth/token`, `/auth/me`, `/docs`, `/redoc` and
+  `/openapi.json` bypass that global boundary; `/auth/me` still validates its JWT.
+  CORS preflight is allowed without exposing data. Private responses, including
+  errors, use `Cache-Control: private, no-store`.
+- WebSockets require the first message `{ "type": "auth", "token": "<JWT>" }`;
+  clients wait for `authenticated` before subscribing. SSE uses the Bearer header.
+  Tokens never belong in URLs. Expiry or revoked access stops private delivery;
+  WebSocket close codes 4401/4403 stop automatic reconnects and clear private data.
+- The separate Flask bot surface also protects `/signals`, `/stats` and the optional
+  `/metrics` with an admin JWT. Anonymous `/status` exposes only database/local
+  lifecycle health; an admin token enables scan/error details. Invalid supplied
+  credentials are rejected. Both variants use `private, no-store` and
+  `Vary: Authorization`. The frontend sends its token to the health service only
+  for the configured same-origin `/status` path, never an external health origin.
+- The site-wide private data changes require a new API/frontend/bot rollout.
+  The earlier `4b15335` research rollout does not establish production acceptance
+  of these changes; current evidence is in the continuation plan.
 - The dashboard stores tokens only in tab memory. Reload, expiry, or logout ends the session;
   account changes clear query caches and private component state. No middleware admin key
   belongs in a frontend environment variable.

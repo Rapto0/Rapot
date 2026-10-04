@@ -10,7 +10,7 @@ import threading
 import time
 import traceback
 from collections.abc import Callable
-from contextlib import suppress
+from contextlib import contextmanager, suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -95,6 +95,9 @@ class BorsapyGateway:
         self._state = "unconfigured"
         self._message = "TradingView bağlantısı yapılandırılmamış."
         self._streams: dict[tuple, dict] = {}
+        self._quotes: dict | None = None
+        self._quote_retry_after = 0.0
+        self._data_epoch = 0
         self._retry_after: dict[tuple, float] = {}
         self._stop = threading.Event()
         self._janitor: threading.Thread | None = None
@@ -324,8 +327,18 @@ class BorsapyGateway:
             self._state, self._message = "unconfigured", "Bağlantı bilgileri silindi."
             return self.status()
 
+    @staticmethod
+    @contextmanager
+    def _account_lock():
+        if not _AUTH_LOCK.acquire(timeout=1):
+            raise BorsapyGatewayError("Veri servisi meşgul; yeniden deneyin.", 429)
+        try:
+            yield
+        finally:
+            _AUTH_LOCK.release()
+
     def run(self, callback: Callable, *, require_auth: bool = False, tradingview: bool = True):
-        with _AUTH_LOCK:
+        with self._account_lock():
             bp = self._prepare(require_auth=require_auth, tradingview=tradingview)
             try:
                 return callback(bp)
@@ -333,6 +346,26 @@ class BorsapyGateway:
                 raise
             except Exception:
                 raise BorsapyGatewayError("Veri sağlayıcı isteği tamamlanamadı.", 502) from None
+
+    def run_public(self, callback: Callable):
+        """Only stateless public KAP/company and economic-calendar adapters.
+
+        These providers do not consult TradingView/EVDS/X credentials. Their slow
+        HTTP calls must not hold the global credential lock and stop quote reads.
+        Authenticated or credential-dependent callbacks must continue using run().
+        """
+        if not _AUTH_LOCK.acquire(timeout=1):
+            raise BorsapyGatewayError("Veri servisi meşgul; yeniden deneyin.", 429)
+        try:
+            bp = self._load()
+        finally:
+            _AUTH_LOCK.release()
+        try:
+            return callback(bp)
+        except BorsapyGatewayError:
+            raise
+        except Exception:
+            raise BorsapyGatewayError("Genel piyasa verisi alınamadı.", 502) from None
 
     def history(self, symbol: str, interval="1d", period="1mo", start=None, end=None):
         symbol = self._validate_subscription(symbol, interval, None)
@@ -391,6 +424,9 @@ class BorsapyGateway:
         return symbol
 
     def _close_streams(self) -> None:
+        self._data_epoch += 1
+        self._close_quotes()
+        self._quote_retry_after = 0
         for entry in self._streams.values():
             with suppress(Exception):
                 entry["stream"].disconnect()
@@ -403,6 +439,17 @@ class BorsapyGateway:
 
     def _cleanup(self) -> None:
         now = self._clock()
+        if self._quotes:
+            entry = self._quotes
+            for symbol, (exchange, touched) in list(entry["symbols"].items()):
+                if now - touched > self.settings.borsapy_stream_idle_seconds:
+                    with suppress(Exception):
+                        entry["stream"].unsubscribe(symbol, exchange=exchange)
+                    entry["symbols"].pop(symbol, None)
+                    entry["received"].pop(symbol, None)
+                    entry["errors"].discard(symbol)
+            if not entry["symbols"]:
+                self._close_quotes()
         for key, entry in list(self._streams.items()):
             entry["subscribers"] = {
                 subscriber: touched
@@ -418,6 +465,232 @@ class BorsapyGateway:
             for key, value in self._retry_after.items()
             if value > now or key in self._streams
         }
+
+    def data_epoch(self) -> int:
+        """Process-local cache generation; contains no credential-derived material."""
+        try:
+            if self._store.revision() == self._credentials_revision:
+                return self._data_epoch
+        except SecretStoreError:
+            pass
+        if not _AUTH_LOCK.acquire(timeout=1):
+            raise BorsapyGatewayError("Bağlantı bilgileri güncelleniyor.", 429)
+        try:
+            self._reload_credentials()
+            return self._data_epoch
+        finally:
+            _AUTH_LOCK.release()
+
+    def _close_quotes(self) -> None:
+        if self._quotes:
+            with suppress(Exception):
+                self._quotes["stream"].disconnect()
+            self._quotes = None
+
+    def _new_quotes(self, bp) -> dict:
+        entry = {
+            "symbols": {},
+            "received": {},
+            "errors": set(),
+            "error": False,
+            "auth_error": False,
+        }
+
+        class QuoteStream(bp.TradingViewStream):
+            WS_URL = "wss://data.tradingview.com/socket.io/websocket"
+
+            def _on_close(self, ws, close_status, close_msg):
+                self._connected.clear()
+
+            def _on_error(self, ws, error):
+                entry["error"] = True
+                self._connected.clear()
+
+            def _on_message(self, ws, message):
+                for packet in self._parse_packets(message):
+                    if isinstance(packet, dict) and packet.get("m") == "critical_error":
+                        entry["auth_error"] = True
+                        return
+                super()._on_message(ws, message)
+
+            def _handle_quote_data(self, params):
+                if len(params) < 2 or not isinstance(params[1], dict):
+                    return
+                data = params[1]
+                full = data.get("n", "")
+                if not isinstance(full, str) or ":" not in full:
+                    return
+                exchange, symbol = full.split(":", 1)
+                if entry["symbols"].get(symbol, (None,))[0] != exchange:
+                    return
+                if data.get("s") == "error":
+                    entry["errors"].add(symbol)
+                    return
+                with self._lock:
+                    cached = self._quotes.get(symbol, {})
+                    if cached.get("_full_symbol") not in {None, full}:
+                        self._quotes.pop(symbol, None)
+                entry["errors"].discard(symbol)
+                super()._handle_quote_data(params)
+
+        stream = QuoteStream(auth_token=self._token)
+        entry["stream"] = stream
+        stream._should_reconnect = False
+
+        def received(symbol, quote):
+            # Only a quote update changes receipt time, never a browser poll.
+            entry["received"][symbol] = time.time()
+
+        stream.on_any_quote(received)
+        try:
+            stream.connect(timeout=3)
+            stream._should_reconnect = False
+            if not stream.is_connected:
+                raise ValueError
+        except Exception:
+            stream.disconnect()
+            raise BorsapyGatewayError("Fiyat akışı bağlantısı kurulamadı.", 502) from None
+        return entry
+
+    def quote_snapshot(self, symbols: list[tuple[str, str]]) -> dict[str, dict]:
+        """One account-scoped socket for bounded dashboard/watchlist batches.
+
+        Keys are exchange:symbol. Upstream indexes by the bare symbol, so a
+        conflicting exchange is rejected instead of returning the wrong market.
+        The pool is separate from chart sessions and expires unused subscriptions.
+        """
+        allowed = {"BIST", "NASDAQ", "NYSE", "SP", "TVC", "CBOE", "FX", "OANDA"}
+        if not 1 <= len(symbols) <= 50 or any(
+            exchange not in allowed or not re.fullmatch(r"[A-Z0-9.]{1,20}", symbol)
+            for exchange, symbol in symbols
+        ):
+            raise BorsapyGatewayError("Geçersiz fiyat listesi.", 422)
+        if len({symbol for _, symbol in symbols}) != len(set(symbols)):
+            raise BorsapyGatewayError("Aynı sembol için farklı borsalar birlikte istenemez.", 422)
+        if not _AUTH_LOCK.acquire(timeout=1):
+            # Read an existing, account-matching socket while a history request
+            # owns the provider auth lock. Never connect/subscribe/authenticate here.
+            entry, epoch = self._quotes, self._data_epoch
+            try:
+                same_revision = self._store.revision() == self._credentials_revision
+                if (
+                    same_revision
+                    and self._authenticated
+                    and not self._blocked
+                    and entry
+                    and not entry["error"]
+                    and not entry["auth_error"]
+                    and entry["stream"].is_connected
+                    and all(
+                        entry["symbols"].get(symbol, (None,))[0] == exchange
+                        for exchange, symbol in symbols
+                    )
+                ):
+                    result = self._read_quotes(entry, symbols)
+                    if (
+                        self._quotes is entry
+                        and self._data_epoch == epoch
+                        and self._store.revision() == self._credentials_revision
+                        and all(
+                            entry["symbols"].get(symbol, (None,))[0] == exchange
+                            for exchange, symbol in symbols
+                        )
+                    ):
+                        # Do not resurrect a lease being removed by the lock owner.
+                        # Normal locked polls renew it once the provider is available.
+                        return result
+            except SecretStoreError:
+                pass
+            raise BorsapyGatewayError("Veri servisi meşgul; yeniden denenecek.", 429)
+        try:
+            bp = self._prepare(require_auth=True)
+            self._cleanup()
+            entry = self._quotes
+            if entry and entry["auth_error"]:
+                self._close_quotes()
+                self._authenticated, self._blocked = False, True
+                self._state, self._message = "auth_needed", "TradingView oturumu yenilenmeli."
+                raise BorsapyGatewayError(self._message, 409)
+            if entry and (entry["error"] or not entry["stream"].is_connected):
+                self._close_quotes()
+                self._quote_retry_after = self._clock() + 30
+                entry = None
+            if self._clock() < self._quote_retry_after:
+                raise BorsapyGatewayError("Fiyat akışı yeniden bağlanmayı bekliyor.", 502)
+            if entry is None:
+                try:
+                    entry = self._new_quotes(bp)
+                except BorsapyGatewayError:
+                    self._quote_retry_after = self._clock() + 30
+                    raise
+                self._quotes = entry
+            additions = {symbol for _, symbol in symbols} - set(entry["symbols"])
+            if len(entry["symbols"]) + len(additions) > 200:
+                raise BorsapyGatewayError("200 etkin fiyat sınırı; izlenen listeyi daraltın.", 429)
+            if any(
+                symbol in entry["symbols"] and entry["symbols"][symbol][0] != exchange
+                for exchange, symbol in symbols
+            ):
+                raise BorsapyGatewayError(
+                    "Sembol başka borsada izleniyor; önce akışı kapatın.", 409
+                )
+            for exchange, symbol in symbols:
+                if symbol not in entry["symbols"]:
+                    entry["symbols"][symbol] = (exchange, self._clock())
+                    entry["stream"].subscribe(symbol, exchange=exchange)
+                entry["symbols"][symbol] = (exchange, self._clock())
+            if not self._janitor or not self._janitor.is_alive():
+                self._stop.clear()
+                self._janitor = threading.Thread(target=self._watch_leases, daemon=True)
+                self._janitor.start()
+            return self._read_quotes(entry, symbols)
+        except BorsapyGatewayError:
+            raise
+        except Exception:
+            self._close_quotes()
+            self._quote_retry_after = self._clock() + 30
+            raise BorsapyGatewayError("Fiyatlar alınamadı; yeniden denenecek.", 502) from None
+        finally:
+            _AUTH_LOCK.release()
+
+    @staticmethod
+    def _read_quotes(entry: dict, symbols: list[tuple[str, str]]) -> dict[str, dict]:
+        result = {}
+        for exchange, symbol in symbols:
+            raw = entry["stream"].get_quote(symbol) or {}
+            if raw.get("_raw", {}).get("_full_symbol") not in {None, f"{exchange}:{symbol}"}:
+                raw = {}
+            failed = symbol in entry["errors"]
+            if failed:
+                raw = {}
+            received = entry["received"].get(symbol)
+            price = _number(raw.get("last"))
+            price = price if price is not None and price > 0 else None
+            timestamp = _number(raw.get("timestamp"))
+            timestamp = timestamp if timestamp and 0 < timestamp <= time.time() + 300 else None
+            stale = bool(
+                received is None
+                or time.time() - received > 120
+                or timestamp is None
+                or time.time() - timestamp > 120
+            )
+            result[f"{exchange}:{symbol}"] = {
+                "price": price,
+                "change": _number(raw.get("change")),
+                "change_pct": _number(raw.get("change_percent")),
+                "provider_time": _utc(timestamp),
+                "received_at": _utc(received),
+                "state": "error"
+                if failed
+                else "waiting"
+                if price is None
+                else "stale"
+                if stale
+                else "ok",
+                "source": "borsapy_tradingview",
+                "realtime_verified": False,
+            }
+        return result
 
     def _watch_leases(self) -> None:
         while not self._stop.wait(5):
@@ -535,7 +808,7 @@ class BorsapyGateway:
     ) -> dict:
         self._validate_subscriber(subscriber_id)
         key = self._stream_key(symbol, interval, study, study_inputs)
-        with _AUTH_LOCK:
+        with self._account_lock():
             entry = self._streams.get(key)
             if entry:
                 entry["subscribers"].pop(subscriber_id, None)
@@ -558,7 +831,31 @@ class BorsapyGateway:
         key = self._stream_key(symbol, interval, study, study_inputs)
         exchange, symbol, interval, study, encoded_inputs = key
         inputs = json.loads(encoded_inputs)
-        with _AUTH_LOCK:
+        if not _AUTH_LOCK.acquire(timeout=1):
+            entry, epoch = self._streams.get(key), self._data_epoch
+            try:
+                if (
+                    self._store.revision() == self._credentials_revision
+                    and self._authenticated
+                    and not self._blocked
+                    and entry
+                    and subscriber_id in entry["subscribers"]
+                    and not entry["error"]
+                    and not entry["auth_error"]
+                    and entry["stream"].is_connected
+                ):
+                    result = self._read_stream(entry, symbol, interval, study)
+                    if (
+                        self._streams.get(key) is entry
+                        and self._data_epoch == epoch
+                        and self._store.revision() == self._credentials_revision
+                        and subscriber_id in entry["subscribers"]
+                    ):
+                        return result
+            except SecretStoreError:
+                pass
+            raise BorsapyGatewayError("Veri servisi meşgul; yeniden deneyin.", 429)
+        try:
             bp = self._prepare(require_auth=True)
             self._cleanup()
             entry = self._streams.get(key)
@@ -602,38 +899,42 @@ class BorsapyGateway:
                     self._janitor = threading.Thread(target=self._watch_leases, daemon=True)
                     self._janitor.start()
             entry["subscribers"][subscriber_id] = self._clock()
-            stream = entry["stream"]
-            raw_quote = stream.get_quote(symbol) or {}
-            fields = ("last", "bid", "ask", "volume", "timestamp", "change", "change_percent")
-            quote = (
-                {field: _number(raw_quote.get(field)) for field in fields} if raw_quote else None
-            )
-            candles = []
-            for candle in stream.get_candles(symbol, interval, count=300):
-                item = {
-                    name: _number(candle.get(name))
-                    for name in ("time", "open", "high", "low", "close", "volume")
-                }
-                if all(value is not None for value in item.values()):
-                    candles.append(item)
-            study_values = stream.get_study(symbol, interval, study) if study else None
-            safe_study = {str(k)[:80]: _number(v) for k, v in (study_values or {}).items()}
-            has_data = bool(candles or (quote and quote.get("last") is not None))
-            stale = bool(entry["received"] and time.time() - entry["received"] > 120)
-            return {
-                "state": "stale" if stale else "active_unverified" if has_data else "connecting",
-                "message": "Veri alınıyor; gerçek zamanlı erişim henüz ölçülmedi."
-                if has_data and not stale
-                else "Son veri güncellemesi iki dakikadan eski."
-                if stale
-                else "İlk veri bekleniyor.",
-                "quote": quote,
-                "candles": candles,
-                "study": safe_study or None,
-                "source": "TradingView / borsapy",
-                "received_at": _utc(entry["received"]),
-                "realtime_verified": False,
+            return self._read_stream(entry, symbol, interval, study)
+        finally:
+            _AUTH_LOCK.release()
+
+    @staticmethod
+    def _read_stream(entry: dict, symbol: str, interval: str, study: str | None) -> dict:
+        stream = entry["stream"]
+        raw_quote = stream.get_quote(symbol) or {}
+        fields = ("last", "bid", "ask", "volume", "timestamp", "change", "change_percent")
+        quote = {field: _number(raw_quote.get(field)) for field in fields} if raw_quote else None
+        candles = []
+        for candle in stream.get_candles(symbol, interval, count=300):
+            item = {
+                name: _number(candle.get(name))
+                for name in ("time", "open", "high", "low", "close", "volume")
             }
+            if all(value is not None for value in item.values()):
+                candles.append(item)
+        study_values = stream.get_study(symbol, interval, study) if study else None
+        safe_study = {str(k)[:80]: _number(v) for k, v in (study_values or {}).items()}
+        has_data = bool(candles or (quote and quote.get("last") is not None))
+        stale = bool(entry["received"] and time.time() - entry["received"] > 120)
+        return {
+            "state": "stale" if stale else "active_unverified" if has_data else "connecting",
+            "message": "Veri alınıyor; gerçek zamanlı erişim henüz ölçülmedi."
+            if has_data and not stale
+            else "Son veri güncellemesi iki dakikadan eski."
+            if stale
+            else "İlk veri bekleniyor.",
+            "quote": quote,
+            "candles": candles,
+            "study": safe_study or None,
+            "source": "TradingView / borsapy",
+            "received_at": _utc(entry["received"]),
+            "realtime_verified": False,
+        }
 
     def close(self) -> None:
         self._stop.set()

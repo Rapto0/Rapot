@@ -237,6 +237,7 @@ jobs:
     env:
       API_BASE_SOURCE: 279aa9fea99b520e661b43f104a2bf4791893ac3
       API_BASE_IMAGE: ghcr.io/rapto0/rapot/backend@sha256:9be0fdb6097f52bf97730f44c86d28c24e2c0cea1fe181e7e8fd668177fdb034
+      BORSAPY_SOURCE_IMAGE: ghcr.io/rapto0/rapot/backend@sha256:b9695f5f78ccb6f16112578c54fb9fb2de7ce6a3dc4c0836c3da7deacf7adf14
     steps:
       - uses: actions/checkout@v6
         with:
@@ -251,12 +252,14 @@ jobs:
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "repository=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
           mkdir "$RUNNER_TEMP/borsapy-context" "$RUNNER_TEMP/borsapy-proof"
+          python -m scripts.verify_borsapy_source select --root . \
+            --output "$RUNNER_TEMP/borsapy-proof/build-mode.json" --github-output "$GITHUB_OUTPUT"
           git archive --format=tar HEAD | tar -x -C "$RUNNER_TEMP/borsapy-context"
           python - <<'PY'
           import hashlib, json, os, pathlib, subprocess
           files = subprocess.check_output(["git", "ls-files", "-z"]).decode().split("\0")
           wanted = [name for name in files if name.endswith(".py") and not name.startswith(".")]
-          wanted += ["Dockerfile", "Dockerfile.borsapy-runtime", ".python-version", "requirements.txt",
+          wanted += ["Dockerfile", "Dockerfile.borsapy-runtime", "Dockerfile.borsapy-source", ".python-version", "requirements.txt",
                      "requirements-security.txt", "requirements-dev.lock"]
           result = {name: hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest() for name in wanted}
           target = pathlib.Path(os.environ["RUNNER_TEMP"]) / "borsapy-proof/source-sha256.json"
@@ -272,11 +275,11 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build extension on the pinned installed runtime
+      - name: Build the selected image on its pinned installed runtime
         uses: docker/build-push-action@v7
         with:
           context: ${{ runner.temp }}/borsapy-context
-          file: ${{ runner.temp }}/borsapy-context/Dockerfile.borsapy-runtime
+          file: ${{ runner.temp }}/borsapy-context/${{ steps.source.outputs.dockerfile }}
           platforms: linux/amd64
           load: true
           push: false
@@ -297,13 +300,32 @@ jobs:
             --mount "type=bind,source=$RUNNER_TEMP/borsapy-proof,target=/proof" \
             "$API_IMAGE" python -m scripts.verify_borsapy_runtime capture --output /proof/extension-inventory.json
           docker image inspect "$API_BASE_IMAGE" --format '{"size_bytes":{{.Size}},"layers":{{json .RootFS.Layers}}}' > "$RUNNER_TEMP/borsapy-proof/base-layers.json"
-          docker image inspect "$API_IMAGE" --format '{"size_bytes":{{.Size}},"layers":{{json .RootFS.Layers}}}' > "$RUNNER_TEMP/borsapy-proof/extension-layers.json"
+          docker image inspect "$API_IMAGE" --format '{"size_bytes":{{.Size}},"layers":{{json .RootFS.Layers}},"labels":{{json .Config.Labels}}}' > "$RUNNER_TEMP/borsapy-proof/extension-layers.json"
           docker run --rm --network none --read-only --tmpfs /tmp:rw,size=64m \
             --mount "type=bind,source=$RUNNER_TEMP/borsapy-proof,target=/proof" \
             "$API_IMAGE" python -m scripts.verify_borsapy_runtime verify \
             --before /proof/base-inventory.json --after /proof/extension-inventory.json --root /app \
             --base-layers /proof/base-layers.json --extension-layers /proof/extension-layers.json \
             --output /proof/runtime-verification.json
+
+      - name: Verify all accepted Borsapy runtime files and layers in source-only mode
+        if: steps.source.outputs.mode == 'source-only'
+        shell: bash
+        env:
+          API_IMAGE: ghcr.io/${{ steps.source.outputs.repository }}/backend:borsapy-${{ steps.source.outputs.sha }}
+        run: |
+          docker pull "$BORSAPY_SOURCE_IMAGE"
+          docker run --rm --network none --read-only --tmpfs /tmp:rw,size=64m \
+            --mount "type=bind,source=$RUNNER_TEMP/borsapy-context/scripts/verify_borsapy_runtime.py,target=/verifier.py,readonly" \
+            --mount "type=bind,source=$RUNNER_TEMP/borsapy-proof,target=/proof" \
+            "$BORSAPY_SOURCE_IMAGE" python /verifier.py capture --output /proof/source-base-inventory.json
+          docker image inspect "$BORSAPY_SOURCE_IMAGE" --format '{"size_bytes":{{.Size}},"layers":{{json .RootFS.Layers}},"labels":{{json .Config.Labels}}}' > "$RUNNER_TEMP/borsapy-proof/source-base-layers.json"
+          docker run --rm --network none --read-only --tmpfs /tmp:rw,size=64m \
+            --mount "type=bind,source=$RUNNER_TEMP/borsapy-proof,target=/proof" \
+            "$API_IMAGE" python -m scripts.verify_borsapy_source verify \
+            --before /proof/source-base-inventory.json --after /proof/extension-inventory.json \
+            --base-layers /proof/source-base-layers.json --image-layers /proof/extension-layers.json \
+            --output /proof/source-only-verification.json
 
       - name: Verify image sources, imports, crypto, SQLite and indicators without network
         shell: bash
@@ -374,20 +396,27 @@ jobs:
           print(json.dumps(proof))
           PY
 
-      - name: Publish verified additive API runtime
+      - name: Publish verified Borsapy API image
         shell: bash
         env:
           API_IMAGE: ghcr.io/${{ steps.source.outputs.repository }}/backend:borsapy-${{ steps.source.outputs.sha }}
+          BUILD_MODE: ${{ steps.source.outputs.mode }}
+          DIRECT_BASE_IMAGE: ${{ steps.source.outputs.direct_base_image }}
         run: |
           docker push "$API_IMAGE"
           docker image inspect "$API_IMAGE" --format '{{json .RepoDigests}}' > "$RUNNER_TEMP/borsapy-proof/published-digests.json"
           docker buildx imagetools inspect "$API_IMAGE" --raw > "$RUNNER_TEMP/borsapy-proof/registry-manifest.json"
           {
-            echo '## Additive borsapy runtime published; server deployment not performed'
+            echo '## Borsapy API image published; server deployment not performed'
             echo "API image: $API_IMAGE"
+            echo "Build mode: $BUILD_MODE"
+            echo "Direct base image: $DIRECT_BASE_IMAGE"
             echo "Preserved runtime base: $API_BASE_IMAGE"
             echo 'Existing distribution versions and file hashes are unchanged; exactly 22 reviewed additions match the lock.'
             echo 'All base layers are reused. Offline imports, encryption, SQLite and indicator checks passed.'
+            if [ "$BUILD_MODE" = source-only ]; then
+              echo 'Source-only proof also matched every installed file across all 120 distributions and the complete accepted Borsapy layer prefix.'
+            fi
             echo 'Registry layer sizes, live capacity including the fixed reserve, and a verified offhost backup remain deployment gates.'
           } >> "$GITHUB_STEP_SUMMARY"
 

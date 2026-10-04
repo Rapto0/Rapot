@@ -5,6 +5,7 @@ Handles ticker, depth, and trade streams with automatic reconnection.
 
 import asyncio
 import json
+import math
 import re
 from collections import defaultdict
 from collections.abc import Callable
@@ -72,8 +73,8 @@ class TickerData:
 
     symbol: str
     price: float
-    price_change: float
-    price_change_percent: float
+    price_change: float | None
+    price_change_percent: float | None
     high_24h: float
     low_24h: float
     volume_24h: float
@@ -171,7 +172,6 @@ class BinanceWebSocketManager:
         self._connection_task: asyncio.Task | None = None
         self._callbacks: dict[str, list[Callable]] = defaultdict(list)
         self._ticker_cache: dict[str, TickerData] = {}
-        self._last_prices: dict[str, float] = {}
 
     async def start(self):
         """Start the WebSocket manager."""
@@ -387,12 +387,22 @@ class BinanceWebSocketManager:
         """Parse mini ticker data."""
         symbol = data["s"]
         price = float(data["c"])
+        if isinstance(data["c"], bool) or not math.isfinite(price) or price <= 0:
+            raise ValueError("Invalid mini ticker closing price")
 
-        # Calculate change from cached price
-        last_price = self._last_prices.get(symbol, price)
-        price_change = price - last_price
-        price_change_percent = (price_change / last_price * 100) if last_price else 0
-        self._last_prices[symbol] = price
+        # Binance's o/c fields describe its rolling 24-hour window. Comparing
+        # successive packets measures a tick change, not a daily return.
+        try:
+            opening = float(data.get("o"))
+            valid_open = (
+                not isinstance(data.get("o"), bool) and math.isfinite(opening) and opening > 0
+            )
+        except (TypeError, ValueError, OverflowError):
+            opening, valid_open = 0.0, False
+        price_change = price - opening if valid_open else None
+        price_change_percent = (price_change / opening * 100) if valid_open else None
+        if price_change_percent is not None and not math.isfinite(price_change_percent):
+            price_change_percent = None
 
         return TickerData(
             symbol=symbol,

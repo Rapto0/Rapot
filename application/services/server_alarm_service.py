@@ -55,6 +55,8 @@ def runtime_status() -> dict[str, Any]:
         "poll_interval_seconds": POLL_INTERVAL_SECONDS,
         "evaluation_budget_seconds": EVALUATION_BUDGET_SECONDS,
         "delivery_budget_seconds": DELIVERY_BUDGET_SECONDS,
+        "bist_source": "borsapy_tradingview" if settings.borsapy_use_for_bist else "yfinance_bist",
+        "bist_timeframes": ["1d"],
     }
 
 

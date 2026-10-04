@@ -10,6 +10,7 @@ import type {
 } from './types';
 
 interface RealtimeStore {
+  resetPrivateData: () => void;
   connectionState: ConnectionState;
   setConnectionState: (state: ConnectionState) => void;
   signalConnectionState: ConnectionState;
@@ -36,6 +37,8 @@ interface RealtimeStore {
 }
 
 export const useRealtimeStore = create<RealtimeStore>((set, get) => ({
+  resetPrivateData: () => set({ tickers: new Map(), bistStocks: new Map(), priceChanges: new Map(),
+    realtimeSignals: [], klineData: new Map(), recentTrades: [], connectionState: 'disconnected', signalConnectionState: 'disconnected' }),
   connectionState: 'disconnected',
   setConnectionState: (state) => set({ connectionState: state }),
   signalConnectionState: 'disconnected',

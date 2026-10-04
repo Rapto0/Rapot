@@ -15,7 +15,7 @@ const sample = {
   createdAt: '2026-09-10T10:00:00Z', specialTag: 'BELES',
 };
 
-function harness(realQueryClient) {
+function harness(realQueryClient, { token, guest = false } = {}) {
   let now = 0;
   let nextTimer = 0;
   const timers = new Map();
@@ -40,9 +40,11 @@ function harness(realQueryClient) {
       this.url = url;
       this.readyState = 0;
       this.closeCount = 0;
+      this.sent = [];
       sockets.push(this);
     }
-    open() { this.readyState = 1; this.onopen?.({}); }
+    open(authenticate = true) { this.readyState = 1; this.onopen?.({}); if (authenticate && this.sent.length) this.message({ type: 'authenticated' }); }
+    send(raw) { this.sent.push(JSON.parse(raw)); }
     message(data) { this.onmessage?.({ data: typeof data === 'string' ? data : JSON.stringify(data) }); }
     close() { this.readyState = 3; this.closeCount++; this.onclose?.({}); }
     error() { this.onerror?.({}); }
@@ -65,6 +67,10 @@ function harness(realQueryClient) {
     const run = vm.runInContext(`(function(require,module,exports) { ${compiled}\n })`, context);
     run((specifier) => {
       if (specifier === 'zustand') return { create };
+      if (specifier === '../auth/session') return {
+        getSession: () => guest ? null : { user: { username: 'admin', is_admin: true, disabled: false }, expiresAt: 123 },
+        getAccessToken: () => guest ? null : 'session-token',
+      };
       if (specifier === '@tanstack/react-query') return { useQueryClient: () => realQueryClient ?? queryClient };
       if (specifier === 'react') return {
         useRef: (value) => ({ current: value }), useCallback: (callback) => callback,
@@ -82,6 +88,7 @@ function harness(realQueryClient) {
     baseUrl: () => 'wss://rapot.test/api/realtime/ws',
     getStore: store.getState,
     refreshSignals: () => refreshes++,
+    ...(token !== undefined ? { getToken: () => token } : {}),
   });
   return {
     connection, store, sockets, attempts, failures, timers, effects, invalidations,
@@ -121,6 +128,77 @@ test('signal feed connects without a ticker, and ticker failures never close it'
   assert.equal(h.store.getState().signalConnectionState, 'connected');
   h.connection.dispose();
   assert.equal(h.timers.size, 0);
+});
+
+test('private websocket authenticates in the first frame and ignores all data before acknowledgement', () => {
+  const h = harness(undefined, { token: 'private-token' });
+  h.connection.connect();
+  const socket = h.latest('/signals');
+  socket.open(false);
+  assert.deepEqual(socket.sent, [{ type: 'auth', token: 'private-token' }]);
+  assert.doesNotMatch(socket.url, /private-token|token=/);
+  assert.equal(h.store.getState().signalConnectionState, 'connecting');
+  socket.message({ type: 'signal', data: sample });
+  assert.equal(h.store.getState().realtimeSignals.length, 0);
+  assert.equal(h.refreshes, 0);
+  socket.message({ type: 'authenticated' });
+  socket.message({ type: 'signal', data: sample });
+  assert.equal(h.store.getState().realtimeSignals.length, 1);
+  assert.equal(h.refreshes, 1);
+  h.connection.dispose();
+});
+
+test('auth rejection retires all private sockets and transient data without retrying', () => {
+  for (const code of [4401, 4403]) {
+    const h = harness(undefined, { token: 'private-token' });
+    h.connection.connect();
+    h.latest('/signals').open();
+    h.latest('/signals').message({ type: 'signal', data: sample });
+    h.connection.subscribe('kline', 'BTCUSDT');
+    h.latest('/ticker').open();
+    const count = h.sockets.length;
+    h.latest('/ticker').onclose({ code });
+    h.advance(120_000);
+    h.connection.connect();
+    h.connection.subscribe('trade', 'ETHUSDT');
+    assert.equal(h.sockets.length, count);
+    assert.equal(h.store.getState().realtimeSignals.length, 0);
+    assert.equal(h.store.getState().signalConnectionState, 'disconnected');
+    assert.ok(h.sockets.every(socket => socket.closeCount === 1));
+    assert.equal(h.timers.size, 0);
+  }
+});
+
+test('absent auth prevents socket construction and an unacknowledged session has a bounded timeout', () => {
+  const guest = harness(undefined, { token: null });
+  guest.connection.connect();
+  guest.connection.subscribe('kline', 'BTCUSDT');
+  assert.equal(guest.sockets.length, 0);
+  const waiting = harness(undefined, { token: 'private-token' });
+  waiting.connection.connect();
+  waiting.latest('/signals').open(false);
+  waiting.advance(5000);
+  assert.ok(waiting.sockets.every(socket => socket.closeCount === 1));
+  assert.equal(waiting.timers.size, 0);
+});
+
+test('server crypto tickers retain valid prices and nullable daily changes across init and updates', () => {
+  const h = harness();
+  h.connection.connect();
+  const socket = h.latest('/ticker');
+  socket.open();
+  socket.message({ type: 'init', crypto: { BTCUSDT: { symbol: 'BTCUSDT', price: 100, priceChange: null, priceChangePercent: null } } });
+  assert.equal(h.store.getState().tickers.get('BTCUSDT').price, 100);
+  assert.equal(h.store.getState().tickers.get('BTCUSDT').priceChangePercent, null);
+  socket.message({ type: 'ticker', data: { symbol: 'BTCUSDT', price: 105, priceChange: 0, priceChangePercent: 0 } });
+  assert.equal(h.store.getState().tickers.get('BTCUSDT').priceChangePercent, 0);
+  socket.message({ type: 'ticker', data: { symbol: 'BTCUSDT', price: 106, priceChangePercent: '0' } });
+  assert.equal(h.store.getState().tickers.get('BTCUSDT').price, 106);
+  assert.equal(h.store.getState().tickers.get('BTCUSDT').priceChangePercent, null);
+  assert.equal(h.store.getState().tickers.get('BTCUSDT').priceChange, null);
+  socket.message({ type: 'ticker', data: { symbol: 'BTCUSDT', price: null, priceChange: 2, priceChangePercent: 2 } });
+  assert.equal(h.store.getState().tickers.get('BTCUSDT').price, 106);
+  h.connection.dispose();
 });
 
 test('signal constructor errors and later disconnects retry independently and refresh REST on open', () => {

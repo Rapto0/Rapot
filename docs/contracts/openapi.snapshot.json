@@ -355,140 +355,6 @@
         "title": "AlarmWrite",
         "type": "object"
       },
-      "CalendarEventResponse": {
-        "properties": {
-          "actual": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "integer"
-              },
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Actual"
-          },
-          "country": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Country"
-          },
-          "currency": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Currency"
-          },
-          "estimate": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "integer"
-              },
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Estimate"
-          },
-          "event": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Event"
-          },
-          "impact": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Impact"
-          },
-          "previous": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "integer"
-              },
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Previous"
-          },
-          "time": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Time"
-          },
-          "timestamp": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Timestamp"
-          },
-          "unit": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Unit"
-          }
-        },
-        "title": "CalendarEventResponse",
-        "type": "object"
-      },
       "CandlePointResponse": {
         "description": "Single candle row.",
         "properties": {
@@ -514,7 +380,7 @@
           },
           "volume": {
             "title": "Volume",
-            "type": "integer"
+            "type": "number"
           }
         },
         "required": [
@@ -529,6 +395,7 @@
         "type": "object"
       },
       "CandlesResponse": {
+        "additionalProperties": true,
         "description": "Candles endpoint response.",
         "properties": {
           "candles": {
@@ -819,15 +686,30 @@
         "type": "object"
       },
       "MarketIndexResponse": {
+        "additionalProperties": true,
         "description": "Global index/ticker row for landing feed.",
         "properties": {
           "regularMarketChangePercent": {
-            "title": "Regularmarketchangepercent",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regularmarketchangepercent"
           },
           "regularMarketPrice": {
-            "title": "Regularmarketprice",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Regularmarketprice"
           },
           "shortName": {
             "title": "Shortname",
@@ -848,6 +730,7 @@
         "type": "object"
       },
       "MarketMetricsItemResponse": {
+        "additionalProperties": true,
         "description": "Scanner metrics row.",
         "properties": {
           "change_pct": {
@@ -862,8 +745,15 @@
             "title": "Change Pct"
           },
           "latest_price": {
-            "title": "Latest Price",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Price"
           },
           "perf_30d": {
             "anyOf": [
@@ -923,15 +813,30 @@
         "type": "object"
       },
       "MarketSeriesResponse": {
+        "additionalProperties": true,
         "description": "Market overview row.",
         "properties": {
           "change": {
-            "title": "Change",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change"
           },
           "currentValue": {
-            "title": "Currentvalue",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currentvalue"
           },
           "history": {
             "items": {
@@ -950,23 +855,45 @@
         "type": "object"
       },
       "MarketTickerResponse": {
+        "additionalProperties": true,
         "description": "Ticker strip row.",
         "properties": {
           "change": {
-            "title": "Change",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Change"
           },
           "changePercent": {
-            "title": "Changepercent",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Changepercent"
           },
           "name": {
             "title": "Name",
             "type": "string"
           },
           "price": {
-            "title": "Price",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
           },
           "symbol": {
             "title": "Symbol",
@@ -1946,7 +1873,8 @@
         "summary": "List Alarms",
         "tags": [
           "Server alarms"
-        ]
+        ],
+        "x-access-role": "admin"
       },
       "post": {
         "operationId": "create_alarm_alarms_post",
@@ -1992,7 +1920,8 @@
         "summary": "Create Alarm",
         "tags": [
           "Server alarms"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/alarms/events": {
@@ -2044,7 +1973,8 @@
         "summary": "List Alarm Events",
         "tags": [
           "Server alarms"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/alarms/{rule_id}": {
@@ -2093,7 +2023,8 @@
         "summary": "Delete Alarm",
         "tags": [
           "Server alarms"
-        ]
+        ],
+        "x-access-role": "admin"
       },
       "put": {
         "operationId": "update_alarm_alarms__rule_id__put",
@@ -2150,7 +2081,8 @@
         "summary": "Update Alarm",
         "tags": [
           "Server alarms"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/analyses": {
@@ -2235,10 +2167,16 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Get Analyses",
         "tags": [
           "AI Analysis"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/analyses/{analysis_id}": {
@@ -2278,10 +2216,16 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Get Analysis",
         "tags": [
           "AI Analysis"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/analyze/{symbol}": {
@@ -2339,7 +2283,8 @@
         "summary": "Analyze Symbol",
         "tags": [
           "Analysis"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/api/calendar": {
@@ -2351,8 +2296,16 @@
             "name": "from_date",
             "required": false,
             "schema": {
-              "title": "From Date",
-              "type": "string"
+              "anyOf": [
+                {
+                  "maxLength": 10,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From Date"
             }
           },
           {
@@ -2360,7 +2313,37 @@
             "name": "to_date",
             "required": false,
             "schema": {
-              "title": "To Date",
+              "anyOf": [
+                {
+                  "maxLength": 10,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "country",
+            "required": false,
+            "schema": {
+              "default": "TR,US",
+              "maxLength": 8,
+              "title": "Country",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "importance",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "maxLength": 4,
+              "title": "Importance",
               "type": "string"
             }
           }
@@ -2370,11 +2353,9 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/CalendarEventResponse"
-                  },
+                  "additionalProperties": true,
                   "title": "Response Get Calendar Api Calendar Get",
-                  "type": "array"
+                  "type": "object"
                 }
               }
             },
@@ -2391,10 +2372,16 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Get Calendar",
         "tags": [
           "Calendar"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/api/market/analysis": {
@@ -2492,7 +2479,8 @@
         "summary": "Get Market Analysis",
         "tags": [
           "AI Analysis"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/auth/me": {
@@ -2593,7 +2581,16 @@
                 "4h",
                 "1d",
                 "1wk",
-                "1mo"
+                "1mo",
+                "2d",
+                "3d",
+                "4d",
+                "5d",
+                "6d",
+                "2wk",
+                "3wk",
+                "2mo",
+                "3mo"
               ],
               "title": "Interval",
               "type": "string"
@@ -2644,7 +2641,8 @@
         "summary": "Private Candles",
         "tags": [
           "Borsapy research"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/borsapy/catalog": {
@@ -2672,7 +2670,8 @@
         "summary": "Research Catalog",
         "tags": [
           "Borsapy research"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/borsapy/connection": {
@@ -2700,7 +2699,8 @@
         "summary": "Clear Connection",
         "tags": [
           "Borsapy connection"
-        ]
+        ],
+        "x-access-role": "admin"
       },
       "get": {
         "operationId": "connection_status_borsapy_connection_get",
@@ -2726,7 +2726,8 @@
         "summary": "Connection Status",
         "tags": [
           "Borsapy connection"
-        ]
+        ],
+        "x-access-role": "admin"
       },
       "post": {
         "operationId": "save_connection_borsapy_connection_post",
@@ -2752,7 +2753,8 @@
         "summary": "Save Connection",
         "tags": [
           "Borsapy connection"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/borsapy/connection/verify": {
@@ -2780,7 +2782,266 @@
         "summary": "Verify Connection",
         "tags": [
           "Borsapy connection"
-        ]
+        ],
+        "x-access-role": "admin"
+      }
+    },
+    "/borsapy/market/crypto-metrics": {
+      "get": {
+        "operationId": "crypto_metrics_borsapy_market_crypto_metrics_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 50,
+              "minItems": 1,
+              "title": "Key",
+              "type": "array"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Crypto Metrics Borsapy Market Crypto Metrics Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Crypto Metrics",
+        "tags": [
+          "Private market data"
+        ],
+        "x-access-role": "admin"
+      }
+    },
+    "/borsapy/market/indices": {
+      "get": {
+        "operationId": "quotes_borsapy_market_indices_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "symbol",
+            "required": true,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 50,
+              "minItems": 1,
+              "title": "Symbol",
+              "type": "array"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Quotes Borsapy Market Indices Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Quotes",
+        "tags": [
+          "Private market data"
+        ],
+        "x-access-role": "admin"
+      }
+    },
+    "/borsapy/market/metrics": {
+      "get": {
+        "operationId": "metrics_borsapy_market_metrics_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "key",
+            "required": true,
+            "schema": {
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 50,
+              "minItems": 1,
+              "title": "Key",
+              "type": "array"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Metrics Borsapy Market Metrics Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Metrics",
+        "tags": [
+          "Private market data"
+        ],
+        "x-access-role": "admin"
+      }
+    },
+    "/borsapy/market/overview": {
+      "get": {
+        "operationId": "overview_borsapy_market_overview_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Overview Borsapy Market Overview Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Overview",
+        "tags": [
+          "Private market data"
+        ],
+        "x-access-role": "admin"
+      }
+    },
+    "/borsapy/market/status": {
+      "get": {
+        "operationId": "status_borsapy_market_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Status Borsapy Market Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Status",
+        "tags": [
+          "Private market data"
+        ],
+        "x-access-role": "admin"
+      }
+    },
+    "/borsapy/market/ticker": {
+      "get": {
+        "operationId": "ticker_borsapy_market_ticker_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "additionalProperties": true,
+                    "type": "object"
+                  },
+                  "title": "Response Ticker Borsapy Market Ticker Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Ticker",
+        "tags": [
+          "Private market data"
+        ],
+        "x-access-role": "admin"
       }
     },
     "/borsapy/query": {
@@ -2828,7 +3089,8 @@
         "summary": "Research Query",
         "tags": [
           "Borsapy research"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/borsapy/saved": {
@@ -2859,7 +3121,8 @@
         "summary": "List Saved",
         "tags": [
           "Borsapy research"
-        ]
+        ],
+        "x-access-role": "admin"
       },
       "post": {
         "operationId": "create_saved_borsapy_saved_post",
@@ -2905,7 +3168,8 @@
         "summary": "Create Saved",
         "tags": [
           "Borsapy research"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/borsapy/saved/{workspace_id}": {
@@ -2954,7 +3218,8 @@
         "summary": "Delete Saved",
         "tags": [
           "Borsapy research"
-        ]
+        ],
+        "x-access-role": "admin"
       },
       "put": {
         "operationId": "update_saved_borsapy_saved__workspace_id__put",
@@ -3011,7 +3276,8 @@
         "summary": "Update Saved",
         "tags": [
           "Borsapy research"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/borsapy/stream": {
@@ -3119,7 +3385,8 @@
         "summary": "Clear Streams",
         "tags": [
           "Borsapy connection"
-        ]
+        ],
+        "x-access-role": "admin"
       },
       "get": {
         "operationId": "stream_snapshot_borsapy_stream_get",
@@ -3225,7 +3492,8 @@
         "summary": "Stream Snapshot",
         "tags": [
           "Borsapy connection"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/calendar": {
@@ -3237,8 +3505,16 @@
             "name": "from_date",
             "required": false,
             "schema": {
-              "title": "From Date",
-              "type": "string"
+              "anyOf": [
+                {
+                  "maxLength": 10,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From Date"
             }
           },
           {
@@ -3246,7 +3522,37 @@
             "name": "to_date",
             "required": false,
             "schema": {
-              "title": "To Date",
+              "anyOf": [
+                {
+                  "maxLength": 10,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "country",
+            "required": false,
+            "schema": {
+              "default": "TR,US",
+              "maxLength": 8,
+              "title": "Country",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "importance",
+            "required": false,
+            "schema": {
+              "default": "all",
+              "maxLength": 4,
+              "title": "Importance",
               "type": "string"
             }
           }
@@ -3256,11 +3562,9 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/CalendarEventResponse"
-                  },
+                  "additionalProperties": true,
                   "title": "Response Get Calendar Calendar Get",
-                  "type": "array"
+                  "type": "object"
                 }
               }
             },
@@ -3277,10 +3581,16 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Get Calendar",
         "tags": [
           "Calendar"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/candles/{symbol}": {
@@ -3293,6 +3603,17 @@
             "required": true,
             "schema": {
               "title": "Symbol",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "default": "borsapy",
+              "pattern": "^(borsapy|legacy)$",
+              "title": "Source",
               "type": "string"
             }
           },
@@ -3355,10 +3676,16 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Get Candles",
         "tags": [
           "Market Data"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/health": {
@@ -3428,7 +3755,8 @@
         "summary": "Get System Logs",
         "tags": [
           "System"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/market/analysis": {
@@ -3526,7 +3854,8 @@
         "summary": "Get Market Analysis",
         "tags": [
           "AI Analysis"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/market/indices": {
@@ -3534,6 +3863,17 @@
         "description": "Landing sayfası için global endeks özet verisi döndürür.",
         "operationId": "get_market_indices_market_indices_get",
         "parameters": [
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "default": "borsapy",
+              "pattern": "^(borsapy|legacy)$",
+              "title": "Source",
+              "type": "string"
+            }
+          },
           {
             "description": "Global endeks sembolleri. Örnek: ?symbol=^GSPC&symbol=^NDX&symbol=XU100.IS",
             "in": "query",
@@ -3580,10 +3920,16 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Get Market Indices",
         "tags": [
           "Market Data"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/market/metrics": {
@@ -3591,6 +3937,17 @@
         "description": "Scanner icin toplu piyasa metrikleri dondurur.\nTek cagriyla birden fazla sembolun latest/change/perf7/perf30 degerini verir.",
         "operationId": "get_market_metrics_market_metrics_get",
         "parameters": [
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "default": "borsapy",
+              "pattern": "^(borsapy|legacy)$",
+              "title": "Source",
+              "type": "string"
+            }
+          },
           {
             "description": "Market key listesi (ornek: BIST:THYAO, Kripto:BTCUSDT)",
             "in": "query",
@@ -3639,16 +3996,34 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Get Market Metrics",
         "tags": [
           "Market Data"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/market/overview": {
       "get": {
-        "description": "Piyasa genel bakış verilerini döndürür (BIST 100 ve Bitcoin).\nSon 24 saatlik mini grafik verisi içerir.",
         "operationId": "get_market_overview_market_overview_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "default": "borsapy",
+              "pattern": "^(borsapy|legacy)$",
+              "title": "Source",
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -3659,18 +4034,46 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Get Market Overview",
         "tags": [
           "Market Data"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/market/ticker": {
       "get": {
-        "description": "Header ticker için popüler sembol verilerini döndürür.",
         "operationId": "get_market_ticker_market_ticker_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "default": "borsapy",
+              "pattern": "^(borsapy|legacy)$",
+              "title": "Source",
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
@@ -3685,12 +4088,28 @@
               }
             },
             "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Get Market Ticker",
         "tags": [
           "Market Data"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/ops/read-model/overview": {
@@ -3744,10 +4163,16 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Get Ops Overview Read Model",
         "tags": [
           "System"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/ops/read-model/scanner-feed": {
@@ -3791,10 +4216,16 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Get Scanner Activity Read Model",
         "tags": [
           "System"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/ops/special-tag-health": {
@@ -3883,10 +4314,16 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Get Special Tag Health",
         "tags": [
           "Operations"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/ops/strategy-inspector": {
@@ -3967,7 +4404,8 @@
         "summary": "Get Strategy Inspector",
         "tags": [
           "Operations"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/realtime/sse/signals": {
@@ -3984,10 +4422,16 @@
             "description": "Successful Response"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Sse Signals",
         "tags": [
           "Real-time Data"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/realtime/sse/ticker": {
@@ -4004,10 +4448,16 @@
             "description": "Successful Response"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Sse Ticker",
         "tags": [
           "Real-time Data"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/realtime/status": {
@@ -4024,10 +4474,16 @@
             "description": "Successful Response"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Realtime Status",
         "tags": [
           "Real-time Data"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/scans": {
@@ -4065,10 +4521,16 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Get Scan History",
         "tags": [
           "System"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/signals": {
@@ -4207,10 +4669,16 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Get Signals",
         "tags": [
           "Signals"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/signals/{signal_id}": {
@@ -4250,10 +4718,16 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Get Signal",
         "tags": [
           "Signals"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/signals/{signal_id}/analysis": {
@@ -4301,10 +4775,16 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Get Signal Analysis",
         "tags": [
           "AI Analysis"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/stats": {
@@ -4323,10 +4803,16 @@
             "description": "Successful Response"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Get Stats",
         "tags": [
           "Statistics"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/symbols/bist": {
@@ -4342,10 +4828,16 @@
             "description": "Successful Response"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Get Bist Symbols",
         "tags": [
           "Symbols"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/symbols/crypto": {
@@ -4361,10 +4853,16 @@
             "description": "Successful Response"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Get Crypto Symbols",
         "tags": [
           "Symbols"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     },
     "/trades": {
@@ -4449,10 +4947,16 @@
             "description": "Validation Error"
           }
         },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
         "summary": "Get Trades",
         "tags": [
           "Trades"
-        ]
+        ],
+        "x-access-role": "admin"
       }
     }
   }

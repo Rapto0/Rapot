@@ -1,8 +1,8 @@
 export interface TickerData {
   symbol: string;
   price: number;
-  priceChange: number;
-  priceChangePercent: number;
+  priceChange: number | null;
+  priceChangePercent: number | null;
   high24h: number;
   low24h: number;
   volume24h: number;

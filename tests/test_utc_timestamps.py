@@ -276,7 +276,7 @@ def test_provider_fetch_metadata_retains_offsetless_utc(
             }
         )
         monkeypatch.setattr(data_loader, "fetch_stock_data", lambda **_kwargs: raw)
-        frame = data_loader.get_bist_data("OFFLINE")
+        frame = data_loader.get_bist_data("OFFLINE", use_borsapy=False)
     else:
         import yfinance
 
@@ -291,29 +291,30 @@ def test_provider_fetch_metadata_retains_offsetless_utc(
     assert datetime.fromisoformat(frame.attrs["fetched_at_iso"]).tzinfo is None
 
 
-def test_calendar_cache_expiry_stays_utc_naive_and_refetches_at_boundary(
+def test_calendar_metadata_and_cache_use_utc_and_refetch_at_boundary(
     fixed_clock: dict[str, datetime],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls = []
     service = CalendarService()
-    service.api_key = "offline-synthetic-key"
     service.cache_ttl_seconds = 60
 
-    def get(*_args: Any, **_kwargs: Any) -> SimpleNamespace:
+    def run(*_args: Any, **_kwargs: Any) -> pd.DataFrame:
         calls.append(True)
-        return SimpleNamespace(
-            raise_for_status=lambda: None, json=lambda: {"economicCalendar": [{"test": len(calls)}]}
-        )
+        return pd.DataFrame()
 
-    monkeypatch.setattr("api.calendar_service.requests.get", get)
-    assert service.get_economic_calendar("2026-09-01", "2026-09-02") == [{"test": 1}]
-    expiry = service._cache_expiry["2026-09-01_2026-09-02"]
-    assert expiry == (fixed_clock["now"] + timedelta(seconds=60)).replace(tzinfo=None)
+    monkeypatch.setattr("api.calendar_service._utc_now", lambda: fixed_clock["now"])
+    monkeypatch.setattr(
+        "api.calendar_service.get_borsapy_gateway", lambda: SimpleNamespace(run_public=run)
+    )
+    first = service.get_economic_calendar()
+    assert first["meta"]["fetched_at"] == "2026-09-11T01:02:03.456789Z"
     fixed_clock["now"] += timedelta(seconds=59)
-    assert service.get_economic_calendar("2026-09-01", "2026-09-02") == [{"test": 1}]
+    assert service.get_economic_calendar()["meta"]["cache_hit"] is True
+    assert len(calls) == 1
     fixed_clock["now"] += timedelta(seconds=1)
-    assert service.get_economic_calendar("2026-09-01", "2026-09-02") == [{"test": 2}]
+    assert service.get_economic_calendar()["meta"]["fetched_at"] == "2026-09-11T01:03:03.456789Z"
+    assert len(calls) == 2
 
 
 @pytest.mark.parametrize(

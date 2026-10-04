@@ -7,8 +7,8 @@ import * as jsxRuntime from 'react/jsx-runtime';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 
-function load(relativePath, imports = {}) {
-  const compiled = ts.transpileModule(readFileSync(new URL(relativePath, import.meta.url), 'utf8'), {
+function load(relativePath, imports = {}, suffix = '') {
+  const compiled = ts.transpileModule(readFileSync(new URL(relativePath, import.meta.url), 'utf8') + suffix, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
   const context = vm.createContext({ exports: {}, require(name) {
@@ -139,13 +139,16 @@ test('scanner page SSR uses the same explicit status instead of defaulting to ac
       react: React, 'react/jsx-runtime': jsxRuntime, 'lucide-react': icons,
       '@tanstack/react-query': { useQuery: () => ({ data: undefined, isLoading: false, isError: false }) },
       '@/lib/api/client': {}, '@/lib/hooks/use-health': { useBotHealth: () => health },
+      '@/lib/hooks/use-private-market': { usePrivateMarket: () => ({ allowed: true, sessionKey: 'admin:123' }) },
+      '@/components/market-data-status': { MarketDataStatus: () => null },
+      '@/components/scanner/borsapy-screener': { BorsapyScreener: () => null },
       '@/components/ui/button': { Button: primitive }, '@/components/ui/input': { Input: () => null },
       '@/components/ui/select': { Select: primitive }, '@/components/ui/action-dialog': { ActionDialog: () => null },
       '@/components/ui/toast': { useToast: () => ({ addToast: () => {} }) },
       '@/components/scanner/scan-status': { ScanStatus: () => null },
       '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' '), getTimeAgo: () => '--' },
-    });
-    const html = renderToStaticMarkup(React.createElement(page.default));
+    }, '\nexport { SignalHistoryScanner };');
+    const html = renderToStaticMarkup(React.createElement(page.SignalHistoryScanner));
     assert.ok(html.includes('Bot Durumu'));
     assert.match(html, new RegExp(`Bot Durumu</span><span[^>]*>${health.label}</span>`));
     assert.ok(!html.includes('AKTIF'));

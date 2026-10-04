@@ -204,7 +204,16 @@ export interface Candle {
     volume: number;
 }
 
-export interface CandlesResponse {
+export interface MarketSourceMetadata {
+    source?: string | null;
+    provider_time?: string | null;
+    received_at?: string | null;
+    state?: 'ok' | 'waiting' | 'stale' | 'error' | 'auth_required' | 'unsupported';
+    realtime_verified?: boolean;
+    message?: string | null;
+}
+
+export interface CandlesResponse extends MarketSourceMetadata {
     symbol: string;
     market_type: string;
     timeframe: string;
@@ -213,12 +222,12 @@ export interface CandlesResponse {
     candles: Candle[];
 }
 
-export interface TickerData {
+export interface TickerData extends MarketSourceMetadata {
     symbol: string;
     name: string;
-    price: number;
-    change: number;
-    changePercent: number;
+    price: number | null;
+    change: number | null;
+    changePercent: number | null;
 }
 
 export interface MarketHistoryPoint {
@@ -226,9 +235,9 @@ export interface MarketHistoryPoint {
     value: number;
 }
 
-export interface MarketData {
-    currentValue: number;
-    change: number;
+export interface MarketData extends MarketSourceMetadata {
+    currentValue: number | null;
+    change: number | null;
     history: MarketHistoryPoint[];
 }
 
@@ -237,14 +246,14 @@ export interface MarketOverviewResponse {
     crypto: MarketData;
 }
 
-export interface GlobalIndexData {
+export interface GlobalIndexData extends MarketSourceMetadata {
     symbol: string;
-    regularMarketPrice: number;
-    regularMarketChangePercent: number;
+    regularMarketPrice: number | null;
+    regularMarketChangePercent: number | null;
     shortName?: string;
 }
 
-export interface MarketMetricsItem {
+export interface MarketMetricsItem extends MarketSourceMetadata {
     latest_price: number | null;
     change_pct: number | null;
     perf_7d: number | null;
@@ -253,13 +262,17 @@ export interface MarketMetricsItem {
 }
 
 export interface EconomicCalendarEvent {
+    id: string;
+    date: string;
+    source_time?: string | null;
+    timestamp?: null;
     country: string | null;
     event: string | null;
     impact: string | null;
     time: string | null;
-    actual: number | null;
-    estimate: number | null;
-    previous: number | null;
+    actual: number | string | null;
+    estimate: number | string | null;
+    previous: number | string | null;
     unit: string | null;
     currency: string | null;
 }
@@ -267,6 +280,18 @@ export interface EconomicCalendarEvent {
 export interface EconomicCalendarParams {
     from_date?: string;
     to_date?: string;
+    country?: string;
+    importance?: 'all' | 'low' | 'mid' | 'high';
+}
+
+export interface EconomicCalendarResponse {
+    events: EconomicCalendarEvent[];
+    meta: {
+        source: string; state: 'ok' | 'empty' | 'stale'; fetched_at: string;
+        source_timezone: null; display_timezone: string; warnings: string[];
+        from_date: string; to_date: string; countries: string[];
+        cache_hit: boolean; provider_cache_seconds: number;
+    };
 }
 
 export type ScanStatus = 'success' | 'partial' | 'failed' | 'cancelled' | 'unknown';

@@ -41,7 +41,10 @@ class Settings(BaseSettings):
         None, description="Encrypted borsapy credentials file; defaults beside the main database"
     )
     borsapy_max_streams: int = Field(3, ge=1, le=5, description="Maximum isolated chart streams")
-    borsapy_use_for_bist: bool = Field(False, description="Use authenticated borsapy for BIST jobs")
+    borsapy_use_for_bist: bool = Field(
+        True,
+        description="Borsapy is the BIST primary source; false explicitly selects legacy providers",
+    )
     borsapy_stream_idle_seconds: int = Field(120, ge=30, le=600, description="Chart lease lifetime")
     bot_lock_path: str | None = Field(None, description="Shared bot instance lock file path")
     cors_allow_origins: str = Field(

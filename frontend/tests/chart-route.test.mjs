@@ -98,12 +98,12 @@ test('candle requests preserve AbortSignal and encode route/query values', async
   assert.equal(requested.options.signal.aborted, true);
 });
 
-test('existing four-argument candle callers keep their defaults', async () => {
+test('default BIST candles use the private Borsapy provider with the same period and limit', async () => {
   let requested;
   const market = loadSource('../src/lib/api/market-api.ts', {
     './core': { API_BASE_URL: '/api', fetchApi: async (url, options) => { requested = { url, options }; return { candles: [] }; } },
   });
   await market.fetchCandles('THYAO');
-  assert.equal(requested.url, '/api/candles/THYAO?market_type=BIST&timeframe=1d&limit=500');
+  assert.equal(requested.url, '/api/borsapy/candles/THYAO?interval=1d&limit=500');
   assert.equal(requested.options.signal, undefined);
 });

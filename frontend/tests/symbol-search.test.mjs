@@ -178,6 +178,8 @@ test('landing page uses the search component and clear heading hierarchy without
       SymbolSearch: () => React.createElement('form', { 'data-symbol-search': true }),
     },
     '@/components/dashboard/market-category': category,
+    '@/lib/hooks/use-private-market': { usePrivateMarket: () => ({ allowed: true, sessionKey: 'admin:123' }) },
+    '@/components/market-data-status': { MarketDataStatus: () => null },
     '@/lib/market-feed': model,
     '@/lib/hooks/use-binance-ticker': {
       useBinanceTickerFeed: () => ({ prices: {}, receivedAtBySymbol: {}, status: 'connecting', reconnect() {} }),

@@ -23,20 +23,21 @@ def _mock_runtime_state():
     }
 
 
-def test_health_status_excludes_wrapper_telemetry_by_default(monkeypatch):
+def test_health_status_excludes_wrapper_telemetry_by_default(monkeypatch, api_auth_users):
     monkeypatch.setattr(health_api, "_probe_database", lambda: True)
     monkeypatch.setattr(health_api, "_load_scanner_counters", _mock_scanner_counters)
     monkeypatch.setattr(health_api, "_load_runtime_state_from_repo", _mock_runtime_state)
 
+    headers = {"Authorization": "Bearer " + api_auth_users.create_access_token({"sub": "admin"})}
     with health_api.app.test_client() as client:
-        response = client.get("/status")
+        response = client.get("/status", headers=headers)
 
     assert response.status_code == 200
     payload = response.get_json()
     assert "compatibility_wrappers" not in payload
 
 
-def test_health_status_can_include_wrapper_telemetry(monkeypatch):
+def test_health_status_can_include_wrapper_telemetry(monkeypatch, api_auth_users):
     monkeypatch.setattr(health_api, "_probe_database", lambda: True)
     monkeypatch.setattr(health_api, "_load_scanner_counters", _mock_scanner_counters)
     monkeypatch.setattr(health_api, "_load_runtime_state_from_repo", _mock_runtime_state)
@@ -52,8 +53,11 @@ def test_health_status_can_include_wrapper_telemetry(monkeypatch):
         },
     )
 
+    headers = {"Authorization": "Bearer " + api_auth_users.create_access_token({"sub": "admin"})}
     with health_api.app.test_client() as client:
-        response = client.get("/status?include_compat_telemetry=true&include_wrapper_details=true")
+        response = client.get(
+            "/status?include_compat_telemetry=true&include_wrapper_details=true", headers=headers
+        )
 
     assert response.status_code == 200
     payload = response.get_json()

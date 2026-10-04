@@ -16,6 +16,7 @@ import {
 } from "@/lib/api/client"
 import { useBinanceTicker } from "@/lib/hooks/use-binance-ticker"
 import { useSession } from "@/lib/hooks/use-session"
+import { MarketDataStatus } from "@/components/market-data-status"
 import { BORSAPY_INTERVALS, fetchBorsapyCandles, fetchBorsapyChartSnapshot, mergeBorsapyCandles, releaseBorsapyChart } from "@/lib/api/borsapy-chart-api"
 import { cn } from "@/lib/utils"
 import { ActionDialog } from "@/components/ui/action-dialog"
@@ -602,8 +603,9 @@ const mapUtilityCalendarImpact = (value: string | null): UtilityCalendarImpact =
     return "Dusuk"
 }
 
-const formatUtilityCalendarMetric = (value: number | null, unit: string | null): string => {
+const formatUtilityCalendarMetric = (value: number | string | null, unit: string | null): string => {
     if (value === null || value === undefined) return ""
+    if (typeof value === "string") return value
     const numeric = Number(value)
     const formatted = Number.isInteger(numeric) ? numeric.toString() : numeric.toFixed(2)
     return `${formatted}${unit || ""}`
@@ -634,7 +636,7 @@ const parseUtilityCalendarDateTime = (
 const buildUtilityCalendarItems = (rawEvents: EconomicCalendarEvent[]): UtilityCalendarItem[] => {
     return rawEvents
         .map((event, index) => {
-            const parsed = parseUtilityCalendarDateTime(event.time)
+            const parsed = event.date ? { date: event.date, time: event.source_time || "Saat belirsiz", orderKey: `${event.date}T${event.source_time || "99:99"}` } : parseUtilityCalendarDateTime(event.time)
             if (!parsed) return null
             return {
                 id: `${parsed.orderKey}-${event.country || "ROW"}-${index}`,
@@ -719,8 +721,7 @@ export function AdvancedChartPage({
     const [marketType, setMarketType] = useState<MarketType>(initialMarket)
     const [timeframe, setTimeframe] = useState("1d")
     const session = useSession()
-    const [bistSource, setBistSource] = useState<"legacy" | "borsapy">("legacy")
-    const useBorsapy = marketType === "BIST" && bistSource === "borsapy"
+    const useBorsapy = marketType === "BIST"
     const canUseBorsapy = Boolean(session?.user.is_admin && !session.user.disabled)
     const chartSubscriber = useRef("")
     const bistTimeframes = useBorsapy ? BORSAPY_INTERVALS : BIST_ALLOWED_TIMEFRAMES
@@ -1269,9 +1270,9 @@ export function AdvancedChartPage({
         isFetching: isCandlesFetching,
         refetch: refetchCandles,
     } = useQuery({
-        queryKey: ['chart-candles', symbol, marketType, timeframe, useBorsapy ? 'borsapy' : 'legacy', useBorsapy ? session?.user.username : null, useBorsapy ? session?.expiresAt : null],
+        queryKey: ['chart-candles', symbol, marketType, timeframe, useBorsapy ? 'borsapy' : 'binance', session?.user.username, session?.expiresAt],
         queryFn: ({ signal }) => useBorsapy ? fetchBorsapyCandles(symbol, timeframe, signal) : fetchCandles(symbol, marketType, timeframe, 1000, { signal }),
-        enabled: !useBorsapy || (canUseBorsapy && BORSAPY_INTERVALS.has(timeframe)),
+        enabled: canUseBorsapy && (!useBorsapy || BORSAPY_INTERVALS.has(timeframe)),
         refetchInterval: 60000,
         retry: false,
     })
@@ -1303,6 +1304,7 @@ export function AdvancedChartPage({
         queryKey: ['bist-symbols'],
         queryFn: fetchBistSymbols,
         staleTime: 300000,
+        enabled: canUseBorsapy,
     })
 
     // Fetch all Binance USDT pairs
@@ -1310,13 +1312,15 @@ export function AdvancedChartPage({
         queryKey: ['binance-symbols'],
         queryFn: async () => (await fetchCryptoSymbols()).symbols,
         staleTime: 3600000,
+        enabled: canUseBorsapy,
     })
 
     // Fetch BIST tickers for watchlist
     const { data: bistTickers, refetch: refetchTickers } = useQuery({
-        queryKey: ['watchlist-ticker'],
+        queryKey: ['watchlist-ticker', session?.user.username, session?.expiresAt],
         queryFn: fetchTicker,
         refetchInterval: 30000,
+        enabled: canUseBorsapy,
     })
 
     const activeWatchlistBistSymbolsForQuery = useMemo(() => {
@@ -1330,14 +1334,14 @@ export function AdvancedChartPage({
                 set.add(`${row.rawSymbol.toUpperCase()}.IS`)
             }
         }
-        return Array.from(set).sort()
+        return Array.from(set).slice(0, 50)
     }, [watchlists, activeWatchlistId])
 
     const { data: activeWatchlistBistQuotes, refetch: refetchActiveWatchlistBistQuotes } = useQuery({
-        queryKey: ['watchlist-active-bist-quotes', ...activeWatchlistBistSymbolsForQuery],
-        queryFn: () => fetchGlobalIndices(activeWatchlistBistSymbolsForQuery),
-        enabled: activeWatchlistBistSymbolsForQuery.length > 0,
-        refetchInterval: 30000,
+        queryKey: ['watchlist-active-bist-quotes', session?.user.username, session?.expiresAt, ...activeWatchlistBistSymbolsForQuery],
+        queryFn: ({ signal }) => fetchGlobalIndices(activeWatchlistBistSymbolsForQuery, { signal }),
+        enabled: canUseBorsapy && activeWatchlistBistSymbolsForQuery.length > 0,
+        refetchInterval: 10000,
         staleTime: 10_000,
     })
 
@@ -1351,19 +1355,20 @@ export function AdvancedChartPage({
     }, [])
 
     const {
-        data: utilityCalendarRaw = [],
+        data: utilityCalendarResponse,
         isFetching: isUtilityCalendarFetching,
         dataUpdatedAt: utilityCalendarUpdatedAt,
         refetch: refetchUtilityCalendar,
     } = useQuery({
-        queryKey: ['chart-watchlist-calendar', utilityCalendarRange.from, utilityCalendarRange.to],
-        queryFn: () =>
+        queryKey: ['chart-watchlist-calendar', session?.user.username, session?.expiresAt, utilityCalendarRange.from, utilityCalendarRange.to],
+        queryFn: ({ signal }) =>
             fetchEconomicCalendar({
                 from_date: utilityCalendarRange.from,
                 to_date: utilityCalendarRange.to,
-            }),
+            }, { signal }),
         refetchInterval: WATCHLIST_UTILITY_CALENDAR_REFRESH_MS,
         staleTime: 30_000,
+        enabled: canUseBorsapy,
     })
 
     const {
@@ -1394,12 +1399,12 @@ export function AdvancedChartPage({
 
     // Live crypto prices for watchlist
     const cryptoPrices = useBinanceTicker(watchlistCryptoSymbols, {
-        paused: activeTool !== "none",
+        paused: !canUseBorsapy || activeTool !== "none",
         flushIntervalMs: 320,
     })
 
     const candles: Candle[] = useMemo(() => {
-        if (useBorsapy && !canUseBorsapy) return []
+        if (!canUseBorsapy) return []
         const rawCandles = useBorsapy && candlesResponse
             ? mergeBorsapyCandles(candlesResponse.candles, chartStream.data?.candles ?? [])
             : candlesResponse?.candles || []
@@ -2147,18 +2152,20 @@ export function AdvancedChartPage({
         for (const [sym, payload] of Object.entries(cryptoPrices)) {
             map.set(sym, {
                 priceText: payload?.price ? payload.price.toFixed(2) : "---",
-                change: payload?.change ?? 0,
+                change: payload?.change ?? Number.NaN,
             })
         }
         return map
     }, [cryptoPrices])
 
     const bistQuoteMap = useMemo(() => {
-        const map = new Map<string, { priceText: string; change: number }>()
+        const map = new Map<string, { priceText: string; change: number; status?: string; providerTime?: string | null }>()
         for (const ticker of bistTickers || []) {
             const quote = {
+                status: ticker.message || ticker.source || "Borsapy / TradingView",
+                providerTime: ticker.provider_time,
                 priceText: ticker.price?.toFixed(2) || "---",
-                change: ticker.changePercent || 0,
+                change: ticker.changePercent ?? Number.NaN,
             }
             map.set(ticker.symbol.toUpperCase(), quote)
             map.set(ticker.name.toUpperCase(), quote)
@@ -2167,10 +2174,12 @@ export function AdvancedChartPage({
             const raw = (quote.symbol || "").toUpperCase()
             const normalized = raw.endsWith(".IS") ? raw.slice(0, -3) : raw
             const payload = {
+                status: quote.message || quote.source || "Borsapy / TradingView",
+                providerTime: quote.provider_time,
                 priceText: typeof quote.regularMarketPrice === "number"
                     ? quote.regularMarketPrice.toFixed(2)
                     : "---",
-                change: quote.regularMarketChangePercent || 0,
+                change: quote.regularMarketChangePercent ?? Number.NaN,
             }
             if (raw) map.set(raw, payload)
             if (normalized) map.set(normalized, payload)
@@ -2214,8 +2223,8 @@ export function AdvancedChartPage({
                 return {
                     ...row,
                     priceText: quote?.priceText ?? "---",
-                    change: quote?.change ?? 0,
-                    hasQuote: !!quote,
+                    change: quote?.change ?? Number.NaN,
+                    hasQuote: !!quote && Number.isFinite(quote.change),
                 }
             })
             .filter((row) => row.hasQuote)
@@ -2240,14 +2249,12 @@ export function AdvancedChartPage({
     }, [activeWatchlistQuotes])
 
     const utilityCalendarItems = useMemo(
-        () => buildUtilityCalendarItems(utilityCalendarRaw),
-        [utilityCalendarRaw]
+        () => buildUtilityCalendarItems(utilityCalendarResponse?.events ?? []),
+        [utilityCalendarResponse]
     )
 
     const utilityCalendarUpcoming = useMemo(() => {
-        const nowKey = new Date().toISOString()
-        const upcoming = utilityCalendarItems.filter((item) => item.orderKey >= nowKey)
-        return (upcoming.length > 0 ? upcoming : utilityCalendarItems).slice(0, 8)
+        return utilityCalendarItems.slice(0, 8)
     }, [utilityCalendarItems])
 
     const utilityCalendarUpdatedLabel = useMemo(() => {
@@ -2764,14 +2771,8 @@ export function AdvancedChartPage({
 
                     {/* Timeframe & Controls */}
                     <div className="flex flex-wrap items-center gap-3">
-                        {marketType === "BIST" && <label className="flex items-center gap-2 text-xs">
-                            Veri kaynağı
-                            <select aria-label="BIST grafik veri kaynağı" value={bistSource} onChange={event => { setBistSource(event.target.value as "legacy" | "borsapy"); setTimeframe("1d") }} className="max-w-48 rounded border border-border bg-surface p-2">
-                                <option value="legacy">İş Yatırım / Yahoo</option>
-                                <option value="borsapy">Borsapy / TradingView</option>
-                            </select>
-                        </label>}
-                        {useBorsapy && <Link className="text-xs text-primary underline" href={canUseBorsapy ? "/research?tab=connection" : "/login?next=%2Fchart"}>{canUseBorsapy ? "Hesap bağlantısı" : "TradingView verisi için giriş yap"}</Link>}
+                        {marketType === "BIST" && <span className="text-xs text-muted-foreground">Borsapy / TradingView</span>}
+                        {useBorsapy && <Link className="text-xs text-primary underline" href={canUseBorsapy ? "/research?tab=connection" : "/login?next=%2Fchart"}>{canUseBorsapy ? "Hesap bağlantısı" : "Grafik için yönetici girişi"}</Link>}
                         {/* Quick Timeframes */}
                         <div className="flex items-center bg-muted/30 rounded-sm p-1">
                             {availableQuickTimeframes.map((tf) => (
@@ -3148,6 +3149,7 @@ export function AdvancedChartPage({
                 ))}
 
                 {/* Status Bar */}
+                <MarketDataStatus compact metadata={marketType === "Kripto" ? { ...candlesResponse, source: "Binance" } : candlesResponse} />
                 <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-4 py-2 border-t border-border/30 text-xs text-muted-foreground">
                     <div className="flex flex-wrap items-center gap-4">
                         <span className="flex items-center gap-1.5">{useBorsapy
@@ -3304,8 +3306,10 @@ export function AdvancedChartPage({
                                     row.marketType === "Kripto"
                                         ? row.rawSymbol.replace("USDT", "/USD")
                                         : row.rawSymbol
-                                const change = quote?.change ?? 0
+                                const change = quote?.change ?? Number.NaN
                                 const priceText = quote?.priceText ?? "---"
+                                const quoteStatus = row.marketType === "Kripto" ? "Binance · USDT" : bistQuoteMap.get(row.rawSymbol)?.status || "Borsapy · veri bekleniyor"
+                                const quoteTime = row.marketType === "BIST" ? bistQuoteMap.get(row.rawSymbol)?.providerTime : null
 
                                 return (
                                     <div
@@ -3318,14 +3322,14 @@ export function AdvancedChartPage({
                                         <button
                                             onClick={() => handleSymbolSelect(row.rawSymbol, row.marketType)}
                                             className="truncate text-left text-sm font-medium"
-                                            title={`${row.rawSymbol} (${row.marketType})`}
+                                            title={`${row.rawSymbol} (${row.marketType}) · ${quoteStatus}${quoteTime ? ` · ${quoteTime}` : ""}`}
                                         >
                                             {displaySymbol}
+                                            <span className="block truncate text-[10px] font-normal text-muted-foreground">{quoteStatus}</span>
                                         </button>
                                         <span className="text-right text-sm font-mono tabular-nums">{priceText}</span>
-                                        <span className={cn("text-right text-sm font-mono tabular-nums", change >= 0 ? "text-profit" : "text-loss")}>
-                                            {change >= 0 ? "+" : ""}
-                                            {change.toFixed(2)}%
+                                        <span className={cn("text-right text-sm font-mono tabular-nums", !Number.isFinite(change) ? "text-muted-foreground" : change >= 0 ? "text-profit" : "text-loss")}>
+                                            {Number.isFinite(change) ? `${change >= 0 ? "+" : ""}${change.toFixed(2)}%` : "—"}
                                         </span>
                                         <IconButton
                                             onClick={() => handleRemoveRowFromWatchlist(index)}
@@ -3339,6 +3343,7 @@ export function AdvancedChartPage({
                             })}
                         </div>
 
+                        <p className="border-t border-border px-3 py-2 text-[10px] text-muted-foreground">BIST fiyatları açık listedeki ilk 50 sembol için izlenir. Gerçek zamanlı veri kabulü doğrulanmadı.</p>
                         {watchlistNotice && (
                             <div className="border-t border-border px-3 py-2 text-xs text-primary">
                                 {watchlistNotice}
@@ -3463,9 +3468,10 @@ export function AdvancedChartPage({
                                 {activeUtilityPanel === "calendar" && (
                                     <div className="space-y-2 text-muted-foreground">
                                         <div className="flex items-center justify-between">
-                                            <span>Canli takvim</span>
+                                            <span>Ekonomik takvim · Borsapy</span>
                                             <button
                                                 onClick={() => refetchUtilityCalendar()}
+                                                disabled={!session?.user.is_admin}
                                                 className={cn(
                                                     "rounded border border-border px-2 py-0.5 text-[10px] hover:bg-raised",
                                                     isUtilityCalendarFetching && "opacity-70"
@@ -3479,6 +3485,8 @@ export function AdvancedChartPage({
                                         </div>
                                         <div className="text-[11px]">Sunucu saati: {serverClockLabel}</div>
                                         <div className="text-[11px]">Grafik periyodu: {currentTimeframeLabel}</div>
+                                        <div className="text-[11px]">Saatler kaynağın bildirdiği şekildedir; saat dilimi doğrulanmadı.</div>
+                                        {utilityCalendarResponse?.meta.warnings.map(warning => <p key={warning} className="text-[11px] text-warning">{warning}</p>)}
                                         <div className="max-h-52 space-y-1 overflow-y-auto rounded border border-border/40 bg-base p-2">
                                             {utilityCalendarUpcoming.length === 0 && (
                                                 <div className="text-[11px] text-muted-foreground">

@@ -36,13 +36,23 @@ Sunucu sırları `NEXT_PUBLIC_*` değişkenlerine konmaz.
 ## Oturum ve doğrulama
 
 Üst çubuktaki **Giriş yap** bağlantısı `/login` ekranını açar. Ana API'de tanımlı
-`admin` veya `user` hesabını kullanın; parolalar backend ortamından yönetilir.
-AI analizi ve strateji inceleme giriş, loglar ve manuel tarama admin yetkisi ister.
+`admin` hesabını kullanın; parolalar backend ortamından yönetilir. Kişisel
+dashboard verileri, analizler, takvim ve işlemler admin yetkisi ister; `user`
+rolü bu özel verilere erişmez. HTTP yanıtları `private, no-store` taşır.
 
 Token yalnız sekme belleğinde tutulur; sayfa yenileme, süre dolumu veya çıkış oturumu
 sonlandırır. Oturum değişince sorgu önbelleği ve önceki kullanıcıya ait bileşen durumu
-temizlenir. Token yalnız yapılandırılmış ana API adresine eklenir; health API'ye
-ve başka servislere gönderilmez. `MW_ADMIN_AUTH_TOKEN` frontend'e verilmez.
+temizlenir. Token yapılandırılmış ana API adresine ve aynı origin'deki
+yapılandırılmış health API'nin yalnız `/status` yoluna eklenir; harici health
+adresine veya başka sağlık yollarına otomatik gönderilmez. `MW_ADMIN_AUTH_TOKEN`
+frontend'e verilmez. Başlıksız bot `/status` yanıtı yalnız DB/yerel lifecycle
+sağlığıdır; kişisel sayaç/hata ayrıntıları admin ister. İki yanıt da
+`private, no-store` ve `Vary: Authorization` kullanır.
+Backend WebSocket bağlantısı yalnız admin oturumunda açılır. İlk mesaj
+`{type: "auth", token}` olur; `authenticated` yanıtı gelmeden abonelik başlamaz.
+Token URL'ye konmaz. 4401/4403 bağlantıyı yeniden denemeyi durdurur ve özel
+realtime durumu temizler. API'nin SSE yolu Bearer başlığı ister; frontend şu an
+SSE tüketmez. Oturum değişimi bütün özel realtime/sorgu sonuçlarını temizler.
 
 ```bash
 npm test
@@ -99,9 +109,11 @@ platform paketi için ürettiği `npm ls` uyarısı
 | Sayfa | Açıklama |
 |-------|----------|
 | **Dashboard** | Piyasa özetleri, BIST/Kripto sembol araması ve ekranlara hızlı erişim |
-| **Piyasa Tarayıcı** | `/scanner` - BIST ve Kripto tarama durumu |
+| **Piyasa Tarayıcı** | `/scanner` - BIST/Kripto COMBO-HUNTER geçmişi, Borsapy temel/teknik tarama |
 | **Aktif Sinyaller** | `/signals` - Filtre/arama, HUNTER/COMBO sinyalleri ve görünür satırların CSV çıktısı |
-| **Grafik** | `/chart` - URL'den sembol/piyasa seçimi, izleme listeleri ve yerel alarm kuralı oluşturma |
+| **Grafik** | `/chart` - BIST Borsapy/TradingView, Kripto Binance, izleme listeleri ve sunucu alarmı taslağı |
+| **Araştırma** | `/research` - Borsapy katalog, sanal portföy, replay ve sunucu hesap bağlantıları |
+| **Ekonomik Takvim** | `/calendar` - Borsapy/Doviz.com olayları, ülke/önem/tarih filtreleri ve kaynak uyarıları |
 | **Sunucu Alarmları** | `/alarms` - Yöneticiye ait kalıcı kural oluşturma/düzenleme, duraklatma ve teslim geçmişi |
 | **Eski Yerel Alarmlar** | `/alarms/local` - Bu sayfa açıkken eski tarayıcı kurallarının kontrolü |
 | **İşlem Geçmişi** | `/trades` - Ana DB işlemleri; hesaplanabilir PnL, eksik veride bilinmeyen değer |
@@ -130,6 +142,20 @@ platform paketi için ürettiği `npm ls` uyarısı
   turundan sonra yaklaşık 60 saniye beklenir; tüm semboller aynı turda
   tamamlanamayabilir. Form, desteklenmeyen periyodu sessizce değiştirmez.
   [Hesaplama, periyot ve teslim sınırları](SERVER_ALARMS.md) geçerlidir.
+- **Piyasa kaynağı:** BIST grafik, dashboard ve izleme listesi Borsapy/TradingView
+  kullanır; kimlik veya sağlayıcı hatasında eski kaynağa sessiz dönüş yoktur.
+  Kaynak, alınma zamanı, sağlayıcı zamanı ve bayat/bekleniyor/hata durumu ayrı
+  gösterilir. Bağlantı açık olması gecikmesiz veri kanıtı değildir. İzleme
+  listesindeki ilk 50 BIST sembolü takip edilir; sunucu ortak havuzu en fazla
+  200 etkin sembolle sınırlıdır. Günlük geçmiş hazırlanırken 7/30 günlük
+  performans/mini grafik beklenebilir; bilinmeyen değişim sıfır yapılmaz.
+  Binance sembolleri BtcTurk verisiyle değiştirilmez.
+- **Takvim:** Borsapy/Doviz.com genel kaynağı TradingView/Finnhub kimliği istemez;
+  Rapot admin oturumu gerekir. En fazla üç ülke ve 31 günlük aralık seçilir;
+  aralık İstanbul gününe göre son 7 gün ile gelecek 30 gün içinde olmalıdır.
+  Kaynak saat dilimi doğrulanmadığı için tarih/saat İstanbul'a çevrilmez.
+  Boş sonuç, eksik saat ve eski önbellek uyarıları görünür; sağlayıcının bir
+  saatlik önbelleği nedeniyle yeniden sorgulama yeni veri garantisi değildir.
 - **Yerel alarm:** Eski kurallar bu tarayıcıda saklanır. `/alarms/local` açıkken ilk kontrol,
   ardından yaklaşık 60 saniyelik kontrol vardır; devam eden tura yenisi eklenmez.
   Sayfa kapanınca durur; arka plan zamanlayıcıları tarayıcı tarafından geciktirilebilir.
@@ -149,6 +175,10 @@ platform paketi için ürettiği `npm ls` uyarısı
   middleware envanteri, borsa bakiyesi veya gerçek emir durumunun dashboard'a
   bağlandığı varsayılmamalıdır. Frontend COMBO/HUNTER hesaplamalarıyla Python/Pine
   hesaplamalarının birebir eşitliği ayrıca doğrulanmış değildir.
+
+Bu site geneli özel veri ve Borsapy kaynak değişikliklerinin API/frontend/bot
+yayını henüz tamamlanmadı. Sentetik yerel tarayıcı kabulü gerçek hesap, piyasa
+gecikmesi veya bildirim teslimi kabulünün yerine geçmez; güncel durum devam planındadır.
 
 ## Gezinme ve arama iyileştirmesi — 21 Eylül 2026
 

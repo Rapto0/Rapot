@@ -17,7 +17,12 @@ from async_data_loader import (
     get_all_binance_symbols_async,
 )
 from config import TIMEFRAMES, signal_guard_settings
-from data_loader import get_all_bist_symbols, is_dataframe_fresh, resample_market_data
+from data_loader import (
+    get_all_bist_symbols,
+    is_dataframe_fresh,
+    resample_market_data,
+    signal_data_metadata,
+)
 from domain.events import SignalDomainEvent
 from infrastructure.persistence.signal_repository import save_signal as db_save_signal
 from logger import get_logger
@@ -186,6 +191,10 @@ async def process_symbol_async(symbol: str, df_daily, market_type: str) -> dict[
             # COMBO
             res_combo = calculate_combo_signal(df_resampled, tf_code)
             if res_combo:
+                res_combo["details"] = {
+                    **res_combo["details"],
+                    **signal_data_metadata(df_daily, market_type),
+                }
                 if res_combo["buy"]:
                     signals.append(
                         {
@@ -214,6 +223,10 @@ async def process_symbol_async(symbol: str, df_daily, market_type: str) -> dict[
             # HUNTER
             res_hunter = calculate_hunter_signal(df_resampled, tf_code)
             if res_hunter:
+                res_hunter["details"] = {
+                    **res_hunter["details"],
+                    **signal_data_metadata(df_daily, market_type),
+                }
                 if res_hunter["buy"]:
                     signals.append(
                         {
@@ -412,7 +425,7 @@ async def scan_market_async(
                 if market_type not in selected_markets:
                     continue
                 symbols = (
-                    get_all_bist_symbols()
+                    await asyncio.to_thread(get_all_bist_symbols)
                     if market_type == "BIST"
                     else get_all_binance_symbols_async()
                 )

@@ -387,6 +387,7 @@ def test_native_binance_provider_requests_exact_interval_and_timeout(monkeypatch
 def test_native_bist_provider_has_no_daily_fallback(monkeypatch):
     import yfinance
 
+    monkeypatch.setattr(alarms.settings, "borsapy_use_for_bist", False)
     ticker = MagicMock()
     ticker.history.return_value = pd.DataFrame()
     factory = MagicMock(return_value=ticker)

@@ -1,8 +1,10 @@
+import type { MarketSourceMetadata } from "./api/types"
+
 export const MARKET_REFRESH_MS = 10_000
 export const MARKET_STALE_MS = 30_000
 
-export interface MarketQuote {
-  value: number
+export interface MarketQuote extends MarketSourceMetadata {
+  value?: number
   change?: number
 }
 
@@ -26,11 +28,16 @@ export function normalizeMarketQuotes(payload: unknown, symbols: readonly string
   for (const item of payload) {
     if (!item || typeof item !== "object" || typeof item.symbol !== "string") continue
     const symbol = item.symbol.toUpperCase()
-    if (!requested.has(symbol) || !finiteNumber(item.regularMarketPrice)) continue
+    if (!requested.has(symbol) || (!finiteNumber(item.regularMarketPrice) && !item.state)) continue
     quotes[symbol] = {
-      value: item.regularMarketPrice,
+      ...(finiteNumber(item.regularMarketPrice) ? { value: item.regularMarketPrice } : {}),
       ...(finiteNumber(item.regularMarketChangePercent)
         ? { change: item.regularMarketChangePercent } : {}),
+      ...(typeof item.source === "string" ? { source: item.source } : {}),
+      ...(typeof item.provider_time === "string" ? { provider_time: item.provider_time } : {}),
+      ...(typeof item.received_at === "string" ? { received_at: item.received_at } : {}),
+      ...(typeof item.message === "string" ? { message: item.message } : {}),
+      ...(["ok", "waiting", "stale", "error", "auth_required", "unsupported"].includes(item.state) ? { state: item.state } : {}),
     }
   }
   return quotes

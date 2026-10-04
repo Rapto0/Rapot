@@ -45,7 +45,7 @@ export default function LoginPage() {
     }
 
     return (
-        <PageShell label="Hesap" title="Giriş yap" description="AI analizi için giriş yapın. Araştırma merkezi, sunucu alarmları, loglar ve manuel tarama yönetici yetkisi gerektirir.">
+        <PageShell label="Hesap" title="Giriş yap" description="Kişisel terminalinize yönetici hesabınızla giriş yapın. Piyasa verileri, grafikler, tarayıcı, ekonomik takvim, araştırmalar ve alarm yönetimi özel erişim gerektirir.">
             <form onSubmit={submit} className="mx-auto flex w-full max-w-sm flex-col gap-4 border border-border bg-surface p-5">
                 <label className="space-y-2 text-sm">
                     <span>Kullanıcı adı</span>

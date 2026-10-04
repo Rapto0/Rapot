@@ -40,14 +40,14 @@ Eski `/alarms/local` kuralları yalnız tarayıcıda değerlendirilir.
 | Alan | Başlangıç noktaları | Etki |
 |---|---|---|
 | Bot yaşam döngüsü | `main.py`, `scheduler.py`, `infrastructure/runtime_lock.py` | Tek scanner, periyodik görevler, Telegram komutları, Flask sağlık |
-| Veri/hazırlık | `data_loader.py`, `price_cache.py`, `config.py`, `settings.py` | Kaynaklar, OHLCV, önbellek, periyotlar ve runtime ayarları |
+| Veri/hazırlık | `data_loader.py`, `application/services/borsapy_gateway.py`, `borsapy_market_data.py`, `price_cache.py`, `config.py`, `settings.py` | BIST varsayılan Borsapy, kimlikli ortak fiyat/geçmiş; eski fiyat önbelleği ayrı |
 | Hesaplama | `signals.py`, `strategy_inspector.py`, `frontend/src/lib/indicators.ts`, `middleware/pine/` | Python/TypeScript/Pine ayrı uygulamalar; eşdeğerlik test ister |
 | Scanner | `market_scanner.py`, `async_scanner.py`, `application/scanner/scan_history.py` | Ortak kayıt/event/scan history; sync AI/haber/Telegram akışı daha geniş |
 | Domain event | `domain/events/signal_domain_event.py` | Typed event, kayıt ve yayın payload alanları |
 | Kayıt handler'ı | `application/scanner/signal_handlers.py` | Başarılı kayıt sonrası callback ve publisher adapter |
 | Ana persistence | `infrastructure/persistence/`, `models.py`, `db_session.py` | Scanner kayıtları, ops/trade yardımcıları ve signal feed okuması |
 | API servisleri | `application/services/`, `infrastructure/repositories/` | Sinyal/işlem/analiz/system read-model ve piyasa verisi |
-| REST/auth | `api/main.py`, `api/routes/`, `api/auth.py`, `api/rate_limit.py` | DTO, HTTP filtreleri, login ve korunan işlemler |
+| REST/auth | `api/main.py`, `api/routes/`, `api/auth.py`, `api/private_data_access.py`, `api/rate_limit.py` | DTO, login, kişisel HTTP/WS/SSE için admin sınırı |
 | Realtime | `api/runtime/realtime_bootstrap.py`, `api/runtime/signal_feed.py`, `api/realtime.py` | Ortak DB sinyal akışı, provider yaşam döngüsü, WS/SSE |
 | AI | `ai_analyst.py`, `ai_schema.py`, `ai_evaluation.py` | google.genai, normalize cevap/metadata, kayıt ve değerlendirme |
 | Bildirim/komut | `telegram_notify.py`, `command_handler.py`, `trade_manager.py` | Telegram I/O ve ana uygulama işlem kayıtları |
@@ -73,7 +73,7 @@ hâlâ FastAPI HTTPException ve api.providers bağımlılığı taşır.
    API bootstrap süreç içi publisher'ı kapalı tutar: üretimde UI yayın kaynağı
    ortak DB'dir; bot içindeki adapter süreçler arası mesaj kuyruğu değildir.
 5. API SignalFeed başlangıçta mevcut en büyük ID'yi alır, sonraki commit edilmiş
-   satırları periyodik ve thread üzerinden okur; WS/SSE'ye yayınlar.
+   satırları periyodik ve thread üzerinden okur; kimlikli admin WS/SSE'ye yayınlar.
    Cursor süreç belleğindedir, kalıcı teslim alındısı veya replay offset'i değildir.
 6. Frontend bağlantı/yeniden bağlantı sırasında REST ile eşitler; geçmişi WS
    replay garantisine bağlamaz. DB geri yüklenmesi cursor gerilemesi yaratırsa
@@ -90,6 +90,33 @@ hâlâ FastAPI HTTPException ve api.providers bağımlılığı taşır.
   Telegram mesajları da içeren manuel tarama/analiz akışını başlatır.
 - Scanner'ın kayıtlı AI analizi gerçek sinyal ID'sine bağlanır. AI_ENABLED=0
   kapalı durumu üretir; kayıtlı analizleri okumak yeni sağlayıcı isteği değildir.
+
+### Kişisel piyasa verisi
+
+Dashboard, izleme listesi ve BIST grafiği Borsapy gateway'i kullanır. Varsayılan
+`BORSAPY_USE_FOR_BIST=true` sync/async scanner ve günlük BIST alarmlarını aynı
+kaynağa bağlar; false eski sağlayıcı yolunu açıkça seçer. Hatalar sessiz kaynak
+değişimi yapmaz. Kimlikli sonuçlar eski SQLite `price_cache` ile karıştırılmaz.
+Scanner'da gereken bağımsız Yahoo teyidi korunur; kaynak politikası teyidin
+başarılı olduğu anlamına gelmez.
+
+`borsapy_market_data.py` tek quote bağlantısında en fazla 200 etkin sembol ve
+istek başına 50 sembolle ortak read-model sunar. Günlük metrik geçmişi tek worker,
+100 bekleyen iş ve 200 bellek kaydıyla sınırlıdır. BIST sembol evreni tembel KAP
+company metadata'sından gelir; başarısızlıkta statik listeye sessiz dönüş yoktur.
+Kripto grafik/alarm/quote kaynağı Binance kalır; BtcTurk araştırması ayrıdır.
+Ekonomik takvim Borsapy/Doviz.com genel veri yolunu kullanır; TradingView/Finnhub
+kimliği istemez. Kaynak saat dilimi doğrulanmadığı için olay saati dönüştürülmez.
+
+Provider kimliği süreç genelinde olduğu için kimlikli ağ işleri gateway kilidi
+altında sırayla çalışır. Kilit edinme beklemesi bir saniyeyle sınırlıdır; mevcut
+fiyat/grafik tamponu kimlik revizyonu ve epoch denetlenerek okunabilir. Bu sınır
+ağ isteğini iptal etmez ve sağlayıcı yanıt süresine kesin üst sınır değildir.
+Eski BIST yayın servisi varsayılan modda başlamaz; ihtiyaç üzerine açılan Borsapy
+bağlantısının henüz yapılandırılmaması API/DB feed/Binance sağlık hatası sayılmaz.
+
+Bu site geneli kaynak/erişim değişikliği yeni API/frontend/bot yayını gerektirir;
+üretim kabulü ve gerçek piyasa/hesap kabulü henüz tamamlanmadı.
 
 ### TradingView → ayrı emir hattı
 
@@ -153,9 +180,11 @@ Signals.py, opsiyonel pandas_ta yokluğunda lock'taki ta ile accessor sağlar.
   ilgili ekranlardan düzenlenir. Backend API anahtarları veya trading yetkisi
   buradan yönetilmez. Token yalnız sekme belleğindedir; refresh/expiry/logout
   oturumu bitirir, hesap değişimi özel sorgu/component durumunu temizler.
-- POST /analyze/{symbol} ve /logs admin; inspector ve yeni AI analizi user/admin
-  JWT ister. Dashboard okuma endpointlerinin tamamı özel değildir. Middleware
-  X-Admin-Token ve webhook kimliği bu JWT hattından ayrıdır.
+- Ana API kök/health, auth ve API belge yolları dışında dashboard HTTP okumaları
+  ve işlemleri admin JWT ister, `private, no-store` döner. `/auth/me` kendi JWT
+  denetimini korur. WS beş saniyede ilk auth mesajını ve `authenticated` yanıtını,
+  SSE Bearer başlığını kullanır; token URL'ye konmaz, teslimde süre/erişim yeniden
+  denetlenir. Middleware X-Admin-Token ve webhook kimliği bu JWT hattından ayrıdır.
 
 ## Veritabanı ve compatibility
 

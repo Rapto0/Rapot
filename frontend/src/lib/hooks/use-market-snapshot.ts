@@ -3,6 +3,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { fetchGlobalIndices } from "@/lib/api/client"
 import { MARKET_REFRESH_MS, normalizeMarketQuotes, type MarketQuote } from "@/lib/market-feed"
+import { usePrivateMarket } from "./use-private-market"
 
 export async function loadMarketSnapshot(symbols: string[], signal: AbortSignal): Promise<Record<string, MarketQuote>> {
   const controller = new AbortController()
@@ -13,8 +14,8 @@ export async function loadMarketSnapshot(symbols: string[], signal: AbortSignal)
   const timeout = setTimeout(cancel, 60_000)
   try {
     const chunks: string[][] = []
-    for (let index = 0; index < symbols.length; index += 30) {
-      chunks.push(symbols.slice(index, index + 30))
+    for (let index = 0; index < symbols.length; index += 50) {
+      chunks.push(symbols.slice(index, index + 50))
     }
     const responses = await Promise.all(chunks.map(async (chunk) =>
       normalizeMarketQuotes(await fetchGlobalIndices(chunk, { signal: controller.signal }), chunk)
@@ -28,12 +29,14 @@ export async function loadMarketSnapshot(symbols: string[], signal: AbortSignal)
 }
 
 export function useMarketSnapshot(symbols: string[]) {
+  const { allowed, sessionKey } = usePrivateMarket()
   return useQuery({
-    queryKey: ["home-market-snapshot", symbols],
+    queryKey: ["private-market-snapshot", sessionKey, symbols],
     queryFn: ({ signal }) => loadMarketSnapshot(symbols, signal),
     refetchInterval: MARKET_REFRESH_MS,
     staleTime: MARKET_REFRESH_MS,
     refetchOnWindowFocus: true,
     retry: false,
+    enabled: allowed && symbols.length > 0,
   })
 }

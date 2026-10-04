@@ -4,8 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 interface TickerPrice {
     price: number
-    change: number
-    priceChange: number
+    change: number | null
+    priceChange: number | null
 }
 
 interface UseBinanceTickerOptions {
@@ -162,7 +162,7 @@ export function useBinanceTickerFeed(symbols: string[], options?: UseBinanceTick
                     const price = numericField(ticker.c)
                     const change = numericField(ticker.P)
                     const priceChange = numericField(ticker.p)
-                    if (price === null || price <= 0 || change === null || priceChange === null) return
+                    if (price === null || price <= 0) return
                     // Browser receipt time, not an exchange/source price timestamp.
                     pending.set(symbol, { price: { price, change, priceChange }, receivedAt: Date.now() })
                     scheduleFlush()

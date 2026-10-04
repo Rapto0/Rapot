@@ -13,6 +13,7 @@ import {
   type LogEntry,
   type ScanHistory,
   type ApiSpecialTagHealth,
+  type MarketSourceMetadata,
 } from "@/lib/api/client"
 import { useBotHealth } from "@/lib/hooks/use-health"
 import { Button } from "@/components/ui/button"
@@ -21,6 +22,9 @@ import { Select } from "@/components/ui/select"
 import { ActionDialog } from "@/components/ui/action-dialog"
 import { useToast } from "@/components/ui/toast"
 import { ScanStatus } from "@/components/scanner/scan-status"
+import { BorsapyScreener } from "@/components/scanner/borsapy-screener"
+import { MarketDataStatus } from "@/components/market-data-status"
+import { usePrivateMarket } from "@/lib/hooks/use-private-market"
 import { cn, getTimeAgo } from "@/lib/utils"
 
 type MarketKind = "BIST" | "Kripto"
@@ -96,7 +100,7 @@ interface ScannerMetricTarget {
   marketType: MarketKind
 }
 
-interface MarketMetricSnapshot {
+interface MarketMetricSnapshot extends MarketSourceMetadata {
   latestPrice: number
   changePct: number | null
   perf7d: number | null
@@ -117,6 +121,8 @@ interface ScannerSignal {
 }
 
 interface ScreenerRow {
+  marketMessage?: string;
+  marketMetadata?: MarketSourceMetadata;
   key: string
   symbol: string
   marketType: MarketKind
@@ -233,7 +239,7 @@ const COLUMN_HELP: Record<ColumnId, string> = {
   symbol: "Takip edilen enstruman kodu.",
   market: "Enstrumanin geldigi pazar (BIST veya Kripto).",
   price: "Secilen sembol icin son gorulen fiyat.",
-  changePct: "Bir onceki kayda gore yuzdesel degisim.",
+  changePct: "BIST: sağlayıcının seans değişimi; kripto: Binance son 24 saat değişimi. Veri yoksa boş gösterilir.",
   perf7d: "Yaklasik 7 gunluk performans.",
   perf30d: "Yaklasik 30 gunluk performans.",
   lastSignal: "Botun son verdigi sinyal yonu.",
@@ -332,6 +338,13 @@ type ScannerDialogState =
   | null
 
 export default function ScannerPage() {
+  const { allowed, sessionKey } = usePrivateMarket()
+  const [tab, setTab] = useState<"market" | "history">("market")
+  return <div className="mx-auto w-full max-w-[1900px] space-y-3 p-3 md:p-4"><h1 className="text-xl font-semibold">Piyasa Tarayıcı</h1><MarketDataStatus />{allowed && <><div className="flex gap-2" role="tablist" aria-label="Tarayıcı görünümü"><Button role="tab" aria-selected={tab === "market"} variant={tab === "market" ? "default" : "outline"} onClick={() => setTab("market")}>Borsapy piyasa taraması</Button><Button role="tab" aria-selected={tab === "history"} variant={tab === "history" ? "default" : "outline"} onClick={() => setTab("history")}>COMBO / HUNTER geçmişi</Button></div>{tab === "market" ? <BorsapyScreener key={sessionKey} /> : <SignalHistoryScanner key={sessionKey} />}</>}</div>
+}
+
+function SignalHistoryScanner() {
+  const { sessionKey } = usePrivateMarket()
   const { addToast } = useToast()
   const health = useBotHealth()
 
@@ -411,20 +424,26 @@ export default function ScannerPage() {
   const metricTargets = useMemo<ScannerMetricTarget[]>(
     () =>
       [...screenerRows]
-        .sort((left, right) => right.lastSeenTs - left.lastSeenTs)
-        .slice(0, 600)
+        .filter(row => (marketFilter === "ALL" || row.marketType === marketFilter)
+          && (!searchQuery.trim() || row.symbol.includes(searchQuery.trim().toUpperCase()))
+          && (strategyFilter === "ALL" || row.lastStrategy === strategyFilter)
+          && (signalFilter === "ALL" || row.lastSignalType === signalFilter)
+          && (!timeframeFilter.length || timeframeFilter.includes(row.lastTimeframe))
+          && (!watchOnly || Boolean(watchlists.find(list => list.id === activeWatchlistId)?.symbols.includes(row.key))))
+        .sort((left, right) => left.key === selectedRowKey ? -1 : right.key === selectedRowKey ? 1 : right.lastSeenTs - left.lastSeenTs)
+        .slice(0, 100)
         .map((row) => ({ key: row.key, symbol: row.symbol, marketType: row.marketType })),
-    [screenerRows]
+    [screenerRows, marketFilter, searchQuery, strategyFilter, signalFilter, timeframeFilter, watchOnly, watchlists, activeWatchlistId, selectedRowKey]
   )
 
   const metricTargetKey = useMemo(() => metricTargets.map((target) => target.key).join("|"), [metricTargets])
 
   const marketMetricQuery = useQuery<Record<string, MarketMetricSnapshot>>({
-    queryKey: ["scanner-v2", "market-metrics", metricTargetKey],
-    queryFn: () => fetchMarketMetricsForTargets(metricTargets),
+    queryKey: ["scanner-v2", "market-metrics", sessionKey, metricTargetKey],
+    queryFn: ({ signal }) => fetchMarketMetricsForTargets(metricTargets, signal),
     enabled: metricTargets.length > 0,
     staleTime: 60_000,
-    refetchInterval: 120_000,
+    refetchInterval: 10_000,
     refetchIntervalInBackground: false,
   })
 
@@ -897,8 +916,10 @@ export default function ScannerPage() {
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <div>
               <div className="label-uppercase">BIST ve Kripto</div>
-              <h1 className="mt-1 text-lg font-semibold tracking-[-0.02em]">Piyasa Tarayıcı</h1>
+              <h2 className="mt-1 text-lg font-semibold tracking-[-0.02em]">COMBO / HUNTER sinyal geçmişi</h2>
               <p className="mt-1 text-xs text-muted-foreground">{VIEW_PRESETS[activeView].subtitle}</p>
+              <p className="mt-2 text-xs text-muted-foreground">Güncel fiyatlar filtrelere uyan ilk 100 sembol için alınır; seçili sembole öncelik verilir. BIST: Borsapy / TradingView; kripto: Binance. Eksik fiyat, geçmiş sinyal fiyatıyla doldurulmaz.</p>
+              {marketMetricQuery.isError && <p role="alert" className="mt-2 text-xs text-loss">Güncel piyasa verileri yenilenemedi.</p>}
             </div>
             <div className="flex w-full flex-wrap items-center gap-2 xl:w-auto">
               <label className="flex w-full min-w-0 flex-col gap-1 sm:w-auto sm:flex-1 xl:w-[320px] xl:flex-none">
@@ -1184,6 +1205,7 @@ export default function ScannerPage() {
                 <MetricCell label="Degisim" value={formatPercent(selectedRow.changePct)} tone={toneFromPercent(selectedRow.changePct)} />
                 <MetricCell label="Sinyal Yogunlugu" value={`${selectedRow.signals24h} / ${selectedRow.totalSignals}`} />
               </div>
+              <p title={marketPriceContext(selectedRow).title} className={cn("text-[11px]", marketPriceContext(selectedRow).warning ? "text-amber-400" : "text-muted-foreground")}>{marketPriceContext(selectedRow).label}</p>
 
               <div className="max-h-[300px] overflow-auto border border-border bg-base">
                 <ul className="divide-y divide-[rgba(255,255,255,0.04)]">
@@ -1429,8 +1451,13 @@ function renderCellContent(column: ColumnId, row: ScreenerRow, watchSet: Set<str
       )
     case "market":
       return <span className="label-uppercase">{row.marketType}</span>
-    case "price":
-      return <span className="mono-numbers text-foreground">{formatPrice(row.latestPrice, row.marketType)}</span>
+    case "price": {
+      const context = marketPriceContext(row)
+      return <div className="space-y-1" title={context.title}>
+        <span title={row.marketMessage} className="mono-numbers text-foreground">{formatPrice(row.latestPrice, row.marketType)}</span>
+        <span className={cn("block text-[10px]", context.warning ? "text-amber-400" : "text-muted-foreground")}>{context.label}</span>
+      </div>
+    }
     case "changePct":
       return <span className={cn("mono-numbers", toneClassFromPercent(row.changePct))}>{formatPercent(row.changePct)}</span>
     case "perf7d":
@@ -1711,6 +1738,7 @@ function formatPercent(value: number | null) {
 }
 
 function formatPrice(value: number, marketType: MarketKind) {
+  if (!Number.isFinite(value)) return "—"
   const digits = marketType === "Kripto" ? 4 : 2
   return new Intl.NumberFormat("tr-TR", { minimumFractionDigits: digits, maximumFractionDigits: digits }).format(value)
 }
@@ -1936,42 +1964,47 @@ function applyMarketMetrics(
   rows: ScreenerRow[],
   metrics: Record<string, MarketMetricSnapshot>
 ) {
-  if (Object.keys(metrics).length === 0) return rows
   return rows.map((row) => {
     const metric = metrics[row.key]
-    if (!metric) return row
     return {
       ...row,
-      latestPrice: Number.isFinite(metric.latestPrice) ? metric.latestPrice : row.latestPrice,
-      changePct: metric.changePct ?? row.changePct,
-      perf7d: metric.perf7d ?? row.perf7d,
-      perf30d: metric.perf30d ?? row.perf30d,
+      latestPrice: metric && Number.isFinite(metric.latestPrice) ? metric.latestPrice : Number.NaN,
+      changePct: metric?.changePct ?? null,
+      perf7d: metric?.perf7d ?? null,
+      perf30d: metric?.perf30d ?? null,
+      marketMessage: metric?.message ?? "Güncel fiyat bekleniyor; geçmiş sinyal fiyatı değildir.",
+      marketMetadata: metric ? {
+        source: metric.source, state: metric.state, provider_time: metric.provider_time,
+        received_at: metric.received_at, realtime_verified: metric.realtime_verified,
+      } : { state: "waiting" as const },
     }
   })
 }
 
-async function fetchMarketMetricsForTargets(targets: ScannerMetricTarget[]) {
+async function fetchMarketMetricsForTargets(targets: ScannerMetricTarget[], signal?: AbortSignal) {
   const metrics: Record<string, MarketMetricSnapshot> = {}
   if (targets.length === 0) return metrics
 
-  const chunkSize = 120
+  const chunkSize = 50
   for (let index = 0; index < targets.length; index += chunkSize) {
     const chunk = targets.slice(index, index + chunkSize)
-    try {
-      const keys = chunk.map((target) => target.key)
-      const response = await fetchMarketMetrics(keys)
-      for (const key of keys) {
-        const item = response[key]
-        if (!item) continue
-        metrics[key] = {
-          latestPrice: Number.isFinite(item.latest_price) ? (item.latest_price as number) : Number.NaN,
-          changePct: toFiniteOrNull(item.change_pct),
-          perf7d: toFiniteOrNull(item.perf_7d),
-          perf30d: toFiniteOrNull(item.perf_30d),
-        }
+    const keys = chunk.map((target) => target.key)
+    const response = await fetchMarketMetrics(keys, { signal })
+    for (const key of keys) {
+      const item = response[key]
+      if (!item) continue
+      metrics[key] = {
+        latestPrice: Number.isFinite(item.latest_price) ? (item.latest_price as number) : Number.NaN,
+        changePct: toFiniteOrNull(item.change_pct),
+        perf7d: toFiniteOrNull(item.perf_7d),
+        perf30d: toFiniteOrNull(item.perf_30d),
+        message: item.message ?? undefined,
+        source: item.source,
+        state: item.state,
+        provider_time: item.provider_time,
+        received_at: item.received_at,
+        realtime_verified: item.realtime_verified,
       }
-    } catch {
-      continue
     }
   }
 
@@ -1980,6 +2013,20 @@ async function fetchMarketMetricsForTargets(targets: ScannerMetricTarget[]) {
 
 function toFiniteOrNull(value: number | null | undefined) {
   return Number.isFinite(value) ? (value as number) : null
+}
+
+function marketPriceContext(row: ScreenerRow) {
+  const metadata = row.marketMetadata
+  const rawSource = metadata?.source ?? ""
+  const source = /binance/i.test(rawSource) ? "Binance" : /borsapy|tradingview/i.test(rawSource) ? "Borsapy / TradingView" : rawSource || "Kaynak bekleniyor"
+  const states = { ok: "Veri alındı", waiting: "Veri bekleniyor", stale: "Eski veri", error: "Veri alınamadı", auth_required: "Hesap bağlantısı gerekli", unsupported: "Desteklenmiyor" }
+  const state = metadata?.state
+  const label = `${source} · ${state ? states[state] ?? "Durum bilinmiyor" : "Durum bilinmiyor"}`
+  return {
+    label,
+    warning: Boolean(state && !["ok", "waiting"].includes(state)),
+    title: [label, row.marketMessage, metadata?.provider_time ? `Sağlayıcı zamanı: ${metadata.provider_time}` : "Sağlayıcı zamanı bilinmiyor", metadata?.received_at ? `Son alım: ${metadata.received_at}` : null].filter(Boolean).join(" · "),
+  }
 }
 
 function sortColumns(columns: ColumnId[]) {

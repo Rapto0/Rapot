@@ -3,6 +3,7 @@
 import json
 import logging
 import threading
+import time
 from types import SimpleNamespace
 
 import pandas as pd
@@ -38,6 +39,12 @@ class FakeStream:
 
     def on_quote(self, symbol, callback):
         self.quote_callback = callback
+
+    def on_any_quote(self, callback):
+        self.quote_callback = callback
+
+    def unsubscribe(self, symbol, exchange="BIST"):
+        self.unsubscribed = (symbol, exchange)
 
     def on_candle(self, symbol, interval, callback):
         self.candle_callback = callback
@@ -483,3 +490,228 @@ def test_real_upstream_protocol_isolated_charts_corrections_and_bounds(gateway, 
         gateway.stream_snapshot("THYAO", "1m")
     assert gateway.status()["authenticated"] is False
     assert gateway.status()["state"] == "auth_needed"
+
+
+def test_shared_quote_pool_auth_timestamps_reuse_and_account_clear(gateway):
+    with pytest.raises(BorsapyGatewayError):
+        gateway.quote_snapshot([("BIST", "THYAO")])
+    connect(gateway)
+    first = gateway.quote_snapshot([("BIST", "THYAO"), ("BIST", "GARAN")])
+    stream = gateway._quotes["stream"]
+    again = gateway.quote_snapshot([("BIST", "THYAO")])
+    assert gateway._quotes["stream"] is stream
+    assert first["BIST:THYAO"]["received_at"] == again["BIST:THYAO"]["received_at"]
+    assert first["BIST:THYAO"]["provider_time"] != first["BIST:THYAO"]["received_at"]
+    assert first["BIST:THYAO"]["realtime_verified"] is False
+    assert TOKEN not in json.dumps(first)
+    epoch = gateway.data_epoch()
+    gateway.clear()
+    assert stream.closed and gateway._quotes is None
+    assert gateway.data_epoch() > epoch
+
+
+def test_quote_pool_expiry_capacity_and_instrument_collision(gateway):
+    connect(gateway)
+    for start in range(0, 200, 50):
+        gateway.quote_snapshot([("BIST", "A" + str(i)) for i in range(start, start + 50)])
+    with pytest.raises(BorsapyGatewayError, match="200"):
+        gateway.quote_snapshot([("BIST", "EXTRA")])
+    with pytest.raises(BorsapyGatewayError, match="borsada"):
+        gateway.quote_snapshot([("NASDAQ", "A0")])
+    old = gateway._quotes["stream"]
+    gateway.clock[0] += 121
+    gateway.quote_snapshot([("BIST", "EXTRA")])
+    assert old.closed
+    assert len(gateway._quotes["symbols"]) == 1
+
+
+def test_quote_pool_reconnect_backoff_and_bad_price_are_explicit(gateway):
+    connect(gateway)
+    gateway.quote_snapshot([("BIST", "THYAO")])
+    stream = gateway._quotes["stream"]
+    stream.quote = {"last": float("nan"), "timestamp": 99999999999999}
+    result = gateway.quote_snapshot([("BIST", "THYAO")])["BIST:THYAO"]
+    assert result["state"] == "waiting" and result["price"] is None
+    assert result["provider_time"] is None
+    stream._connected.clear()
+    with pytest.raises(BorsapyGatewayError):
+        gateway.quote_snapshot([("BIST", "THYAO")])
+    gateway.clock[0] += 31
+    gateway.quote_snapshot([("BIST", "THYAO")])
+    assert gateway._quotes["stream"] is not stream
+
+
+def test_quote_freshness_requires_provider_timestamp_not_just_new_metadata(gateway):
+    connect(gateway)
+    gateway.quote_snapshot([("BIST", "THYAO")])
+    entry = gateway._quotes
+    entry["received"]["THYAO"] = time.time()
+    for stamp in [None, time.time() - 1000, time.time() + 1000]:
+        entry["stream"].quote = {"last": 100, "timestamp": stamp}
+        assert gateway.quote_snapshot([("BIST", "THYAO")])["BIST:THYAO"]["state"] == "stale"
+    entry["stream"].quote = {"last": 100, "timestamp": time.time()}
+    assert gateway.quote_snapshot([("BIST", "THYAO")])["BIST:THYAO"]["state"] == "ok"
+
+
+def test_existing_quotes_read_during_history_lock_but_new_subscriptions_wait(gateway, monkeypatch):
+    from application.services.borsapy_gateway import _AUTH_LOCK
+
+    connect(gateway)
+    gateway.quote_snapshot([("BIST", "THYAO")])
+    entered, release = threading.Event(), threading.Event()
+
+    def history():
+        with _AUTH_LOCK:
+            entered.set()
+            release.wait(5)
+
+    thread = threading.Thread(target=history)
+    thread.start()
+    try:
+        assert entered.wait(2)
+        assert gateway.quote_snapshot([("BIST", "THYAO")])["BIST:THYAO"]["price"] == 100
+        with pytest.raises(BorsapyGatewayError) as result:
+            gateway.quote_snapshot([("BIST", "GARAN")])
+        assert result.value.status_code == 429
+        assert "GARAN" not in gateway._quotes["symbols"]
+        original = gateway._read_quotes
+
+        def removed(entry, pairs):
+            result = original(entry, pairs)
+            entry["symbols"].pop("THYAO")
+            return result
+
+        monkeypatch.setattr(gateway, "_read_quotes", removed)
+        with pytest.raises(BorsapyGatewayError):
+            gateway.quote_snapshot([("BIST", "THYAO")])
+        assert "THYAO" not in gateway._quotes["symbols"]
+    finally:
+        release.set()
+        thread.join(2)
+
+
+def test_public_calendar_callback_does_not_hold_account_lock(gateway):
+    connect(gateway)
+    entered, release = threading.Event(), threading.Event()
+
+    def calendar(bp):
+        entered.set()
+        release.wait(3)
+
+    thread = threading.Thread(target=lambda: gateway.run_public(calendar))
+    thread.start()
+    try:
+        assert entered.wait(2)
+        assert gateway.quote_snapshot([("BIST", "THYAO")])["BIST:THYAO"]["price"] == 100
+    finally:
+        release.set()
+        thread.join(2)
+
+
+def test_existing_chart_survives_slow_history_and_new_requests_fail_bounded(gateway):
+    from application.services.borsapy_gateway import _AUTH_LOCK
+
+    connect(gateway)
+    first = gateway.stream_snapshot("THYAO")
+    entered, release = threading.Event(), threading.Event()
+
+    def history():
+        with _AUTH_LOCK:
+            entered.set()
+            release.wait(8)
+
+    thread = threading.Thread(target=history)
+    thread.start()
+    try:
+        assert entered.wait(2)
+        assert gateway.stream_snapshot("THYAO")["candles"] == first["candles"]
+        for request in (
+            lambda: gateway.stream_snapshot("GARAN"),
+            lambda: gateway.stream_snapshot("THYAO", subscriber_id="new-client"),
+            lambda: gateway.run(lambda _: pytest.fail("Must not run behind busy provider")),
+        ):
+            with pytest.raises(BorsapyGatewayError) as result:
+                request()
+            assert result.value.status_code == 429
+    finally:
+        release.set()
+        thread.join(2)
+
+
+def test_chart_fast_read_rejects_generation_change_during_read(gateway, monkeypatch):
+    from application.services.borsapy_gateway import _AUTH_LOCK
+
+    connect(gateway)
+    gateway.stream_snapshot("THYAO")
+    original = gateway._read_stream
+
+    def invalidated(*args):
+        result = original(*args)
+        gateway._data_epoch += 1
+        return result
+
+    monkeypatch.setattr(gateway, "_read_stream", invalidated)
+    entered, release = threading.Event(), threading.Event()
+
+    def history():
+        with _AUTH_LOCK:
+            entered.set()
+            release.wait(4)
+
+    thread = threading.Thread(target=history)
+    thread.start()
+    try:
+        assert entered.wait(2)
+        with pytest.raises(BorsapyGatewayError) as result:
+            gateway.stream_snapshot("THYAO")
+        assert result.value.status_code == 429
+    finally:
+        release.set()
+        thread.join(2)
+
+
+def test_real_quote_packets_ignore_late_other_exchange_and_clear_symbol_errors(
+    gateway, monkeypatch
+):
+    from borsapy.stream import TradingViewStream
+
+    class Socket:
+        def send(self, message):
+            pass
+
+        def close(self):
+            pass
+
+    def offline_connect(stream, timeout):
+        stream._ws = Socket()
+        stream._on_open(stream._ws)
+        return True
+
+    monkeypatch.setattr(TradingViewStream, "connect", offline_connect)
+    gateway.fake.TradingViewStream = TradingViewStream
+    connect(gateway)
+    gateway.quote_snapshot([("BIST", "ABC"), ("BIST", "KEEP")])
+    stream = gateway._quotes["stream"]
+
+    def packet(full, value=100, status="ok"):
+        message = {
+            "m": "qsd",
+            "p": [
+                stream._quote_session,
+                {"n": full, "s": status, "v": {"lp": value, "lp_time": time.time()}},
+            ],
+        }
+        stream._on_message(stream._ws, stream._format_packet(message))
+
+    packet("BIST:ABC")
+    packet("NASDAQ:ABC", 999)
+    assert gateway.quote_snapshot([("BIST", "ABC")])["BIST:ABC"]["price"] == 100
+    packet("BIST:ABC", status="error")
+    assert gateway.quote_snapshot([("BIST", "ABC")])["BIST:ABC"]["state"] == "error"
+    gateway.clock[0] += 121
+    gateway._quotes["symbols"]["KEEP"] = ("BIST", gateway.clock[0])
+    gateway.quote_snapshot([("NASDAQ", "ABC")])
+    assert "ABC" not in gateway._quotes["errors"]
+    packet("BIST:ABC", 888)
+    packet("NASDAQ:ABC", 200)
+    assert gateway.quote_snapshot([("NASDAQ", "ABC")])["NASDAQ:ABC"]["price"] == 200

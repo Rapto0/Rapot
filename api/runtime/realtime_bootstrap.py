@@ -14,6 +14,7 @@ from api.realtime import (
     register_broadcast_loop,
 )
 from api.runtime.signal_feed import SignalFeed
+from settings import settings
 from signal_dispatcher import register_signal_publisher
 
 _signal_feed: SignalFeed | None = None
@@ -37,6 +38,8 @@ def get_realtime_status() -> dict[str, Any]:
             "started": bool(_status_state.get("market_realtime_ready")),
             "binance_connected": bool(socket is not None and not socket.closed),
             "bist_running": bool(getattr(bist, "_running", False)),
+            "bist_source": "borsapy_tradingview" if settings.borsapy_use_for_bist else "legacy",
+            "bist_account_stream": "on_demand" if settings.borsapy_use_for_bist else None,
             "startup_failed": bool(_status_state.get("market_realtime_error")),
         },
     }
@@ -101,13 +104,19 @@ async def start_realtime_services(*, runtime_state: dict[str, Any], logger: Any)
         from bist_service import bist_service
         from websocket_manager import ws_manager
 
-        _providers = (ws_manager, bist_service)
+        # Authenticated BIST streams are demand-driven by the private gateway.
+        # Missing account setup is a connection state, not an API health failure.
+        legacy_bist = None if settings.borsapy_use_for_bist else bist_service
+        _providers = (ws_manager, legacy_bist)
         ws_manager.on("ticker", broadcast_ticker)
         ws_manager.on("kline", _on_kline)
         ws_manager.on("trade", _on_trade)
-        bist_service.on_update(broadcast_bist_update)
+        if legacy_bist is not None:
+            legacy_bist.on_update(broadcast_bist_update)
 
-        for name, provider in (("binance", ws_manager), ("bist", bist_service)):
+        for name, provider in (("binance", ws_manager), ("bist", legacy_bist)):
+            if provider is None:
+                continue
             try:
                 await provider.start()
             except Exception as exc:
@@ -147,8 +156,11 @@ async def stop_realtime_services(*, runtime_state: dict[str, Any], logger: Any) 
             ws_manager.off("ticker", broadcast_ticker)
             ws_manager.off("kline", _on_kline)
             ws_manager.off("trade", _on_trade)
-            bist_service.off_update(broadcast_bist_update)
+            if bist_service is not None:
+                bist_service.off_update(broadcast_bist_update)
             for provider in _providers:
+                if provider is None:
+                    continue
                 try:
                     await provider.stop()
                 except Exception:

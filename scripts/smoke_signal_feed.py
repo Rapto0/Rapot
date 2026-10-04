@@ -72,6 +72,7 @@ def isolate_environment(base: Path) -> None:
         AI_ENABLED="0",
         RUN_EMBEDDED_BOT="false",
         JWT_SECRET_KEY="offline-smoke-secret-never-used-for-real-sessions",
+        ADMIN_PASSWORD="synthetic-offline-smoke-password",
         DATABASE_PATH=str(base / "signals.sqlite3"),
         DATABASE_URL="",
         CACHE_DATABASE_PATH=str(base / "cache.sqlite3"),
@@ -105,6 +106,12 @@ async def signal_socket(app: Any):
     incoming: asyncio.Queue = asyncio.Queue()
     outgoing: asyncio.Queue = asyncio.Queue()
     await incoming.put({"type": "websocket.connect"})
+    from api.auth import create_access_token
+
+    token = create_access_token({"sub": "admin"})
+    await incoming.put(
+        {"type": "websocket.receive", "text": json.dumps({"type": "auth", "token": token})}
+    )
     scope = {
         "type": "websocket",
         "asgi": {"version": "3.0", "spec_version": "2.1"},
@@ -123,6 +130,8 @@ async def signal_socket(app: Any):
     try:
         accepted = await asyncio.wait_for(outgoing.get(), timeout=3)
         assert accepted["type"] == "websocket.accept"
+        authenticated = await asyncio.wait_for(outgoing.get(), timeout=3)
+        assert json.loads(authenticated["text"]) == {"type": "authenticated"}
         yield outgoing
     finally:
         await incoming.put({"type": "websocket.disconnect", "code": 1000})

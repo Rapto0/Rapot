@@ -19,6 +19,17 @@ function isCoreApiUrl(url: string): boolean {
     );
 }
 
+function isPrivateHealthStatusUrl(url: string): boolean {
+    if (typeof window === 'undefined') return false;
+    const origin = window.location.origin;
+    const base = new URL(HEALTH_API_URL, origin);
+    const target = new URL(url, origin);
+    // Health configuration may point off-site; only our status proxy receives the session.
+    return base.origin === origin && target.origin === origin
+        && !base.username && !base.password && !target.username && !target.password
+        && target.pathname === `${base.pathname.replace(/\/$/, '')}/status`;
+}
+
 export class ApiError extends Error {
     status: number;
 
@@ -35,7 +46,11 @@ export async function fetchApi<T>(
 ): Promise<T> {
     const headers = new Headers(options.headers);
     if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
-    const token = isCoreApiUrl(url) ? getAccessToken() : null;
+    const coreApi = isCoreApiUrl(url);
+    const token = coreApi || isPrivateHealthStatusUrl(url) ? getAccessToken() : null;
+    if (coreApi && /\/(?:borsapy(?:\/|\?|$)|calendar(?:\?|$))/.test(new URL(url, window.location.origin).pathname) && !token) {
+        throw new ApiError('Bu işlem için giriş yapın.', 401);
+    }
     if (token && !headers.has('Authorization')) headers.set('Authorization', `Bearer ${token}`);
     const response = await fetch(url, {
         ...options,

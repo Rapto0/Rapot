@@ -7,6 +7,8 @@ interface SocketOptions {
   onMessage: (data: string) => void;
   onOpen?: () => void;
   onState?: (state: ConnectionState) => void;
+  getToken?: () => string | null;
+  onAuthFailure?: () => void;
 }
 
 /** Own one socket and its retries; retired sockets can never change current state. */
@@ -16,8 +18,11 @@ export function createReconnectingSocket(options: SocketOptions) {
   let attempts = 0;
   let enabled = false;
   let disposed = false;
+  let authTimeout: ReturnType<typeof setTimeout> | null = null;
 
   function retire() {
+    if (authTimeout !== null) clearTimeout(authTimeout);
+    authTimeout = null;
     const previous = socket;
     socket = null;
     if (!previous) return;
@@ -37,22 +42,49 @@ export function createReconnectingSocket(options: SocketOptions) {
 
   function open() {
     if (!enabled || disposed || socket || retry !== null) return;
+    const token = options.getToken?.();
+    if (options.getToken && !token) { enabled = false; options.onState?.('disconnected'); return; }
     options.onState?.(attempts ? 'reconnecting' : 'connecting');
     try {
       const current = new WebSocket(options.url());
       socket = current;
       const isCurrent = () => enabled && !disposed && socket === current;
-      current.onopen = () => {
-        if (!isCurrent()) return;
+      let authenticated = !options.getToken;
+      const ready = () => {
         attempts = 0;
         options.onState?.('connected');
         options.onOpen?.();
       };
-      current.onmessage = (event) => {
-        if (isCurrent()) options.onMessage(String(event.data));
+      const deny = () => {
+        enabled = false;
+        retire();
+        options.onState?.('disconnected');
+        options.onAuthFailure?.();
       };
-      current.onclose = () => {
+      current.onopen = () => {
         if (!isCurrent()) return;
+        if (options.getToken) {
+          current.send(JSON.stringify({ type: 'auth', token }));
+          authTimeout = setTimeout(() => { if (isCurrent()) deny(); }, 5000);
+        } else ready();
+      };
+      current.onmessage = (event) => {
+        if (!isCurrent()) return;
+        if (!authenticated) {
+          try {
+            if (JSON.parse(String(event.data)).type !== 'authenticated') return;
+          } catch { return; }
+          authenticated = true;
+          if (authTimeout !== null) clearTimeout(authTimeout);
+          authTimeout = null;
+          ready();
+          return;
+        }
+        options.onMessage(String(event.data));
+      };
+      current.onclose = (event) => {
+        if (!isCurrent()) return;
+        if (event.code === 4401 || event.code === 4403) { deny(); return; }
         retire();
         scheduleRetry();
       };
@@ -119,6 +151,7 @@ interface RealtimeConnectionOptions {
   getStore: typeof useRealtimeStore.getState;
   refreshSignals: () => void;
   onSignal?: (signal: SignalData) => void;
+  getToken?: () => string | null;
 }
 
 export function createRealtimeConnection(options: RealtimeConnectionOptions) {
@@ -143,11 +176,15 @@ export function createRealtimeConnection(options: RealtimeConnectionOptions) {
     onSignal,
   };
   const ticker = createReconnectingSocket({
+    getToken: options.getToken,
+    onAuthFailure: denyAll,
     url: () => `${options.baseUrl()}/ticker`,
     onState: (state) => options.getStore().setConnectionState(state),
     onMessage: (raw) => dispatchTickerSocketMessage(raw, tickerHandlers),
   });
   const signals = createReconnectingSocket({
+    getToken: options.getToken,
+    onAuthFailure: denyAll,
     url: () => `${options.baseUrl()}/signals`,
     onState: (state) => options.getStore().setSignalConnectionState(state),
     onOpen: () => {
@@ -168,6 +205,12 @@ export function createRealtimeConnection(options: RealtimeConnectionOptions) {
     signals.disconnect();
     for (const entry of subscriptions.values()) entry.socket.disconnect();
     refresh.cancel();
+  }
+
+  function denyAll() {
+    disposed = true;
+    disconnect();
+    options.getStore().resetPrivateData();
   }
 
   return {
@@ -195,6 +238,8 @@ export function createRealtimeConnection(options: RealtimeConnectionOptions) {
         entry = {
           count: 0,
           socket: createReconnectingSocket({
+            getToken: options.getToken,
+            onAuthFailure: denyAll,
             url: () => `${options.baseUrl()}${endpoint}`,
             onMessage: (raw) => dispatchTickerSocketMessage(raw, tickerHandlers),
           }),

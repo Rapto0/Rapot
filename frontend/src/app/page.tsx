@@ -8,6 +8,8 @@ import { MarketCategoryPanel } from "@/components/dashboard/market-category"
 import { useBinanceTickerFeed } from "@/lib/hooks/use-binance-ticker"
 import { useMarketSnapshot } from "@/lib/hooks/use-market-snapshot"
 import { describeMarketRequest, describeTickerFeed } from "@/lib/market-feed"
+import { usePrivateMarket } from "@/lib/hooks/use-private-market"
+import { MarketDataStatus } from "@/components/market-data-status"
 
 type MarketFeedSource = "binance" | "indices"
 
@@ -69,7 +71,7 @@ const LIVE_MARKET_CATEGORIES: MarketCategory[] = [
     items: [
       { id: "XAUUSD", label: "XAUUSD", source: "indices", feedSymbol: "XAUUSD=X" },
       { id: "XAGUSD", label: "XAGUSD", source: "indices", feedSymbol: "XAGUSD=X" },
-      { id: "OIL", label: "Spot Petrol", source: "indices", feedSymbol: "CL=F" },
+      { id: "OIL", label: "WTI referans", source: "indices", feedSymbol: "WTI" },
       { id: "DXY", label: "DXY", source: "indices", feedSymbol: "DX-Y.NYB" },
       { id: "USDTRY", label: "Dolar/TL", source: "indices", feedSymbol: "TRY=X" },
     ],
@@ -84,8 +86,9 @@ const INDEX_SYMBOLS = LIVE_MARKET_CATEGORIES.flatMap((category) =>
   category.items.filter((item) => item.source === "indices").map((item) => item.feedSymbol)
 )
 export default function LandingPage() {
+  const { allowed } = usePrivateMarket()
   const market = useMarketSnapshot(INDEX_SYMBOLS)
-  const crypto = useBinanceTickerFeed(BINANCE_SYMBOLS)
+  const crypto = useBinanceTickerFeed(BINANCE_SYMBOLS, { paused: !allowed })
   const [clock, setClock] = useState({ now: 0, startedAt: 0 })
 
   useEffect(() => {
@@ -106,6 +109,8 @@ export default function LandingPage() {
       const live = streaming ? crypto.prices[item.feedSymbol] : undefined
       const snapshot = streaming ? undefined : market.data?.[item.feedSymbol.toUpperCase()]
       return {
+        ...snapshot,
+        source: streaming ? "Binance · USDT" : snapshot?.source,
         key: item.id, label: item.label,
         value: live?.price ?? snapshot?.value,
         change: live?.change ?? snapshot?.change,
@@ -143,6 +148,7 @@ export default function LandingPage() {
         </div>
       </section>
 
+      <MarketDataStatus />
       <section className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         {categorizedMarketRows.map((category) => (
           <MarketCategoryPanel
@@ -150,7 +156,7 @@ export default function LandingPage() {
             {...category}
             now={clock.now}
             receivedAt={market.dataUpdatedAt}
-            onRefresh={category.streaming ? crypto.reconnect : () => { void market.refetch({ cancelRefetch: false }) }}
+            onRefresh={() => { if (allowed) { if (category.streaming) crypto.reconnect(); else void market.refetch({ cancelRefetch: false }) } }}
             refreshing={category.streaming ? crypto.status === "connecting" : market.isFetching}
           />
         ))}
@@ -200,7 +206,8 @@ export default function LandingPage() {
         <h2 className="label-uppercase mb-2">Verileri okurken</h2>
         <p>
           Süreler, tarayıcının son mesajı veya yanıtı aldığı zamanı gösterir; borsadaki işlem zamanı değildir.
-          BIST, ABD, emtia ve döviz özetleri son mevcut günlük veriyi kullanır; fiyatlar gecikmeli olabilir.
+          BIST, ABD, emtia ve döviz Borsapy/TradingView bağlantısından; kripto Binance USDT akışından alınır.
+          Sağlayıcı zamanı varsa ayrıca gösterilir; gecikmesiz fiyat kabulü henüz doğrulanmadı.
           Akış veya yenileme kesilirse son alınan fiyatlar uyarıyla birlikte gösterilir.
         </p>
       </section>

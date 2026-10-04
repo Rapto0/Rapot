@@ -1,8 +1,10 @@
-# Borsapy araştırma merkezi
+# Borsapy araştırma ve kişisel veri altyapısı
 
 4 Ekim 2026. Kullanıcı, mevcut TradingView Premium ve BIST gerçek zamanlı veri
 paketiyle kişisel Rapot sitesinde borsapy README'sindeki özellik ailelerini
-istedi. Canlı piyasa/hesap kabulü piyasa açıkken yapılmak üzere ertelendi.
+istedi. Sonraki kapsam grafik, dashboard, izleme listesi, scanner ve ekonomik
+takvimin ortak kişisel veri altyapısını da içerir. Canlı piyasa/hesap kabulü
+piyasa açıkken yapılmak üzere ertelendi.
 
 Kaynak: borsapy 0.11.0,
 [`a9e41ae398fc2d25b35f864a5c7028d5f98862c3`](https://github.com/saidsurucu/borsapy/tree/a9e41ae398fc2d25b35f864a5c7028d5f98862c3).
@@ -45,7 +47,7 @@ veya sağlayıcının bütün metotlarına serbest erişim değildir.
 Şirket finansalları ve temettü/sermaye işlemleri de sunulur. Her aile için web
 yüzeyi bulunması, bütün sağlayıcıların canlı kabul edildiği anlamına gelmez.
 
-Çevrimdışı kabul: CI'da 1.204 Python testi (bir performans testi atlandı);
+İlk araştırma yayınının çevrimdışı kabulü: CI'da 1.204 Python testi (bir performans testi atlandı);
 227 frontend testi, lint/typecheck, build ve standalone proxy kontrolü geçti.
 Sentetik tarayıcı oturumunda katalog/formlar, kaydetme, replay, akış kontrolleri,
 özel grafik kaynağı, bağlantı sekmesi ve 320 px görünüm sınandı. Sağlayıcı,
@@ -60,6 +62,11 @@ dosya doğrulandı. Eski 10 tablonun şeması korundu; araştırma tablosu ve in
 eklendi. TradingView/EVDS/X bağlantıları henüz yapılandırılmamış; gerçek hesap,
 fiyat/mum akışı ve piyasa kabulü erteli. Ayrıntılı kaynak/imaj, yedek, temizlik ve
 kapasite kanıtları [devam planındadır](RAPOT_DEVAM_PLANI.md#son-üretim-ve-yayın-kanıtları).
+
+Aşağıdaki site geneli özel veri ve varsayılan kaynak değişiklikleri bu ilk
+yayından sonradır. API/frontend/bot yayını henüz tamamlanmadı; mevcut kaynak
+sözleşmesi üretimde kabul edilmiş davranışla karıştırılmamalıdır. Yerel doğrulama
+ve yeni yayın durumu devam planında izlenir.
 
 Python güvenlik işi report-only sözleşmesini korur: 134 pakette 5 etkilenen
 paket / 16 ham bulgu (12 benzersiz bildirim) raporlandı. 22 ek paketin tamamı
@@ -76,10 +83,11 @@ sınırlar; özellikle dış HTTP istemcisinin tam erişilemezliği kanıtlanmad
 [PyJWT](https://github.com/advisories/GHSA-42vr-xj54-vc7v) ve
 [urllib3](https://github.com/advisories/GHSA-vxq7-64xx-v4gw) bildirimleri.
 
-`/chart` BIST kaynağı olarak Borsapy/TradingView seçimini sunar. Özel
+`/chart` BIST kaynağı olarak Borsapy/TradingView kullanır. Özel
 `/borsapy/candles/{symbol}` ve `/borsapy/stream` kullanılır. Göstergeler mevcut
-TypeScript hesaplayıcısıyla çalışır. İş Yatırım/Yahoo seçimi korunur. Koşulsuz
-“Canlı” etiketi kaldırılır. Araştırmadaki borsapy göstergeleriyle mevcut
+TypeScript hesaplayıcısıyla çalışır; grafik eski sağlayıcıya otomatik dönmez.
+Kripto grafiği Binance kaynağını korur. Koşulsuz “Canlı” etiketi kullanılmaz.
+Araştırmadaki borsapy göstergeleriyle mevcut
 COMBO/HUNTER motorlarının eşdeğerliği iddia edilmez.
 
 ## Kalıcılık ve erişim
@@ -99,9 +107,55 @@ COMBO/HUNTER motorlarının eşdeğerliği iddia edilmez.
   okunamayan şifreli dosyada bütün kimlikli yollar durur.
 - `.borsapy/` Git ve Docker build context'inden çıkarılır. Gizli yedekler genel
   rapora veya Git'e alınmaz. Windows'ta ciphertext JWT anahtarından ayrı tutulur.
-- `/borsapy/catalog`, `/query`, `/saved`, `/connection`, `/stream`, `/candles`
-  yönetici ister. Kaynaklar anonim endpointlere otomatik açılmaz. Sağlayıcı
+- Kişisel dashboard HTTP yolları, `/borsapy/*`, piyasa verisi, sinyaller,
+  kayıtlı analizler ve takvim dahil yönetici ister; yanıtlar ve hatalar
+  `private, no-store` taşır. Ana API kök/health, auth ve belge yolları global
+  sınırın dışındadır; `/auth/me` kendi JWT doğrulamasını korur. Sağlayıcı
   oturumu ile Rapot JWT oturumu ayrıdır.
+- Ayrı Flask bot proxy'si de bu sınırı korur: sinyal, istatistik ve isteğe bağlı
+  Prometheus yolları admin ister. Başlıksız `/status` yalnız DB/yerel lifecycle
+  döndürür; ayrıntılı sayaç/hata bilgisi admin ister. Başlığı geçersiz bir istek
+  anonim yanıta düşmez. Cevaplar `private, no-store` ve `Vary: Authorization` taşır.
+- Backend WS ilk beş saniyede `{type: "auth", token}` mesajı, SSE Bearer başlığı
+  ister. WS `authenticated` yanıtından önce abonelik/veri akışı başlamaz.
+  URL'de token kabul edilmez. JWT süresi ve erişim veri tesliminde yeniden
+  denetlenir; 4401/4403 sonrası istemci yeniden bağlanmayı durdurup özel veriyi temizler.
+
+## Dashboard, izleme listesi ve takvim
+
+`borsapy_market_data.py` dashboard/izleme listesi için ortak özel read-model'dir.
+`/borsapy/market/*` ve ana piyasa endpointlerinin varsayılan `source=borsapy`
+yolu bunu kullanır. Eski piyasa endpointlerinde `source=legacy` açık seçimi
+korunur; ikisi de yöneticiye özeldir. Kimlikli fiyatlar eski SQLite `price_cache`
+ile karıştırılmaz. Kaynak, sağlayıcı zamanı, alınma zamanı ve
+bekleniyor/bayat/hata/kimlik gerekli durumları ayrı taşınır; eksik değişim sıfır
+gibi gösterilmez. `realtime_verified=false` canlı kabul sınırını korur.
+
+Dashboard fiyatları tek ortak TradingView quote bağlantısında en fazla 200 etkin
+sembol, istek başına 50 sembolle sınırlıdır. Kullanılmayan abonelikler varsayılan
+120 saniyelik kiralama süresinden sonra bırakılır. Günlük geçmişten 7/30 günlük metrik ve mini grafik hazırlayan
+tek worker, 100 bekleyen iş ve en fazla 200 bellek kaydı kullanır. Başarılı
+geçmişin TTL'i 300 saniye, hatalı sonucun yeniden deneme süresi 60 saniyedir.
+Geçmiş hazırlanırken fiyat yanıtı bekleniyor metadata'sıyla dönebilir; eksik
+geçmişten getiri uydurulmaz. BIST geçmiş önbelleği kimlik revizyonuna bağlıdır.
+
+Binance sembolleri, kripto grafik/alarmları ve mevcut Binance fiyat akışı korunur.
+BtcTurk araştırması bunların yerine geçirilmez. Global endeks/döviz/emtia
+eşlemeleri açık sembol/borsa listesi kullanır; tanımsız araç desteklenmiyor
+olarak döner. Spot yerine vadeli kontratla sessiz ikame yapılmaz.
+
+`/scanner`, mevcut COMBO/HUNTER sinyal geçmişinin yanında Borsapy temel/teknik
+tarama yüzeylerini sunar. Bu araştırma taramaları mevcut bot stratejilerini
+ve ikinci kaynak teyidini değiştirmez.
+
+`/calendar` Borsapy/Doviz.com `EconomicCalendar` kaynağını kullanır; Finnhub
+veya TradingView kimliği istemez, Rapot yönetici oturumu ister. İstanbul gününe
+göre son 7 gün/gelecek 30 gün içinde en fazla 31 gün ve üç ülke seçilebilir.
+Tek sağlayıcı işi ve 16 girişli bellek önbelleği vardır. Kaynak bir saatlik
+önbellek uyguladığından alım zamanı yeni upstream güncelleme kanıtı değildir.
+Yenileme başarısızken sınırlı eski yanıt açık `stale` uyarısıyla gösterilebilir.
+Kaynak saat dilimi doğrulanmadığından olayın tarih/saat metni UTC veya İstanbul
+zamanına çevrilmez; boş sonuç olay olmadığına dair kesin kanıt değildir.
 
 ## Akış ve hesaplayıcı
 
@@ -111,6 +165,11 @@ en fazla 5; `BORSAPY_STREAM_IDLE_SECONDS` varsayılan 120. Kullanılmayan grafik
 aboneliği kapanır; bu kiralar sunucu alarm döngüsünü durdurmaz. Mum tamponu sınırlı.
 Sekmeler ayrı abone kimliği kullanır; bir sekmeyi kapatmak diğer sekmenin ortak
 akışını kapatmaz. VİOP veri hakkı ayrıca doğrulanır; BIST paketi bunu kanıtlamaz.
+
+Kimlikli sağlayıcı callback'leri ortak hesap kilidi altında sıralanır. Yeni işin
+kilit beklemesi bir saniyeyle sınırlıdır; mevcut fiyat/grafik tamponu, hesap
+revizyonu ve epoch değişmemişse güvenli okuma yolundan dönebilir. Bu bekleme
+sınırı başlamış ağ çağrısını iptal etmez ve sağlayıcı yanıt süresi garantisi değildir.
 
 Kimlikli istek token yokken anonim veriye düşmez. Oturumun süresiz geçerli olması
 veya bütün mesajların eksiksiz teslimi garanti edilmez. Sağlayıcının işlem zamanı
@@ -124,14 +183,33 @@ değişmez. Araştırma işlemleri borsaya emir veya kullanıcı adına alarm g�
 
 ## Scanner ve sunucu alarmları
 
-`BORSAPY_USE_FOR_BIST=true` açık seçimiyle `get_bist_data` ve günlük BIST alarm
-sağlayıcısı kimlikli gateway'i kullanabilir. Varsayılan false; canlı kabulden
-önce çalışan taramalar kendiliğinden dönüştürülmez. Seçildiğinde başarısızlıkta
-başka sağlayıcıya sessiz fallback olmaz. Günlük İstanbul işlem tarihi mevcut
+`BORSAPY_USE_FOR_BIST` varsayılan true'dur: `get_bist_data`, sync/async scanner ve
+günlük BIST alarm sağlayıcısı kimlikli gateway'i kullanır. False eski sağlayıcı
+yolunu açıkça seçer. Kimlik veya sağlayıcı hatasında başka kaynağa sessiz fallback
+olmaz. Günlük İstanbul işlem tarihi mevcut
 hesaplamaya uyarlanır; `open_quality=provider`, `adjustment=splits` taşınır.
 Scanner'ın alım tazeliği metadata'sı korunur; alım zamanı işlem zamanı değildir.
-Genel mum endpointi açıkça eski kaynağı seçer; borsapy verisi ortak genel fiyat
-önbelleğine yazılmaz. Özel grafik geçmişi kimlikli ayrı endpointten alınır.
+`adjustment=splits` temettü dahil toplam getiri veya tüm sermaye işlemlerinin
+canlı doğrulaması değildir. Borsapy verisi eski fiyat önbelleğine yazılmaz.
+Alarmın ek 30 saniyelik önbelleği Borsapy BIST yolunda atlanır; kimlik değişimi
+gateway'de yeniden kontrol edilir.
+
+BIST sembol evreni varsayılan modda KAP kaynaklı `bp.companies()` ile tembel
+yüklenir; importta sağlayıcı çağrısı yoktur. En fazla 2.000 girdi doğrulanır,
+yerel TTL bir saat, upstream KAP önbelleği 24 saattir. Tek worker ve paylaşılan
+işle bekleme 25 saniyeyle sınırlıdır; hata/eski veri sessiz statik listeye düşmez.
+`/borsapy/market/status` kaynak politikasını ve sembol durumunu açıklar.
+
+Mevcut özel sinyal/AI/bildirim koşullarında gereken bağımsız Yahoo teyidi
+korunur. Borsapy'yi ikinci kez okumak bağımsız teyit sayılmaz; aynı sağlayıcı
+eşleşmesi reddedilir. Sinyal metadata'sı birincil kaynak ve teyit politikasını
+taşır; politika alanı tek başına başarılı teyit sonucu değildir. Strateji
+eşikleri ve COMBO/HUNTER hesaplama sözleşmesi değiştirilmez.
+
+API bootstrap varsayılan modda eski BIST fiyat servisini başlatmaz; Borsapy
+akışları ihtiyaç olduğunda açılır. Hesap henüz tanımlı değilse bu durum kişisel
+veri hatasıdır; çalışan API/DB sinyal feed'i ve Binance sağlık durumu bununla
+başarısız sayılmaz. Bot da bu kaynak değişikliği için yenilenmelidir.
 
 BIST sunucu alarmlarının günlük kısıtı korunur. Gün içi grafik bulunması BIST
 seans/tatil/yarım gün ve mum kapanış takviminin doğrulandığı anlamına gelmez.

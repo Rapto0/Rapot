@@ -3,7 +3,9 @@
 `/alarms`, yönetici oturumuyla kalıcı alarm kuralları oluşturur, düzenler,
 duraklatır ve siler. Kural sunucuya kaydedildikten sonra tarayıcı, bilgisayar
 veya oturum kapansa da API'nin alarm motoru değerlendirmeye devam eder.
-TradingView hesabı veya webhook'u gerekmez. Bu sistem bildirim üretir;
+TradingView alarmı veya webhook'u gerekmez. Varsayılan BIST veri kaynağı için
+sunucuda Borsapy/TradingView hesabı gerekir; kripto Binance genel verisini kullanır.
+Bu sistem bildirim üretir;
 Spot middleware emir hattına bağlanmaz.
 
 ## Kurallar ve grafik bağlantısı
@@ -50,8 +52,13 @@ dakikada kesin kontrol/teslim taahhüdü yoktur. Motor durumu, son tur, kural
 hataları ve olay geçmişi arayüzde görünür. Eksik/bayat veri veya tamamlanmamış
 sembol kontrolü başarılı tam kontrol sayılmaz.
 
-Kripto Binance'in genel mum verisini, BIST Yahoo'nun ilgili periyot verisini
-kullanır. Hesaplama için fiyat önbelleğindeki başka periyoda geri düşülmez.
+Kripto Binance'in genel mum verisini, BIST varsayılan olarak kimlikli
+Borsapy/TradingView günlük mumlarını kullanır. `BORSAPY_USE_FOR_BIST=false`
+eski BIST Yahoo yolunu açıkça seçer; kimlik/sağlayıcı hatasında sessiz kaynak
+değişimi yapılmaz. Borsapy BIST verisi eski fiyat önbelleğiyle karıştırılmaz;
+alarmın ek kısa önbelleği bu yolda atlanarak gateway kimlik kontrolü korunur.
+Hesaplama için başka periyoda geri düşülmez. Runtime yanıtı BIST kaynağını
+ve desteklenen `1d` periyodunu ayrıca bildirir.
 BIST günlük mumun kapanışı muhafazakâr biçimde İstanbul'da sonraki gece
 yarısı kabul edilir; bu seans kapanışında anında bildirim sözleşmesi değildir.
 BIST tatil/seans ve sağlayıcı gecikmesi sınırları, TradingView ile aynı veri
@@ -66,7 +73,8 @@ sonrası işlenen mum bilgisi korunur. Ağ erişimi sırasında yazma işlemi a�
 tutulmaz; kural değiştirme/duraklatma/silme yarışları kayıt öncesi denetlenir.
 
 `GET/POST /alarms`, `PUT/DELETE /alarms/{id}` ve `GET /alarms/events` yönetici
-JWT'si ister ve kayıt sahibini denetler. Tarayıcıya bot token'ı veya chat ID
+JWT'si ister ve kayıt sahibini denetler; yanıtlar `private, no-store` taşır.
+Tarayıcıya bot token'ı veya chat ID
 dönmez. Yönetici olmayan kullanıcıların ortak Telegram hedefine bildirim
 göndermesi desteklenmez.
 
@@ -95,7 +103,9 @@ girdi sınırları, kapanmış mumlar, veri hataları, kalıcı tekilleştirme, 
 başlatma, bildirim hataları ve motor kapanışı ayrı doğrulanır. Yerel testler
 gerçek Telegram teslimi veya gerçek sağlayıcı kabulü değildir.
 
-Yayın API ve frontend değişikliği gerektirir. Ana DB için doğrulanmış yedek,
+Alarm motorunun yayını API ve frontend değişikliği gerektirir; sonraki ortak
+Borsapy veri geçişi scanner nedeniyle botun da yenilenmesini gerektirir.
+Bu site geneli geçişin API/frontend/bot yayını henüz tamamlanmadı. Ana DB için doğrulanmış yedek,
 tam kaynak SHA'sının CI/imajı ve 528 MiB disk rezervi kontrol edilir. İlk açılış
 boş alarm tablolarıyla gelir; kullanıcının yerine canlı alarm oluşturulmaz.
 Geri dönüş eski API/frontend imajlarını kullanır ve uyumlu ek tabloları korur;

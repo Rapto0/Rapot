@@ -7,8 +7,8 @@ import { useRealtimeStore } from '@/lib/realtime/store';
 /** One connection owner for the active session, beneath QueryClientProvider. */
 export function RealtimeBridge() {
   useEffect(() => {
-    useRealtimeStore.getState().clearSignals();
-    return () => useRealtimeStore.getState().clearSignals();
+    useRealtimeStore.getState().resetPrivateData();
+    return () => useRealtimeStore.getState().resetPrivateData();
   }, []);
   useRealtimeConnection();
   return null;

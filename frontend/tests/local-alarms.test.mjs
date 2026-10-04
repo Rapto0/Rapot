@@ -448,6 +448,7 @@ test('hook forwards AbortSignal and hides old configuration results before effec
   const requests = [];
   const fixture = monitorFixture(() => assert.fail('Hook must supply its own reader'));
   const hook = loadSource('../src/lib/hooks/use-local-alarms.ts', {
+    './use-session': { useSession: () => ({ user: { username: 'admin', is_admin: true }, expiresAt: 123 }) },
     react: harness.hooks, '@/lib/local-alarm-monitor': fixture.moduleExports,
     '@/lib/api/client': { fetchCandles: (...args) => {
       const request = { ...deferred(), args }; requests.push(request); return request.promise;

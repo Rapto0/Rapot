@@ -11,10 +11,18 @@ from contextlib import suppress
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 
+from api.private_data_access import (
+    PRIVATE_CACHE,
+    AccessGrant,
+    authenticate_websocket,
+    receive_private,
+    require_admin_request,
+)
 from logger import get_logger
+from settings import settings
 
 logger = get_logger(__name__)
 
@@ -28,12 +36,19 @@ class ConnectionManager:
         self._active_connections: dict[str, list[WebSocket]] = defaultdict(list)
         self._sse_queues: dict[str, list[asyncio.Queue]] = defaultdict(list)
         self._send_locks: dict[WebSocket, asyncio.Lock] = {}
+        self._grants: dict[WebSocket, AccessGrant] = {}
         self._send_timeout = send_timeout
         self._sse_queue_size = sse_queue_size
 
-    async def connect(self, websocket: WebSocket, channel: str = "default"):
+    async def connect(
+        self, websocket: WebSocket, channel: str = "default", *, grant: AccessGrant | None = None
+    ):
         """Accept and register a WebSocket connection."""
-        await websocket.accept()
+        if grant is None:
+            await websocket.accept()
+        else:
+            grant.check()
+            self._grants[websocket] = grant
         self._active_connections[channel].append(websocket)
         self._send_locks.setdefault(websocket, asyncio.Lock())
         logger.info(f"Client connected to channel: {channel}")
@@ -44,10 +59,18 @@ class ConnectionManager:
             self._active_connections[channel].remove(websocket)
             logger.info(f"Client disconnected from channel: {channel}")
         self._send_locks.pop(websocket, None)
+        self._grants.pop(websocket, None)
 
     async def _send_text(self, websocket: WebSocket, data: str) -> None:
         lock = self._send_locks.setdefault(websocket, asyncio.Lock())
         async with lock:
+            grant = self._grants.get(websocket)
+            if grant is not None:
+                try:
+                    grant.check()
+                except HTTPException as error:
+                    await websocket.close(code=4403 if error.status_code == 403 else 4401)
+                    raise
             await websocket.send_text(data)
 
     async def send_json(self, websocket: WebSocket, message: dict) -> None:
@@ -176,7 +199,10 @@ async def websocket_ticker(websocket: WebSocket):
     WebSocket endpoint for real-time ticker data.
     Receives both BIST and Crypto ticker updates.
     """
-    await manager.connect(websocket, "ticker")
+    grant = await authenticate_websocket(websocket)
+    if grant is None:
+        return
+    await manager.connect(websocket, "ticker", grant=grant)
     subscriptions: set[str] = set()
     try:
         # Send initial data
@@ -186,7 +212,7 @@ async def websocket_ticker(websocket: WebSocket):
         initial_data = {
             "type": "init",
             "crypto": ws_manager.get_cached_tickers(),
-            "bist": bist_service.get_all_stocks(),
+            "bist": [] if settings.borsapy_use_for_bist else bist_service.get_all_stocks(),
             "timestamp": datetime.now().isoformat(),
         }
         await manager.send_json(websocket, initial_data)
@@ -194,7 +220,7 @@ async def websocket_ticker(websocket: WebSocket):
         # Keep connection alive and handle client messages
         while True:
             try:
-                data = await asyncio.wait_for(websocket.receive_text(), timeout=30)
+                data = await receive_private(websocket, grant)
                 message = json.loads(data)
                 if not isinstance(message, dict):
                     await websocket.close(code=1008)
@@ -242,6 +268,9 @@ async def websocket_kline(websocket: WebSocket, symbol: str, interval: str = "1m
     """
     WebSocket endpoint for real-time kline/candlestick data.
     """
+    grant = await authenticate_websocket(websocket)
+    if grant is None:
+        return
     from websocket_manager import normalize_kline_interval, normalize_stream_symbol, ws_manager
 
     try:
@@ -251,7 +280,7 @@ async def websocket_kline(websocket: WebSocket, symbol: str, interval: str = "1m
         await websocket.close(code=1008)
         return
     channel = f"kline_{symbol}_{interval}"
-    await manager.connect(websocket, channel)
+    await manager.connect(websocket, channel, grant=grant)
     subscribed = False
 
     try:
@@ -262,7 +291,7 @@ async def websocket_kline(websocket: WebSocket, symbol: str, interval: str = "1m
         # Keep connection alive
         while True:
             try:
-                await asyncio.wait_for(websocket.receive_text(), timeout=30)
+                await receive_private(websocket, grant)
             except TimeoutError:
                 await manager.send_json(websocket, {"type": "heartbeat"})
 
@@ -282,6 +311,9 @@ async def websocket_trades(websocket: WebSocket, symbol: str):
     """
     WebSocket endpoint for real-time trade stream.
     """
+    grant = await authenticate_websocket(websocket)
+    if grant is None:
+        return
     from websocket_manager import normalize_stream_symbol, ws_manager
 
     try:
@@ -290,7 +322,7 @@ async def websocket_trades(websocket: WebSocket, symbol: str):
         await websocket.close(code=1008)
         return
     channel = f"trades_{symbol}"
-    await manager.connect(websocket, channel)
+    await manager.connect(websocket, channel, grant=grant)
     subscribed = False
 
     try:
@@ -300,7 +332,7 @@ async def websocket_trades(websocket: WebSocket, symbol: str):
 
         while True:
             try:
-                await asyncio.wait_for(websocket.receive_text(), timeout=30)
+                await receive_private(websocket, grant)
             except TimeoutError:
                 await manager.send_json(websocket, {"type": "heartbeat"})
 
@@ -320,12 +352,15 @@ async def websocket_signals(websocket: WebSocket):
     """
     WebSocket endpoint for real-time trading signals.
     """
-    await manager.connect(websocket, "signals")
+    grant = await authenticate_websocket(websocket)
+    if grant is None:
+        return
+    await manager.connect(websocket, "signals", grant=grant)
 
     try:
         while True:
             try:
-                await asyncio.wait_for(websocket.receive_text(), timeout=30)
+                await receive_private(websocket, grant)
             except TimeoutError:
                 await manager.send_json(websocket, {"type": "heartbeat"})
 
@@ -340,24 +375,31 @@ async def websocket_signals(websocket: WebSocket):
 # ==================== SSE Endpoints ====================
 
 
-async def event_generator(queue: asyncio.Queue, channel: str):
+async def event_generator(queue: asyncio.Queue, channel: str, grant: AccessGrant | None = None):
     """Generate SSE events from queue."""
     try:
         while True:
             try:
-                data = await asyncio.wait_for(queue.get(), timeout=30)
+                if grant is not None:
+                    grant.check()
+                timeout = min(30, grant.remaining()) if grant is not None else 30
+                data = await asyncio.wait_for(queue.get(), timeout=timeout)
+                if grant is not None:
+                    grant.check()
                 yield f"data: {json.dumps(data)}\n\n"
             except TimeoutError:
+                if grant is not None:
+                    grant.check()
                 # Send heartbeat
                 yield f"data: {json.dumps({'type': 'heartbeat'})}\n\n"
-    except asyncio.CancelledError:
+    except (asyncio.CancelledError, HTTPException):
         pass
     finally:
         manager.remove_sse_queue(queue, channel)
 
 
 @router.get("/sse/ticker")
-async def sse_ticker():
+async def sse_ticker(grant: AccessGrant = Depends(require_admin_request)):
     """
     Server-Sent Events endpoint for ticker data.
     Alternative to WebSocket for simpler clients.
@@ -365,10 +407,10 @@ async def sse_ticker():
     queue = manager.create_sse_queue("ticker")
 
     return StreamingResponse(
-        event_generator(queue, "ticker"),
+        event_generator(queue, "ticker", grant),
         media_type="text/event-stream",
         headers={
-            "Cache-Control": "no-cache",
+            "Cache-Control": PRIVATE_CACHE,
             "Connection": "keep-alive",
             "X-Accel-Buffering": "no",
         },
@@ -376,17 +418,17 @@ async def sse_ticker():
 
 
 @router.get("/sse/signals")
-async def sse_signals():
+async def sse_signals(grant: AccessGrant = Depends(require_admin_request)):
     """
     SSE endpoint for trading signals.
     """
     queue = manager.create_sse_queue("signals")
 
     return StreamingResponse(
-        event_generator(queue, "signals"),
+        event_generator(queue, "signals", grant),
         media_type="text/event-stream",
         headers={
-            "Cache-Control": "no-cache",
+            "Cache-Control": PRIVATE_CACHE,
             "Connection": "keep-alive",
         },
     )
@@ -466,6 +508,9 @@ def publish_signal(signal: dict) -> bool:
 
 async def broadcast_bist_update(stocks: list[dict]):
     """Broadcast BIST data update."""
+    if settings.borsapy_use_for_bist:
+        # Legacy provider callbacks cannot relabel or overwrite private Borsapy data.
+        return
     await manager.broadcast(
         {
             "type": "bist",

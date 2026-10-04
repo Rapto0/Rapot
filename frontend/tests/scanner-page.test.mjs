@@ -7,7 +7,7 @@ import * as jsxRuntime from 'react/jsx-runtime';
 import ts from 'typescript';
 
 const compiled = ts.transpileModule(
-  readFileSync(new URL('../src/app/scanner/page.tsx', import.meta.url), 'utf8'),
+  readFileSync(new URL('../src/app/scanner/page.tsx', import.meta.url), 'utf8') + '\nexport { SignalHistoryScanner };',
   { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } },
 ).outputText;
 const PREFS = 'rapot.scanner.preferences.v2';
@@ -56,7 +56,7 @@ function memoryStorage(initial = {}, { failRead, failWrite } = {}) {
   };
 }
 
-function harness({ storage = memoryStorage(), blockedStorage = false, queryOverrides = {}, signals = fixtures() } = {}) {
+function harness({ storage = memoryStorage(), blockedStorage = false, queryOverrides = {}, signals = fixtures(), workspace = false, allowed = true, metricResponse = {} } = {}) {
   const slots = [], requests = [], toasts = [], logs = [], configs = new Map(), timers = new Map();
   let position = 0, effects = [], dirty = false, tree, timerId = 0;
   const different = (a, b) => !a || b.some((value, index) => !Object.is(value, a[index]));
@@ -109,12 +109,15 @@ function harness({ storage = memoryStorage(), blockedStorage = false, queryOverr
     } },
     '@/lib/api/client': {
       async fetchSignals(params) { requests.push(['signals', params]); return []; },
-      async fetchMarketMetrics(keys) { requests.push(['metrics', keys]); return {}; },
+      async fetchMarketMetrics(keys) { requests.push(['metrics', keys]); return metricResponse; },
       async fetchScanHistory(limit) { requests.push(['scans', limit]); return []; },
       async fetchLogs(limit) { requests.push(['logs', limit]); return []; },
       async fetchSpecialTagHealth(params) { requests.push(['health', params]); return {}; },
     },
     '@/lib/hooks/use-health': { useBotHealth: () => ({ label: 'Durum bilinmiyor', scanningLabel: 'Bekleniyor', tone: 'neutral', scanCount: null }) },
+    '@/lib/hooks/use-private-market': { usePrivateMarket: () => ({ allowed, sessionKey: allowed ? 'admin:123' : 'guest' }) },
+    '@/components/market-data-status': { MarketDataStatus: () => null },
+    '@/components/scanner/borsapy-screener': { BorsapyScreener: () => null },
     '@/components/ui/button': { Button: 'button' }, '@/components/ui/input': { Input: 'input' },
     '@/components/ui/select': { Select: 'select' }, '@/components/ui/action-dialog': { ActionDialog: Dialog },
     '@/components/ui/toast': { useToast: () => ({ addToast: toast => toasts.push(toast) }) },
@@ -132,7 +135,7 @@ function harness({ storage = memoryStorage(), blockedStorage = false, queryOverr
   const render = () => {
     for (let pass = 0; pass < 30; pass++) {
       dirty = false; position = 0;
-      tree = context.exports.default();
+      tree = workspace ? context.exports.default() : context.exports.SignalHistoryScanner();
       const scheduled = effects; effects = [];
       scheduled.forEach(effect => effect());
       if (!dirty) return tree;
@@ -180,6 +183,63 @@ test('scanner retains bounded read-only queries and labels latest-signal filter 
   for (const label of ['Piyasa', 'Son strateji', 'Son sinyal yönü', 'İzleme listesi']) {
     assert.ok(descendants(h.tree).some(node => node.type === 'label' && text(node).startsWith(label) && descendants(node).some(child => child.type === 'select')));
   }
+});
+
+test('missing current metrics never display the historical signal price as the current price', () => {
+  const h = harness();
+  const currentPrice = symbol => descendants(h.row(symbol)).find(node => node.type === 'span' && node.props.title?.includes('Güncel fiyat'));
+  assert.equal(text(currentPrice('THYAO')), '—');
+  assert.doesNotMatch(text(h.row('THYAO')), /NaN|Infinity/);
+  h.updateQuery('market-metrics', { data: { 'BIST:THYAO': { latestPrice: 0, changePct: 0, perf7d: null, perf30d: null, message: 'Sıfır ölçümü' } } });
+  const zero = descendants(h.row('THYAO')).find(node => node.type === 'span' && node.props.title === 'Sıfır ölçümü');
+  assert.equal(text(zero), '0,00');
+  h.updateQuery('market-metrics', { data: {} });
+  assert.equal(text(currentPrice('THYAO')), '—');
+});
+
+test('scanner workspace keeps private scans behind admin access and separates market scans from history', () => {
+  const guest = harness({ workspace: true, allowed: false });
+  assert.doesNotMatch(guest.text, /Borsapy piyasa taraması|COMBO \/ HUNTER geçmişi/);
+  assert.equal(guest.configs.size, 0);
+  const admin = harness({ workspace: true });
+  assert.equal(admin.button('Borsapy piyasa taraması').props['aria-selected'], true);
+  admin.click('COMBO / HUNTER geçmişi');
+  assert.equal(admin.button('COMBO / HUNTER geçmişi').props['aria-selected'], true);
+  assert.ok(descendants(admin.tree).some(node => node.type?.name === 'SignalHistoryScanner'));
+});
+
+test('current metric rows preserve source and freshness through the actual request adapter', async () => {
+  const timestamp = '2026-10-02T09:30:00Z';
+  const h = harness({ metricResponse: {
+    'BIST:THYAO': { latest_price: 126.8, change_pct: 0, perf_7d: null, perf_30d: null, source: 'borsapy_tradingview', state: 'stale', provider_time: timestamp, received_at: '2026-10-02T12:00:00Z', message: 'Fiyat eskidi' },
+    'BIST:GARAN': { latest_price: null, change_pct: null, perf_7d: null, perf_30d: null, source: 'borsapy_tradingview', state: 'waiting', message: 'Güncel fiyat bekleniyor' },
+    'Kripto:BTCUSDT': { latest_price: 70000, change_pct: null, perf_7d: null, perf_30d: null, source: 'binance', state: 'ok', provider_time: timestamp },
+  } });
+  const data = await h.configs.get('market-metrics').queryFn({ signal: new AbortController().signal });
+  assert.equal(data['BIST:THYAO'].state, 'stale');
+  assert.equal(data['BIST:THYAO'].provider_time, timestamp);
+  h.updateQuery('market-metrics', { data });
+  assert.match(text(h.row('THYAO')), /Borsapy \/ TradingView · Eski veri/);
+  assert.match(text(h.row('THYAO')), /126,80/);
+  const priceContext = descendants(h.row('THYAO')).find(node => node.props.title?.includes('Sağlayıcı zamanı:'));
+  assert.ok(priceContext.props.title.includes(timestamp));
+  assert.ok(priceContext.props.title.includes('Fiyat eskidi'));
+  assert.match(text(h.row('GARAN')), /Borsapy \/ TradingView · Veri bekleniyor/);
+  assert.equal(text(descendants(h.row('GARAN')).find(node => node.type === 'span' && node.props.title === 'Güncel fiyat bekleniyor')), '—');
+  assert.match(text(h.row('BTCUSDT')), /Binance · Veri alındı/);
+  assert.ok(descendants(h.tree).some(node => node.type === 'button' && node.props.title?.includes('BIST: sağlayıcının seans değişimi; kripto: Binance son 24 saat')));
+});
+
+test('scanner requests only one hundred filtered symbols in bounded chunks and propagates cancellation', async () => {
+  const h = harness({ signals: { BIST: Array.from({ length: 150 }, (_, i) => signal(i + 1, `S${String(i).padStart(3, '0')}`, 'BIST')), Kripto: [] } });
+  const abort = new AbortController();
+  await h.configs.get('market-metrics').queryFn({ signal: abort.signal });
+  assert.deepEqual(h.requests.map(request => request[1].length), [50, 50]);
+  assert.equal(new Set(h.requests.flatMap(request => [...request[1]])).size, 100);
+  h.requests.length = 0;
+  h.search('S149');
+  await h.configs.get('market-metrics').queryFn({ signal: abort.signal });
+  assert.deepEqual(plain(h.requests), [['metrics', ['BIST:S149']]]);
 });
 
 test('market, strategy, signal, search and numeric filters combine with AND; periods combine with OR', () => {

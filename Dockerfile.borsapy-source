@@ -1,0 +1,15 @@
+# Source-only derivative of the accepted Borsapy runtime; never installs packages.
+FROM ghcr.io/rapto0/rapot/backend@sha256:b9695f5f78ccb6f16112578c54fb9fb2de7ce6a3dc4c0836c3da7deacf7adf14
+
+LABEL org.opencontainers.image.base.name="ghcr.io/rapto0/rapot/backend@sha256:b9695f5f78ccb6f16112578c54fb9fb2de7ce6a3dc4c0836c3da7deacf7adf14" \
+      org.opencontainers.image.base.digest="sha256:b9695f5f78ccb6f16112578c54fb9fb2de7ce6a3dc4c0836c3da7deacf7adf14" \
+      io.rapot.runtime.extension="borsapy-0.11.0-v1" \
+      io.rapot.runtime.mode="source-only"
+
+# This deletion occurs only in the build image, never a production volume.
+WORKDIR /
+RUN python -c "import pathlib, shutil; source = pathlib.Path('/app'); assert source.is_dir() and not source.is_symlink(); shutil.rmtree(source); source.mkdir()"
+WORKDIR /app
+COPY . .
+
+CMD ["python", "-m", "scripts.runtime", "api"]

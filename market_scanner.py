@@ -32,6 +32,7 @@ from data_loader import (
     get_dataframe_age_seconds,
     is_dataframe_fresh,
     resample_market_data,
+    signal_data_metadata,
 )
 from domain.events import SignalDomainEvent
 from infrastructure.persistence.signal_repository import save_signal as db_save_signal
@@ -700,9 +701,14 @@ def _verify_bist_second_source(
     signal_dir: str,
     trigger_rule: list[str],
     secondary_df: pd.DataFrame | None,
+    primary_source: str | None = None,
 ) -> tuple[bool, str]:
     if secondary_df is None or secondary_df.empty:
         return False, "ikincil_kaynak_bos"
+
+    secondary_source = secondary_df.attrs.get("source_hint") or secondary_df.attrs.get("source")
+    if primary_source and (primary_source == "yfinance_bist" or primary_source == secondary_source):
+        return False, "ikincil_kaynak_bagimsiz_degil"
 
     if not is_dataframe_fresh(secondary_df, signal_guard_settings.BIST_MAX_DATA_AGE_SECONDS):
         age = get_dataframe_age_seconds(secondary_df)
@@ -884,6 +890,10 @@ def process_symbol(
             # --- COMBO ---
             res_combo = calculate_combo_signal(df_resampled, tf_code)
             if res_combo:
+                res_combo["details"] = {
+                    **res_combo["details"],
+                    **signal_data_metadata(df_daily, market_type),
+                }
                 if res_combo["buy"]:
                     combo_hits["buy"][tf_code] = res_combo["details"]
                     logger.info("COMBO AL signal | %s %s", symbol, tf_label)
@@ -920,6 +930,10 @@ def process_symbol(
             # --- HUNTER ---
             res_hunter = calculate_hunter_signal(df_resampled, tf_code)
             if res_hunter:
+                res_hunter["details"] = {
+                    **res_hunter["details"],
+                    **signal_data_metadata(df_daily, market_type),
+                }
                 if res_hunter["buy"]:
                     hunter_hits["buy"][tf_code] = res_hunter["details"]
                     logger.info("HUNTER DIP signal | %s %s", symbol, tf_label)
@@ -1033,6 +1047,7 @@ def finalize_symbol_signals(
                 signal_dir=signal_dir,
                 trigger_rule=trigger_rule,
                 secondary_df=get_secondary_df(),
+                primary_source=df_daily.attrs.get("source_hint") or df_daily.attrs.get("source"),
             )
             if not ok:
                 logger.warning(

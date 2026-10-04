@@ -6,7 +6,6 @@ import json
 import threading
 from typing import Any, Literal
 
-import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -17,8 +16,28 @@ from infrastructure.repositories import research_workspace_repository as saved
 
 router = APIRouter(prefix="/borsapy", tags=["Borsapy research"], route_class=PrivateRoute)
 _research_slots = threading.BoundedSemaphore(2)
-_INTERVALS = Literal["1m", "5m", "15m", "30m", "1h", "4h", "1d", "1wk", "1mo"]
+_INTERVALS = Literal[
+    "1m",
+    "5m",
+    "15m",
+    "30m",
+    "1h",
+    "4h",
+    "1d",
+    "1wk",
+    "1mo",
+    "2d",
+    "3d",
+    "4d",
+    "5d",
+    "6d",
+    "2wk",
+    "3wk",
+    "2mo",
+    "3mo",
+]
 _INDEPENDENT_SOURCES = {
+    "calendar",
     "fx.current",
     "fx.banks",
     "crypto.pairs",
@@ -158,35 +177,14 @@ def private_candles(
     limit: int = Query(1000, ge=1, le=2000),
     user: User = Depends(get_current_admin_user),
 ) -> dict:
-    from application.services.borsapy_gateway import BorsapyGatewayError, get_borsapy_gateway
+    from application.services.borsapy_gateway import BorsapyGatewayError
+    from application.services.borsapy_market_data import get_borsapy_market_data
 
     _private(response)
-    period = {"1m": "5d", "5m": "1mo", "15m": "3mo", "30m": "6mo", "1h": "1y", "4h": "2y"}.get(
-        interval, "10y"
-    )
     if not _research_slots.acquire(blocking=False):
         raise HTTPException(429, "Veri yükleniyor; biraz sonra tekrar deneyin.")
     try:
-        frame = get_borsapy_gateway().history(symbol, interval=interval, period=period)
-        candles = [
-            {
-                "time": pd.Timestamp(timestamp).isoformat(),
-                "open": float(row.Open),
-                "high": float(row.High),
-                "low": float(row.Low),
-                "close": float(row.Close),
-                "volume": float(row.Volume),
-            }
-            for timestamp, row in frame.tail(limit).iterrows()
-        ]
-        return {
-            "symbol": symbol.upper().removesuffix(".IS"),
-            "market_type": "BIST",
-            "timeframe": interval,
-            "source": "borsapy_tradingview",
-            "count": len(candles),
-            "candles": candles,
-        }
+        return get_borsapy_market_data().candles(symbol, interval, limit)
     except BorsapyGatewayError as exc:
         raise HTTPException(exc.status_code, str(exc)) from None
     except Exception:
