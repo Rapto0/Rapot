@@ -9,6 +9,15 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Kaldığımız nokta
 
+- **4 Ekim — TradingView bağlantı düzeltmesi hazırlanıyor:** Kullanıcının
+  kaydettiği oturum geçerli; borsapy/httpx otomatik `www` → `tr` yönlendirmesinde
+  elle gönderilen çerez başlığının kaybolduğu doğrulandı. Sınırlı, sır içermeyen
+  sunucu tanısı hedefe oturumla ulaşıldığında kullanılabilir token bulunduğunu
+  gösterdi. Güvenli yönlendirme adaptörü ve hata sonrası durumu yenileyen
+  frontend düzeltmesi hazırlanıyor; henüz üretime alınmış sayılmaz.
+  [Neden ve bağlantı sözleşmesi](BORSAPY_INTEGRATION.md#tradingview-oturum-yönlendirmesi).
+  Bu iş yalnız hesap bağlantısının kabulünü açar; canlı fiyat/mum, bölünme,
+  alarm teslimi ve emir kabulü hâlâ ertelidir.
 - **4 Ekim — Borsapy ortak piyasa altyapısı:** Kullanıcı Borsapy verisini grafik,
   tarayıcı ve ekonomik takvimde istedi. Yeni kaynakta BIST varsayılanı Borsapy;
   grafik/izleme listesi/piyasa kartları ortak, sınırlı TradingView fiyat havuzunu
@@ -164,6 +173,10 @@ açılmadı. Bu taslak sınırlar kendi başına emir veya alıcıyı açma yetk
   dahil ortak veri altyapısına taşınmasını kapsar. Bu geçiş API/frontend yanında
   scanner botunun da yeni kaynağı çalıştırmasını gerektirir. Genel doğrulanmış
   yayın yetkisi sürer; önceki iki imaja özel silme yetkisi genişlemez.
+- Bağlantı yardımında kullanıcı hesabını bağlamayı ve başarısız bağlantıyı
+  düzeltmeyi açıkça istedi; kayıtlı oturumla yalnız kimlik doğrulama tanısı ve
+  doğrulaması bu kapsamdadır. Oturum sırları sohbete/Git'e/kanıta yazılmaz.
+  Bu istek canlı piyasa veya testnet/gerçek emir kabulünü açmaz.
 - 4 Ekim devamında kullanıcı, iki eski frontend imajını (`e312d7aa…` ve
   `a24bbefa…`) kaldırıp yayını tamamlama sorusuna **"yayını tamamlamama onay
   veriyorum"** yanıtını verdi. Yetki, aşağıdaki tam digest'ler ve teklif hash'i

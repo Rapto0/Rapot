@@ -3,8 +3,9 @@
 4 Ekim 2026. Kullanıcı, mevcut TradingView Premium ve BIST gerçek zamanlı veri
 paketiyle kişisel Rapot sitesinde borsapy README'sindeki özellik ailelerini
 istedi. Sonraki kapsam grafik, dashboard, izleme listesi, scanner ve ekonomik
-takvimin ortak kişisel veri altyapısını da içerir. Canlı piyasa/hesap kabulü
-piyasa açıkken yapılmak üzere ertelendi.
+takvimin ortak kişisel veri altyapısını da içerir. Canlı piyasa kabulü
+piyasa açıkken yapılmak üzere ertelendi. Sonraki bağlantı yardım talimatı,
+kayıtlı TradingView oturumunun doğrulanmasını ayrıca yetkilendirdi.
 
 Kaynak: borsapy 0.11.0,
 [`a9e41ae398fc2d25b35f864a5c7028d5f98862c3`](https://github.com/saidsurucu/borsapy/tree/a9e41ae398fc2d25b35f864a5c7028d5f98862c3).
@@ -98,6 +99,37 @@ TypeScript hesaplayıcısıyla çalışır; grafik eski sağlayıcıya otomatik 
 Kripto grafiği Binance kaynağını korur. Koşulsuz “Canlı” etiketi kullanılmaz.
 Araştırmadaki borsapy göstergeleriyle mevcut
 COMBO/HUNTER motorlarının eşdeğerliği iddia edilmez.
+
+## TradingView oturum yönlendirmesi
+
+4 Ekim bağlantı incelemesinde kullanıcının kaydettiği oturumun geçerli olduğu
+doğrulandı. Sunucudan `www.tradingview.com/` isteği 302 ile
+`tr.tradingview.com/` adresine yönlendiriliyordu. borsapy 0.11.0 çerezleri
+elle `Cookie` başlığında gönderir; httpx otomatik yönlendirmede bu başlığı
+kaldırıp çerez deposundan yeniden kurar. Session yöntemi depoyu doldurmadığı
+için ikinci istek oturumsuz kalır. Aynı yönlendirmeyi izin verilen hedefe
+çerezleri koruyarak izleyen sınırlı tanı çağrısı 200 ve kullanılabilir token
+buldu; çerez/token/HTML veya profil bilgisi rapora alınmadı. Bu gözlem
+gerçek zamanlı fiyat, BIST paket yetkisi veya piyasa kabulü değildir.
+
+`infrastructure.providers.tradingview_session_auth`, hesap kilidi altında
+yalnız doğrulama süresince sağlayıcının HTTP istemcisine geçici bir adaptör
+uygular. borsapy'nin HTML ayrıştırıcısı ve oturum deposu korunur; paket dosyası
+değiştirilmez. En çok dört GET, yalnız HTTPS `www.tradingview.com`,
+`tr.tradingview.com` ve `tradingview.com` kök adresleri kabul edilir. Port,
+kullanıcı bilgisi, sorgu, fragment veya başka yol/hedef taşıyan yönlendirme,
+ikinci isteğe sır gönderilmeden reddedilir. Yanıt en çok 8 MiB'dir; her istek
+ve parçada 30 saniyelik zaman bütçesi denetlenir, HTTP faz timeout'u en çok
+10 saniyedir. Bu kontroller çalışan ağ çağrısı için sert bir toplam süre
+garantisi değildir. Başarı ve hatada özgün istemci ile önceki çerez deposu
+geri yüklenir; geçici yanıttaki çerezler sonraki işlemlere bırakılmaz.
+
+Bağlantı ekranında kaydetme, doğrulama başarısız olsa bile sunucuda tamamlanabilir.
+Başarılı ve başarısız işlemlerden sonra ortak bağlantı durumu yenilenir;
+“Kayıtlı · doğrulanmadı” ile “Yapılandırılmadı” ayrılır. Durum alınamıyorsa eski
+başarı kartı gösterilmez. Oturum kapanmış, değişmiş veya süresi dolmuşsa eski
+işlemin sonucu yeni oturuma taşınmaz. Depolama hatasında açık onayla kaydı
+kaldırma yolu korunur. Bu düzeltmelerin yayın/kabul durumu devam planındadır.
 
 ## Kalıcılık ve erişim
 

@@ -232,6 +232,69 @@ def test_source_proof_cli_writes_the_full_comparison(inventory, layers, tmp_path
     assert proof["direct_base_image"] == source.SOURCE_IMAGE
 
 
+@pytest.mark.parametrize("old_evidence", ["revision", "base_name", "base_digest"])
+def test_previous_accepted_runtime_cannot_replace_the_current_direct_base(
+    inventory, layers, old_evidence
+):
+    before, after = layers
+    previous_digest = "sha256:b9695f5f78ccb6f16112578c54fb9fb2de7ce6a3dc4c0836c3da7deacf7adf14"
+    if old_evidence == "revision":
+        before["labels"]["org.opencontainers.image.revision"] = (
+            "4b15335f00f30e65a21899e73af47c508f395706"
+        )
+    else:
+        key = "name" if old_evidence == "base_name" else "digest"
+        after["labels"][f"org.opencontainers.image.base.{key}"] = (
+            f"ghcr.io/rapto0/rapot/backend@{previous_digest}" if key == "name" else previous_digest
+        )
+    with pytest.raises(source.SourceVerificationError):
+        source.verify_source_runtime(inventory, inventory, before, after)
+
+
+def test_canonical_manifest_hashes_new_auth_adapter_gateway_and_tests(monkeypatch, tmp_path):
+    document = yaml.safe_load((ROOT / ".github/workflows/deploy.yml").read_text(encoding="utf-8"))
+    steps = document["jobs"]["publish-borsapy-runtime"]["steps"]
+    preparation = next(step for step in steps if step.get("id") == "source")["run"]
+    assert "git archive --format=tar HEAD" in preparation
+    manifest = preparation.split("python - <<'PY'\n", 1)[1].rsplit("\nPY", 1)[0]
+    python_files = [
+        "application/services/borsapy_gateway.py",
+        "infrastructure/providers/__init__.py",
+        "infrastructure/providers/tradingview_session_auth.py",
+        "tests/test_tradingview_session_auth.py",
+    ]
+    other_inputs = [
+        "Dockerfile",
+        "Dockerfile.borsapy-runtime",
+        "Dockerfile.borsapy-source",
+        ".python-version",
+        "requirements.txt",
+        "requirements-security.txt",
+        "requirements-dev.lock",
+    ]
+    for name in [*python_files, *other_inputs]:
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(f"synthetic:{name}\n", encoding="utf-8")
+    runner = tmp_path / "runner"
+    (runner / "borsapy-proof").mkdir(parents=True)
+    monkeypatch.setenv("RUNNER_TEMP", str(runner))
+    monkeypatch.chdir(tmp_path)
+
+    def tracked_files(args):
+        assert args == ["git", "ls-files", "-z"]
+        return "\0".join(
+            [*python_files, *other_inputs, "README.md", ".private/hidden.py", ""]
+        ).encode()
+
+    monkeypatch.setattr(subprocess, "check_output", tracked_files)
+    exec(compile(manifest, "workflow-source-manifest", "exec"), {})
+    result = json.loads((runner / "borsapy-proof/source-sha256.json").read_text())
+    assert set(result) == set(python_files + other_inputs)
+    for name, digest in result.items():
+        assert digest == hashlib.sha256((tmp_path / name).read_bytes()).hexdigest()
+
+
 def test_recipe_and_workflow_require_both_proofs_before_push():
     recipe = (ROOT / "Dockerfile.borsapy-source").read_text(encoding="utf-8")
     commands = [

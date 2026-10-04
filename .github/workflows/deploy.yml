@@ -237,7 +237,7 @@ jobs:
     env:
       API_BASE_SOURCE: 279aa9fea99b520e661b43f104a2bf4791893ac3
       API_BASE_IMAGE: ghcr.io/rapto0/rapot/backend@sha256:9be0fdb6097f52bf97730f44c86d28c24e2c0cea1fe181e7e8fd668177fdb034
-      BORSAPY_SOURCE_IMAGE: ghcr.io/rapto0/rapot/backend@sha256:b9695f5f78ccb6f16112578c54fb9fb2de7ce6a3dc4c0836c3da7deacf7adf14
+      BORSAPY_SOURCE_IMAGE: ghcr.io/rapto0/rapot/backend@sha256:384674f3a7230ae4a6b182ac26e6114808627555988cb3305e7ed906b7d59def
     steps:
       - uses: actions/checkout@v6
         with:

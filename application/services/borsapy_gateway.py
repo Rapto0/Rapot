@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+from infrastructure.providers.tradingview_session_auth import authenticate_session
 from infrastructure.repositories.borsapy_secret_store import BorsapySecretStore, SecretStoreError
 from settings import get_settings
 
@@ -42,7 +43,9 @@ class _Redact(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         text = record.getMessage()
         exception = (
-            "".join(traceback.format_exception(*record.exc_info)) if record.exc_info else None
+            "".join(traceback.format_exception(*record.exc_info))
+            if record.exc_info
+            else record.exc_text
         )
         for secret in self.secrets:
             if secret:
@@ -75,7 +78,9 @@ def _number(value: Any) -> float | None:
 
 
 class BorsapyGateway:
-    def __init__(self, settings=None, *, loader=None, version_reader=None, clock=None):
+    def __init__(
+        self, settings=None, *, loader=None, version_reader=None, clock=None, session_auth=None
+    ):
         self.settings = settings or get_settings()
         path = self.settings.borsapy_credentials_path
         self._store = BorsapySecretStore(
@@ -85,6 +90,13 @@ class BorsapyGateway:
             self.settings.jwt_secret_key or "",
         )
         self._loader = loader or (lambda: importlib.import_module("borsapy"))
+        # A custom module loader is an injected provider; it can also inject its
+        # auth adapter. The production loader always uses the pinned redirect fix.
+        self._session_auth = session_auth or (
+            authenticate_session
+            if loader is None
+            else lambda bp, **values: bp.set_tradingview_auth(**values)
+        )
         self._version_reader = version_reader or (lambda: importlib.metadata.version("borsapy"))
         self._clock = clock or time.monotonic
         self._module = None
@@ -212,7 +224,8 @@ class BorsapyGateway:
         self._protect_logs()
         try:
             bp.clear_tradingview_auth()
-            result = bp.set_tradingview_auth(
+            result = self._session_auth(
+                bp,
                 session=self._credentials["session"],
                 session_sign=self._credentials["session_sign"],
             )

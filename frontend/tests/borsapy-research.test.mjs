@@ -165,29 +165,177 @@ test('private research page mounts no workspace when signed out and keys workspa
   assert.match(text(Page()), /yönetici yetkisi/);
 });
 
-test('connection form sends secrets only in the write call and immediately clears inputs', async () => {
-  const writes = [];
-  const status = { installed: true, version: '0.11.0', configured: false, authenticated: false, evds_configured: false, twitter_configured: false, message: 'Hazır' };
-  const component = harness('../src/components/research/connection-panel.tsx', 'ConnectionPanel', {
-    '@tanstack/react-query': { useQuery: () => ({ data: status, refetch: async () => ({ data: status }) }) },
-    '@/components/ui/action-dialog': { ActionDialog: () => null }, '@/components/research/research-utils': utils,
-    './research-utils': utils, '@/lib/api/borsapy-api': {
-      saveResearchConnection: async payload => { writes.push(payload); return status; },
-      fetchResearchConnection: async () => status,
+const emptyConnection = { installed: true, version: '0.11.0', configured: false, authenticated: false, evds_configured: false, twitter_configured: false, state: 'unconfigured', message: 'Hazır' };
+function connectionFixture({ operation = async () => ({}), refreshed = emptyConnection, refreshError = null, initial = emptyConnection } = {}) {
+  const writes = [], queryKeys = [];
+  let session = { user: { username: 'admin', is_admin: true, disabled: false }, expiresAt: Date.now() + 60_000 };
+  let refreshCount = 0;
+  const query = {
+    data: initial, isError: false,
+    async refetch() {
+      refreshCount++;
+      if (refreshError) { query.isError = true; query.error = refreshError; return { data: query.data, isError: true }; }
+      query.data = refreshed;
+      return { data: refreshed, isError: false };
     },
-  }, {}, { sessionKey: 'admin:1' });
+  };
+  const queryImports = { useQuery: options => { queryKeys.push(plain(options.queryKey)); return query; } };
+  const sessionKey = `${session.user.username}:${session.expiresAt}`;
+  const component = harness('../src/components/research/connection-panel.tsx', 'ConnectionPanel', {
+    '@tanstack/react-query': queryImports,
+    '@/components/ui/action-dialog': { ActionDialog: 'dialog' },
+    '@/lib/auth/session': { getSession: () => session },
+    './research-utils': utils, '@/lib/api/borsapy-api': {
+      saveResearchConnection: async (payload, signal) => { writes.push(payload); return operation(signal); },
+      verifyResearchConnection: signal => operation(signal),
+      clearResearchConnection: signal => operation(signal),
+      fetchResearchConnection: async () => query.data,
+    },
+  }, {}, { sessionKey });
+  const market = load('../src/lib/hooks/use-private-market.ts', {
+    '@tanstack/react-query': queryImports, './use-session': { useSession: () => session },
+    '@/lib/api/borsapy-api': { fetchResearchConnection: async () => query.data },
+  });
+  return { component, writes, queryKeys, sessionKey, query, market,
+    refreshCount: () => refreshCount, setSession: next => { session = next; },
+  };
+}
+function submitConnection(component) {
   for (const [name, value] of [['session', 'secret-session'], ['session_sign', 'secret-sign']]) {
     component.find(node => node.type === 'input' && node.props.name === name).props.onChange({ target: { value } }); component.render();
   }
   component.find(node => node.type === 'form').props.onSubmit({ preventDefault() {} });
   component.render();
+}
+async function settleConnection(component) {
+  for (let i = 0; i < 12; i++) await Promise.resolve();
+  component.render();
+}
+
+test('connection form sends secrets only in the write call and immediately clears inputs', async () => {
+  const fixture = connectionFixture();
+  const { component, writes } = fixture;
+  submitConnection(component);
   assert.equal(writes.length, 1);
   assert.equal(writes[0].session, 'secret-session');
   assert.ok(component.nodes().filter(node => node.type === 'input').every(node => node.props.value === '' && node.props.type === 'password'));
-  for (let i = 0; i < 5; i++) await Promise.resolve();
-  component.render();
+  await settleConnection(component);
+  assert.equal(fixture.refreshCount(), 1);
   assert.ok(!text(component.tree()).includes('secret-session'));
   component.unmount();
+});
+
+test('saved credentials with a rejected provider login refresh the shared market status and enable verification', async () => {
+  const fixture = connectionFixture({
+    operation: async () => { throw { status: 409, message: 'secret-session raw provider error' }; },
+    refreshed: { ...emptyConnection, configured: true, state: 'auth_needed', message: 'TradingView oturumu doğrulanamadı.' },
+  });
+  submitConnection(fixture.component);
+  await settleConnection(fixture.component);
+  const marketConnection = fixture.market.usePrivateMarket().connection;
+  assert.equal(fixture.refreshCount(), 1);
+  assert.ok(fixture.queryKeys.every(key => JSON.stringify(key) === JSON.stringify(['borsapy-connection', fixture.sessionKey])));
+  assert.equal(marketConnection.data.configured, true, 'Other market consumers observe the same cache entry');
+  assert.equal(marketConnection.data.authenticated, false);
+  assert.match(text(fixture.component.tree()), /Bağlantı bilgileri sunucuda kayıtlı; TradingView oturumu doğrulanamadı/);
+  assert.match(text(fixture.component.tree()), /Kayıtlı · doğrulanmadı/);
+  assert.equal(fixture.component.find(node => node.type === 'button' && text(node) === 'Oturumu doğrula').props.disabled, false);
+  assert.ok(fixture.component.nodes().filter(node => node.type === 'input').every(node => node.props.value === ''));
+  assert.doesNotMatch(text(fixture.component.tree()), /secret-session|raw provider error/);
+  fixture.component.unmount();
+});
+
+test('verification and removal refresh shared connection state after success or provider failure', async () => {
+  for (const action of ['verify', 'clear']) {
+    for (const failed of [false, true]) {
+      const fixture = connectionFixture({
+        initial: { ...emptyConnection, configured: true },
+        operation: async () => { if (failed) throw { status: 502 }; return {}; },
+        refreshed: action === 'clear' ? emptyConnection : { ...emptyConnection, configured: true, authenticated: !failed },
+      });
+      if (action === 'verify') fixture.component.find(node => node.type === 'button' && text(node) === 'Oturumu doğrula').props.onClick();
+      else fixture.component.find(node => node.type === 'dialog').props.onConfirm();
+      await settleConnection(fixture.component);
+      assert.equal(fixture.refreshCount(), 1);
+      assert.equal(fixture.market.usePrivateMarket().connection.data.configured, action !== 'clear');
+      if (failed) assert.match(text(fixture.component.tree()), /İşlem tamamlanamadı/);
+      fixture.component.unmount();
+    }
+  }
+});
+
+test('failed status refresh never treats stale configured data as a saved or verified connection', async () => {
+  for (const rejected of [false, true]) {
+    const fixture = connectionFixture({
+      initial: { ...emptyConnection, configured: true, state: 'auth_needed' },
+      operation: async () => { if (rejected) throw { status: 409 }; return {}; },
+      refreshError: { status: 503 },
+    });
+    submitConnection(fixture.component);
+    await settleConnection(fixture.component);
+    const content = text(fixture.component.tree());
+    assert.match(content, /Güncel bağlantı durumu alınamadı/);
+    if (rejected) assert.match(content, /Sağlayıcı oturumu doğrulanamadı/);
+    assert.doesNotMatch(content, /sunucuda kayıtlı|Kayıtlı · doğrulanmadı|sunucuya gönderildi/);
+    assert.equal(fixture.component.find(node => node.type === 'button' && text(node) === 'Oturumu doğrula').props.disabled, true);
+    fixture.component.unmount();
+  }
+});
+
+test('a storage error does not present in-memory credentials as successfully saved', async () => {
+  const fixture = connectionFixture({
+    operation: async () => { throw { status: 503, message: 'private-storage-detail' }; },
+    refreshed: { ...emptyConnection, configured: true, evds_configured: true, state: 'storage_error' },
+  });
+  submitConnection(fixture.component);
+  await settleConnection(fixture.component);
+  assert.match(text(fixture.component.tree()), /Bağlantı kaydının durumu alınamadı/);
+  assert.doesNotMatch(text(fixture.component.tree()), /sunucuda kayıtlı|Kayıtlı · doğrulanmadı|Anahtar kayıtlı|private-storage-detail/);
+  fixture.component.unmount();
+});
+
+test('a storage error still permits confirmed removal without claiming the old credentials are saved', async () => {
+  let finish, clearCount = 0;
+  const fixture = connectionFixture({
+    initial: { ...emptyConnection, configured: true, evds_configured: true, state: 'storage_error' },
+    operation: () => { clearCount++; return new Promise(resolve => { finish = resolve; }); },
+    refreshed: emptyConnection,
+  });
+  const clearButton = () => fixture.component.find(node => node.type === 'button' && text(node) === 'Bağlantıları kaldır');
+  assert.equal(clearButton().props.disabled, false);
+  assert.equal(fixture.component.find(node => node.type === 'button' && text(node) === 'Oturumu doğrula').props.disabled, true);
+  assert.doesNotMatch(text(fixture.component.tree()), /Kayıtlı · doğrulanmadı|Anahtar kayıtlı/);
+  clearButton().props.onClick(); fixture.component.render();
+  assert.equal(clearCount, 0, 'Opening the confirmation must not delete credentials');
+  assert.equal(fixture.component.find(node => node.type === 'dialog').props.open, true);
+  fixture.component.find(node => node.type === 'dialog').props.onConfirm(); fixture.component.render();
+  assert.equal(clearCount, 1);
+  assert.equal(clearButton().props.disabled, true, 'Removal cannot be repeated while pending');
+  finish({});
+  await settleConnection(fixture.component);
+  assert.equal(fixture.refreshCount(), 1);
+  assert.equal(fixture.market.usePrivateMarket().connection.data.configured, false);
+  assert.equal(fixture.component.find(node => node.type === 'dialog').props.open, false);
+  assert.match(text(fixture.component.tree()), /Bağlantı bilgileri kaldırıldı/);
+  fixture.component.unmount();
+});
+
+test('permission failures, logout, expired or replaced sessions and unmount never trigger a follow-up status request', async () => {
+  for (const failure of [401, 403, 'logout', 'expired', 'replaced', 'unmount']) {
+    let finish;
+    const fixture = connectionFixture({ operation: signal => new Promise((resolve, reject) => { finish = { resolve, reject, signal }; }) });
+    submitConnection(fixture.component);
+    if (failure === 'logout') fixture.setSession(null);
+    if (failure === 'expired') fixture.setSession({ user: { username: 'admin', is_admin: true }, expiresAt: 1 });
+    if (failure === 'replaced') fixture.setSession({ user: { username: 'other', is_admin: true }, expiresAt: Date.now() + 60_000 });
+    if (failure === 'unmount') { fixture.component.unmount(); assert.equal(finish.signal.aborted, true); }
+    if (typeof failure === 'number') finish.reject({ status: failure });
+    else finish.resolve({});
+    await settleConnection(fixture.component);
+    assert.equal(fixture.refreshCount(), 0, String(failure));
+    assert.doesNotMatch(text(fixture.component.tree()), /sunucuya gönderildi/);
+    fixture.component.unmount();
+  }
 });
 
 test('stream polling is opt-in, serial, abortable, and stop releases only its own lease', async () => {

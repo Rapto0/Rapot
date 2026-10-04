@@ -1,8 +1,8 @@
 # Source-only derivative of the accepted Borsapy runtime; never installs packages.
-FROM ghcr.io/rapto0/rapot/backend@sha256:b9695f5f78ccb6f16112578c54fb9fb2de7ce6a3dc4c0836c3da7deacf7adf14
+FROM ghcr.io/rapto0/rapot/backend@sha256:384674f3a7230ae4a6b182ac26e6114808627555988cb3305e7ed906b7d59def
 
-LABEL org.opencontainers.image.base.name="ghcr.io/rapto0/rapot/backend@sha256:b9695f5f78ccb6f16112578c54fb9fb2de7ce6a3dc4c0836c3da7deacf7adf14" \
-      org.opencontainers.image.base.digest="sha256:b9695f5f78ccb6f16112578c54fb9fb2de7ce6a3dc4c0836c3da7deacf7adf14" \
+LABEL org.opencontainers.image.base.name="ghcr.io/rapto0/rapot/backend@sha256:384674f3a7230ae4a6b182ac26e6114808627555988cb3305e7ed906b7d59def" \
+      org.opencontainers.image.base.digest="sha256:384674f3a7230ae4a6b182ac26e6114808627555988cb3305e7ed906b7d59def" \
       io.rapot.runtime.extension="borsapy-0.11.0-v1" \
       io.rapot.runtime.mode="source-only"
 

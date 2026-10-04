@@ -7,11 +7,12 @@ import { ActionDialog } from "@/components/ui/action-dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { clearResearchConnection, fetchResearchConnection, saveResearchConnection, verifyResearchConnection, type ResearchSecrets } from "@/lib/api/borsapy-api"
+import { getSession } from "@/lib/auth/session"
 import { researchError } from "./research-utils"
 
 const EMPTY = { session: "", session_sign: "", evds_key: "", twitter_auth_token: "", twitter_ct0: "" }
 export function ConnectionPanel({ sessionKey }: { sessionKey: string }) {
-    const connection = useQuery({ queryKey: ["research-connection", sessionKey], queryFn: ({ signal }) => fetchResearchConnection(signal), retry: false })
+    const connection = useQuery({ queryKey: ["borsapy-connection", sessionKey], queryFn: ({ signal }) => fetchResearchConnection(signal), retry: false })
     const [draft, setDraft] = useState({ ...EMPTY })
     const [pending, setPending] = useState(false)
     const [error, setError] = useState("")
@@ -24,13 +25,42 @@ export function ConnectionPanel({ sessionKey }: { sessionKey: string }) {
         const controller = new AbortController()
         request.current = controller
         setPending(true); setError(""); setNotice("")
+        const canContinue = () => {
+            const current = getSession()
+            return !controller.signal.aborted && current?.user.is_admin && !current.user.disabled
+                && current.expiresAt > Date.now() && `${current.user.username}:${current.expiresAt}` === sessionKey
+        }
         try {
-            await operation(controller.signal)
-            if (!controller.signal.aborted) { setNotice(message); setConfirmClear(false); await connection.refetch() }
-        } catch (cause) {
-            if (!controller.signal.aborted) setError(researchError(cause))
+            let failure: unknown
+            let failed = false
+            try { await operation(controller.signal) }
+            catch (cause) { failed = true; failure = cause }
+            if (!canContinue()) return
+            const failureStatus = typeof failure === "object" && failure !== null && "status" in failure ? failure.status : null
+            if (failureStatus === 401 || failureStatus === 403) { setError(researchError(failure)); return }
+
+            // A provider rejection can occur after the credentials were saved. Refresh the
+            // shared status on either outcome, without automatically retrying authentication.
+            const failureMessage = failed ? researchError(failure) : ""
+            try {
+                const refreshed = await connection.refetch()
+                if (!canContinue()) return
+                if (refreshed.isError || !refreshed.data) throw new Error("Status unavailable")
+                const latest = refreshed.data
+                if (latest.state === "storage_error") {
+                    setError(`${failureMessage} Bağlantı kaydının durumu alınamadı. Durumu yenileyip tekrar kontrol edin.`.trim())
+                } else if (failed) {
+                    setError(failureStatus === 409 && latest.configured && latest.state === "auth_needed"
+                        ? "Bağlantı bilgileri sunucuda kayıtlı; TradingView oturumu doğrulanamadı. Oturumu doğrula ile tekrar deneyebilirsiniz."
+                        : failureMessage)
+                } else {
+                    setNotice(message); setConfirmClear(false)
+                }
+            } catch {
+                if (canContinue()) setError(`${failureMessage} Güncel bağlantı durumu alınamadı. Durumu yenileyip tekrar kontrol edin.`.trim())
+            }
         } finally {
-            if (!controller.signal.aborted) { setDraft({ ...EMPTY }); setPending(false) }
+            if (canContinue()) { setDraft({ ...EMPTY }); setPending(false) }
             if (request.current === controller) request.current = null
         }
     }
@@ -43,12 +73,14 @@ export function ConnectionPanel({ sessionKey }: { sessionKey: string }) {
         setDraft({ ...EMPTY })
         void perform(signal => saveResearchConnection(secrets, signal), "Bağlantı bilgileri sunucuya gönderildi. Güncel doğrulama durumu aşağıda.")
     }
-    const status = connection.data
+    const storageUnavailable = connection.data?.state === "storage_error"
+    const status = connection.isError || storageUnavailable ? undefined : connection.data
     const field = (name: keyof typeof EMPTY, label: string) => <label className="block space-y-1 text-sm"><span>{label}</span><Input type="password" name={name} autoComplete="new-password" spellCheck={false} value={draft[name]} onChange={event => setDraft(current => ({ ...current, [name]: event.target.value }))} className="min-h-11" placeholder="Yeni bilgi girin" maxLength={4096} /></label>
     return <section className="space-y-4" aria-labelledby="connections-title">
         <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 id="connections-title" className="flex items-center gap-2 text-[16px] text-foreground font-semibold"><KeyRound className="h-4 w-4" aria-hidden="true" />Veri bağlantıları</h2><p className="mt-1 max-w-3xl text-xs leading-relaxed text-muted-foreground">Yalnız kullanma yetkiniz olan hesap bilgilerini girin. Kaydedilen bilgiler geri gösterilmez. Boş bıraktığınız alanlar mevcut kaydı korur.</p></div><Button className="min-h-11" variant="outline" disabled={connection.isFetching || pending} onClick={() => void connection.refetch()}><RefreshCw aria-hidden="true" />Durumu yenile</Button></div>
         {connection.isLoading && <p role="status" className="text-sm text-muted-foreground">Bağlantılar kontrol ediliyor…</p>}
         {connection.isError && <p role="alert" className="text-sm text-loss">Bağlantı durumu alınamadı. {researchError(connection.error)}</p>}
+        {storageUnavailable && <p role="alert" className="text-sm text-loss">Bağlantı kaydının durumu alınamadı. Durumu yenileyip tekrar kontrol edin.</p>}
         {status && <><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{[
             ["Borsapy", status.installed ? `Kurulu · ${status.version ?? "sürüm bilinmiyor"}` : "Sunucuda kurulu değil", status.installed],
             ["TradingView", status.authenticated ? "Oturum doğrulandı" : status.configured ? "Kayıtlı · doğrulanmadı" : "Yapılandırılmadı", status.authenticated],
@@ -64,7 +96,7 @@ export function ConnectionPanel({ sessionKey }: { sessionKey: string }) {
                 <section className="space-y-3 border border-border bg-surface p-4"><h3 className="text-sm font-medium">TCMB EVDS</h3><p className="text-xs text-muted-foreground">Makro veri sorguları için kendi EVDS anahtarınız.</p>{field("evds_key", "EVDS API anahtarı")}</section>
                 <section className="space-y-3 border border-border bg-surface p-4"><h3 className="text-sm font-medium">X / Twitter</h3><p className="text-xs text-muted-foreground">X aramaları için sunucudaki isteğe bağlı sağlayıcı kullanılır.</p>{field("twitter_auth_token", "X erişim bilgisi (auth_token)")}{field("twitter_ct0", "X oturum doğrulaması (ct0)")}</section>
             </fieldset>
-            <div className="flex flex-wrap gap-2"><Button type="submit" className="min-h-11" disabled={pending}>{pending ? "İşleniyor…" : "Bağlantıları kaydet"}</Button><Button type="button" variant="outline" className="min-h-11" disabled={pending || !status?.configured} onClick={() => void perform(signal => verifyResearchConnection(signal), "TradingView oturumu yeniden kontrol edildi.")}><RefreshCw aria-hidden="true" />Oturumu doğrula</Button><Button type="button" variant="ghost" className="min-h-11 text-loss" disabled={pending || !status} onClick={() => setConfirmClear(true)}><Trash2 aria-hidden="true" />Bağlantıları kaldır</Button></div>
+            <div className="flex flex-wrap gap-2"><Button type="submit" className="min-h-11" disabled={pending}>{pending ? "İşleniyor…" : "Bağlantıları kaydet"}</Button><Button type="button" variant="outline" className="min-h-11" disabled={pending || !status?.configured} onClick={() => void perform(signal => verifyResearchConnection(signal), "TradingView oturumu yeniden kontrol edildi.")}><RefreshCw aria-hidden="true" />Oturumu doğrula</Button><Button type="button" variant="ghost" className="min-h-11 text-loss" disabled={pending || !connection.data} onClick={() => setConfirmClear(true)}><Trash2 aria-hidden="true" />Bağlantıları kaldır</Button></div>
         </form>
         <ActionDialog open={confirmClear} title="Veri bağlantılarını kaldır" description="Kayıtlı TradingView, EVDS ve X bilgileri silinir; açık veri akışı kapatılır." confirmLabel="Bağlantıları kaldır" cancelLabel="Vazgeç" variant="danger" pending={pending} onCancel={() => setConfirmClear(false)} onConfirm={() => void perform(signal => clearResearchConnection(signal), "Bağlantı bilgileri kaldırıldı.")} />
     </section>

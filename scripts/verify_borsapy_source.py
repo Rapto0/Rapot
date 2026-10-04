@@ -13,8 +13,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
-SOURCE_BASE = "4b15335f00f30e65a21899e73af47c508f395706"
-SOURCE_IMAGE = "ghcr.io/rapto0/rapot/backend@sha256:b9695f5f78ccb6f16112578c54fb9fb2de7ce6a3dc4c0836c3da7deacf7adf14"
+SOURCE_BASE = "ab18dc48881964f6211dc9d9a63ebe33cec9c785"
+SOURCE_IMAGE = "ghcr.io/rapto0/rapot/backend@sha256:384674f3a7230ae4a6b182ac26e6114808627555988cb3305e7ed906b7d59def"
 ADDITIVE_IMAGE = "ghcr.io/rapto0/rapot/backend@sha256:9be0fdb6097f52bf97730f44c86d28c24e2c0cea1fe181e7e8fd668177fdb034"
 EXTENSION = "borsapy-0.11.0-v1"
 RUNTIME_INPUTS = (
