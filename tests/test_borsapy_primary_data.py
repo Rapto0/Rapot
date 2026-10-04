@@ -21,14 +21,18 @@ def bars():
     )
 
 
-@pytest.fixture
-def isolated_universe(monkeypatch):
+@pytest.fixture(params=[0.0, 3_000_000.0], ids=["fresh-clock", "long-running-clock"])
+def isolated_universe(monkeypatch, request):
+    clock = [request.param]
+    # The clock origin is arbitrary. Replace only data_loader's clock facade;
+    # futures/thread timeout machinery must continue using the real clock.
+    monkeypatch.setattr(data_loader, "time", SimpleNamespace(monotonic=lambda: clock[0]))
     monkeypatch.setattr(settings, "borsapy_use_for_bist", True)
     monkeypatch.setattr(data_loader, "_bist_symbols_cache", None)
     monkeypatch.setattr(data_loader, "_bist_symbols_future", None)
     monkeypatch.setattr(data_loader, "_bist_symbols_executor", None)
     monkeypatch.setattr(data_loader, "_bist_symbols_error", None)
-    yield
+    yield clock
     if data_loader._bist_symbols_executor is not None:
         data_loader._bist_symbols_executor.shutdown(wait=True, cancel_futures=True)
 
@@ -167,9 +171,17 @@ def test_company_universe_is_lazy_bounded_copied_and_cached(monkeypatch, isolate
     company.assert_called_once()
     assert gateway_calls == ["public"]
     assert data_loader.bist_symbols_status()["state"] == "ready"
-    monkeypatch.setattr(data_loader, "_BIST_SYMBOL_TTL_SECONDS", -1)
-    data_loader.get_all_bist_symbols()
+    isolated_universe[0] += data_loader._BIST_SYMBOL_TTL_SECONDS - 1
+    assert data_loader.get_all_bist_symbols() == ["GARAN", "THYAO"]
+    assert data_loader.bist_symbols_status()["state"] == "ready"
+    company.assert_called_once()
+    isolated_universe[0] += 1
+    assert data_loader.bist_symbols_status()["state"] == "not_loaded"
+    assert data_loader.bist_symbols_status()["count"] == 0
+    company.return_value = pd.DataFrame({"ticker": ["ASELS"]})
+    assert data_loader.get_all_bist_symbols() == ["ASELS"]
     assert company.call_count == 2
+    assert data_loader.bist_symbols_status()["state"] == "ready"
 
 
 @pytest.mark.parametrize(
@@ -183,14 +195,17 @@ def test_company_universe_is_lazy_bounded_copied_and_cached(monkeypatch, isolate
 def test_invalid_company_universe_never_returns_static_or_expired_data(
     monkeypatch, isolated_universe, frame
 ):
-    monkeypatch.setattr(data_loader, "_bist_symbols_cache", (0, ("OLD",)))
+    provider = Mock(side_effect=[pd.DataFrame({"ticker": ["OLD"]}), frame])
     monkeypatch.setattr(
         borsapy_gateway,
         "get_borsapy_gateway",
-        lambda: SimpleNamespace(run_public=lambda callback: frame),
+        lambda: SimpleNamespace(run_public=provider),
     )
+    assert data_loader.get_all_bist_symbols() == ["OLD"]
+    isolated_universe[0] += data_loader._BIST_SYMBOL_TTL_SECONDS
     with pytest.raises(data_loader.BistSymbolSourceError, match="eski listeye geçilmedi"):
         data_loader.get_all_bist_symbols()
+    assert provider.call_count == 2
     assert data_loader.bist_symbols_status()["state"] == "error"
     assert data_loader.bist_symbols_status()["count"] == 0
 
