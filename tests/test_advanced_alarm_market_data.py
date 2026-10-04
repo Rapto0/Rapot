@@ -261,6 +261,87 @@ def test_provider_revision_resets_prices_and_other_timeframes(hub):
     assert not snapshot(hub)["ready"]
 
 
+@pytest.mark.parametrize("revision", ["remove", "backfill"])
+def test_historical_index_revision_cannot_create_indicator_crossing(hub, revision):
+    selected = rule("ema")
+    complete = frame()
+    sparse = complete.drop(complete.index[-2])
+    initial, revised = (complete, sparse) if revision == "remove" else (sparse, complete)
+    hub._provider.frames["1m"] = initial
+    load(hub, selected)
+    before = snapshot(hub, selected)
+    assert before["ready"]
+    hub.time[0] += 30
+    hub._provider.frames["1m"] = revised
+    load(hub, selected)
+    after = snapshot(hub, selected)
+    assert after["ready"] and after["value"] != before["value"]
+    assert after["source_timestamp"] == before["source_timestamp"]
+    assert after["continuity_id"] != before["continuity_id"]
+    crossing = rule(
+        "ema",
+        op="crossed_below" if after["value"] < before["value"] else "crossed_above",
+        right=(after["value"] + before["value"]) / 2,
+    )
+    assert not snapshot(hub, crossing)["ready"]
+    assert hub._series[("BIST", "THYAO", "1m")][1] is None
+
+
+def test_backward_history_tail_resets_observation_continuity(hub):
+    selected = rule("ema")
+    load(hub, selected)
+    before = snapshot(hub, selected)
+    hub.time[0] += 30
+    hub._provider.frames["1m"] = hub._provider.frames["1m"].iloc[:-1].copy()
+    load(hub, selected)
+    after = snapshot(hub, selected)
+    assert after["ready"]
+    assert after["source_timestamp"] < before["source_timestamp"]
+    assert after["continuity_id"] != before["continuity_id"]
+    assert not snapshot(hub, rule("ema", op="crossed_below"))["ready"]
+
+
+@pytest.mark.parametrize("cache_available", [False, True])
+def test_evicted_source_frame_requires_restorable_history_for_continuity(hub, cache_available):
+    selected = rule("ema")
+    load(hub, selected)
+    before = snapshot(hub, selected)
+    key = ("BIST", "THYAO", "1m")
+    hub._hot.pop(key)
+    if not cache_available:
+        hub._cache.data.clear()
+        # Surviving values and latest time agree; only a historical bar disappears.
+        raw = hub._provider.frames["1m"]
+        hub._provider.frames["1m"] = raw.drop(raw.index[-2])
+    hub.time[0] += 30
+    load(hub, selected)
+    after = snapshot(hub, selected)
+    assert after["ready"]
+    if cache_available:
+        assert after["continuity_id"] == before["continuity_id"]
+    else:
+        assert after["continuity_id"] != before["continuity_id"]
+        crossing = rule("ema", op="crossed_below", right=(before["value"] + after["value"]) / 2)
+        assert not snapshot(hub, crossing)["ready"]
+        assert hub._series[key][1] is None
+
+
+def test_normal_rolling_history_window_preserves_continuity(hub):
+    selected = rule("ema")
+    raw = frame(count=500)
+    hub._provider.frames["1m"] = raw
+    load(hub, selected)
+    before = snapshot(hub, selected)
+    stamp = pd.Timestamp(NOW + 60, unit="s", tz="UTC")
+    raw.loc[stamp] = raw.iloc[-1]
+    hub.time[0] = NOW + 61
+    hub._provider.frames["1m"] = raw.iloc[1:].copy()
+    load(hub, selected)
+    after = snapshot(hub, selected)
+    assert after["ready"] and after["continuity_id"] == before["continuity_id"]
+    assert hub._series[("BIST", "THYAO", "1m")][1] is not None
+
+
 def test_reconnect_backoff_credential_epoch_and_late_callbacks(hub):
     hub.connection_step()
     old = hub._provider.callback

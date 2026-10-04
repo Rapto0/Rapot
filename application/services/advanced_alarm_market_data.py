@@ -574,12 +574,27 @@ class AdvancedMarketData:
                 previous_sample = self._series.get(key, (None, None))[1]
                 old_frame = self._hot.get(key)
                 discontinuity = bool(previous and result.received - previous.received > 180)
+                # Without the retained or restored source frame, continuity
+                # cannot be proven across a possible historical revision.
+                discontinuity |= previous is not None and old_frame is None
                 # Sparse native history is valid input, but a newly traversed gap
                 # cannot connect old rule state to a later observed trading bar.
                 discontinuity |= bool(
                     previous and any(gap > previous.source_time for gap in result.gaps)
                 )
+                discontinuity |= bool(previous and result.source_time < previous.source_time)
                 if old_frame is not None:
+                    # A removed/backfilled historical bar revises indicator inputs,
+                    # even when all surviving prices and the latest time agree.
+                    # Compare only the common retained window: normal rolling-tail
+                    # truncation is not a provider revision.
+                    start = max(old_frame.index[0], frame.index[0])
+                    end = min(old_frame.index[-1], frame.index[-1])
+                    old_window = old_frame.index[
+                        (old_frame.index >= start) & (old_frame.index <= end)
+                    ]
+                    new_window = frame.index[(frame.index >= start) & (frame.index <= end)]
+                    discontinuity |= not old_window.equals(new_window)
                     overlap = old_frame.index[:-1].intersection(frame.index)
                     discontinuity |= bool(
                         len(overlap) and not old_frame.loc[overlap].equals(frame.loc[overlap])

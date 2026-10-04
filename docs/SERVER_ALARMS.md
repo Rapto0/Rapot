@@ -59,7 +59,10 @@ BIST sağlayıcısının işlem olmayan dakikaları atlayan doğal mum serisi ko
 tam periyot katı olan boşluklara yapay mum eklenmez. Geçmiş bu haliyle saklanır
 ve hesaplanır; yeni gözlemlerde aşılan boşluk alarm devamlılığını sıfırlar ve
 boşluğun iki tarafındaki değerlerden kesişme üretilmez. Kripto aralık doğrulaması
-kesintisiz kalır. `history_cached`, eski ama önbellekte bulunan seri sayısını;
+kesintisiz kalır. Sağlayıcının geçmiş mum silmesi/eklemesi, zaman gerilemesi veya
+önceki geçmişin karşılaştırılamaması da alarm başlangıcını sıfırlar; normal kayan
+pencere ve diskten geçmişi geri okuma devamlılığı korur.
+`history_cached`, eski ama önbellekte bulunan seri sayısını;
 `history_ready`, şu an alarm için güncel seri sayısını; `history_failures_by_reason`
 ise sağlayıcı/boşluk/geçersiz veri ayrımını gösterir.
 BIST'te bir mumun kapandığını sonraki gerçek sağlayıcı mumu doğrular; yarım gün
