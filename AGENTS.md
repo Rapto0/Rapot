@@ -58,12 +58,17 @@ Kripto grafik/alarm ve Binance sembol kimliği korunur; BtcTurk ayrı araştırm
 Ekonomik takvim Borsapy/Doviz.com kullanır; TradingView/Finnhub anahtarı istemez.
 Canlı piyasa kabulü ertelidir; bağlantı açık olması gecikmesiz fiyat kanıtı değildir.
 [Entegrasyon sözleşmesi](docs/BORSAPY_INTEGRATION.md) kapsam ve sınırları açıklar.
-4 Ekim'de `4b15335` API/frontend üretime alındı; 51 işlem/9 grup, özel GET'ler,
+4 Ekim 06:21 UTC'de `4b15335` API/frontend üretime alındı; 51 işlem/9 grup, özel GET'ler,
 HTTPS/statik dosyalar ve ek araştırma tablosu doğrulandı. TradingView/EVDS/X
 bağlantıları bu kabulde henüz tanımlı değildi. Bot/middleware/Compose/current
 `279aa9f` korundu; gerçek hesap ve piyasa kabulü hâlâ ertelidir. İmaj/kanıt
-kimlikleri ve tamamlanmış iki-imaj temizlik onayı devam planındadır. Sonraki
-kişisel veri altyapısı değişikliklerinin API/frontend/bot yayını henüz tamamlanmadı.
+kimlikleri ve tamamlanmış iki-imaj temizlik onayı devam planındadır.
+Ardından 08:02:14 UTC'de `ab18dc4` API/bot/frontend'e yayımlandı; 08:02:47 UTC
+ayrı salt okunur kabul erişim sınırlarını, WS kimliğini, SSR/statik dosyaları ve
+11 tablonun değişmeyen şemasını doğruladı. API/bot `BORSAPY_USE_FOR_BIST=true`
+ile aynı kaynak imajını kullanır; middleware/Compose/current `279aa9f` korundu.
+TradingView/EVDS/X bağlantıları hâlâ tanımsızdır; gerçek hesap, fiyat/mum ve
+şirket işlemleri kabulü ertelidir. Son boş alan 804.610.048 bayt, rezerv 528 MiB'dir.
 
 Canonical import ve compatibility listesi [paketleme haritasındadır](docs/PACKAGING_REFACTOR_MAP.md).
 `application.scanner.signal_handlers` gerçek uygulamadır; `scanner_side_effects`

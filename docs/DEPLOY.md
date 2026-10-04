@@ -210,6 +210,42 @@ with zero restarts; final free space was 839,430,144 bytes, above the fixed
 528 MiB reserve. Exact digests, evidence hashes and remaining live acceptance
 are in the [continuation plan](RAPOT_DEVAM_PLANI.md#son-üretim-ve-yayın-kanıtları).
 
+### Site-wide Borsapy source-only rollout — 4 October 2026
+
+Source `ab18dc48881964f6211dc9d9a63ebe33cec9c785` passed all five jobs in
+[CI 37187054987](https://github.com/Rapto0/Rapot/actions/runs/37187054987) and both
+requested jobs in [publication 37187060992](https://github.com/Rapto0/Rapot/actions/runs/37187060992);
+the unrequested API-delta job was skipped. CI passed 1,385 Python tests with one
+optional skip/three warnings and 250 frontend tests. The publication evidence
+verified 266 source files, all 120 unchanged distribution file inventories and
+the complete `b9695f5f…` layer prefix.
+
+At 08:02:14 UTC, API and bot moved to
+`ghcr.io/rapto0/rapot/backend@sha256:384674f3a7230ae4a6b182ac26e6114808627555988cb3305e7ed906b7d59def`,
+with explicit `BORSAPY_USE_FOR_BIST=true`. Frontend moved to
+`ghcr.io/rapto0/rapot/frontend@sha256:bbb7bb3821811618641127ead98d08130804c88aec8bd11591692ba90ca3e7ba`.
+Runtime checks verified 120 packages and 28 canonical source files. Middleware
+and PostgreSQL container identities/start times/restarts, DRY_RUN settings,
+private environment files, Nginx and the `279aa9f` Compose/current source remained
+unchanged. No initializer, migration, production restore, cleanup or plan upgrade
+was performed; rollback was not needed.
+
+The 07:48:21 UTC offhost snapshot produced a 150,096,490-byte gzip archive;
+all eleven tables passed independent restore verification. Added image capacity
+was 117,284,294 bytes; the required 740,138,438 bytes included the fixed 528 MiB
+reserve, 64 MiB runtime allowance and 2 MiB evidence allowance. Final free space
+was 804,610,048 bytes.
+
+Separate read-only acceptance passed at 08:02:47 UTC: 45 anonymous private GETs
+across loopback/HTTPS returned 401/no-store; Flask checks verified protected paths
+and sanitized anonymous status. WebSockets rejected anonymous access with 4401
+and acknowledged authenticated signal access. Five SSR pages, 22 JS/CSS assets
+and all eleven unchanged table schemas passed. TradingView/EVDS/X connections
+remained unconfigured; no live account, price/candle, corporate-action or provider
+test was performed. Normal startup traffic was not measured. Ignored evidence
+is retained in `runtime-data/borsapy-market-deploy/`; exact backup and deployment
+records are summarized in the [continuation plan](RAPOT_DEVAM_PLANI.md#son-üretim-ve-yayın-kanıtları).
+
 ### Frontend-only releases on the current VPS
 
 The historical P2-1 archive procedure below applies to changes confined to frontend

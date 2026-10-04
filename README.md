@@ -7,8 +7,8 @@ process handles TradingView webhooks and order accounting.
 
 Current priorities, production evidence and deferred acceptance:
 [Rapot continuation plan](docs/RAPOT_DEVAM_PLANI.md). Documentation was compared with
-the source on **21 September 2026 (repository cleanup)**. Old backlog IDs and unchecked boxes are
-historical planning information; use the continuation plan for current work.
+the source on **4 October 2026 (personal Borsapy data infrastructure)**. Old backlog
+IDs and unchecked boxes are historical planning information; use the continuation plan for current work.
 The [documentation index](docs/README.md) groups the current technical guides and acceptance records.
 
 ## Architecture
@@ -195,9 +195,11 @@ commit does not change the running application images.
   credentials are rejected. Both variants use `private, no-store` and
   `Vary: Authorization`. The frontend sends its token to the health service only
   for the configured same-origin `/status` path, never an external health origin.
-- The site-wide private data changes require a new API/frontend/bot rollout.
-  The earlier `4b15335` research rollout does not establish production acceptance
-  of these changes; current evidence is in the continuation plan.
+- The site-wide private data changes were deployed as `ab18dc4` to API, bot and
+  frontend on 4 October at 08:02 UTC. Separate read-only acceptance verified the
+  HTTP/Flask access boundaries, WebSocket authentication, pages/assets and unchanged
+  database schemas. Provider connections remain unconfigured; live account and
+  market acceptance is deferred. Exact evidence is in the continuation plan.
 - The dashboard stores tokens only in tab memory. Reload, expiry, or logout ends the session;
   account changes clear query caches and private component state. No middleware admin key
   belongs in a frontend environment variable.

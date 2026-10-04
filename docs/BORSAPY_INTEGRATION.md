@@ -63,10 +63,19 @@ eklendi. TradingView/EVDS/X bağlantıları henüz yapılandırılmamış; gerç
 fiyat/mum akışı ve piyasa kabulü erteli. Ayrıntılı kaynak/imaj, yedek, temizlik ve
 kapasite kanıtları [devam planındadır](RAPOT_DEVAM_PLANI.md#son-üretim-ve-yayın-kanıtları).
 
-Aşağıdaki site geneli özel veri ve varsayılan kaynak değişiklikleri bu ilk
-yayından sonradır. API/frontend/bot yayını henüz tamamlanmadı; mevcut kaynak
-sözleşmesi üretimde kabul edilmiş davranışla karıştırılmamalıdır. Yerel doğrulama
-ve yeni yayın durumu devam planında izlenir.
+Aşağıdaki site geneli özel veri ve varsayılan kaynak değişiklikleri `ab18dc4`
+ile 4 Ekim 08:02:14 UTC'de API/bot/frontend'e yayımlandı.
+[CI 37187054987](https://github.com/Rapto0/Rapot/actions/runs/37187054987)
+ve [imaj yayını 37187060992](https://github.com/Rapto0/Rapot/actions/runs/37187060992)
+geçti: 1.385 Python testi, bir isteğe bağlı atlama/üç uyarı ve 250 frontend testi.
+Kaynak imajı önceki `b9695f5f…` runtime'ının 120 paket dosya envanterini ve tüm
+katman önekini korur; API/bot aynı imajı `BORSAPY_USE_FOR_BIST=true` ile kullanır.
+08:02:47 UTC ayrı salt okunur kabulde 45 anonim özel GET'in 401/no-store sınırı,
+Flask erişim ayrımı, WS kimlik doğrulaması, beş SSR sayfası, 22 JS/CSS dosyası ve
+11 değişmeyen tablo şeması doğrulandı. Middleware, PostgreSQL, özel ayarlar,
+Nginx ve Compose/current kaynağı korundu. TradingView/EVDS/X bağlantıları hâlâ
+tanımsızdır; gerçek fiyat/mum, bölünme ve hesap kabulü ertelidir. Normal başlangıç
+trafiği ölçülmedi. Yedek, kapasite ve imaj kimliklerinin kanıtları devam planında tutulur.
 
 Python güvenlik işi report-only sözleşmesini korur: 134 pakette 5 etkilenen
 paket / 16 ham bulgu (12 benzersiz bildirim) raporlandı. 22 ek paketin tamamı
