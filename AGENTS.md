@@ -1,6 +1,6 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-Kaynaklarla son karşılaştırma: **4 Ekim 2026 / sunucu kaynak temizliği**. İş sırası, kullanıcı
+Kaynaklarla son karşılaştırma: **4 Ekim 2026 / gelişmiş gün içi alarmlar**. İş sırası, kullanıcı
 yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DEVAM_PLANI.md)
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 Teknik rehberler [docs dizininde](docs/README.md) listelenir.
@@ -51,6 +51,11 @@ altındadır; `/alarms` eski API yolu korunur. Eski yerel kurallar
 sınırlarını açıklar; keyfi Pine çalıştırma desteği değildir.
 Grafik 26 çizim aracı ve 1m/5m periyot sunar. Çizimler sembol/periyot başına
 tarayıcıda saklanır; sunucu alarmı veya emir oluşturmaz.
+Son kabulde API `3df9640`, frontend `9592c69` üretimdedir. Doğal seyrek BIST
+mumları doldurulmadan saklanır; yeni boşluk, geçmiş mum revizyonu ve kayıp
+karşılaştırma girdisi alarm devamlılığını sıfırlar. Eski önbellek güncel veri
+sayılmaz. 1.619 Python/291 frontend testi ve 15 tablo/servis/HTTPS kabulü geçti;
+canlı piyasa kapsamı/gecikmesi ve Telegram teslim kabulü ertelidir.
 
 `/research` borsapy 0.11.0 katalog/form/tablo/grafik, sanal portföy, replay ve
 hesap bağlantılarını yöneticiye sunar. Kişisel dashboard HTTP verileri yöneticiye
