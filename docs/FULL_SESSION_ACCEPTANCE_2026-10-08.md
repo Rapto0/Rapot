@@ -1,6 +1,6 @@
 # BIST tam seans, 3.000 alarm ve veri kalitesi kabulü
 
-**Hazırlık: 7 Ekim 2026. Durum: canlı tam seans kabulü henüz tamamlanmadı.**
+**Güncelleme: 7 Ekim 2026. Durum: düzeltmeler üretimde; canlı tam seans kabulü tamamlanmadı.**
 Kullanıcı tam BIST kapsamını, eşzamanlı 3.000 canlı alarmı, gün boyunca devamlılığı,
 hacim erişimini ve ekonomik takvim saat dilimini doğrulamamızı istedi.
 [Önceki kısa canlı kabul](LIVE_MARKET_ACCEPTANCE_2026-10-07.md) bundan ayrıdır.
@@ -59,9 +59,10 @@ SHA256 `2af787927b35c938f4d85344dc2e9852b0d828040027f4ec8e7a187e4238690f`.
 
 ## Tam seans ölçümünün sözleşmesi
 
-Hedef gözlem 8 Ekim 09:30–18:15 TSİ; 3.000 kural yükü 10:00–18:00 sürekli
-işlem bölümünü kapsayacak şekilde hazırlanır. Sunucu kurulumu ve başlatma
-kanıtı ayrıca yazılmadan bu plan çalışıyor veya tamamlandı sayılmaz.
+Hedef gözlem 8 Ekim 09:30–18:15 TSİ; rapor 10:00–18:00 sürekli işlem bölümünü
+ayrıca değerlendirir. **3.000 kural yükü kaynak ön kontrolünde durdu; yük
+zamanlayıcısı kurulmadı ve test kuralları oluşturulmadı.** Yalnız veri gözlemi
+için ayrı zamanlayıcı kuruldu. 8 Ekim seansı henüz başlamadı.
 
 7 Ekim 17:21 UTC karşılaştırmasında [KAP resmî pazar listesi](https://www.kap.org.tr/tr/Pazarlar)
 Yıldız 149, Ana 394, Alt 49, Yakın İzleme 20, PÖİP 19 olmak üzere **631**
@@ -127,10 +128,111 @@ Yerelde 299 frontend testi, lint/typecheck/build/standalone ve tam bağımlılı
 audit'i (469 paket, sıfır bulgu) geçti. Python tam koşusunda 1.751 test geçti;
 eski teslim bütçesi testindeki Windows saat çözünürlüğü kaynaklı 20 ms yarışı
 sabit test saatiyle giderildi. Ardından ilgili 23 alarm/OpenAPI testi geçti.
-284 izlenen Python kaynağının lint/format kontrolü temiz. Tam kaynak CI sonucu
-yayımdan önce ayrıca doğrulanacak; bu yerel kontroller canlı piyasa kabulü değildir.
+284 izlenen Python kaynağının lint/format kontrolü temiz. Tam kaynak
+`e4493751ec4bc7838ef9e6eefecce3aeab1a5b82` için
+[CI'nin beş işi](https://github.com/Rapto0/Rapot/actions/runs/37659323929) ve
+[iki imaj yayın işi](https://github.com/Rapto0/Rapot/actions/runs/37659357095)
+geçti. Bu kontroller canlı piyasa kabulü değildir.
 
-Kaynak düzeltmeleri ve ölçüm araçları hazırlanıyor. Tam kaynak CI, yayın,
-sunucu zamanlayıcı kurulumu, çalışma kimliği ve gün sonu kanıtları bu bölüme
-sonradan, gerçekleşen sonuçlarla eklenecek. **Tam BIST, 3.000 canlı yük ve tam
-seans kesintisizlik şu aşamada kabul edilmiş değildir.**
+7 Ekim **17:45:10 UTC** yayın makbuzu API ve frontend'i bu kaynağa bağlar;
+**17:48:15 UTC** bağımsız kabul geçti. İmajlar:
+
+- API: `sha256:2bfa6ac02fd03305656041d051808e56449605624c7886f21482ec297f06fa8d`.
+- Frontend: `sha256:589be0f933de1d4353b187081abb1dfd4d6e6f78abbae76aabe09533365bf08d`.
+
+Beş servis sağlıklı/restart0; bot, middleware ve PostgreSQL kimlikleri korundu.
+15 tablo şeması aynı; üç gönderilmiş olay ve tek kullanıcı listesi güncel
+yedek parmak izleriyle eşleşti. Altı özel GET, iki tanı yolu için anonim 401,
+beş HTTPS sayfası ve 13 statik dosya örneği geçti. Canlı tanılar 805 kapsam
+satırı verdi; piyasa kapalı olduğundan sıfır taze kayıt canlı kabul değildir.
+Boş alan **7.177.162.752 bayt**, sabit rezerv 528 MiB. Migration/temizlik,
+Telegram gönderimi veya emir testi yapılmadı.
+
+Özel kanıt dizini `runtime-data/20261007-full-session-deploy/`:
+`acceptance.json` SHA256
+`5a53150d7c78005cd17ab5a01c2b44ddef0ca30c7362c2b098ac9c37eb2d990f`,
+yayın makbuzu SHA256
+`b60ff218cf94533c44807447bd23c1e769fc6b4d56ecf9a09af0807544012a95`.
+Yedek ayrı bilgisayarda açılıp 15 tablo doğrulandı; doğrulama SHA256
+`dcf06f4f83ed5b3772ebdd564ca41e4f11f4c56abddeb810f95a5cecd35c1f47`.
+Tamamlanmış yayın operatorü ve kanıt dosyaları yeniden çalıştırılmaz.
+
+### 3.000 yük ön kontrolü: kaynak yetersizliği
+
+Eski test paketi yalnız `/root/rapot-ops/20261007-full-session-acceptance`
+dizinine aktarıldı. `prepare` kullanılabilir bellek 197.005.312 bayt olduğunda
+256 MiB yük korumasında durdu. 17:56:38 UTC bağımsız kontrolünde altı test
+unit'i yoktu; baseline/manifest/seed/collector spec'i ve izin dosyası yoktu;
+ayrılmış test sahibine ait kural/liste sayıları sıfırdı. Bu paket yeniden
+çalıştırılmaz; eski collector hash'i yereldeki son düzeltmeden farklıdır.
+Çalışma kimliği `4330f1623e334fb2955ef85ca853ba47`, ilk kurulum manifesti SHA256
+`44898838f22af96d03f6ebb1675a1142c07da0b087fe246c26d4d62cf5110214`.
+
+17:58:10–24 UTC'de üç ayrı kaynak örneğinde toplam fiziksel bellek 957,3 MiB,
+kullanılabilir bellek 210,6–216,7 MiB, kullanılan swap 699,4 MiB idi. Botun
+401,1 MiB swap'ta olması, uyandığında gereken belleği görünür RSS'nin
+göstermediğini ortaya koyuyor. Beş servis sağlıklı/restart0/OOM0 olsa da
+3.000 canlı alarm için güvenli baş boşluğu kanıtlanmadı. Kullanılabilir
+bellek zaten geri kazanılabilir önbelleği içerir; önbellek tekrar eklenmez.
+
+Yük koruması düşürülmedi; servis durdurulmadı, plan yükseltilmedi. Sonraki
+kapasite adımı tam Linux imajıyla çevrimdışı 3.000 kural + geçmiş seriler +
+gözlem süreçlerinin birlikte tepe bellek/CPU ölçümüdür; ardından ölçülen
+gereksiz süreç/import/önbellek maliyetleri azaltılabilir. Swap eklemek veya
+kotanın 3.000 olması canlı kapasite kabulü değildir.
+Özel `memory-evidence.json` SHA256
+`22f177e8425e6df1f73b8ec6d0377b4d6c2da4f3ec750680cd7d3d29e9abc814`;
+`memory-assessment.json` SHA256
+`1702878d8ad87f29a9184121fb1b824483cf87968633a43dd4bc305fa7144eaf`.
+
+### Ayrı, salt okunur seans gözlemi
+
+Yeni gözlem paketi `runtime-data/20261008-market-observation/` altında,
+sunucuda `/root/rapot-ops/20261008-market-observation` dizinine kuruldu.
+Yük kontrolcüsü, seed, kural, watchlist ve izin dosyası oluşturmaz;
+`load_test_status=NOT_STARTED_RESOURCE_GUARD` raporda zorunlu kalır.
+1 saniyelik motor kalp atışı, 30 saniyelik kapsam ve kaynak örnekleri
+yalnız bellekten okunur; yeni sağlayıcı sorgusu başlatılmaz.
+
+18:06 UTC'deki gerçek Linux imajı kontrolünde tek tanı çocuğunun tepe belleği
+55,9 MiB; iki GET 200, kapsam 805 satırdı. Token yalnız süreç belleğindeydi.
+Bu ölçüm ana gözlem sürecini ve sonraki bot taramalarını içermez. Gözlem için
+Başlamadan önce 192 MiB kullanılabilir bellek gerekir: 128 MiB devam sınırına
+ölçülen çocuk için 64 MiB eklenir. 30 saniyelik kaynak kontrolünde 128 MiB'nin
+altına inildiğinde gözlem durur; 3.000 yükün 256 MiB önkoşulu değişmez.
+Host gözlem grubunun 96 MiB sınırı container içindeki tanı çocuğunu kapsamaz.
+Toplam kanıt bütçesi 32 MiB ve sabit disk rezervi 528 MiB'dir. Örnekler hash
+zinciriyle saklanır; kaynak sınırı, kayıt boşluğu veya süreç değişimi gizlenmez.
+Özel `collector-memory-evidence.json` SHA256
+`4b6930699469791c292f37d98613877c9537a486850728d0291c1f37395b9b4a`.
+
+**7 Ekim 18:24:40 UTC'de kuruldu; 18:24:51 UTC kurulum kabulü ve 18:26:04 UTC
+ayrı salt okunur kabul geçti.** Tek `rapot-market-observation-20261008.timer`
+enabled/active/waiting; sonraki başlangıç **8 Ekim 06:30 UTC / 09:30 TSİ**.
+Servis henüz inactive; bitiş 18:15 TSİ, `Restart=no`, azami çalışma 9 saat.
+Test kuralı/lease oluşturulmadı, uygulama servisleri yeniden başlatılmadı.
+İki sağlık GET'i 200; son boş alan **7.167.053.824 bayt**.
+
+15 collector/rapor koruma testi, gerçek motor/hub sözleşme testi, 10 kurulum
+testi, Ruff ve host Python 3.10 sözdizimi kontrolü geçti. Kurulum öncesi ayrı
+iki GET gerçek strict collector şemasını doğruladı; çocuğun bu seferki tepe
+belleği 59.113.472 bayttı. Gözlem hem piyasa öncesi/sonrası örnekleri korur hem
+10:00–18:00 için ayrı sembol durumları, tazelik aralıkları ve boşluklar çıkarır.
+
+- Çalışma kimliği: `917a800aca2a4f078f3e8d346b6ee1be`.
+- Kurulum manifesti: `240483f99d19456bcb9758b2ed4e04016fef211f69f35db38f139e1e4908acf8`.
+- Collector: `bf6d4f78e11aec3cc7dc34fc615149264bf3f1441d3567e53050b59c85f027a2`.
+- Rapor: `01b695a34c0e76bd1fd4e0d23fc5e08780074e37f5b869c3b7819b4dfca55bf3`.
+- Sunucu kurulum kabul makbuzu: `6076a02d25cd0f3d215317394a669b881a4ff103ef2021d17cf1328ea7458541`.
+- Ayrı yerel kabul dosyası `independent-install-acceptance.json`:
+  `2b658b3e2d14a6ddf551da840036cb8512b84acd0c2760ac6527616f600c4182`.
+
+Codex takibi 8 Ekim 10:20 ve 18:20 TSİ için bu sohbete bağlandı; tarih sınırını
+geçen yeni test açamaz ve rapor sonrasında kapanır. Yerel takip Codex/bilgisayarın
+açık olmasına bağlıdır; sunucu gözlemi bundan bağımsızdır. Sabah yalnız gözlemin
+başlaması ve kaynak sınırları doğrulanır. Seans bitince mühürlenmiş kanıtlar
+özel yerel dizine alınır, hash zinciri doğrulanır ve raporlanır; yalnız bu
+gözleme ait timer durdurulup devre dışı bırakılır. Kanıtlar korunur. Tamamlanmış
+kurulum araçları tekrar çalıştırılmaz; yetersiz bellekle duran yük testi açılmaz.
+
+**Tam BIST, 3.000 canlı yük ve tam seans kesintisizlik kabul edilmiş değildir.**

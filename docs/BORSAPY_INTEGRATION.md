@@ -8,8 +8,10 @@ piyasa açıkken yapılmak üzere ertelendi. Sonraki bağlantı yardım talimat�
 kayıtlı TradingView oturumunun doğrulanmasını ayrıca yetkilendirdi; bu hesap
 kabulü `876f3f3` yayını sonrasında tamamlandı. 7 Ekim canlı piyasa kabulü yeniden
 seçildi; beş sembollü fiyat örneklemi, THYAO açık mum karşılaştırması ve üç Rapot
-alarm kategorisinin Telegram teslimi yapıldı. Tam kapsam/hacim kabulü açık;
-[güncel kanıt ve yayın durumu](LIVE_MARKET_ACCEPTANCE_2026-10-07.md).
+alarm kategorisinin Telegram teslimi yapıldı. Ek kontrolde mevcut `BISTMIXED`
+bağlantısının hacim alanı vermediği doğrulandı; tam canlı kapsam ve takvimin
+genel saat dilimi kabulü açık. Hacim/takvim düzeltmeleri `e449375` ile üretimde;
+[son doğrulama ve yayın durumu](FULL_SESSION_ACCEPTANCE_2026-10-08.md).
 
 Kaynak: borsapy 0.11.0,
 [`a9e41ae398fc2d25b35f864a5c7028d5f98862c3`](https://github.com/saidsurucu/borsapy/tree/a9e41ae398fc2d25b35f864a5c7028d5f98862c3).

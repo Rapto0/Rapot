@@ -9,14 +9,24 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Kaldığımız nokta
 
-- **7 Ekim — tam seans/yük kabulü hazırlığı ve hacim sonucu:** Kullanıcı tam BIST,
+- **7 Ekim — veri kalitesi düzeltmeleri üretimde; yük kabulü kaynak sınırında:** Kullanıcı tam BIST,
   eşzamanlı 3.000 alarm, gün boyu süreklilik, hacim ve takvim saatini doğrulamamızı
   istedi. Dört canlı geçmiş sorgusunda 200 mumun doğal hacmi yok; sağlayıcı
-  `BISTMIXED` döndürüyor. Hacmi gerçek sıfır saymayan sunum düzeltmesi hazır.
+  `BISTMIXED` döndürüyor. Hacmi gerçek sıfır saymayan sunum düzeltmesi üretimde.
   Takvimde haftalık/aylık bloğun ilk gününe yanlış tarih atama düzeltildi;
   üç resmî saat örneği TSİ ile eşleşti, genel saat dilimi hâlâ doğrulanmadı.
-  8 Ekim 09:30–18:15 TSİ için sınırlı sunucu ölçümü ve gerçek motor yükü
-  hazırlanıyor; kuruldu/çalıştı/kabul edildi sayılmaz.
+  **`e449375`, 17:45:10 UTC API/frontend yayını; 17:48:15 UTC bağımsız kabul**
+  geçti. Beş CI ve iki imaj yayın işi, 299 frontend testi, 469/0 audit;
+  beş servis sağlıklı/restart0, 15 tablo ve kişisel kayıtlar korundu.
+  Boş alan **7.177.162.752 bayt**; migration/temizlik yapılmadı.
+  3.000 yük ön kontrolü 256 MiB bellek sınırında durdu: host 957 MiB,
+  kullanılabilir 211–217 MiB, swap kullanımı 699 MiB. Test kuralı/lease'i ve
+  altı yük/gözlem unit'i oluşturulmadı; eski staged paket tekrar çalıştırılmaz.
+  Ayrı yalnız veri gözlemi **18:24 UTC'de kuruldu, 18:26 UTC ayrı kabul geçti**;
+  tek timer 8 Ekim 09:30–18:15 TSİ için hazır. Başlangıç/çalışma bellek
+  sınırları 192/128 MiB; gerçek yük `NOT_STARTED_RESOURCE_GUARD` kalır.
+  Son boş alan **7.167.053.824 bayt**. 10:20/18:20 yerel Codex takibi bu
+  sohbete bağlı; sunucu ölçümü bilgisayardan bağımsız. Tam seans kabulü bekliyor.
   [Kapsam, kanıtlar ve çalışma durumu](FULL_SESSION_ACCEPTANCE_2026-10-08.md).
 - **7 Ekim — canlı piyasa ve Telegram kabulü:** 17:44–18:00 TSİ aralığında
   gerçek sağlayıcı/ekran kontrolleri yapıldı. Beş sembolün fiyat/zamanları ilerledi;
@@ -256,6 +266,9 @@ açılmadı. Bu taslak sınırlar kendi başına emir veya alıcıyı açma yetk
   TEST sahibi, Telegram kapalı 1.000'er kategori, dosya süresi/kalp atışıyla
   otomatik durma ve yalnız test manifestini temizleme seçildi. Mevcut kullanıcı
   kuralları/kotaları, 528 MiB rezerv ve emir ayarları korunur; yeni paket alınmaz.
+  Gerçek yük kaynak ön kontrolünü geçemedi; yalnız veri gözlemi ayrı kuruldu.
+  Eski staged paket ve 256 MiB yük koruması değiştirilmeden korunur. Takip
+  otomasyonu yükü başlatamaz veya gözlemi 3.000 alarm kabulü sayamaz.
 - 7 Ekim: “Piyasa açıkken kalan işleri her şeyi doğrula” talimatı, kayıtlı
   hesapla gerçek veri ve Rapot alarm/Telegram kabulünü yeniden seçti. Mevcut
   Telegram hedefine açık TEST etiketli üç geçici kural kullanıldı; yalnız bu

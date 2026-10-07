@@ -1,6 +1,6 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-Kaynaklarla son karşılaştırma: **7 Ekim 2026 / tam seans kabulü hazırlığı**. İş sırası, kullanıcı
+Kaynaklarla son karşılaştırma: **7 Ekim 2026 / veri kalitesi ve tam seans ölçümü**. İş sırası, kullanıcı
 yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DEVAM_PLANI.md)
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 Teknik rehberler [docs dizininde](docs/README.md) listelenir.
@@ -9,8 +9,12 @@ Teknik rehberler [docs dizininde](docs/README.md) listelenir.
 `BISTMIXED` ve hacimsiz döndürdü; eksik hacim gerçek sıfır sayılmaz. Takvimin
 çok günlük bloklarda yanlış tarih ataması düzeltildi; üç resmî saat örneği
 uyuşsa da genel kaynak saat dilimi doğrulanmadı. 631 resmî KAP pay kodunun
-tamamı 805 aday içinde var; bu canlı fiyat kapsamı değildir. 8 Ekim tam seans
-ve gerçek 3.000 kural yükünün hazırlık/kurulum/sonuç durumu
+tamamı 805 aday içinde var; bu canlı fiyat kapsamı değildir. API/frontend
+`e449375`, 17:45 UTC'de yayımlandı; 17:48 UTC ayrı kabul geçti. 3.000 yük
+ön kontrolü yetersiz kullanılabilir RAM'de durdu; test kuralı veya yük
+zamanlayıcısı oluşturulmadı. 8 Ekim 09:30–18:15 TSİ için yalnız veri gözlemi
+ayrı timer ile kuruldu; başlangıç/çalışma bellek sınırları 192/128 MiB.
+Kurulum/sonuç durumu
 [ayrı kabul belgesinde](docs/FULL_SESSION_ACCEPTANCE_2026-10-08.md) tutulur.
 Yeni bellek tanıları yöneticiye özeldir; ayrılmış TEST kuralları her turda
 süreli özel dosya izni gerektirir ve Telegram gönderemez. Normal kurallar
@@ -74,8 +78,10 @@ tarayıcıda saklanır; sunucu alarmı veya emir oluşturmaz.
 7 Ekim 15:58 UTC'de API/frontend `c74c1ad` üretime alındı; 15:59 UTC ayrı kabul
 geçti. 16:31 UTC'de yalnız API `a835ece` oldu: yavaş herkese açık şirket işlemi
 sorgusu hesap kilidini tutmaz; yönetici ve iki araştırma sınırı korunur.
-Frontend `c74c1ad`, bot `876f3f3`, middleware/Compose/current `279aa9f` korundu.
-Beş servis sağlıklı, 15 tablo ve üç gönderilmiş test olayı korundu. 1.697 Python/297 frontend
+Ardından 17:45 UTC'de API/frontend `e449375` oldu: hacim kalitesi, takvim tarih
+parser'ı, özel bellek tanıları ve TEST lease koruması eklendi. Bot `876f3f3`,
+middleware/Compose/current `279aa9f` korundu. Beş servis sağlıklı, 15 tablo ve
+üç gönderilmiş test olayı korundu. Tam kaynak CI'nin beş işi ve 299 frontend
 testi geçti; Sharp 0.35.5/rsvg 2.63.2/vips 8.18.7 native metadata'sı doğrulandı.
 Doğal seyrek BIST
 mumları doldurulmadan saklanır; yeni boşluk, geçmiş mum revizyonu ve kayıp
