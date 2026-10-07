@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
+import * as jsxRuntime from 'react/jsx-runtime';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { QueryClient } from '@tanstack/react-query';
 import ts from 'typescript';
 
 const compiled = ts.transpileModule(readFileSync(new URL('../src/lib/api/borsapy-chart-api.ts', import.meta.url), 'utf8'), {
@@ -18,6 +21,16 @@ vm.runInContext(compiled, context);
 const api = context.exports;
 const candle = (time, close = 11) => ({ time, open: 10, high: 12, low: 9, close, volume: 100 });
 const plain = value => JSON.parse(JSON.stringify(value));
+
+const errorContext = vm.createContext({ exports: {}, require(name) {
+    assert.equal(name, 'react/jsx-runtime');
+    return jsxRuntime;
+} });
+vm.runInContext(ts.transpileModule(readFileSync(new URL('../src/components/charts/chart-data-error.tsx', import.meta.url), 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
+}).outputText, errorContext);
+const { ChartDataError, hasDisplayableCandles } = errorContext.exports;
+const errorProps = { message: 'Sunucu şu anda meşgul.', fetching: false, onRetry() {} };
 
 test('forming bar updates replace matching history and new bars append in time order', () => {
     const seconds = Date.parse('2026-10-02T07:00:00Z') / 1000;
@@ -53,4 +66,72 @@ test('each chart releases only its subscriber lease', () => {
     assert.equal(snapshot[0], '/api/borsapy/stream?symbol=THYAO&interval=5m&subscriber_id=chart-a');
     assert.equal(release[0], snapshot[0]);
     assert.equal(release[1].method, 'DELETE');
+});
+
+test('failed history refresh retains 1002 history/live candles with a nonblocking warning', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+    const key = ['chart-candles', 'THYAO', 'BIST', '1m', 'borsapy', 'admin', 1234];
+    const start = Date.parse('2026-10-05T07:00:00Z');
+    const history = Array.from({ length: 1000 }, (_, index) => candle(new Date(start + index * 60000).toISOString()));
+    try {
+        client.setQueryData(key, { candles: history });
+        await assert.rejects(client.fetchQuery({ queryKey: key, queryFn: async () => { throw new Error('busy'); } }));
+        const state = client.getQueryState(key);
+        assert.equal(state.status, 'error');
+        const merged = api.mergeBorsapyCandles(state.data.candles, [candle(start / 1000 + 60000), candle(start / 1000 + 60060)]);
+        assert.equal(merged.length, 1002);
+        assert.equal(hasDisplayableCandles(merged), true);
+        const html = renderToStaticMarkup(ChartDataError({ ...errorProps, mode: 'refresh' }));
+        assert.match(html, /mevcut mumlar gösteriliyor/);
+        assert.match(html, /Geçmiş veriler güncel olmayabilir/);
+        assert.match(html, /Sunucu şu anda meşgul/);
+        assert.doesNotMatch(html, /absolute|inset-0|backdrop-blur|Grafik verisi yüklenemedi/);
+    } finally { client.clear(); }
+});
+
+test('a failed request for a new selection cannot reuse another symbol or timeframe to hide the fatal error', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+    const previous = ['chart-candles', 'THYAO', 'BIST', '1m', 'borsapy', 'admin', 1234];
+    try {
+        client.setQueryData(previous, { candles: [candle('2026-10-07T07:00:00Z')] });
+        for (const selection of [
+            ['chart-candles', 'GARAN', 'BIST', '1m', 'borsapy', 'admin', 1234],
+            ['chart-candles', 'THYAO', 'BIST', '5m', 'borsapy', 'admin', 1234],
+            ['chart-candles', 'THYAO', 'BIST', '1m', 'borsapy', 'admin', 5678],
+        ]) {
+            await assert.rejects(client.fetchQuery({ queryKey: selection, queryFn: async () => { throw new Error('busy'); } }));
+            assert.equal(hasDisplayableCandles(client.getQueryState(selection).data?.candles ?? []), false);
+        }
+        const html = renderToStaticMarkup(ChartDataError({ ...errorProps, mode: 'fatal' }));
+        assert.match(html, /absolute inset-0/);
+        assert.match(html, /Grafik verisi yüklenemedi/);
+        assert.match(html, /Tekrar dene/);
+    } finally { client.clear(); }
+});
+
+test('invalid candles alone do not suppress a chart load error', () => {
+    assert.equal(hasDisplayableCandles([]), false);
+    for (const invalid of [candle('invalid'), candle('2026-10-07', NaN), { ...candle('2026-10-07'), low: 0 }, { ...candle('2026-10-07'), high: 5 }]) {
+        assert.equal(hasDisplayableCandles([invalid]), false);
+    }
+    assert.equal(hasDisplayableCandles([candle('2026-10-07')]), true);
+});
+
+test('both error presentations preserve retry and disable it during refresh', () => {
+    const findButton = node => {
+        if (!node || typeof node !== 'object') return undefined;
+        if (node.type === 'button') return node;
+        return [node.props?.children].flat(Infinity).map(findButton).find(Boolean);
+    };
+    for (const mode of ['fatal', 'refresh']) {
+        let retries = 0;
+        const tree = ChartDataError({ ...errorProps, mode, onRetry: () => retries++ });
+        const button = findButton(tree);
+        assert.equal(button.props.disabled, false);
+        button.props.onClick();
+        assert.equal(retries, 1);
+        const fetching = ChartDataError({ ...errorProps, mode, fetching: true });
+        assert.equal(findButton(fetching).props.disabled, true);
+        assert.match(renderToStaticMarkup(fetching), /Yenileniyor/);
+    }
 });

@@ -19,6 +19,7 @@ import { useSession } from "@/lib/hooks/use-session"
 import { MarketDataStatus } from "@/components/market-data-status"
 import { BORSAPY_INTERVALS, fetchBorsapyCandles, fetchBorsapyChartSnapshot, mergeBorsapyCandles, releaseBorsapyChart } from "@/lib/api/borsapy-chart-api"
 import { ChartDrawingTools } from "./chart-drawing-tools"
+import { ChartDataError, hasDisplayableCandles } from "./chart-data-error"
 import { chartTimeZone, createChartTimeFormatters, type ChartTimeZone } from "@/lib/chart-time"
 import { cn } from "@/lib/utils"
 import { ActionDialog } from "@/components/ui/action-dialog"
@@ -1213,6 +1214,9 @@ export function AdvancedChartPage({
             .sort((a, b) => a[0] - b[0])
             .map((entry) => entry[1])
     }, [candlesResponse, chartStream.data?.candles, useBorsapy, canUseBorsapy])
+    // Query keys include symbol, market, timeframe and session; only this selection's
+    // merged history/stream may keep a failed refresh from covering the chart.
+    const hasChartCandles = useMemo(() => hasDisplayableCandles(candles), [candles])
     const dataSource = candlesResponse?.source || "loading"
 
     const candlesSignature = useMemo(() => {
@@ -2641,6 +2645,11 @@ export function AdvancedChartPage({
                     </div>
                 )}
 
+                {isCandlesError && hasChartCandles && (
+                    <ChartDataError mode="refresh" message={candlesErrorMessage}
+                        fetching={isCandlesFetching} onRetry={() => void refetchCandles()} />
+                )}
+
                 {/* Chart Area */}
                 <div className={cn("relative flex-1 min-h-[320px] overflow-hidden", visiblePanelIndicators.length > 0 && "mb-3")}>
                     {visibleOverlayIndicators.length > 0 && (
@@ -2676,7 +2685,7 @@ export function AdvancedChartPage({
                         </div>
                     )}
 
-                    {isCandlesLoading && (
+                    {isCandlesLoading && !hasChartCandles && (
                         <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm z-10 pointer-events-none">
                             <div className="flex flex-col items-center gap-3">
                                 <div className="w-10 h-10 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
@@ -2684,21 +2693,9 @@ export function AdvancedChartPage({
                             </div>
                         </div>
                     )}
-                    {isCandlesError && !isCandlesLoading && (
-                        <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/90 backdrop-blur-sm">
-                            <div className="max-w-sm space-y-3 border border-loss/40 bg-surface p-4 text-center">
-                                <div className="text-sm font-semibold text-loss">Grafik verisi yüklenemedi</div>
-                                <div className="text-xs text-muted-foreground">{candlesErrorMessage}</div>
-                                <button
-                                    type="button"
-                                    onClick={() => void refetchCandles()}
-                                    disabled={isCandlesFetching}
-                                    className="inline-flex h-8 items-center justify-center rounded-sm border border-border px-3 text-xs text-foreground hover:bg-raised disabled:cursor-not-allowed disabled:opacity-50"
-                                >
-                                    {isCandlesFetching ? "Yenileniyor..." : "Tekrar dene"}
-                                </button>
-                            </div>
-                        </div>
+                    {isCandlesError && !isCandlesLoading && !hasChartCandles && (
+                        <ChartDataError mode="fatal" message={candlesErrorMessage}
+                            fetching={isCandlesFetching} onRetry={() => void refetchCandles()} />
                     )}
                     <div
                         ref={chartContainerRef}
@@ -2751,7 +2748,7 @@ export function AdvancedChartPage({
                     <div className="flex flex-wrap items-center gap-4">
                         <span className="flex items-center gap-1.5">{useBorsapy
                             ? !canUseBorsapy ? "Yönetici girişi gerekli" : chartStream.isError ? "Akış alınamadı · son mumlar gösteriliyor" : chartStream.data?.message || "TradingView akışı bekleniyor"
-                            : isCandlesError ? "Veri alınamadı" : isCandlesFetching ? "Güncelleniyor" : "Periyodik veri"}</span>
+                            : isCandlesError ? hasChartCandles ? "Yenileme başarısız · son mumlar gösteriliyor" : "Veri alınamadı" : isCandlesFetching ? "Güncelleniyor" : "Periyodik veri"}</span>
                         <span>{candles.length} mum</span>
                         <span>Periyot: {currentTimeframeLabel}</span>
                         {activeIndicators.length > 0 && <span className="flex items-center gap-1"><LineChart className="h-3 w-3 text-primary" />{activeIndicators.length} indikatör</span>}

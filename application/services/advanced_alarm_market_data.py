@@ -1,7 +1,8 @@
 """Autonomous, bounded market input for private advanced alarms.
 
-Snapshot/status/history are memory-only. Fixed workers own all provider and cache
-I/O; the browser never keeps this service alive. Quotes cannot manufacture OHLCV.
+Snapshot/status are memory-only. Fixed workers own provider I/O; history may read
+the bounded disk cache without authenticating it for alarms. The browser never
+keeps this service alive. Quotes cannot manufacture OHLCV.
 No unverified real-time entitlement or holiday calendar is implied.
 """
 
@@ -824,26 +825,80 @@ class AdvancedMarketData:
         with self._lock:
             frame = self._hot.get(key)
             pair = self._series.get(key)
+            generation = self._reset_count
             if frame is None:
                 if key not in self._requests and len(self._requests) < MAX_REQUESTS:
                     self._requests[key] = Work()
                 # Existing provider failures retain their retry backoff on HTTP polls.
                 self._wake.set()
+        cached_received = None
+        if frame is None:
+            # A hot-cache eviction is not loss of the persisted provider history.
+            # Read outside the evaluation lock and never hydrate live indicators.
+            try:
+                saved = self._cache.load(":".join(key))
+                if saved and saved[0]:
+                    frame = pd.DataFrame(saved[0]).set_index("time")
+                    frame.index = pd.to_datetime(frame.index, unit="s", utc=True)
+                    frame.columns = [column.title() for column in frame.columns]
+                    frame.attrs["timeframe"] = timeframe
+                    frame = validate_frame(frame, timeframe, market_type, self._clock())
+                    cached_received = saved[1]
+            except Exception:
+                frame = None
+        with self._lock:
+            if generation != self._reset_count:
+                frame, pair = None, None
             available = frame is not None
-            ready = available and pair is not None
             series = pair[0] if pair else None
-            closed = [p.time for p in series.points if p.confirmed] if series else []
+            matching = bool(
+                available and series and series.source_time == frame.index[-1].timestamp()
+            )
+            now = self._clock()
+            fresh = bool(
+                matching
+                and now - series.received <= 180
+                and now - series.source_time <= DURATIONS[timeframe] + 120
+            )
+            memory_epoch = getattr(self._provider, "memory_epoch", None)
+            invalidated = self._stop.is_set() or (
+                market_type == "BIST"
+                and (
+                    (memory_epoch is not None and memory_epoch() != self._epoch)
+                    or (self._connection is not None and not self._connection.connected)
+                    or self._state in {"auth_required", "reconnecting", "error", "stopped"}
+                )
+            )
+            ready = fresh and cached_received is None and not invalidated
+            closed = [p.time for p in series.points if p.confirmed] if matching else []
+            state = (
+                "ok"
+                if ready
+                else "stale"
+                if matching and not fresh
+                else "cached_unverified"
+                if available
+                else "waiting"
+            )
             return {
                 "candles": candles(frame, max(1, min(int(limit), MAX_BARS))) if available else [],
                 "source": "borsapy_tradingview" if market_type == "BIST" else "binance",
-                "state": "ok" if ready else "cached_unverified" if available else "waiting",
+                "state": state,
                 "reason": None
                 if ready
+                else "Geçmiş veri eski; canlı alarm için taze gözlem bekleniyor."
+                if state == "stale"
                 else "Önbellek geçmişi canlı alarmda kullanılmaz."
                 if available
                 else "Mum verisi sırada.",
-                "source_timestamp": utc(series.source_time) if series else None,
-                "received_at": utc(series.received) if series else None,
+                "source_timestamp": utc(frame.index[-1].timestamp()) if available else None,
+                "received_at": utc(
+                    cached_received
+                    if cached_received is not None
+                    else series.received
+                    if series
+                    else None
+                ),
                 "closed_through": utc(closed[-1]) if closed else None,
                 "realtime_verified": False,
             }

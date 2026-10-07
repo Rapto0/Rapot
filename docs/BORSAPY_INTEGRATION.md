@@ -6,7 +6,10 @@ istedi. Sonraki kapsam grafik, dashboard, izleme listesi, scanner ve ekonomik
 takvimin ortak kişisel veri altyapısını da içerir. Canlı piyasa kabulü
 piyasa açıkken yapılmak üzere ertelendi. Sonraki bağlantı yardım talimatı,
 kayıtlı TradingView oturumunun doğrulanmasını ayrıca yetkilendirdi; bu hesap
-kabulü `876f3f3` yayını sonrasında tamamlandı. Canlı piyasa kabulü hâlâ ertelidir.
+kabulü `876f3f3` yayını sonrasında tamamlandı. 7 Ekim canlı piyasa kabulü yeniden
+seçildi; beş sembollü fiyat örneklemi, THYAO açık mum karşılaştırması ve üç Rapot
+alarm kategorisinin Telegram teslimi yapıldı. Tam kapsam/hacim kabulü açık;
+[güncel kanıt ve yayın durumu](LIVE_MARKET_ACCEPTANCE_2026-10-07.md).
 
 Kaynak: borsapy 0.11.0,
 [`a9e41ae398fc2d25b35f864a5c7028d5f98862c3`](https://github.com/saidsurucu/borsapy/tree/a9e41ae398fc2d25b35f864a5c7028d5f98862c3).
@@ -233,6 +236,13 @@ Kimlikli sağlayıcı callback'leri ortak hesap kilidi altında sıralanır. Yen
 kilit beklemesi bir saniyeyle sınırlıdır; mevcut fiyat/grafik tamponu, hesap
 revizyonu ve epoch değişmemişse güvenli okuma yolundan dönebilir. Bu bekleme
 sınırı başlamış ağ çağrısını iptal etmez ve sağlayıcı yanıt süresi garantisi değildir.
+
+7 Ekim düzeltmesinde arka plan alarm geçmişi bu uzun kilitten ayrılır: en fazla
+iki isteğe özel sağlayıcı, kısa kilit altında yakalanan kimliği kullanır; sonuç
+öncesi revizyon/epoch/token tekrar kontrol edilir. Doğal hacim alanı ayrıca
+doğrulanır; borsapy'nin eksik hacmi sıfıra çevirmesi BIST hacim alarmına veri
+sağlamaz. Grafik yenileme hatasında mevcut seçimin geçerli akış mumları varsa
+grafik görünür kalır ve hata ayrı uyarı olarak gösterilir.
 
 Kimlikli istek token yokken anonim veriye düşmez. Oturumun süresiz geçerli olması
 veya bütün mesajların eksiksiz teslimi garanti edilmez. Sağlayıcının işlem zamanı

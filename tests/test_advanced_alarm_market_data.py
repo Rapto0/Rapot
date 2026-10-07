@@ -10,6 +10,7 @@ import pandas as pd
 import pytest
 
 from application.services.advanced_alarm_data_cache import MarketCache
+from application.services.advanced_alarm_data_provider import NativeMarketProvider
 from application.services.advanced_alarm_market_data import AdvancedMarketData
 from application.services.advanced_alarm_series import (
     SeriesError,
@@ -607,6 +608,7 @@ def test_near_future_next_bar_cannot_confirm_previous_before_actual_end(market):
 def test_zero_volume_preserved_and_short_atr_unknown():
     value = frame(count=5)
     value.Volume = 0.0
+    value.attrs["volume_verified"] = True
     valid = validate_frame(value, "1m", "BIST", NOW)
     refs = [
         {"field": "volume", "timeframe": "1m"},
@@ -649,6 +651,73 @@ def test_unchanged_config_and_history_http_poll_preserve_retry_backoff(hub):
     changed = {**selected, "revision": 2, "condition": rule("rsi")["condition"]}
     hub.configure([changed])
     assert hub._requests[key].due <= hub.time[0]
+
+
+def test_active_rule_promotes_failed_job_ahead_of_805_passive_histories(hub):
+    hub.settings.advanced_alarm_all_bist_enabled = True
+    hub._set_universe(["THYAO", *[f"S{i}" for i in range(804)]])
+    hub.configure([])
+    target = ("BIST", "THYAO", "1m")
+    hub._requests[target].due = NOW + 300
+    hub._requests[target].reason = "provider"
+    hub.configure([rule("rsi")])
+    assert len(hub._requests) == 805
+    assert hub._take_work()[0] == target
+    assert hub._take_work()[0] != target  # A busy active job cannot starve passive work.
+
+
+def test_history_cold_view_reads_disk_without_provider_or_indicator_hydration(hub):
+    load(hub, rule("close"))
+    key = ("BIST", "THYAO", "1m")
+    hub._hot.pop(key)
+    calls = list(hub._provider.calls)
+    pair = hub._series[key]
+    viewed = hub.history("THYAO")
+    assert len(viewed["candles"]) == 60
+    assert viewed["state"] == "cached_unverified"
+    assert viewed["received_at"] == "2026-10-05T08:00:00Z"
+    assert hub._provider.calls == calls and key not in hub._hot
+    assert hub._series[key] is pair
+    hub.time[0] += 181
+    assert hub.history("THYAO")["state"] == "stale"
+    assert not snapshot(hub, rule("close"))["ready"]
+
+
+def test_hot_history_does_not_label_stale_observations_ok(hub):
+    load(hub, rule("close"))
+    hub.time[0] += 181
+    result = hub.history("THYAO")
+    assert result["state"] == "stale" and len(result["candles"]) == 60
+
+
+@pytest.mark.parametrize("change", ["account", "disconnect"])
+def test_history_cannot_claim_ok_after_account_or_transport_invalidation(hub, change):
+    hub.connection_step()
+    load(hub, rule("close"))
+    assert hub.history("THYAO")["state"] == "ok"
+    if change == "account":
+        hub._provider.memory_epoch = lambda: hub._epoch + 1
+    else:
+        hub._provider.connections[-1].connected = False
+    result = hub.history("THYAO")
+    assert result["state"] == "cached_unverified" and len(result["candles"]) == 60
+    assert not snapshot(hub, rule("close"))["ready"]
+
+
+def test_alarm_native_provider_uses_isolated_history_boundary():
+    calls = []
+
+    class Gateway:
+        def alarm_history(self, symbol, **kwargs):
+            calls.append((symbol, kwargs))
+            return frame()
+
+        def history(self, *_args, **_kwargs):
+            raise AssertionError("Shared foreground lock must not own alarm I/O")
+
+    result = NativeMarketProvider(Gateway()).history("THYAO", "BIST", "1m")
+    assert calls == [("THYAO", {"interval": "1m", "period": "5d"})]
+    assert result.attrs["timeframe"] == "1m"
 
 
 def test_history_observation_gap_resets_even_when_evaluator_missed_stale_period(hub):

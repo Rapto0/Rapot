@@ -155,6 +155,16 @@ def calculate_series(
         field, key = ref["field"], field_key(ref, timeframe)
         period = ref.get("period", 14)
         series = None
+        if (
+            field == "volume"
+            and market == "BIST"
+            and frame.attrs.get("volume_verified") is not True
+        ):
+            # borsapy fills an omitted native volume field with zero. An absent
+            # entitlement must not satisfy a user's low/zero-volume condition.
+            for item in values:
+                item[key] = None
+            continue
         if field in {"price", "open", "high", "low", "close", "volume"}:
             series = frame["Close" if field == "price" else field.title()]
         elif field == "rsi":
@@ -202,7 +212,10 @@ def calculate_series(
     # Values, not receipt time, identify a genuine provider update.
     import hashlib
 
-    version = hashlib.sha256(frame.tail(4).to_numpy().tobytes()).hexdigest()[:16]
+    payload = frame.tail(4).to_numpy().tobytes()
+    if market == "BIST":
+        payload += b"|volume_verified:" + str(frame.attrs.get("volume_verified") is True).encode()
+    version = hashlib.sha256(payload).hexdigest()[:16]
     return Series(
         points=tuple(points),
         received=now,

@@ -142,6 +142,7 @@ class BorsapyGateway:
         self._streams: dict[tuple, dict] = {}
         self._quotes: dict | None = None
         self._alarm_quotes: list[AlarmQuoteConnection] = []
+        self._alarm_history_slots = threading.BoundedSemaphore(2)
         self._quote_retry_after = 0.0
         self._data_epoch = 0
         self._retry_after: dict[tuple, float] = {}
@@ -424,6 +425,96 @@ class BorsapyGateway:
             ),
             require_auth=True,
         )
+        return self._validated_history(frame)
+
+    @staticmethod
+    def _new_alarm_history_provider(token: str):
+        # A request-local provider never consults or changes borsapy's global
+        # account while the bounded WebSocket history request is in flight.
+        from borsapy._providers.tradingview import TradingViewProvider
+
+        class AuthenticatedHistory(TradingViewProvider):
+            def __init__(self):
+                super().__init__()
+                self._volume_quality = {}
+
+            def _get_auth_token(self):
+                return token
+
+            def _calculate_bars(self, *args, **kwargs):
+                return min(500, super()._calculate_bars(*args, **kwargs))
+
+            def _parse_packets(self, raw):
+                packets = super()._parse_packets(raw)
+                for packet in packets:
+                    if not isinstance(packet, dict) or packet.get("m") != "timescale_update":
+                        continue
+                    params = packet.get("p", [])
+                    if len(params) < 2 or not isinstance(params[1], dict):
+                        continue
+                    for candle in params[1].get("$prices", {}).get("s", []):
+                        values = candle.get("v", [])
+                        if len(values) < 5:
+                            continue
+                        stamp = _number(values[0])
+                        volume = _number(values[5]) if len(values) >= 6 else None
+                        self._volume_quality[stamp] = volume is not None and 0 <= volume < 1e99
+                return packets
+
+            def get_history(self, *args, **kwargs):
+                frame = super().get_history(*args, **kwargs)
+                verified = [
+                    self._volume_quality.get(stamp.timestamp(), False) for stamp in frame.index
+                ]
+                # Upstream may default an absent field to zero. Preserve price
+                # history, but never authenticate that placeholder for volume rules.
+                for stamp, valid in zip(frame.index, verified, strict=True):
+                    if not valid:
+                        frame.loc[stamp, "Volume"] = 0.0
+                frame.attrs["volume_verified"] = bool(verified) and all(verified)
+                frame.attrs["volume_unavailable_rows"] = sum(not valid for valid in verified)
+                return frame
+
+        return AuthenticatedHistory()
+
+    def alarm_history(self, symbol: str, interval="1m", period="5d"):
+        """Isolate autonomous history I/O from dashboard/account lock ownership."""
+        symbol = self._validate_subscription(symbol, interval, None)
+        if period not in PERIODS:
+            raise BorsapyGatewayError("Desteklenmeyen veri dönemi.", 422)
+        if not self._alarm_history_slots.acquire(timeout=1):
+            raise BorsapyGatewayError("Alarm geçmişi iş kuyruğu dolu.", 429)
+        provider = None
+        try:
+            with self._account_lock():
+                self._prepare(require_auth=True)
+                token, epoch, revision = self._token, self._data_epoch, self._credentials_revision
+                if not token or token == "unauthorized_user_token":
+                    raise BorsapyGatewayError("TradingView hesabı doğrulanmalı.", 409)
+            provider = self._new_alarm_history_provider(token)
+            frame = provider.get_history(symbol, interval=interval, period=period)
+            with self._account_lock():
+                if (
+                    self._data_epoch != epoch
+                    or self._store.revision() != revision
+                    or self._token != token
+                    or not self._authenticated
+                    or self._blocked
+                ):
+                    raise BorsapyGatewayError("Hesap değişti; yeni geçmiş bekleniyor.", 409)
+            return self._validated_history(frame)
+        except BorsapyGatewayError:
+            raise
+        except Exception:
+            raise BorsapyGatewayError("Alarm geçmişi alınamadı.", 502) from None
+        finally:
+            if provider is not None:
+                with suppress(Exception):
+                    provider.close()
+            self._alarm_history_slots.release()
+
+    @staticmethod
+    def _validated_history(frame):
         try:
             import numpy as np
             import pandas as pd
@@ -452,6 +543,8 @@ class BorsapyGateway:
             result.attrs.update(
                 source="borsapy_tradingview", adjustment="splits", open_quality="provider"
             )
+            result.attrs["volume_verified"] = frame.attrs.get("volume_verified") is True
+            result.attrs["volume_unavailable_rows"] = frame.attrs.get("volume_unavailable_rows")
             return result
         except Exception:
             raise BorsapyGatewayError("Sağlayıcı geçerli OHLCV verisi döndürmedi.", 502) from None

@@ -1,6 +1,6 @@
 # Rapot Devam Planı
 
-**Güncel özet: 4 Ekim 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
+**Güncel özet: 7 Ekim 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
 Çalışma kuralı: **incele → düzelt → doğrula → belgeyi güncelle**.
 Teknik ayrıntılar [belge indeksinde](README.md), çalışma kuralları
 [AGENTS.md](../AGENTS.md), önceki planın eksiksiz metni
@@ -9,6 +9,16 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Kaldığımız nokta
 
+- **7 Ekim — canlı piyasa ve Telegram kabulü:** 17:44–18:00 TSİ aralığında
+  gerçek sağlayıcı/ekran kontrolleri yapıldı. Beş sembolün fiyat/zamanları ilerledi;
+  THYAO 17:55 açık mum OHLC'si TradingView ile eşleşti. GARAN fiyat, izleme listesi
+  ve RSI/close teknik TEST alarmları normal motor/kuyrukla Telegram'a teslim edildi;
+  kullanıcı ilk iki mesajı gördüğünü doğruladı. Yalnız geçici üç kural/liste kaldırıldı,
+  olaylar korundu. Ortak kilit nedeniyle 429, yanlış grafik hata örtüsü, disk geçmiş
+  okuma eksikliği ve doğrulanmayan hacim bulundu. Düzeltmelerin yerel kabulünde
+  1.644 Python/295 frontend testi, lint/typecheck/build/standalone geçti; bu satır
+  yeni kaynağın üretime geçtiğini iddia etmez. [Ayrıntı ve son yayın durumu](LIVE_MARKET_ACCEPTANCE_2026-10-07.md).
+  Tam evren/saniyelik kapsama, hacim ve uzun süreli yük kabulü tamamlanmadı.
 - **4 Ekim — gelişmiş gün içi alarm merkezi ve 26 çizim aracı üretimde:**
   Son API düzeltmesi `3df9640`, 16:17:54 UTC'de yayımlandı; 16:19:02 UTC ayrı
   kabul geçti. Frontend `9592c69` korunur. Son CI **1.619 Python testi** geçti;
@@ -186,8 +196,8 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 ## Sıradaki işler ve ertelenen kabul
 
 P0–P3 geliştirme listesi ve arayüz UI-1/UI-2/UI-3 kapalıdır. 2 Ekim sunucu
-alarmları üretimdedir; son kullanıcı seçimi 4 Ekim gelişmiş gün içi alarm ve
-kalıcı veri takibidir. Kullanıcı canlı piyasa testlerini daha sonra yapmayı seçti.
+alarmları üretimdedir; 7 Ekim kullanıcı canlı piyasa testlerini yeniden seçti.
+Dar canlı örneklem ve üç Rapot alarm kategorisinin Telegram teslimi tamamlandı.
 Yerel doğrulama, imaj/disk bütçesi ve yayın kaydı birbirinden ayrı tutulur.
 Kapatılmış işleri veya eski onay bekleme kayıtlarını yeniden başlatma.
 
@@ -197,7 +207,7 @@ Kapatılmış işleri veya eski onay bekleme kayıtlarını yeniden başlatma.
 | Kullanım dışı sunucu kaynaklarının temizliği | Tamamlandı: 4 Ekim 10:58 UTC son envanter. 24 imaj, dokuz eski kaynak dizini, beş önbellek/derleme dizini ve yedeklenmiş 90 PM2 günlüğü kaldırıldı; beş servis sağlıklı/restart0, boş alan yaklaşık 7,67 GB. Yeni silme adayı otomatik varsayılmaz. |
 | BIST grafik saat gösterimi | Tamamlandı: `57aed91` yalnız frontend, 4 Ekim 10:08 UTC. Ana grafik/gösterge/araştırma eksen ve imleci Türkiye saatinde; sentetik 07:00Z → 10:00 kabulü geçti. Canlı piyasa doğruluğu aşağıdaki ayrı kabuldür. |
 | TradingView hesap bağlantısı | Tamamlandı: `876f3f3` API/bot/frontend, 4 Ekim 09:06 UTC; mevcut kayıtlı oturumla sitedeki doğrulama başarılı. Canlı piyasa verisi bu kabulün dışındadır. |
-| Borsapy canlı kabulü | Gerçek fiyat/mum zamanı, tarihsel kapsam ve şirket işlemleri piyasa açıkken karşılaştırılacak. `realtime_verified=false` korunur. EVDS/X ayrı kimlik ve kabul ister. |
+| Borsapy canlı kabulü | 7 Ekim beş sembolde dar fiyat/zaman örneklemi ve THYAO açık mum karşılaştırması yapıldı. Üç Rapot alarm kategorisi Telegram'a teslim edildi. Tam evren, tarihsel şirket işlemleri, hacim ve uzun süreli kapsam açık; `realtime_verified=false` korunur. [Kanıt](LIVE_MARKET_ACCEPTANCE_2026-10-07.md). EVDS/X ayrı kimlik ve kabul ister. |
 | Borsapy ortak piyasa altyapısı yayını | Tamamlandı: `ab18dc4` API/bot/frontend, 4 Ekim 08:02 UTC. İki runtime'da BIST kaynak seçimi açık; yeni temizlik veya plan yükseltmesi yapılmadı. Güncel 11 tablo yedeği ve bağımsız restore, kapasite, runtime/HTTP/WS/şema kabulü geçti. Son boş alan 804.610.048 bayt; 528 MiB rezerv korundu. |
 | Borsapy araştırma merkezi ilk yayını | Tamamlandı: `4b15335` API/frontend, 4 Ekim 06:21 UTC. Özel onaylı iki imaj kaldırıldı; güncel yedek, kapasite, runtime/şema/HTTPS kabulü geçti. Son boş alan 839.430.144 bayt; sabit 528 MiB rezerv ve mevcut sunucu planı korundu. Bu tarihsel yayının kabulü kapalı; yeni ortak piyasa geçişi üstte ayrı izlenir. |
 | Eski Python pinlerinin yeni güvenlik bildirimleri | 134 paketlik report-only taramada 5 paket/16 ham bulgu; 22 borsapy ek paketinde bulgu yok. anyio/PyJWT/soupsieve/urllib3 runtime ve virtualenv geliştirme pinleri için ayrı taban imaj güncellemesi gerekir. [İnceleme ve düzeltme sınırları](BORSAPY_INTEGRATION.md). Yeşil güvenlik işi sıfır bulgu değildir. |
@@ -223,6 +233,11 @@ açılmadı. Bu taslak sınırlar kendi başına emir veya alıcıyı açma yetk
 
 ## Kapsam ve yetki kaydı
 
+- 7 Ekim: “Piyasa açıkken kalan işleri her şeyi doğrula” talimatı, kayıtlı
+  hesapla gerçek veri ve Rapot alarm/Telegram kabulünü yeniden seçti. Mevcut
+  Telegram hedefine açık TEST etiketli üç geçici kural kullanıldı; yalnız bu
+  kurallar ve geçici liste kaldırıldı, olay geçmişi korundu. Gerçek/testnet emir
+  ve TradingView webhook kabulü bu kapsamdan ayrıdır; yeni abonelik alınmaz.
 - Kullanıcı geliştirme, doğrulama, otomatik commit/push ve uygun zamanda
   doğrulanmış deploy yetkisi verdi. Aynı kapsam için yeniden onay istenmez.
   Root SSH erişim kurulumu ve alan adı olmadan IP HTTPS kurulumu 9 Eylül'de onaylandı.

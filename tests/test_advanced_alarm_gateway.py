@@ -1,8 +1,10 @@
 """The autonomous stream uses the existing authenticated credential boundary."""
 
+import json
 import threading
 from types import SimpleNamespace
 
+import pandas as pd
 import pytest
 
 from application.services.borsapy_gateway import BorsapyGateway, BorsapyGatewayError
@@ -181,3 +183,156 @@ def test_late_frame_cannot_revive_expired_generation(gateway, poll_before_frame)
     stream._on_message(None, "~h~late")
     stream.callbacks[-1]("THYAO", {"last": 100, "timestamp": 1791187200})
     assert not handle.connected and observed == []
+
+
+def history_frame():
+    return pd.DataFrame(
+        {"Open": [100.0], "High": [102.0], "Low": [99.0], "Close": [101.0], "Volume": [5.0]},
+        index=pd.date_range("2026-10-07 17:45", periods=1, tz="Europe/Istanbul"),
+    )
+
+
+def test_alarm_history_does_not_hold_account_lock_during_native_io(gateway, monkeypatch):
+    authenticate(gateway)
+    entered, release = threading.Event(), threading.Event()
+    closed, results, errors = [], [], []
+
+    class Request:
+        def get_history(self, symbol, **kwargs):
+            entered.set()
+            assert release.wait(3)
+            return history_frame()
+
+        def close(self):
+            closed.append(True)
+
+    monkeypatch.setattr(gateway, "_new_alarm_history_provider", lambda _: Request())
+
+    def fetch():
+        try:
+            results.append(gateway.alarm_history("THYAO"))
+        except Exception as error:
+            errors.append(type(error).__name__)
+
+    worker = threading.Thread(target=fetch)
+    worker.start()
+    try:
+        assert entered.wait(1)
+        # This locks and prepares the real gateway while history remains blocked.
+        assert (
+            gateway.run(lambda _: "foreground available", require_auth=True)
+            == "foreground available"
+        )
+    finally:
+        release.set()
+        worker.join(3)
+    assert not worker.is_alive() and not errors
+    assert results[0].Close.iloc[0] == 101 and closed == [True]
+
+
+@pytest.mark.parametrize("change", ["clear", "file_revision", "token"])
+def test_alarm_history_discards_account_changes_and_always_closes(gateway, monkeypatch, change):
+    authenticate(gateway)
+    closed = []
+
+    class Request:
+        def get_history(self, *_args, **_kwargs):
+            if change == "clear":
+                gateway.clear()
+            elif change == "file_revision":
+                gateway._store.save({"session": "other-session", "session_sign": "other-sign"})
+            else:
+                gateway._token = "different-synthetic-token"
+            return history_frame()
+
+        def close(self):
+            closed.append(True)
+
+    monkeypatch.setattr(gateway, "_new_alarm_history_provider", lambda _: Request())
+    with pytest.raises(BorsapyGatewayError, match="Hesap değişti") as raised:
+        gateway.alarm_history("THYAO")
+    assert raised.value.status_code == 409 and closed == [True]
+
+
+def test_alarm_history_requires_authentication_before_provider_creation(gateway, monkeypatch):
+    created = []
+    monkeypatch.setattr(gateway, "_new_alarm_history_provider", lambda _: created.append(True))
+    with pytest.raises(BorsapyGatewayError):
+        gateway.alarm_history("THYAO")
+    assert created == []
+
+
+def test_real_request_provider_pins_token_caps_native_bars_without_global_auth(gateway):
+    from borsapy._providers.tradingview import get_tradingview_auth
+
+    original = get_tradingview_auth()
+    provider = gateway._new_alarm_history_provider("synthetic-request-token")
+    try:
+        assert provider._get_auth_token() == "synthetic-request-token"
+        assert provider._calculate_bars("5d", "1m", None, None) == 500
+        assert provider._calculate_bars("1d", "1d", None, None) == 10
+        assert get_tradingview_auth() is original
+    finally:
+        provider.close()
+
+
+def test_alarm_history_slot_limit_and_native_error_do_not_leak_or_abandon(gateway, monkeypatch):
+    authenticate(gateway)
+    closed = []
+
+    class Request:
+        def get_history(self, *_args, **_kwargs):
+            raise RuntimeError("synthetic-private-token")
+
+        def close(self):
+            closed.append(True)
+
+    monkeypatch.setattr(gateway, "_new_alarm_history_provider", lambda _: Request())
+    for _ in range(3):
+        with pytest.raises(BorsapyGatewayError, match="Alarm geçmişi alınamadı") as raised:
+            gateway.alarm_history("THYAO")
+        assert "synthetic" not in str(raised.value)
+    assert closed == [True, True, True]
+    assert gateway._alarm_history_slots.acquire(False)
+    assert gateway._alarm_history_slots.acquire(False)
+    try:
+        with pytest.raises(BorsapyGatewayError) as raised:
+            gateway.alarm_history("THYAO")
+        assert raised.value.status_code == 429
+    finally:
+        gateway._alarm_history_slots.release()
+        gateway._alarm_history_slots.release()
+
+
+@pytest.mark.parametrize(
+    "raw_volume,verified",
+    [(0, True), (12.5, True), (None, False), (1e100, False), (float("nan"), False)],
+)
+def test_native_packet_volume_provenance_precedes_upstream_zero_fallback(
+    gateway, monkeypatch, raw_volume, verified
+):
+    from borsapy._providers.tradingview import TradingViewProvider
+
+    expected = history_frame()
+    stamp = expected.index[0].timestamp()
+
+    def native_request(self, *_args, **_kwargs):
+        values = [stamp, 100, 102, 99, 101]
+        if raw_volume is not None:
+            values.append(raw_volume)
+        packet = {"m": "timescale_update", "p": ["session", {"$prices": {"s": [{"v": values}]}}]}
+        self._parse_packets(json.dumps(packet))
+        result = expected.copy()
+        result["Volume"] = raw_volume if raw_volume is not None else 0.0
+        return result
+
+    monkeypatch.setattr(TradingViewProvider, "get_history", native_request)
+    provider = gateway._new_alarm_history_provider("synthetic-request-token")
+    try:
+        result = gateway._validated_history(provider.get_history("THYAO"))
+    finally:
+        provider.close()
+    assert result.attrs["volume_verified"] is verified
+    assert result.attrs["volume_unavailable_rows"] == (0 if verified else 1)
+    assert result.Volume.iloc[0] == (raw_volume if verified else 0)
+    assert result.Close.iloc[0] == 101

@@ -43,7 +43,9 @@ class NativeMarketProvider:
 
     def history(self, symbol: str, market_type: str, timeframe: str) -> pd.DataFrame:
         if market_type == "BIST":
-            frame = self.gateway.history(symbol, interval=timeframe, period=PERIODS[timeframe])
+            frame = self.gateway.alarm_history(
+                symbol, interval=timeframe, period=PERIODS[timeframe]
+            )
         else:
             # Binance is explicit: borsapy/BtcTurk is never a crypto substitute.
             from binance.client import Client

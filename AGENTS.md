@@ -1,6 +1,6 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-Kaynaklarla son karşılaştırma: **4 Ekim 2026 / gelişmiş gün içi alarmlar**. İş sırası, kullanıcı
+Kaynaklarla son karşılaştırma: **7 Ekim 2026 / canlı piyasa kabulü**. İş sırası, kullanıcı
 yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DEVAM_PLANI.md)
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 Teknik rehberler [docs dizininde](docs/README.md) listelenir.
@@ -18,6 +18,15 @@ okunur; bu dosya kendi başına üretim işlemi veya emir gönderme yetkisi verm
 Kullanıcı borsa ile ilgili dış kabulü erteledi: gerçek TradingView alarm teslimi
 ve testnet/gerçek emir testi açık kalır. Mevcut üretim DRY_RUN, trading/live kapalıdır.
 Anahtar, parola, .env içeriği ve gerçek veritabanları rapora/Git'e alınmaz.
+
+7 Ekim kullanıcı talimatıyla canlı fiyat/mum ve Rapot Telegram kabulü yapıldı:
+GARAN fiyat, izleme listesi ve RSI/close çok koşullu teknik testleri normal
+motor/kuyruk üzerinden teslim edildi; ilk iki mesaj kullanıcı tarafından da
+doğrulandı. Geçici kurallar/liste kaldırıldı, üç olay korundu. Bu kabul TradingView
+webhook veya emir testi değildir. Beş sembollü dar örneklem tam BIST kapsamını
+kanıtlamaz. Doğrulanmayan BIST hacmi `unknown` olmalıdır; eksik hacimden sıfır
+üretilip alarm tetiklenmez. [Canlı kabul kaydı](docs/LIVE_MARKET_ACCEPTANCE_2026-10-07.md)
+gözlemleri, bulunan kilit/grafik/önbellek sorunlarını ve yayın durumunu ayırır.
 
 ## Mimari ve giriş noktaları
 

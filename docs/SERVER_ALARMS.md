@@ -26,6 +26,9 @@ bölümü yalnız eski API `/alarms` sözleşmesini açıklar.
 - Eksik, eski, sonlu olmayan veya periyodu/saat dilimi tutarsız veri `unknown`
   sayılır. VEYA grubundaki eksik dal da gizlenmez. Mum içi göstergeler değişebilir.
   Python/TypeScript/Pine gösterge eşitliği varsayılmaz.
+- BIST `volume` koşulu yalnız doğal sağlayıcı hacimleri doğrulanmış seride
+  değerlendirilir. Eksik/geçersiz hacimden üretilen sıfır `unknown` olur;
+  doğrulanmış gerçek sıfır korunur. Fiyat tabanlı koşullar bağımsız çalışır.
 - Telegram seçimi varsayılan kapalıdır. Açıkça seçilen alarm mevcut sunucu
   hedefine gider; token/chat ID tarayıcıya dönmez. Olay ve teslim kuyruğu
   kalıcıdır; beş deneme, 429 bekleme süresi, teslim kira süresi ve en az gönderim
@@ -55,6 +58,10 @@ sağlayıcı OHLCV'sinden hesaplanır; fiyat kotasyonlarından uydurma mum oluş
 Gösterge geçmişinin yenileme hedefi 1m için 30, diğer periyotlar için 60
 saniyedir; kuyruk ve sağlayıcı süreleri bunu uzatabilir. Isınma süresi de
 fiyat akışından farklıdır.
+Alarm geçmişi en fazla iki isteğe özel TradingView sağlayıcısıyla alınır;
+hesap kilidi ağ çağrısı boyunca tutulmaz. Kimlik/epoch/revizyon sonuç öncesinde
+yeniden kontrol edilir. Ekran geçmişi sıcak bellekten çıkarılmışsa sınırlı disk
+önbelleğini okuyabilir; bu okuma eski veriyi alarm hesabına güncel olarak sokmaz.
 BIST sağlayıcısının işlem olmayan dakikaları atlayan doğal mum serisi korunur;
 tam periyot katı olan boşluklara yapay mum eklenmez. Geçmiş bu haliyle saklanır
 ve hesaplanır; yeni gözlemlerde aşılan boşluk alarm devamlılığını sıfırlar ve
@@ -65,6 +72,11 @@ pencere ve diskten geçmişi geri okuma devamlılığı korur.
 `history_cached`, eski ama önbellekte bulunan seri sayısını;
 `history_ready`, şu an alarm için güncel seri sayısını; `history_failures_by_reason`
 ise sağlayıcı/boşluk/geçersiz veri ayrımını gösterir.
+
+7 Ekim canlı seansta fiyat, izleme listesi ve çok koşullu teknik kuralın normal
+motor/kuyruk üzerinden Telegram teslimi doğrulandı; ilk iki mesajı kullanıcı da
+doğruladı. [Kabul kaydı](LIVE_MARKET_ACCEPTANCE_2026-10-07.md) dar örneklem ile
+tam evren/gecikme garantisi arasındaki sınırı ve üretim sürümünü belirtir.
 BIST'te bir mumun kapandığını sonraki gerçek sağlayıcı mumu doğrular; yarım gün
 ve tatil kapanışı tahmin edilmez. Son seans mumu bir sonraki gerçek muma kadar
 bekleyebilir. Kriptoda yerel UTC aralık sınırı kullanılır.
