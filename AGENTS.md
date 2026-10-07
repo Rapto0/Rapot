@@ -14,6 +14,12 @@ tamamı 805 aday içinde var; bu canlı fiyat kapsamı değildir. API/frontend
 ön kontrolü yetersiz kullanılabilir RAM'de durdu; test kuralı veya yük
 zamanlayıcısı oluşturulmadı. 8 Ekim 09:30–18:15 TSİ için yalnız veri gözlemi
 ayrı timer ile kuruldu; başlangıç/çalışma bellek sınırları 192/128 MiB.
+**Son kullanıcı talimatı:** 8 Ekim yaklaşık 10:00'da bilgisayarını açacak;
+ayrı otomatik takip istemiyor. Codex takibi `PAUSED`; yalnız bu gözleme ait
+timer 7 Ekim 18:38 UTC'de `disabled/inactive` doğrulandı. Yeni gözlem/çalışma
+yalnız kullanıcının **“hazırım”**
+mesajıyla elle devam eder. Önceki kurulum kabulü tarihsel kanıttır; 3.000
+yükün bellek engeli geçerlidir.
 Kurulum/sonuç durumu
 [ayrı kabul belgesinde](docs/FULL_SESSION_ACCEPTANCE_2026-10-08.md) tutulur.
 Yeni bellek tanıları yöneticiye özeldir; ayrılmış TEST kuralları her turda

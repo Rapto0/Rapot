@@ -23,10 +23,14 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
   kullanılabilir 211–217 MiB, swap kullanımı 699 MiB. Test kuralı/lease'i ve
   altı yük/gözlem unit'i oluşturulmadı; eski staged paket tekrar çalıştırılmaz.
   Ayrı yalnız veri gözlemi **18:24 UTC'de kuruldu, 18:26 UTC ayrı kabul geçti**;
-  tek timer 8 Ekim 09:30–18:15 TSİ için hazır. Başlangıç/çalışma bellek
+  tek timer 8 Ekim 09:30–18:15 TSİ için hazırlanmıştı. Başlangıç/çalışma bellek
   sınırları 192/128 MiB; gerçek yük `NOT_STARTED_RESOURCE_GUARD` kalır.
-  Son boş alan **7.167.053.824 bayt**. 10:20/18:20 yerel Codex takibi bu
-  sohbete bağlı; sunucu ölçümü bilgisayardan bağımsız. Tam seans kabulü bekliyor.
+  Son boş alan **7.167.053.824 bayt**. **Son kullanıcı talimatı otomatik başlangıcı
+  iptal eder:** 8 Ekim yaklaşık 10:00'da bilgisayarını açacak, ayrı otomatik
+  takip istemiyor; yalnız **“hazırım”** mesajından sonra elle devam edilecek.
+  Codex takibi `PAUSED`; 18:38 UTC'de gözlem timer'ı `disabled/inactive`,
+  sonraki başlangıcı boş, gözlem servisi `inactive/MainPID0` doğrulandı. Kurulum kanıtı
+  tarihsel olarak korunur; 3.000 yükün bellek engeli ve tam seans kabulü açıktır.
   [Kapsam, kanıtlar ve çalışma durumu](FULL_SESSION_ACCEPTANCE_2026-10-08.md).
 - **7 Ekim — canlı piyasa ve Telegram kabulü:** 17:44–18:00 TSİ aralığında
   gerçek sağlayıcı/ekran kontrolleri yapıldı. Beş sembolün fiyat/zamanları ilerledi;
@@ -260,6 +264,13 @@ açılmadı. Bu taslak sınırlar kendi başına emir veya alıcıyı açma yetk
 
 ## Kapsam ve yetki kaydı
 
+- 7 Ekim son talimatı: Kullanıcı 8 Ekim yaklaşık 10:00'da bilgisayarını açacak;
+  ayrı otomatik takip istemiyor ve çalışmanın yalnız kendisi **“hazırım”**
+  dediğinde başlamasını istiyor. Önceki zamanlanmış gözlem/takip planı bu
+  talimatla iptal edildi. Codex heartbeat'i duraklatıldı; yalnız
+  `rapot-market-observation-20261008.timer` devre dışı bırakıldı. 18:38 UTC
+  kontrolünde bu timer ve gözlem servisi inactive; beş ana servis sağlıklı ve aynı.
+  mevcut uygulama servisleri, kurulum kanıtları ve 256 MiB yük koruması korunur.
 - 7 Ekim devamı: “Tam BIST kapsamı, 3.000 alarmın eşzamanlı canlı yükü ve gün
   boyu kesintisizlik ... Hacim erişimi ve takvim saat dilimini de doğrula”
   talimatı sınırlı gerçek motor yükünü ve tam seans ölçümünü kapsar. Ayrılmış

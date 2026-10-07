@@ -59,7 +59,9 @@ SHA256 `2af787927b35c938f4d85344dc2e9852b0d828040027f4ec8e7a187e4238690f`.
 
 ## Tam seans ölçümünün sözleşmesi
 
-Hedef gözlem 8 Ekim 09:30–18:15 TSİ; rapor 10:00–18:00 sürekli işlem bölümünü
+Önceki hedef gözlem 8 Ekim 09:30–18:15 TSİ idi; son kullanıcı talimatıyla
+otomatik başlangıç iptal edildi, elle devam için “hazırım” mesajı beklenir.
+Rapor 10:00–18:00 sürekli işlem bölümünü
 ayrıca değerlendirir. **3.000 kural yükü kaynak ön kontrolünde durdu; yük
 zamanlayıcısı kurulmadı ve test kuralları oluşturulmadı.** Yalnız veri gözlemi
 için ayrı zamanlayıcı kuruldu. 8 Ekim seansı henüz başlamadı.
@@ -207,9 +209,10 @@ zinciriyle saklanır; kaynak sınırı, kayıt boşluğu veya süreç değişimi
 `4b6930699469791c292f37d98613877c9537a486850728d0291c1f37395b9b4a`.
 
 **7 Ekim 18:24:40 UTC'de kuruldu; 18:24:51 UTC kurulum kabulü ve 18:26:04 UTC
-ayrı salt okunur kabul geçti.** Tek `rapot-market-observation-20261008.timer`
-enabled/active/waiting; sonraki başlangıç **8 Ekim 06:30 UTC / 09:30 TSİ**.
-Servis henüz inactive; bitiş 18:15 TSİ, `Restart=no`, azami çalışma 9 saat.
+ayrı salt okunur kabul geçti.** Bu tarihsel kabul anında tek
+`rapot-market-observation-20261008.timer` enabled/active/waiting durumundaydı;
+sonraki başlangıç **8 Ekim 06:30 UTC / 09:30 TSİ** olarak kayıtlıydı.
+Servis o anda inactive idi; bitiş 18:15 TSİ, `Restart=no`, azami çalışma 9 saat.
 Test kuralı/lease oluşturulmadı, uygulama servisleri yeniden başlatılmadı.
 İki sağlık GET'i 200; son boş alan **7.167.053.824 bayt**.
 
@@ -227,12 +230,22 @@ belleği 59.113.472 bayttı. Gözlem hem piyasa öncesi/sonrası örnekleri koru
 - Ayrı yerel kabul dosyası `independent-install-acceptance.json`:
   `2b658b3e2d14a6ddf551da840036cb8512b84acd0c2760ac6527616f600c4182`.
 
-Codex takibi 8 Ekim 10:20 ve 18:20 TSİ için bu sohbete bağlandı; tarih sınırını
-geçen yeni test açamaz ve rapor sonrasında kapanır. Yerel takip Codex/bilgisayarın
-açık olmasına bağlıdır; sunucu gözlemi bundan bağımsızdır. Sabah yalnız gözlemin
-başlaması ve kaynak sınırları doğrulanır. Seans bitince mühürlenmiş kanıtlar
-özel yerel dizine alınır, hash zinciri doğrulanır ve raporlanır; yalnız bu
-gözleme ait timer durdurulup devre dışı bırakılır. Kanıtlar korunur. Tamamlanmış
-kurulum araçları tekrar çalıştırılmaz; yetersiz bellekle duran yük testi açılmaz.
+**Son kullanıcı talimatı — otomatik başlangıç iptal:** Kullanıcı 8 Ekim yaklaşık
+10:00'da bilgisayarını açacağını, ayrı otomatik takip istemediğini ve yalnız
+kendisi **“hazırım”** dediğinde çalışmanın başlamasını istediğini belirtti.
+Önceden 10:20/18:20 için bağlanan Codex takibi `PAUSED` olarak doğrulandı.
+**7 Ekim 18:38:08 UTC'de** yalnız `rapot-market-observation-20261008.timer`
+`disabled/inactive`, sonraki başlangıç boş; gözlem servisi `inactive/MainPID0`
+doğrulandı. Beş ana servisin kimlik/sağlık/restart bilgileri aynı ve sağlıklı.
+Veritabanı/kural değişmedi; kanıtlar korundu. Özel `user-requested-pause.json`
+SHA256: `4f276af636f5042c8b6cbe69c5825b686bd3b560290750dcf63b426a100d388d`.
+Önceki başarılı kurulum ve kabul hash'leri tarihsel
+kanıt olarak korunur; otomatik çalışma için güncel talimat sayılmaz.
+
+Elle devam kullanıcının “hazırım” mesajını bekler. O sırada gerçek saat ve kaynak
+durumu yeniden değerlendirilir; kaçırılan seans bölümü ölçülmüş sayılmaz.
+Tamamlanmış kurulum araçları tekrar çalıştırılmaz; 3.000 yükün 256 MiB bellek
+engeli geçerlidir ve yük testi kendiliğinden açılmaz. Mevcut uygulama servisleri
+ve kişisel kayıtlar bu takip iptalinin kapsamı dışındadır.
 
 **Tam BIST, 3.000 canlı yük ve tam seans kesintisizlik kabul edilmiş değildir.**
