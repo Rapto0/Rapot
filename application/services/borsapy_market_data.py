@@ -395,6 +395,7 @@ class BorsapyMarketData:
 
     def candles(self, symbol: str, interval: str, limit: int = 1000) -> dict:
         from application.services.borsapy_gateway import INTERVALS
+        from application.services.market_volume_quality import frame_volume_quality
         from data_loader import resample_bist_data
 
         grouped = {"2d", "3d", "4d", "5d", "6d", "2wk", "3wk", "2mo", "3mo"}
@@ -406,6 +407,7 @@ class BorsapyMarketData:
         frame = self.gateway.history(
             symbol, interval="1d" if interval in grouped else interval, period=period
         )
+        volume_quality = frame_volume_quality(frame)
         if interval in grouped:
             frame = resample_bist_data(frame, interval)
             if frame is None or frame.empty:
@@ -418,7 +420,7 @@ class BorsapyMarketData:
                 "high": float(row.High),
                 "low": float(row.Low),
                 "close": float(row.Close),
-                "volume": float(row.Volume),
+                "volume": float(row.Volume) if volume_quality["verified"] else None,
             }
             for t, row in frame.tail(limit).iterrows()
         ]
@@ -429,6 +431,7 @@ class BorsapyMarketData:
             "source": "borsapy_tradingview",
             "count": len(bars),
             "candles": bars,
+            "volume_quality": volume_quality,
             "provider_time": bars[-1]["time"] if bars else None,
             "received_at": _now(),
             "state": "ok" if bars else "waiting",

@@ -126,10 +126,17 @@ def test_delivery_deadline_leaves_remaining_events_pending(monkeypatch):
     queued_event()
     queued_event()
     calls = []
+    virtual = {"seconds": 0.0}
+    monkeypatch.setattr(service, "time", SimpleNamespace(monotonic=lambda: virtual["seconds"]))
 
     async def hanging(message):
         calls.append(message)
-        await asyncio.Event().wait()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            # asyncio's real timeout still cancels the send; a deterministic service
+            # clock avoids Windows timer resolution admitting a second tiny await.
+            virtual["seconds"] = 0.02
 
     monkeypatch.setattr(service, "send_telegram_message", hanging)
     asyncio.run(service.deliver_pending_notifications(time_budget_seconds=0.02))

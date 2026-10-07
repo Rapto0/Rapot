@@ -351,9 +351,14 @@ test('stream polling is opt-in, serial, abortable, and stop releases only its ow
   assert.equal(calls.length, 1);
   assert.equal(timers.length, 0, 'No second request scheduled until first completes');
   assert.equal(calls[0][0].subscriberId, 'private-panel-uuid');
-  resolve({ state: 'active_unverified', message: 'Veri', quote: null, candles: [], study: null, received_at: null });
+  resolve({ state: 'active_unverified', message: 'Veri', quote: null,
+    candles: [{ time: 1791356400, open: 10, high: 12, low: 9, close: 11, volume: null }],
+    volume_quality: { state: 'unavailable', verified: false, unavailable_rows: 1, message: 'Hacim gönderilmedi; sıfır hacim değildir.' },
+    study: null, received_at: null });
   for (let i = 0; i < 5; i++) await Promise.resolve();
   component.render();
+  assert.match(text(component.tree()), /Hacim gönderilmedi; sıfır hacim değildir/);
+  assert.equal(component.find(node => node.props.candles?.length === 1).props.candles[0].volume, null);
   assert.equal(timers.length, 1);
   await component.find(node => node.type === 'button' && text(node) === 'Durdur').props.onClick(); component.render();
   assert.equal(released.length, 1);

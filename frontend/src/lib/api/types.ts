@@ -201,7 +201,14 @@ export interface Candle {
     high: number;
     low: number;
     close: number;
-    volume: number;
+    volume: number | null;
+}
+
+export interface VolumeQuality {
+    state: 'verified' | 'unavailable' | 'unverified';
+    verified: boolean;
+    unavailable_rows: number | null;
+    message: string;
 }
 
 export interface MarketSourceMetadata {
@@ -220,6 +227,7 @@ export interface CandlesResponse extends MarketSourceMetadata {
     source: string;
     count: number;
     candles: Candle[];
+    volume_quality?: VolumeQuality;
 }
 
 export interface TickerData extends MarketSourceMetadata {

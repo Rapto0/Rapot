@@ -117,6 +117,22 @@ def events(
     return repository.events(user.username, after_id, limit)
 
 
+@router.get("/heartbeat")
+@limiter.limit("120/minute")
+def heartbeat(
+    request: Request,
+    test_run_id: str | None = Query(None, pattern=r"^[a-f0-9]{32}$"),
+    user: User = Depends(get_current_admin_user),
+) -> dict:
+    return get_advanced_alarm_engine().heartbeat(user.username, test_run_id=test_run_id)
+
+
+@router.get("/coverage")
+@limiter.limit("10/minute")
+def coverage(request: Request, user: User = Depends(get_current_admin_user)) -> dict:
+    return get_advanced_alarm_engine().hub.coverage()
+
+
 @router.get("/watchlists")
 @limiter.limit("120/minute")
 def watchlists(request: Request, user: User = Depends(get_current_admin_user)) -> dict:

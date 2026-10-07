@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote
 
+from application.services.market_volume_quality import native_volume, volume_quality
 from infrastructure.providers.tradingview_session_auth import authenticate_session
 from infrastructure.repositories.borsapy_secret_store import BorsapySecretStore, SecretStoreError
 from settings import get_settings
@@ -927,7 +928,13 @@ class BorsapyGateway:
     def _new_stream(
         self, bp, symbol: str, interval: str, study: str | None, exchange: str, inputs: dict
     ) -> dict:
-        entry = {"subscribers": {}, "received": None, "error": False, "auth_error": False}
+        entry = {
+            "subscribers": {},
+            "received": None,
+            "error": False,
+            "auth_error": False,
+            "volume_observations": {},
+        }
 
         class IsolatedStream(bp.TradingViewStream):
             # Upstream appends ?type=chart itself. Recreate whole sessions on reconnect.
@@ -951,6 +958,35 @@ class BorsapyGateway:
                         entry["error"] = True
                         entry["auth_error"] = packet.get("m") == "critical_error"
                         return
+                    if not isinstance(packet, dict) or packet.get("m") not in {
+                        "timescale_update",
+                        "du",
+                    }:
+                        continue
+                    params = packet.get("p", [])
+                    if len(params) < 2 or not isinstance(params[1], dict):
+                        continue
+                    series = params[1].get("$prices", {})
+                    if not isinstance(series, dict):
+                        continue
+                    native_candles = series.get("s", series.get("st", []))
+                    if not isinstance(native_candles, list):
+                        continue
+                    # Observe the native field before borsapy fills absent v[5]
+                    # with zero. Each entry owns exactly one chart subscription.
+                    with self._lock:
+                        observations = entry["volume_observations"]
+                        for candle in native_candles:
+                            values = candle.get("v", []) if isinstance(candle, dict) else []
+                            if not isinstance(values, list) or len(values) < 5:
+                                continue
+                            stamp = _number(values[0])
+                            if stamp is not None and stamp > 0:
+                                observations[stamp] = (
+                                    native_volume(values[5]) if len(values) > 5 else None
+                                )
+                        for stamp in sorted(observations)[:-300]:
+                            del observations[stamp]
                 super()._on_message(ws, message)
 
             def _update_chart_data(self, symbol, interval, candles):
@@ -1135,14 +1171,24 @@ class BorsapyGateway:
         raw_quote = stream.get_quote(symbol) or {}
         fields = ("last", "bid", "ask", "volume", "timestamp", "change", "change_percent")
         quote = {field: _number(raw_quote.get(field)) for field in fields} if raw_quote else None
+        if quote is not None:
+            quote["volume"] = native_volume(raw_quote.get("volume"))
+        with stream._lock:
+            volume_observations = dict(entry.get("volume_observations", {}))
         candles = []
         for candle in stream.get_candles(symbol, interval, count=300):
             item = {
                 name: _number(candle.get(name))
                 for name in ("time", "open", "high", "low", "close", "volume")
             }
-            if all(value is not None for value in item.values()):
+            if all(item[name] is not None for name in ("time", "open", "high", "low", "close")):
+                item["volume"] = volume_observations.get(item["time"])
                 candles.append(item)
+        missing_volumes = sum(
+            item["time"] in volume_observations and item["volume"] is None for item in candles
+        )
+        verified_volume = bool(candles) and all(item["volume"] is not None for item in candles)
+        quality = volume_quality(verified_volume, missing_volumes or None)
         study_values = stream.get_study(symbol, interval, study) if study else None
         safe_study = {str(k)[:80]: _number(v) for k, v in (study_values or {}).items()}
         has_data = bool(candles or (quote and quote.get("last") is not None))
@@ -1156,6 +1202,7 @@ class BorsapyGateway:
             else "İlk veri bekleniyor.",
             "quote": quote,
             "candles": candles,
+            "volume_quality": quality,
             "study": safe_study or None,
             "source": "TradingView / borsapy",
             "received_at": _utc(entry["received"]),

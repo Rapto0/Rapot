@@ -22,6 +22,7 @@ import numpy as np
 import pandas as pd
 
 from application.services.borsapy_catalog import OPERATIONS
+from application.services.market_volume_quality import frame_volume_quality
 
 _OPERATIONS = {entry["id"]: entry for entry in OPERATIONS}
 MAX_ROWS = 2000
@@ -509,6 +510,7 @@ def run_operation(bp_module: Any, operation: str, params: dict[str, Any]) -> dic
         "Veri zamanı ve gecikmesi sağlayıcıya bağlıdır. Güncelleme saati sorgu saatidir; fiyat zamanı değildir."
     ]
     candles = None
+    volume_metadata = None
     if operation == "search":
         searches = {
             "all": bp.search,
@@ -525,6 +527,7 @@ def run_operation(bp_module: Any, operation: str, params: dict[str, Any]) -> dic
         frame = bp.Ticker(p["symbol"]).history(
             period=p["period"], interval=p["interval"], adjust=True, auto_adjust=False
         )
+        volume_metadata = frame_volume_quality(frame)
         raw = {"ohlcv": frame}
         candles = frame
         warnings.append(
@@ -538,7 +541,10 @@ def run_operation(bp_module: Any, operation: str, params: dict[str, Any]) -> dic
             )
             warnings.append("Heikin Ashi mumları sentetiktir; gerçek işlem fiyatı değildir.")
         elif operation == "ta.indicators":
-            raw["indicator"] = _indicator(bp, frame, p["indicator"], p["length"])
+            if p["indicator"] in {"obv", "vwap"} and not volume_metadata["verified"]:
+                raw["indicator"] = None
+            else:
+                raw["indicator"] = _indicator(bp, frame, p["indicator"], p["length"])
             warnings.append(
                 "MACD 12/26/9; OBV ve VWAP birikimli hesaplanır. Bu üçünde uzunluk alanı uygulanmaz."
             )
@@ -546,6 +552,17 @@ def run_operation(bp_module: Any, operation: str, params: dict[str, Any]) -> dic
             warnings.append(
                 "Tekrar görünümü geçmiş veri üzerinde ilerler; gelecek veriyi gizlemek tek başına tarafsız backtest değildir."
             )
+        if not volume_metadata["verified"]:
+            warnings.append(volume_metadata["message"])
+            # Keep the original OHLC input for price-only indicators; redact only
+            # presented volume, including HA/replay tables and exported candles.
+            raw = {
+                name: value.assign(Volume=float("nan"))
+                if isinstance(value, pd.DataFrame) and "Volume" in value
+                else value
+                for name, value in raw.items()
+            }
+            candles = candles.assign(Volume=float("nan"))
     elif operation == "company.info":
         raw = bp.Ticker(p["symbol"]).info.todict()
     elif operation == "company.financials":
@@ -744,7 +761,10 @@ def run_operation(bp_module: Any, operation: str, params: dict[str, Any]) -> dic
     elif operation == "viop.contracts":
         raw = bp.viop_contracts(p["base_symbol"])
     elif operation == "calendar":
-        raw = bp.economic_calendar(
+        from api.calendar_service import calendar_events
+
+        raw = calendar_events(
+            bp,
             period=p["period"],
             country=["TR", "US", "EU", "DE", "GB", "JP", "CN"]
             if p["country"] == "all"
@@ -758,4 +778,7 @@ def run_operation(bp_module: Any, operation: str, params: dict[str, Any]) -> dic
         raw = bp.search_tweets(p["query"], period=p["period"], limit=p["limit"], lang="tr")
     else:
         raise ResearchInputError("Bu araştırma işlemi desteklenmiyor.")
-    return normalize_result(operation, raw, warnings=warnings, candles=candles)
+    result = normalize_result(operation, raw, warnings=warnings, candles=candles)
+    if volume_metadata is not None:
+        result["volume_quality"] = volume_metadata
+    return result

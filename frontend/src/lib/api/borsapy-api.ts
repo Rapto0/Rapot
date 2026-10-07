@@ -1,4 +1,5 @@
 import { API_BASE_URL, fetchApi } from './core';
+import type { VolumeQuality } from './types';
 
 export interface ResearchField {
     name: string;
@@ -33,7 +34,7 @@ export interface ResearchTable {
     total_rows: number;
     truncated: boolean;
 }
-export interface ResearchCandle { time: number; open: number; high: number; low: number; close: number; volume?: number }
+export interface ResearchCandle { time: number; open: number; high: number; low: number; close: number; volume?: number | null }
 export interface ResearchResult {
     operation: string;
     source: string;
@@ -42,6 +43,7 @@ export interface ResearchResult {
     summary: Record<string, unknown>;
     warnings: string[];
     candles?: ResearchCandle[];
+    volume_quality?: VolumeQuality;
 }
 export interface ResearchConnection {
     installed: boolean;
@@ -59,6 +61,7 @@ export interface ResearchStream {
     message: string;
     quote: Record<string, unknown> | null;
     candles: ResearchCandle[];
+    volume_quality?: VolumeQuality;
     study: Record<string, unknown> | null;
     source: string;
     received_at: string | null;

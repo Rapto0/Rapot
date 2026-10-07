@@ -319,6 +319,58 @@ def test_each_symbol_interval_study_has_an_isolated_bounded_stream(gateway):
     assert not gateway._streams and all(e["stream"].closed for e in entries)
 
 
+@pytest.mark.parametrize("kind", ["absent", "null", "zero", "positive", "sentinel", "negative"])
+def test_stream_native_volume_provenance_preserves_prices_and_true_zero(gateway, monkeypatch, kind):
+    monkeypatch.setattr(
+        FakeStream, "_parse_packets", lambda self, raw: json.loads(raw), raising=False
+    )
+    monkeypatch.setattr(FakeStream, "_on_message", lambda *args: None, raising=False)
+    connect(gateway)
+    before = gateway.stream_snapshot("THYAO")
+    assert before["volume_quality"]["state"] == "unverified"
+    assert before["candles"][0]["volume"] is None
+    entry = next(iter(gateway._streams.values()))
+    values = [1710000000, 100, 103, 98, 101]
+    raw_volume = {"null": None, "zero": 0, "positive": 123.5, "sentinel": 1e100, "negative": -1}
+    if kind != "absent":
+        values.append(raw_volume[kind])
+    packet = {"m": "timescale_update", "p": ["chart", {"$prices": {"s": [{"v": values}]}}]}
+    entry["stream"]._on_message(None, json.dumps([packet]))
+    entry["stream"].quote["volume"] = 1e100
+    result = gateway.stream_snapshot("THYAO")
+    assert result["quote"]["volume"] is None
+    assert len(result["candles"]) == 1 and result["candles"][0]["close"] == 101
+    verified = kind in {"zero", "positive"}
+    assert result["volume_quality"]["state"] == ("verified" if verified else "unavailable")
+    assert result["volume_quality"]["verified"] is verified
+    assert result["volume_quality"]["unavailable_rows"] == (0 if verified else 1)
+    assert result["candles"][0]["volume"] == (raw_volume[kind] if verified else None)
+
+
+def test_stream_volume_observations_are_bounded_correctable_and_ignore_studies(
+    gateway, monkeypatch
+):
+    monkeypatch.setattr(
+        FakeStream, "_parse_packets", lambda self, raw: json.loads(raw), raising=False
+    )
+    monkeypatch.setattr(FakeStream, "_on_message", lambda *args: None, raising=False)
+    connect(gateway)
+    gateway.stream_snapshot("THYAO")
+    entry = next(iter(gateway._streams.values()))
+    stream = entry["stream"]
+    bars = [{"v": [1710000000 + i * 60, 100, 103, 98, 101, i]} for i in range(400)]
+    stream._on_message(None, json.dumps([{"m": "du", "p": ["chart", {"$prices": {"s": bars}}]}]))
+    assert len(entry["volume_observations"]) == 300
+    last_time = bars[-1]["v"][0]
+    assert entry["volume_observations"][last_time] == 399
+    study = {"m": "du", "p": ["chart", {"st1": {"s": [{"v": [last_time, 1, 2, 3, 4, 999]}]}}]}
+    stream._on_message(None, json.dumps([study]))
+    assert entry["volume_observations"][last_time] == 399
+    correction = {"m": "du", "p": ["chart", {"$prices": {"s": [{"v": [last_time, 1, 2, 3, 4]}]}}]}
+    stream._on_message(None, json.dumps([correction]))
+    assert entry["volume_observations"][last_time] is None
+
+
 def test_disconnected_cache_is_rejected_and_retry_is_cooled_down(gateway):
     connect(gateway)
     gateway.stream_snapshot("THYAO")

@@ -9,7 +9,7 @@ bölümü yalnız eski API `/alarms` sözleşmesini açıklar.
 
 ### Kural ve bildirim sözleşmesi
 
-- Yönetici başına **1.000 fiyat, 1.000 teknik ve 1.000 izleme listesi alarmı**;
+- Sunucu genelinde **1.000 fiyat, 1.000 teknik ve 1.000 izleme listesi alarmı**;
   kurallar süresizdir. Açık sembol listesi, kalıcı sunucu listesi veya tüm BIST
   evreni seçilir. Kural/liste başına 2.000 sembol, 1.000 sunucu listesi sınırı
   vardır. Liste değişikliği bağlı kuralların sürümünü yeniler.
@@ -100,6 +100,16 @@ ve sahte sağlayıcı kullanır. Kullanıcının ertelediği canlı kabul, üret
 normal veri servisinin çalışmasını kapatmaz.
 
 ### Kalıcılık, erişim ve grafik
+
+7 Ekim'de eklenen yöneticiye özel `/advanced-alarms/heartbeat` ve `/coverage`
+tanı yolları yalnız belleği okur; sağlayıcı/DB sorgusu veya geçmiş işi başlatmaz.
+Motorun son turu yanında toplam ve son 60 saniyede kontrol edilmiş farklı kural
+sürümlerini kategori bazında gösterir. Süreç kimliği ve sayaç zamanı, yeniden
+başlatılmış/eski ölçümleri ayırt eder. KAP şirket kodları doğrulanmış pay evreni
+olarak etiketlenmez. Sınırlı canlı yük için ayrılmış test kuralları her turda
+90 saniyelik kalp atışı ve sabit son tarih içeren özel izin dosyasını gerektirir;
+normal kurallar bu dosyalara bağımlı değildir. Test sahibi Telegram gönderemez.
+[Tam seans ölçümü ve kabul sınırları](FULL_SESSION_ACCEPTANCE_2026-10-08.md).
 
 `advanced_alarm_rules`, `advanced_alarm_states`, `advanced_alarm_events` ve
 `advanced_alarm_watchlists` tabloları ana DB'ye uyumlu olarak eklenir. Eski

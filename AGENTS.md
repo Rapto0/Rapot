@@ -1,9 +1,20 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-Kaynaklarla son karşılaştırma: **7 Ekim 2026 / canlı piyasa kabulü**. İş sırası, kullanıcı
+Kaynaklarla son karşılaştırma: **7 Ekim 2026 / tam seans kabulü hazırlığı**. İş sırası, kullanıcı
 yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DEVAM_PLANI.md)
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 Teknik rehberler [docs dizininde](docs/README.md) listelenir.
+
+7 Ekim ek doğrulamasında mevcut TradingView bağlantısı 200 THYAO/GARAN mumunu
+`BISTMIXED` ve hacimsiz döndürdü; eksik hacim gerçek sıfır sayılmaz. Takvimin
+çok günlük bloklarda yanlış tarih ataması düzeltildi; üç resmî saat örneği
+uyuşsa da genel kaynak saat dilimi doğrulanmadı. 631 resmî KAP pay kodunun
+tamamı 805 aday içinde var; bu canlı fiyat kapsamı değildir. 8 Ekim tam seans
+ve gerçek 3.000 kural yükünün hazırlık/kurulum/sonuç durumu
+[ayrı kabul belgesinde](docs/FULL_SESSION_ACCEPTANCE_2026-10-08.md) tutulur.
+Yeni bellek tanıları yöneticiye özeldir; ayrılmış TEST kuralları her turda
+süreli özel dosya izni gerektirir ve Telegram gönderemez. Normal kurallar
+bu test iznine bağımlı değildir. Tam seans kabulünü hazırlanmış kodla karıştırma.
 
 ## Proje ve çalışma sınırları
 

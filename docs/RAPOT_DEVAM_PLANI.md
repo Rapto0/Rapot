@@ -9,6 +9,15 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Kaldığımız nokta
 
+- **7 Ekim — tam seans/yük kabulü hazırlığı ve hacim sonucu:** Kullanıcı tam BIST,
+  eşzamanlı 3.000 alarm, gün boyu süreklilik, hacim ve takvim saatini doğrulamamızı
+  istedi. Dört canlı geçmiş sorgusunda 200 mumun doğal hacmi yok; sağlayıcı
+  `BISTMIXED` döndürüyor. Hacmi gerçek sıfır saymayan sunum düzeltmesi hazır.
+  Takvimde haftalık/aylık bloğun ilk gününe yanlış tarih atama düzeltildi;
+  üç resmî saat örneği TSİ ile eşleşti, genel saat dilimi hâlâ doğrulanmadı.
+  8 Ekim 09:30–18:15 TSİ için sınırlı sunucu ölçümü ve gerçek motor yükü
+  hazırlanıyor; kuruldu/çalıştı/kabul edildi sayılmaz.
+  [Kapsam, kanıtlar ve çalışma durumu](FULL_SESSION_ACCEPTANCE_2026-10-08.md).
 - **7 Ekim — canlı piyasa ve Telegram kabulü:** 17:44–18:00 TSİ aralığında
   gerçek sağlayıcı/ekran kontrolleri yapıldı. Beş sembolün fiyat/zamanları ilerledi;
   THYAO 17:55 açık mum OHLC'si TradingView ile eşleşti. GARAN fiyat, izleme listesi
@@ -241,6 +250,12 @@ açılmadı. Bu taslak sınırlar kendi başına emir veya alıcıyı açma yetk
 
 ## Kapsam ve yetki kaydı
 
+- 7 Ekim devamı: “Tam BIST kapsamı, 3.000 alarmın eşzamanlı canlı yükü ve gün
+  boyu kesintisizlik ... Hacim erişimi ve takvim saat dilimini de doğrula”
+  talimatı sınırlı gerçek motor yükünü ve tam seans ölçümünü kapsar. Ayrılmış
+  TEST sahibi, Telegram kapalı 1.000'er kategori, dosya süresi/kalp atışıyla
+  otomatik durma ve yalnız test manifestini temizleme seçildi. Mevcut kullanıcı
+  kuralları/kotaları, 528 MiB rezerv ve emir ayarları korunur; yeni paket alınmaz.
 - 7 Ekim: “Piyasa açıkken kalan işleri her şeyi doğrula” talimatı, kayıtlı
   hesapla gerçek veri ve Rapot alarm/Telegram kabulünü yeniden seçti. Mevcut
   Telegram hedefine açık TEST etiketli üç geçici kural kullanıldı; yalnız bu

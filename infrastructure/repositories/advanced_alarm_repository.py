@@ -525,6 +525,14 @@ def claim_delivery(now=None):
         )
         if row is None:
             return None
+        if row.owner.startswith("__acceptance__:"):
+            row.delivery_status, row.delivery_error, row.next_attempt_at = (
+                "cancelled",
+                "Kabul testi bildirim gönderemez.",
+                None,
+            )
+            session.commit()
+            return None
         rule = session.get(Rule, row.rule_id)
         if rule is None or rule.deleted_at or not rule.enabled or rule.revision != row.revision:
             row.delivery_status, row.delivery_error = (

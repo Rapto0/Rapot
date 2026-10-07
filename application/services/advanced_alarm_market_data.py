@@ -903,6 +903,106 @@ class AdvancedMarketData:
                 "realtime_verified": False,
             }
 
+    def coverage(self) -> dict:
+        """Bounded diagnostic view; no provider, history enqueue or disk access.
+
+        KAP company codes are candidates, not a verified exchange equity universe.
+        Quote absence cannot distinguish an invalid code from an inactive security.
+        This sampled view also cannot certify every intervening provider tick.
+        """
+        with self._lock:
+            now = self._clock()
+            candidates = {item["symbol"] for item in self._universe}
+            subscribed = set(self._subscriptions)
+            all_symbols = candidates | subscribed | self._explicit_bist
+            names = sorted(all_symbols)[:4000]
+            memory_epoch = getattr(self._provider, "memory_epoch", None)
+            connected = bool(self._connection and self._connection.connected)
+            invalidated = (
+                self._stop.is_set()
+                or (memory_epoch is not None and memory_epoch() != self._epoch)
+                or not connected
+                or self._state in {"auth_required", "reconnecting", "error", "stopped"}
+            )
+            rows = []
+            for name in names:
+                quote_pair = self._quotes.get(("BIST", name))
+                quote = quote_pair[0] if quote_pair else None
+                quote_fresh = bool(
+                    quote
+                    and max(now - quote.source, now - quote.received)
+                    <= self.settings.advanced_alarm_quote_stale_seconds
+                )
+                pair = self._series.get(("BIST", name, "1m"))
+                series = pair[0] if pair else None
+                work = self._requests.get(("BIST", name, "1m"))
+                history_fresh = bool(
+                    series and now - series.received <= 180 and now - series.source_time <= 180
+                )
+                closed = (
+                    [point.time for point in series.points if point.confirmed] if series else []
+                )
+                rows.append(
+                    {
+                        "symbol": name,
+                        "candidate": name in candidates,
+                        "explicit": name in self._explicit_bist,
+                        "subscribed": name in subscribed and connected,
+                        "continuity_id": self._continuity("BIST", name),
+                        "quote": {
+                            "state": "invalidated"
+                            if invalidated
+                            else "missing"
+                            if quote is None
+                            else "fresh"
+                            if quote_fresh
+                            else "stale",
+                            "source_timestamp": utc(quote.source) if quote else None,
+                            "received_at": utc(quote.received) if quote else None,
+                            "sequence": quote.sequence if quote else None,
+                        },
+                        "history_1m": {
+                            "state": "invalidated"
+                            if invalidated
+                            else "missing"
+                            if series is None
+                            else "fresh"
+                            if history_fresh
+                            else "stale",
+                            "source_timestamp": utc(series.source_time) if series else None,
+                            "received_at": utc(series.received) if series else None,
+                            "closed_through": utc(closed[-1]) if closed else None,
+                            "native_gap_count": len(series.gaps) if series else None,
+                            "request_reason": work.reason if work else None,
+                            "request_failures": work.failures if work else 0,
+                            "request_busy": bool(work and work.busy),
+                            "request_due_at": utc(work.due) if work else None,
+                        },
+                    }
+                )
+            return {
+                "schema": "rapot-advanced-coverage-v1",
+                "observed_at": utc(now),
+                "market": self.status(),
+                "universe": {
+                    "source": "borsapy_kap_company_codes",
+                    "classification": "unverified_candidates",
+                    "candidate_count": len(candidates),
+                    "subscription_limit": self.settings.advanced_alarm_max_symbols,
+                    "provider_source_total_known": False,
+                    "equity_membership_verified": False,
+                    "provider_resolution_verified": False,
+                },
+                "rows": rows,
+                "row_count": len(rows),
+                "total_row_count": len(all_symbols),
+                "rows_truncated": len(rows) != len(all_symbols),
+                "provider_calls": False,
+                "prices_included": False,
+                "continuous_tick_capture": False,
+                "realtime_entitlement_verified": False,
+            }
+
     def status(self) -> dict:
         with self._lock:
             now = self._clock()

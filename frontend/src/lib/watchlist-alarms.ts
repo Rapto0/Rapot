@@ -290,7 +290,7 @@ export const evaluateWatchlistAlarmRule = (
         ![candle.open, candle.high, candle.low, candle.close, candle.volume].every(Number.isFinite) ||
         candle.low <= 0 || candle.high < candle.low || candle.open < candle.low ||
         candle.open > candle.high || candle.close < candle.low || candle.close > candle.high ||
-        candle.volume < 0
+        candle.volume === null || candle.volume < 0
     )) {
         return { state: "unknown", triggered: false, side: null, value: null, detail: "Mum verisi geçersiz" }
     }

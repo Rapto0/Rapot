@@ -2086,6 +2086,35 @@
         "x-access-role": "admin"
       }
     },
+    "/advanced-alarms/coverage": {
+      "get": {
+        "operationId": "coverage_advanced_alarms_coverage_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Coverage Advanced Alarms Coverage Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Coverage",
+        "tags": [
+          "Advanced alarms"
+        ],
+        "x-access-role": "admin"
+      }
+    },
     "/advanced-alarms/events": {
       "get": {
         "operationId": "events_advanced_alarms_events_get",
@@ -2150,6 +2179,64 @@
           }
         ],
         "summary": "Events",
+        "tags": [
+          "Advanced alarms"
+        ],
+        "x-access-role": "admin"
+      }
+    },
+    "/advanced-alarms/heartbeat": {
+      "get": {
+        "operationId": "heartbeat_advanced_alarms_heartbeat_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "test_run_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[a-f0-9]{32}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Test Run Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Heartbeat Advanced Alarms Heartbeat Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Heartbeat",
         "tags": [
           "Advanced alarms"
         ],

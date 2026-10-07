@@ -114,6 +114,26 @@ def test_grouped_bist_candles_preserve_prices_timezone_and_provenance():
         service.candles("THYAO", "unknown")
 
 
+@pytest.mark.parametrize("interval", ["1d", "2wk"])
+@pytest.mark.parametrize("verified", [True, False, None])
+def test_chart_volume_requires_provenance_and_keeps_real_zero(interval, verified):
+    data = frame()
+    data["Volume"] = 0.0
+    if verified is not None:
+        data.attrs["volume_verified"] = verified
+        data.attrs["volume_unavailable_rows"] = 0 if verified else len(data)
+    gateway = Gateway()
+    gateway.history = lambda *args, **kwargs: data.copy()
+    result = BorsapyMarketData(gateway).candles("THYAO", interval, 4)
+    assert result["count"] == 4
+    assert all(bar["close"] == 11 for bar in result["candles"])
+    assert result["volume_quality"]["verified"] is (verified is True)
+    assert [bar["volume"] for bar in result["candles"]] == [0.0 if verified else None] * 4
+    assert result["volume_quality"]["state"] == (
+        "verified" if verified else "unavailable" if verified is False else "unverified"
+    )
+
+
 @pytest.mark.parametrize(
     "path",
     [

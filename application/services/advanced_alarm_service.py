@@ -7,12 +7,15 @@ import hashlib
 import json
 import math
 import time
+import uuid
 from collections import OrderedDict
 from collections.abc import Callable
 from datetime import UTC, datetime
+from pathlib import Path
 
 import aiohttp
 
+from application.services.alarm_acceptance_lease import PREFIX, AcceptanceLeaseGate
 from application.services.server_alarm_service import telegram_configured
 from infrastructure.repositories import advanced_alarm_repository as repository
 from settings import settings
@@ -42,11 +45,21 @@ class AdvancedAlarmEngine:
         self._clock = clock or time.monotonic
         self._wall_clock = wall_clock or (lambda: datetime.now(UTC))
         self._rules = []
+        self._source_rules = []
         self._rules_at = -math.inf
         self._generation = -1
         self._cursor = (0, 0)
         self._states: OrderedDict = OrderedDict()
         self._rule_health = {}
+        self._lease_gate = AcceptanceLeaseGate(
+            Path(settings.database_path).resolve().parent / "alarm-acceptance-leases"
+        )
+        self._diagnostic_rules: OrderedDict = OrderedDict()
+        self._diagnostic_epoch = uuid.uuid4().hex
+        self._diagnostic_totals = {"cycles": 0, "failed_cycles": 0, "checked": 0, "ready": 0}
+        self._owner_diagnostics = {}
+        self._published_totals = dict(self._diagnostic_totals)
+        self._diagnostics_at = None
         self._runtime = {
             "running": False,
             "last_cycle_at": None,
@@ -71,6 +84,111 @@ class AdvancedAlarmEngine:
 
     def set_running(self, value):
         self._runtime["running"] = bool(value)
+
+    def heartbeat(self, owner, *, test_run_id=None):
+        """Constant-size, provider/DB-free counters; global cycles are labelled explicitly."""
+        selected = PREFIX + test_run_id if test_run_id is not None else owner
+        return {
+            "schema": "rapot-advanced-heartbeat-v1",
+            "observed_at": _now(),
+            "process_epoch": self._diagnostic_epoch,
+            "running": self._runtime["running"],
+            "last_cycle_at": self._runtime["last_cycle_at"],
+            "last_cycle_failed": self._runtime["last_error"] is not None,
+            "evaluation_scope": "global_engine",
+            "evaluation": dict(self._runtime["evaluation"]),
+            "cumulative": dict(self._published_totals),
+            "counters_as_of": self._diagnostics_at,
+            "selected_scope": "acceptance_run" if test_run_id is not None else "current_owner",
+            "selected": self._owner_diagnostics.get(selected, {}),
+            "lease": dict(self._lease_gate.status),
+            "tracked_rule_limit": 3000,
+            "observations_meaning": "ready_observation_transitions_per_rule_revision",
+            "diagnostics_retention": "latest_3000_rule_revisions_in_this_process",
+            "provider_calls": False,
+            "database_calls": False,
+        }
+
+    def _observe_rule(self, rule, snapshot, ready, now):
+        key = (rule["id"], rule["revision"])
+        row = self._diagnostic_rules.get(key)
+        if row is None:
+            row = {
+                "owner": rule["owner"],
+                "category": rule["category"],
+                "checked": 0,
+                "ready": 0,
+                "unknown": 0,
+                "observations": 0,
+                "first_checked_at": now,
+                "last_checked_at": now,
+                "first_ready_at": None,
+                "last_ready_at": None,
+                "last_observation": None,
+            }
+            self._diagnostic_rules[key] = row
+        row["checked"] += 1
+        row["ready" if ready else "unknown"] += 1
+        row["last_checked_at"] = now
+        row["latest_ready"] = bool(ready)
+        observation = (snapshot.get("continuity_id"), snapshot.get("observation_id"))
+        if ready:
+            if observation != row["last_observation"]:
+                row["observations"] += 1
+                row["last_observation"] = observation
+            row["first_ready_at"] = row["first_ready_at"] or now
+            row["last_ready_at"] = now
+        self._diagnostic_rules.move_to_end(key)
+        while len(self._diagnostic_rules) > 3000:
+            self._diagnostic_rules.popitem(last=False)
+
+    def _publish_diagnostics(self):
+        grouped = {}
+        now = self._wall_clock()
+        for row in self._diagnostic_rules.values():
+            result = grouped.setdefault(row["owner"], {}).setdefault(
+                row["category"],
+                {
+                    "distinct_rule_revisions_checked": 0,
+                    "distinct_rule_revisions_ready": 0,
+                    "checked": 0,
+                    "ready": 0,
+                    "unknown": 0,
+                    "observations": 0,
+                    "first_checked_at": None,
+                    "last_checked_at": None,
+                    "first_ready_at": None,
+                    "last_ready_at": None,
+                    "checked_rules_last_60s": 0,
+                    "ready_rules_last_60s": 0,
+                    "latest_ready_rules_last_60s": 0,
+                    "oldest_last_checked_at": None,
+                    "max_rule_check_age_seconds": 0,
+                },
+            )
+            age = max(0, (now - datetime.fromisoformat(row["last_checked_at"])).total_seconds())
+            result["checked_rules_last_60s"] += age <= 60
+            result["latest_ready_rules_last_60s"] += age <= 60 and row["latest_ready"]
+            if row["last_ready_at"]:
+                ready_age = (now - datetime.fromisoformat(row["last_ready_at"])).total_seconds()
+                result["ready_rules_last_60s"] += 0 <= ready_age <= 60
+            result["max_rule_check_age_seconds"] = max(result["max_rule_check_age_seconds"], age)
+            oldest = result["oldest_last_checked_at"]
+            result["oldest_last_checked_at"] = (
+                min(oldest, row["last_checked_at"]) if oldest else row["last_checked_at"]
+            )
+            result["distinct_rule_revisions_checked"] += 1
+            result["distinct_rule_revisions_ready"] += bool(row["ready"])
+            for key in ("checked", "ready", "unknown", "observations"):
+                result[key] += row[key]
+            for key in ("first_checked_at", "first_ready_at"):
+                if row[key]:
+                    result[key] = min(result[key], row[key]) if result[key] else row[key]
+            for key in ("last_checked_at", "last_ready_at"):
+                if row[key]:
+                    result[key] = max(result[key], row[key]) if result[key] else row[key]
+        self._owner_diagnostics = grouped
+        self._diagnostics_at = now.isoformat()
 
     def status(self, owner):
         # No provider I/O. Detailed account-wide coverage contains no other owner's rules.
@@ -105,9 +223,7 @@ class AdvancedAlarmEngine:
             valid = set(identity)
             self._states = OrderedDict((k, v) for k, v in self._states.items() if k[:2] in valid)
             self._rule_health = {k: v for k, v in self._rule_health.items() if k in valid}
-        self._rules = rules
-        if changed:
-            self.hub.configure(rules)
+        self._source_rules = rules
         self._rules_at, self._generation = self._clock(), repository.generation()
 
     def _jobs(self):
@@ -203,6 +319,13 @@ class AdvancedAlarmEngine:
         self._runtime["backpressure"] = None
         try:
             self._refresh()
+            eligible = self._lease_gate.filter_rules(self._source_rules)
+            if [(row["id"], row["revision"]) for row in eligible] != [
+                (row["id"], row["revision"]) for row in self._rules
+            ]:
+                self._cursor = (0, 0)
+                self.hub.configure(eligible)
+            self._rules = eligible
             jobs, total = self._jobs()
             keys = [(r["id"], r["revision"], s["symbol"], s["market_type"]) for r, s, _ in jobs]
             missing = [key for key in keys if key not in self._states]
@@ -224,6 +347,9 @@ class AdvancedAlarmEngine:
                 state, event = self._evaluate(rule, snapshot, previous, now)
                 checked += 1
                 ready_count += int(state.get("ready", False))
+                self._observe_rule(rule, snapshot, state.get("ready", False), now.isoformat())
+                self._diagnostic_totals["checked"] += 1
+                self._diagnostic_totals["ready"] += int(state.get("ready", False))
                 rule_key = (rule["id"], rule["revision"])
                 result = health.setdefault(
                     rule_key,
@@ -307,6 +433,15 @@ class AdvancedAlarmEngine:
             )
         finally:
             self._runtime["last_cycle_at"] = _now()
+            self._diagnostic_totals["cycles"] += 1
+            self._diagnostic_totals["failed_cycles"] += int(self._runtime["last_error"] is not None)
+            self._publish_diagnostics()
+            self._diagnostic_totals["last_cycle_ms"] = round((self._clock() - started) * 1000, 2)
+            self._diagnostic_totals["max_cycle_ms"] = max(
+                self._diagnostic_totals.get("max_cycle_ms", 0),
+                self._diagnostic_totals["last_cycle_ms"],
+            )
+            self._published_totals = dict(self._diagnostic_totals)
 
 
 class TelegramFailure(Exception):

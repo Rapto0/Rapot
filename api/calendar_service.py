@@ -4,9 +4,11 @@ import hashlib
 import math
 import re
 import threading
+import time
 from collections import OrderedDict
 from copy import deepcopy
 from datetime import UTC, date, datetime, timedelta
+from html import escape
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -23,6 +25,121 @@ WARNINGS = [
     "Olay saatlerinin kaynak saat dilimi doğrulanmamıştır; UTC veya İstanbul saatine çevrilmemiştir.",
     "Sağlayıcı önbelleği 1 saattir. Alınma zamanı yeni bir kaynak güncellemesi anlamına gelmez.",
 ]
+
+
+class _CalendarCache:
+    """Separate, bounded parsed-data cache; never reuse the upstream parser's entries."""
+
+    def __init__(self) -> None:
+        self._entries: OrderedDict[str, tuple[float, Any]] = OrderedDict()
+        self._lock = threading.Lock()
+
+    def get(self, key: str) -> Any:
+        with self._lock:
+            entry = self._entries.get(key)
+            if entry is None:
+                return None
+            if entry[0] <= time.monotonic():
+                self._entries.pop(key)
+                return None
+            self._entries.move_to_end(key)
+            return deepcopy(entry[1])
+
+    def set(self, key: str, value: Any, ttl: int) -> None:
+        with self._lock:
+            self._entries[key] = (time.monotonic() + ttl, deepcopy(value))
+            self._entries.move_to_end(key)
+            while len(self._entries) > 16:
+                self._entries.popitem(last=False)
+
+
+_calendar_provider: Any = None
+_calendar_provider_lock = threading.Lock()
+
+
+def _dated_calendar_provider() -> Any:
+    """Fix borsapy 0.11's first-heading-per-tab parser without changing its globals."""
+    global _calendar_provider
+    with _calendar_provider_lock:
+        if _calendar_provider is not None:
+            return _calendar_provider
+        from borsapy._providers.dovizcom_calendar import DovizcomCalendarProvider
+        from bs4 import BeautifulSoup
+
+        class DatedCalendarProvider(DovizcomCalendarProvider):
+            def _parse_html(self, html_content: str, country_code: str) -> list[dict[str, Any]]:
+                if not isinstance(html_content, str) or len(html_content) > 2_000_000:
+                    raise ValueError("Calendar HTML exceeds the supported size")
+                soup = BeautifulSoup(html_content, "html.parser")
+                containers = soup.find_all(
+                    "div", id=lambda value: value and value.startswith("calendar-content-")
+                )
+                if not containers:
+                    raise ValueError("Calendar day containers are missing")
+                events = []
+                for container in containers:
+                    header, rows = None, []
+
+                    def flush(header: Any, rows: list[Any]) -> None:
+                        if not rows:
+                            return
+                        if header is None or self._parse_turkish_date(header.get_text()) is None:
+                            raise ValueError("Calendar event rows have no valid day heading")
+                        # The original parser now sees exactly one explicit day per fragment.
+                        fragment = (
+                            '<div id="calendar-content-rapot">'
+                            + '<div class="text-center mt-8 mb-8 text-bold">'
+                            + escape(header.get_text(strip=True))
+                            + "</div>"
+                            + "<table>"
+                            + "".join(map(str, rows))
+                            + "</table></div>"
+                        )
+                        events.extend(
+                            super(DatedCalendarProvider, self)._parse_html(fragment, country_code)
+                        )
+
+                    for node in container.find_all(["div", "tr"]):
+                        if (
+                            node.find_parent(
+                                "div",
+                                id=lambda value: value and value.startswith("calendar-content-"),
+                            )
+                            is not container
+                        ):
+                            continue
+                        if node.name == "div" and {
+                            "text-center",
+                            "mt-8",
+                            "mb-8",
+                            "text-bold",
+                        } <= set(node.get("class", [])):
+                            flush(header, rows)
+                            header, rows = node, []
+                        elif node.name == "tr" and node.find_all("td"):
+                            rows.append(node)
+                    flush(header, rows)
+                # Today/week/month views repeat events; preserve the first source occurrence.
+                unique = {}
+                for event in events:
+                    identity = (event["date"], event["time"], event["country_code"], event["event"])
+                    unique.setdefault(identity, event)
+                return list(unique.values())
+
+        _calendar_provider = DatedCalendarProvider(cache=_CalendarCache())
+        return _calendar_provider
+
+
+def calendar_events(bp: Any, **kwargs: Any) -> pd.DataFrame:
+    """Use native borsapy fields/filtering with each HTML table's actual day heading."""
+    from borsapy._providers.dovizcom_calendar import DovizcomCalendarProvider
+
+    if kwargs.get("start") is None:
+        kwargs["start"] = _utc_now().astimezone(ISTANBUL).date().isoformat()
+    calendar = bp.EconomicCalendar()
+    if isinstance(getattr(calendar, "_provider", None), DovizcomCalendarProvider):
+        calendar._provider = _dated_calendar_provider()
+    return calendar.events(**kwargs)
 
 
 def _utc_now() -> datetime:
@@ -200,7 +317,8 @@ class CalendarService:
             return self.get_economic_calendar(from_date, to_date, country, importance)
         try:
             frame = get_borsapy_gateway().run_public(
-                lambda bp: bp.EconomicCalendar().events(
+                lambda bp: calendar_events(
+                    bp,
                     start=start.isoformat(),
                     end=end.isoformat(),
                     country=list(countries),

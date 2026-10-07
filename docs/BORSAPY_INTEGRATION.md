@@ -304,6 +304,14 @@ Mevcut alarm kalıcılığı, sahiplik, Telegram sınırları ve DRY_RUN/emir ay
 
 ## Ertelenen canlı kabul
 
+7 Ekim ek kabulünde THYAO/GARAN 1m/günlük 200 mum `BISTMIXED` olarak çözüldü
+ve doğal hacim alanı bulunmadı. Grafik/akış/araştırma eksik hacmi `null` ve
+kalite uyarısıyla gösterir; doğal gerçek sıfır korunur. Hacim doğrulanmadan
+OBV/VWAP üretilmez. Takvim adaptörü çok günlük HTML'deki olayları kendi gün
+başlıklarına bağlar. Üç resmî saat örneği İstanbul saatiyle uyuşsa da kaynak
+timezone bildirmediğinden genel saat dilimi kabulü açık kalır.
+[Hacim, takvim ve tam seans kanıtları](FULL_SESSION_ACCEPTANCE_2026-10-08.md).
+
 TradingView oturumunun Rapot sunucusundan doğrulanması tamamlandı. Aşağıdaki
 piyasa ve diğer sağlayıcı kontrolleri bundan ayrıdır:
 

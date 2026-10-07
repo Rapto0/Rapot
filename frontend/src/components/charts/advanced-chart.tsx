@@ -17,7 +17,7 @@ import {
 import { useBinanceTicker } from "@/lib/hooks/use-binance-ticker"
 import { useSession } from "@/lib/hooks/use-session"
 import { MarketDataStatus } from "@/components/market-data-status"
-import { BORSAPY_INTERVALS, fetchBorsapyCandles, fetchBorsapyChartSnapshot, mergeBorsapyCandles, releaseBorsapyChart } from "@/lib/api/borsapy-chart-api"
+import { BORSAPY_INTERVALS, borsapyVolumeWarning, fetchBorsapyCandles, fetchBorsapyChartSnapshot, mergeBorsapyCandles, releaseBorsapyChart } from "@/lib/api/borsapy-chart-api"
 import { ChartDrawingTools } from "./chart-drawing-tools"
 import { ChartDataError, hasDisplayableCandles } from "./chart-data-error"
 import { chartTimeZone, createChartTimeFormatters, type ChartTimeZone } from "@/lib/chart-time"
@@ -1217,6 +1217,8 @@ export function AdvancedChartPage({
     // Query keys include symbol, market, timeframe and session; only this selection's
     // merged history/stream may keep a failed refresh from covering the chart.
     const hasChartCandles = useMemo(() => hasDisplayableCandles(candles), [candles])
+    const volumeWarning = useBorsapy && hasChartCandles
+        ? borsapyVolumeWarning(candlesResponse?.volume_quality, chartStream.data?.volume_quality) : null
     const dataSource = candlesResponse?.source || "loading"
 
     const candlesSignature = useMemo(() => {
@@ -2744,6 +2746,7 @@ export function AdvancedChartPage({
 
                 {/* Status Bar */}
                 <MarketDataStatus compact metadata={marketType === "Kripto" ? { ...candlesResponse, source: "Binance" } : candlesResponse} />
+                {volumeWarning && <p role="status" className="shrink-0 border-t border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-300">{volumeWarning}</p>}
                 <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-4 py-2 border-t border-border/30 text-xs text-muted-foreground">
                     <div className="flex flex-wrap items-center gap-4">
                         <span className="flex items-center gap-1.5">{useBorsapy

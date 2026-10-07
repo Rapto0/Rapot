@@ -59,6 +59,30 @@ test('chart data calls private endpoints with an explicit interval', () => {
     assert.equal(api.BORSAPY_INTERVALS.has('3m'), false);
 });
 
+test('missing native volume keeps OHLC candles without inventing zero', () => {
+    const seconds = Date.parse('2026-10-07T07:00:00Z') / 1000;
+    const rows = plain(api.mergeBorsapyCandles([], [
+        { ...candle(seconds), volume: null },
+        { ...candle(seconds + 60), volume: undefined },
+        { ...candle(seconds + 120), volume: 0 },
+        { ...candle(seconds + 180), volume: 1e100 },
+    ]));
+    assert.equal(rows.length, 3);
+    assert.deepEqual(rows.map(row => row.volume), [null, null, 0]);
+    assert.ok(rows.every(row => row.close === 11));
+    assert.equal(hasDisplayableCandles(rows), true);
+});
+
+test('live verified volume never hides unverified historical volume', () => {
+    const verified = { state: 'verified', verified: true, message: 'Verified' };
+    const unknown = { state: 'unverified', verified: false, message: 'History not verified' };
+    const absent = { state: 'unavailable', verified: false, message: 'Volume absent, not zero' };
+    assert.equal(api.borsapyVolumeWarning(unknown, verified), unknown.message);
+    assert.equal(api.borsapyVolumeWarning(unknown, absent), absent.message);
+    assert.equal(api.borsapyVolumeWarning(verified, verified), null);
+    assert.equal(api.borsapyVolumeWarning(), null);
+});
+
 test('each chart releases only its subscriber lease', () => {
     api.fetchBorsapyChartSnapshot('THYAO', '5m', undefined, 'chart-a');
     api.releaseBorsapyChart('THYAO', '5m', 'chart-a');
