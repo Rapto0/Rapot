@@ -16,8 +16,12 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
   kullanıcı ilk iki mesajı gördüğünü doğruladı. Yalnız geçici üç kural/liste kaldırıldı,
   olaylar korundu. Ortak kilit nedeniyle 429, yanlış grafik hata örtüsü, disk geçmiş
   okuma eksikliği ve doğrulanmayan hacim bulundu. Düzeltmelerin yerel kabulünde
-  1.644 Python/295 frontend testi, lint/typecheck/build/standalone geçti; bu satır
-  yeni kaynağın üretime geçtiğini iddia etmez. [Ayrıntı ve son yayın durumu](LIVE_MARKET_ACCEPTANCE_2026-10-07.md).
+  ilk kaynak testlerini teknik tarama kapsam/periyot ve iki npm güvenlik düzeltmesi
+  izledi. **1.693 Python/297 frontend testi**, audit **469/0** ve beş CI işi geçti.
+  **`c74c1ad`, 15:58:41 UTC API/frontend yayını; 15:59:24 UTC bağımsız kabul**.
+  Bot/middleware/PostgreSQL, 15 tablo, üç gönderilmiş olay ve kullanıcı listesi
+  korundu; boş alan **7.295.827.968 bayt**. Temizlik/migration yapılmadı.
+  [Ayrıntı ve son yayın durumu](LIVE_MARKET_ACCEPTANCE_2026-10-07.md).
   Tam evren/saniyelik kapsama, hacim ve uzun süreli yük kabulü tamamlanmadı.
 - **4 Ekim — gelişmiş gün içi alarm merkezi ve 26 çizim aracı üretimde:**
   Son API düzeltmesi `3df9640`, 16:17:54 UTC'de yayımlandı; 16:19:02 UTC ayrı
@@ -203,7 +207,7 @@ Kapatılmış işleri veya eski onay bekleme kayıtlarını yeniden başlatma.
 
 | Konu | Durum / devam koşulu |
 |---|---|
-| Gelişmiş gün içi alarmlar ve çizimler | Frontend `9592c69`, API `3df9640` üretimde; 4 Ekim 16:19 UTC son şema/motor/HTTPS kabulü geçti. Fiyat/teknik/liste kotası 1.000'er, 26 çizim aracı. Doğal seyrek mumlar saklanıyor; canlı saniyelik kapsam, tüm dakika geçmişi ve Telegram teslimi piyasa açıkken ayrıca kabul edilecek. |
+| Gelişmiş gün içi alarmlar ve çizimler | API/frontend `c74c1ad` üretimde; 7 Ekim 15:59 UTC şema/motor/HTTPS kabulü geçti. Fiyat/teknik/liste kotası 1.000'er, 26 çizim aracı. Üç kategori Telegram'a normal motorla teslim edildi. Tam evren/saniyelik kapsam ve tüm dakika geçmişi doğrulanmış değildir. |
 | Kullanım dışı sunucu kaynaklarının temizliği | Tamamlandı: 4 Ekim 10:58 UTC son envanter. 24 imaj, dokuz eski kaynak dizini, beş önbellek/derleme dizini ve yedeklenmiş 90 PM2 günlüğü kaldırıldı; beş servis sağlıklı/restart0, boş alan yaklaşık 7,67 GB. Yeni silme adayı otomatik varsayılmaz. |
 | BIST grafik saat gösterimi | Tamamlandı: `57aed91` yalnız frontend, 4 Ekim 10:08 UTC. Ana grafik/gösterge/araştırma eksen ve imleci Türkiye saatinde; sentetik 07:00Z → 10:00 kabulü geçti. Canlı piyasa doğruluğu aşağıdaki ayrı kabuldür. |
 | TradingView hesap bağlantısı | Tamamlandı: `876f3f3` API/bot/frontend, 4 Ekim 09:06 UTC; mevcut kayıtlı oturumla sitedeki doğrulama başarılı. Canlı piyasa verisi bu kabulün dışındadır. |
@@ -211,7 +215,7 @@ Kapatılmış işleri veya eski onay bekleme kayıtlarını yeniden başlatma.
 | Borsapy ortak piyasa altyapısı yayını | Tamamlandı: `ab18dc4` API/bot/frontend, 4 Ekim 08:02 UTC. İki runtime'da BIST kaynak seçimi açık; yeni temizlik veya plan yükseltmesi yapılmadı. Güncel 11 tablo yedeği ve bağımsız restore, kapasite, runtime/HTTP/WS/şema kabulü geçti. Son boş alan 804.610.048 bayt; 528 MiB rezerv korundu. |
 | Borsapy araştırma merkezi ilk yayını | Tamamlandı: `4b15335` API/frontend, 4 Ekim 06:21 UTC. Özel onaylı iki imaj kaldırıldı; güncel yedek, kapasite, runtime/şema/HTTPS kabulü geçti. Son boş alan 839.430.144 bayt; sabit 528 MiB rezerv ve mevcut sunucu planı korundu. Bu tarihsel yayının kabulü kapalı; yeni ortak piyasa geçişi üstte ayrı izlenir. |
 | Eski Python pinlerinin yeni güvenlik bildirimleri | 134 paketlik report-only taramada 5 paket/16 ham bulgu; 22 borsapy ek paketinde bulgu yok. anyio/PyJWT/soupsieve/urllib3 runtime ve virtualenv geliştirme pinleri için ayrı taban imaj güncellemesi gerekir. [İnceleme ve düzeltme sınırları](BORSAPY_INTEGRATION.md). Yeşil güvenlik işi sıfır bulgu değildir. |
-| Canlı veri yükleme gecikmesi | UI-3'te görülen bekleme tarihsel gözlemdir. Yeni ortak altyapı sınırlı fiyat havuzu, kuyruk, önbellek ve bekleme/eskilik durumlarını ekledi; gerçek sağlayıcı gecikmesi ve piyasa performansı henüz ölçülmedi. |
+| Canlı veri yükleme gecikmesi | 7 Ekim beş sembol/63 saniye örnekleminde son işlem yaşı ve geçici error/waiting ölçüldü. Bu ağ gecikmesi veya eksiksiz tick kabulü değildir. Arka plan geçmişinin ortak kilidi tutması düzeltildi; tam seans yük/kapsam ölçümü açık. |
 | Gerçek TradingView alarmının webhook'a teslimi | Erteli; kullanıcı yeniden seçtiğinde ele alınır. Webhook URL erişimi için şu an yanıt beklenmiyor. |
 | ALL/FIRST, saat filtresi, futures/standart olmayan grafik korumaları | Güncel kaynağın bu runtime matrisi erteli. BTCUSDT/standart mum kabulü bunları kapsamaz. |
 | Testnet BUY → FIFO SELL → reconcile ve gerçek emir | Erteli; ayrı hesap/DB/kapsam ve somut emir yetkisi gerekir. Hazır test araçlarını kendiliğinden çalıştırma. |

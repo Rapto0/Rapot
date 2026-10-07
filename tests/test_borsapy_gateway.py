@@ -608,6 +608,68 @@ def test_public_calendar_callback_does_not_hold_account_lock(gateway):
         thread.join(2)
 
 
+def test_real_ticker_public_actions_never_use_tv_and_allow_quotes_during_slow_io(
+    gateway, monkeypatch
+):
+    import borsapy.ticker as ticker_module
+
+    from application.services.borsapy_research import run_operation
+
+    connect(gateway)
+    entered, release = threading.Event(), threading.Event()
+    public_calls, results, errors = [], [], []
+
+    class NoTradingViewAccess:
+        def __getattr__(self, name):
+            pytest.fail(f"Company actions must not use TradingView: {name}")
+
+    class PublicProvider:
+        def get_dividends(self, symbol):
+            public_calls.append(("dividends", symbol))
+            entered.set()
+            assert release.wait(5)
+            return pd.DataFrame({"Amount": [0.25]}, index=pd.to_datetime(["2025-07-02"]))
+
+        def get_capital_increases(self, symbol):
+            public_calls.append(("splits", symbol))
+            return pd.DataFrame(
+                {"BonusFromCapital": [100.0], "BonusFromDividend": [0.0]},
+                index=pd.to_datetime(["2024-11-27"]),
+            )
+
+    monkeypatch.setattr(ticker_module, "get_tradingview_provider", NoTradingViewAccess)
+    monkeypatch.setattr(ticker_module.Ticker, "_get_isyatirim", lambda self: PublicProvider())
+    monkeypatch.setattr(gateway.fake, "Ticker", ticker_module.Ticker)
+    auth_calls = gateway.fake.auth_calls
+
+    def slow_actions():
+        try:
+            results.append(
+                gateway.run_public(
+                    lambda bp: run_operation(bp, "company.actions", {"symbol": "EREGL"})
+                )
+            )
+        except BaseException as error:
+            errors.append(error)
+
+    thread = threading.Thread(target=slow_actions)
+    thread.start()
+    try:
+        assert entered.wait(2)
+        # New symbol subscription needs the account lock; this is not merely a
+        # cached fast read. It must succeed while the public provider is blocked.
+        assert gateway.quote_snapshot([("BIST", "THYAO")])["BIST:THYAO"]["price"] == 100
+        assert gateway.fake.auth_calls == auth_calls
+    finally:
+        release.set()
+        thread.join(2)
+    assert not thread.is_alive()
+    assert not errors
+    assert public_calls == [("dividends", "EREGL"), ("splits", "EREGL")]
+    assert results[0]["source"] == "İş Yatırım"
+    assert {table["name"] for table in results[0]["tables"]} == {"dividends", "splits", "actions"}
+
+
 def test_existing_chart_survives_slow_history_and_new_requests_fail_bounded(gateway):
     from application.services.borsapy_gateway import _AUTH_LOCK
 

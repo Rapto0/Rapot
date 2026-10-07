@@ -50,8 +50,16 @@ Git dışı kanıtlar `runtime-data/20261007-live-acceptance/` altında
 `npm-audit-before/`, `npm-audit-after/`, `dependency-lock-delta.json` ve
 `sharp-linuxmusl-native-evidence.json` dosyalarındadır. Sonuncunun SHA256'sı
 `53ea67b59e0f225a3155c0909a9f8dcbd18e71f190e2cedd0d544214e13df6d2`.
-Bu kayıt yerel düzeltmeyi belgeler; yeni kaynak CI'sinin veya üretim yayınının
-tamamlandığı iddiası değildir.
+Windows çalışma kopyası CRLF içerir; canonical Git LF lock'u **244.732 bayt**,
+SHA256 `2ee38aebec58923458fbfe2a8702b7697b87ce4197da664aeba0a58a5a45b1d6`.
+Yayın doğrulayıcısı yalnız CRLF→LF dönüşümünden sonra tam bayt eşitliği ister.
+
+`c74c1ad` için [CI 37646334599](https://github.com/Rapto0/Rapot/actions/runs/37646334599)
+beş iş, [yayın 37646403634](https://github.com/Rapto0/Rapot/actions/runs/37646403634)
+iki iş geçti. 7 Ekim 15:58 UTC'de tam frontend imajı `e7b8e6b9…` üretime alındı.
+15:59 UTC bağımsız kabul, çalışan Linux/x64 ELF modülünü ve `sharp.versions`
+değerlerini **Sharp 0.35.5/rsvg 2.63.2/vips 8.18.7** olarak doğruladı. Bu
+metadata kabulü üretimde exploit veya görüntü decode denemesi değildir.
 
 ## 4 Ekim 2026 — Next ESLint glob bağımlılığı
 

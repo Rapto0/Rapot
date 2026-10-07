@@ -27,6 +27,7 @@ def client(api_auth_users):
     [
         ("get", "/borsapy/catalog", None),
         ("post", "/borsapy/query", {"operation": "search", "params": {}}),
+        ("post", "/borsapy/query", {"operation": "company.actions", "params": {}}),
         ("get", "/borsapy/candles/THYAO", None),
         ("get", "/borsapy/saved", None),
         ("post", "/borsapy/saved", {"name": "Örnek", "operation": "search", "params": {}}),
@@ -82,6 +83,79 @@ def test_research_auth_depends_on_actual_data_source(
     response = client.post("/borsapy/query", json={"operation": operation, "params": params})
     assert response.status_code == 200
     assert calls == [{"tradingview": uses_tv, "require_auth": auth}]
+
+
+def test_only_company_actions_uses_public_gateway_with_bounded_slots(client, monkeypatch):
+    import threading
+
+    from application.services import borsapy_gateway, borsapy_research
+
+    slots = threading.BoundedSemaphore(2)
+    monkeypatch.setattr(routes, "_research_slots", slots)
+    calls = []
+    module = object()
+
+    def operation(bp, name, params):
+        assert bp is module
+        calls.append((name, params["symbol"]))
+        # One permit is held throughout the public callback.
+        assert slots.acquire(blocking=False)
+        assert not slots.acquire(blocking=False)
+        slots.release()
+        return {"operation": name, "source": "İş Yatırım"}
+
+    def public(callback):
+        return callback(module)
+
+    def locked(callback, **kwargs):
+        calls.append(("locked", kwargs))
+        return {"operation": "company.info"}
+
+    monkeypatch.setattr(borsapy_research, "run_operation", operation)
+    monkeypatch.setattr(
+        borsapy_gateway,
+        "get_borsapy_gateway",
+        lambda: SimpleNamespace(run=locked, run_public=public),
+    )
+    response = client.post(
+        "/borsapy/query", json={"operation": "company.actions", "params": {"symbol": "EREGL"}}
+    )
+    assert response.status_code == 200
+    assert response.json() == {"operation": "company.actions", "source": "İş Yatırım"}
+    assert response.headers["Cache-Control"] == "private, no-store"
+    assert calls == [("company.actions", "EREGL")]
+    assert slots.acquire(blocking=False) and slots.acquire(blocking=False)
+    blocked = client.post("/borsapy/query", json={"operation": "company.actions", "params": {}})
+    assert blocked.status_code == 429
+    assert len(calls) == 1
+    slots.release()
+    slots.release()
+    other = client.post("/borsapy/query", json={"operation": "company.info", "params": {}})
+    assert other.status_code == 200
+    assert calls[-1] == ("locked", {"tradingview": True, "require_auth": False})
+
+
+def test_public_company_failure_is_private_sanitized_and_releases_slot(client, monkeypatch):
+    import threading
+
+    from application.services import borsapy_gateway
+
+    slots = threading.BoundedSemaphore(2)
+    monkeypatch.setattr(routes, "_research_slots", slots)
+
+    def fail(callback):
+        raise RuntimeError("private-upstream-body")
+
+    monkeypatch.setattr(
+        borsapy_gateway, "get_borsapy_gateway", lambda: SimpleNamespace(run_public=fail)
+    )
+    response = client.post("/borsapy/query", json={"operation": "company.actions", "params": {}})
+    assert response.status_code == 502
+    assert response.headers["Cache-Control"] == "private, no-store"
+    assert "private-upstream-body" not in response.text
+    assert slots.acquire(blocking=False) and slots.acquire(blocking=False)
+    slots.release()
+    slots.release()
 
 
 def test_saved_research_is_durable_and_owner_scoped():

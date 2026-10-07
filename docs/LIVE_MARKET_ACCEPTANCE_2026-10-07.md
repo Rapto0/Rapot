@@ -121,3 +121,62 @@ dilimi tek bir seans sonu örnekleminden doğrulanmış sayılmaz.
 `realtime_verified=false` ve `one_second_coverage_guaranteed=false` korunur.
 TradingView webhook/gerçek veya testnet emir kabulü bu bildirim testinden
 ayrı kapsamdır ve işlem yetkisi gerektirir.
+
+## Yayın ve kapanış sonrası bağımsız kabul
+
+Kaynak **`c74c1ad12f5464502bd7da7b72d7d6dfde69244a`**; 1.693 Python testi
+(bir atlama/üç mevcut bağımlılık uyarısı), 280 Python dosyasında Ruff, 297 frontend
+testi, lint/typecheck/build/standalone ve 469 paket/0 bulgu audit geçti.
+[CI 37646334599](https://github.com/Rapto0/Rapot/actions/runs/37646334599)
+beş iş; [yayın 37646403634](https://github.com/Rapto0/Rapot/actions/runs/37646403634)
+iki başarılı iş/iki beklenen atlama içerir. API 120 runtime paketini koruyan
+kaynak imajı; frontend native güvenlik yamaları nedeniyle tam imajdır.
+
+| Bileşen | Yeni değişmez imaj |
+|---|---|
+| API | `ghcr.io/rapto0/rapot/backend@sha256:94ff294ba51be2bf7648b34bf382040eb8fffda4a680f7f9e95c20c9c66a6dcb` |
+| Frontend | `ghcr.io/rapto0/rapot/frontend@sha256:e7b8e6b9cdb49b138523d57f16a14eabaef3013287be0d2ebed6e444a59c7c54` |
+
+Ek imaj bütçesi 119.115.601 bayt; 528 MiB rezerv, 64 MiB WAL/günlük ve
+2 MiB kanıt payıyla gerekli alan 741.969.745 bayt; mevcut alan 7.396.454.400
+bayttı. Temizlik, migration veya plan yükseltmesi yapılmadı.
+
+**15:58:41 UTC yayın / 15:59:24 UTC bağımsız kabul geçti.** Beş servis healthy/
+restart0; API/frontend değişti, diğer üç container korundu. Beş HTTPS sayfası,
+20 keşfedilen statik dosyanın 13'lük örneklemi ve 11 anonim 401/no-store kontrolü
+geçti. 15 tablo şeması değişmedi. Olaylar 1/2/3 ve kullanıcı listesi içerik
+parmak izleriyle taze yedekle eşleşti. Test kuralları API'de görünmez; olaylarla
+ilişkili yumuşak silinmiş satırlar korunur. Yeni Telegram mesajı/emir gönderilmedi.
+
+Motor çalışıyor; kapanış sonrası 805 sembolün eskimiş olması taze veri gibi
+gösterilmedi (`history_ready=0`). Native ELF64 Linux/x64 modülü ile Node 20.20.2,
+Next 16.3.8, Sharp 0.35.5/rsvg 2.63.2/vips 8.18.7 doğrulandı. Boş alan
+**7.295.827.968 bayt**; kimlik/ayarlar ve DRY_RUN/live kapalı sözleşmesi korundu.
+Açık yönetici grafiğinde 1.000 mum, Türkiye saati etiketi ve hata örtüsünün
+kalktığı görüldü. Bu ekran yeni sürümün açık piyasa kapsam/gecikme kabulü değildir.
+
+19:04 TSİ üretim sağlayıcı kontrolünde takvim **200/0,283s**, teknik tarama
+**200/0,472s** döndü. Takvim kaynak saat dilimi hâlâ bilinmiyor; iki aynı başlıklı
+olay 17:00 ve 17:40 olarak geldi, kaynak saatleri sessizce birleştirilmedi.
+EREGL şirket işlemleri 45s istemci süresinde tamamlanmadı; arkasındaki TUPRS
+sorgusu 429 verdi. Bu şirket işlemleri API kabulü başarısızdır; ayrı aday
+sürecin önceki başarılı sonuçları bu sonucu geçersiz kılmaz. Yavaş herkese açık
+şirket sorgusunun ortak hesap kilidini tutması için ek dar düzeltme gerekir.
+
+İkinci aday düzeltmede yalnız `company.actions`, mevcut `run_public` yoluna
+alındı. Borsapy 0.11.0'ın gerçek `Ticker` zinciri incelendi: temettü ve sermaye
+işlemleri herkese açık İş Yatırım sağlayıcısına gider; birleşik tablo bu verilerden
+yerelde üretilir. Yönetici HTTP erişimi ve iki eşzamanlı araştırma sınırı korunur.
+Bloke şirket sorgusu sırasında yeni fiyat aboneliğinin açılabildiği, diğer
+araştırmaların hesap yolunda kaldığı ve hata/slot temizliği 49 testle doğrulandı.
+Bu değişiklik İş Yatırım yanıt süresini hızlandırma iddiası taşımaz; yayın ve
+HTTP kabulü henüz bu aday için tamamlanmış değildir.
+
+Hacim kalite bilgisi alarm hesaplayıcısında korunur; mevcut grafik/araştırma
+yanıtı bu kalite alanını arayüze taşımaz. Grafikte görülen sıfır hacimler
+doğrulanmış sıfır işlem hacmi olarak yorumlanamaz.
+
+Özel kanıtlar `runtime-data/20261007-live-fix-deploy/` altında: yayın SHA256
+`194082959e6868a4e0cbbe73cf0be59fa5a9c8bae1857fb7e26ed07ca31043c0`, bağımsız kabul
+`e23f8b90a05cec6cf18086cbfe45e762cfc75bdf1592ccdd60869064f9696d6e`, sağlayıcı kontrolü
+`210e237858d177cd9181304665ab390a20ea25e54f1b1fe9dc773dde6f92ccdd`.

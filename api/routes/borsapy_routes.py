@@ -141,6 +141,13 @@ def research_query(
     if not _research_slots.acquire(blocking=False):
         raise HTTPException(429, "İki araştırma sürüyor. Tamamlanınca tekrar deneyin.")
     try:
+        if payload.operation == "company.actions":
+            # Pinned Ticker dividends/splits use only public İş Yatırım data;
+            # actions combines them locally. Slow public I/O must not retain
+            # the TradingView account lock, but still occupies a research slot.
+            return get_borsapy_gateway().run_public(
+                lambda bp: run_operation(bp, payload.operation, params)
+            )
         fx_intraday = payload.operation == "fx.history" and params["interval"] not in {
             "1d",
             "1wk",
