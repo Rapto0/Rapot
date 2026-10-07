@@ -21,6 +21,10 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
   **`c74c1ad`, 15:58:41 UTC API/frontend yayını; 15:59:24 UTC bağımsız kabul**.
   Bot/middleware/PostgreSQL, 15 tablo, üç gönderilmiş olay ve kullanıcı listesi
   korundu; boş alan **7.295.827.968 bayt**. Temizlik/migration yapılmadı.
+  Ardından şirket işlemleri sorgusunun hesap kilidini tutması dar bir düzeltmeyle
+  ayrıldı: **`a835ece`, 16:31:11 UTC yalnız API yayını / 16:31:50 UTC bağımsız kabul**.
+  Frontend `c74c1ad` ve diğer servisler korundu. **1.697 Python testi** geçti;
+  son boş alan **7.286.444.032 bayt**. 15 tablo/üç olay/tek kullanıcı listesi korundu.
   [Ayrıntı ve son yayın durumu](LIVE_MARKET_ACCEPTANCE_2026-10-07.md).
   Tam evren/saniyelik kapsama, hacim ve uzun süreli yük kabulü tamamlanmadı.
 - **4 Ekim — gelişmiş gün içi alarm merkezi ve 26 çizim aracı üretimde:**
@@ -207,7 +211,7 @@ Kapatılmış işleri veya eski onay bekleme kayıtlarını yeniden başlatma.
 
 | Konu | Durum / devam koşulu |
 |---|---|
-| Gelişmiş gün içi alarmlar ve çizimler | API/frontend `c74c1ad` üretimde; 7 Ekim 15:59 UTC şema/motor/HTTPS kabulü geçti. Fiyat/teknik/liste kotası 1.000'er, 26 çizim aracı. Üç kategori Telegram'a normal motorla teslim edildi. Tam evren/saniyelik kapsam ve tüm dakika geçmişi doğrulanmış değildir. |
+| Gelişmiş gün içi alarmlar ve çizimler | API `a835ece`, frontend `c74c1ad` üretimde; 7 Ekim 16:31 UTC şema/motor/HTTPS kabulü geçti. Fiyat/teknik/liste kotası 1.000'er, 26 çizim aracı. Üç kategori Telegram'a normal motorla teslim edildi. Tam evren/saniyelik kapsam ve tüm dakika geçmişi doğrulanmış değildir. |
 | Kullanım dışı sunucu kaynaklarının temizliği | Tamamlandı: 4 Ekim 10:58 UTC son envanter. 24 imaj, dokuz eski kaynak dizini, beş önbellek/derleme dizini ve yedeklenmiş 90 PM2 günlüğü kaldırıldı; beş servis sağlıklı/restart0, boş alan yaklaşık 7,67 GB. Yeni silme adayı otomatik varsayılmaz. |
 | BIST grafik saat gösterimi | Tamamlandı: `57aed91` yalnız frontend, 4 Ekim 10:08 UTC. Ana grafik/gösterge/araştırma eksen ve imleci Türkiye saatinde; sentetik 07:00Z → 10:00 kabulü geçti. Canlı piyasa doğruluğu aşağıdaki ayrı kabuldür. |
 | TradingView hesap bağlantısı | Tamamlandı: `876f3f3` API/bot/frontend, 4 Ekim 09:06 UTC; mevcut kayıtlı oturumla sitedeki doğrulama başarılı. Canlı piyasa verisi bu kabulün dışındadır. |

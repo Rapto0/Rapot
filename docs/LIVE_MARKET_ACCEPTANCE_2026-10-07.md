@@ -76,6 +76,9 @@ korundu. Diğer kullanıcı kurallarına veya emir sistemine dokunulmadı.
    doğrular. Native koşul ayrıştırıcısı korunur. Seçilen periyodun gösterge
    değerleri alınır; günlük değerler başka periyot etiketiyle sunulmaz.
    Sağlayıcı/şema hatası başarılı boş sonuç olarak dönmez.
+6. Şirket işlemlerinin herkese açık İş Yatırım sorgusu da hesap kilidini
+   tutuyordu. Yalnız `company.actions`, mevcut kilitsiz public callback yoluna
+   alındı; HTTP yönetici kontrolü ve iki araştırma sınırı korundu.
 
 İlk kaynak `6976127` için CI, frontend audit'te iki yeni yüksek bulgu nedeniyle
 durdu. Sharp 0.35.5 ve source-map-js 1.2.2 yamaları lock'a alındı; Next/React
@@ -90,7 +93,7 @@ yüklenerek şema, satır sayıları ve içerik parmak izleri karşılaştırıl
 arşiv SHA256 `bde3ca0d71991596f38de7b174385ca8a53e9e3478fb76424aa07659b3f88609`.
 Üretime geri yükleme yapılmadı; özel yedek Git dışındadır.
 
-## Henüz başarılı sayılmayan kontroller
+## Araştırma kontrollerinin ilk sonuçları ve sınırları
 
 İlk dar araştırma kontrolünde günlük teknik tarama 200/boş sonuç verdi;
 bu gösterge doğruluğu kanıtı değildir. Bugünün TR ekonomik takvimi ve
@@ -170,7 +173,7 @@ yerelde üretilir. Yönetici HTTP erişimi ve iki eşzamanlı araştırma sını
 Bloke şirket sorgusu sırasında yeni fiyat aboneliğinin açılabildiği, diğer
 araştırmaların hesap yolunda kaldığı ve hata/slot temizliği 49 testle doğrulandı.
 Bu değişiklik İş Yatırım yanıt süresini hızlandırma iddiası taşımaz; yayın ve
-HTTP kabulü henüz bu aday için tamamlanmış değildir.
+HTTP kabulü aşağıdaki ikinci yayın kaydında ayrıca tamamlandı.
 
 Hacim kalite bilgisi alarm hesaplayıcısında korunur; mevcut grafik/araştırma
 yanıtı bu kalite alanını arayüze taşımaz. Grafikte görülen sıfır hacimler
@@ -180,3 +183,53 @@ doğrulanmış sıfır işlem hacmi olarak yorumlanamaz.
 `194082959e6868a4e0cbbe73cf0be59fa5a9c8bae1857fb7e26ed07ca31043c0`, bağımsız kabul
 `e23f8b90a05cec6cf18086cbfe45e762cfc75bdf1592ccdd60869064f9696d6e`, sağlayıcı kontrolü
 `210e237858d177cd9181304665ab390a20ea25e54f1b1fe9dc773dde6f92ccdd`.
+
+## Şirket sorgusunun ayrılması: son API yayını
+
+Kaynak **`a835eceaa0f8a2795e140137a2f237d246ca7008`**, yalnız API imajı
+**`ghcr.io/rapto0/rapot/backend@sha256:c17fc9595d132e1e853148a37b73d38f4dec957fd38bf8542a68a44e5b564e7e`**.
+Yerelde **1.697 Python testi** geçti (bir atlama/üç mevcut bağımlılık uyarısı).
+[CI 37651616416](https://github.com/Rapto0/Rapot/actions/runs/37651616416)
+beş iş; [yayın 37651671995](https://github.com/Rapto0/Rapot/actions/runs/37651671995)
+iki başarılı iş/iki beklenen atlama ile tamamlandı. Frontend kodu değişmedi;
+aynı 297 test ve audit/lint/typecheck/build/standalone kontrolleri CI'de geçti.
+120 runtime paketi ve 287 kaynak dosyası yayın artifact'iyle doğrulandı.
+
+Ek imaj bütçesi **10.252.411 bayt**; sabit 528 MiB rezerv + 64 MiB runtime/WAL
++ 2 MiB kanıt payı ile toplam **633.106.555 bayt**, ölçülen boş alan
+**7.294.513.152 bayt**. Aynı gün alınan altı saatten genç, bağımsız restore'u
+doğrulanmış 15 tabloluk yedek ve değişmeyen şema kapısı korundu.
+
+**16:31:11 UTC yayın / 16:31:50 UTC bağımsız kabul geçti.** Yalnız API container'ı
+değişti; frontend `c74c1ad`, bot `876f3f3`, middleware/PostgreSQL ve
+Compose/current `279aa9f` korundu. Beş servis healthy/restart0; 15 tablo şeması,
+üç `sent` olay ve tek kullanıcı listesi korundu. HTTPS sayfaları, statik örneklem,
+11 anonim 401/no-store ve dört yönetici GET kontrolü geçti. Alarm motoru çalışıyor;
+boş alan **7.286.444.032 bayt**. Migration, temizlik, yeni Telegram mesajı veya
+emir gönderilmedi. Grafikte 1.000 mum ve Türkiye saati etiketi görüldü.
+
+**16:32:18–16:32:34 UTC üretim eşzamanlı sorgu kontrolü:**
+
+| İstek | HTTP ve süre | Sonuç |
+|---|---|---|
+| EREGL şirket işlemleri | 200 / 15,4769 saniye | 20 temettü, 6 sermaye işlemi, 26 birleşik kayıt; kesilmedi |
+| THYAO/GARAN fiyat okuması | 200 / 0,0102 saniye | İki sonlu fiyat; kapanış sonrası ikisi de açıkça `stale` |
+| TR takvimi | 200 / 0,1642 saniye | İki olay; kaynak saat dilimi hâlâ bilinmiyor |
+| THYAO/GARAN teknik tarama | 200 / 0,5118 saniye | Önceki sayısal karşılaştırmayla tutarlı boş sonuç |
+
+Üç kısa istek, şirket isteği hâlâ beklerken başladı ve tamamlandı; bütün HTTP
+yanıtları `private, no-store`. API kimliği öncesi/sonrası aynıydı. Bu gözlem ve
+gerçek Ticker zinciriyle yapılan kilit regresyon testi birlikte, dar ayrımın
+çalıştığını destekler. İstemci isteklerinin örtüşmesi, her sağlayıcı çağrısının
+aynı anda çalıştığını veya kapanış sonrası fiyatın canlı olduğunu kanıtlamaz.
+Şirket işlemleri kaynağının 15 saniyeyi aşan yanıt süresi devam eder.
+
+Özel kanıtlar `runtime-data/20261007-public-research-fix/` altında: yayın SHA256
+`822154dfbe8028411d94b64cfe8e37c987d25b6200eb4cec315892d6bab60b23`, bağımsız kabul
+`30c2e7162c1e3ca33df6fcfd5a8f2d9ec8b80dfd00889bc63ca04d3721226b54`, sağlayıcı ölçümü
+`15b721eaf0da2c1b6f7b49163941aec8b182d9f6b3ba7ba34ae5410f9d76680a`.
+
+Tam seans/tüm BIST kapsamı, 3.000 kuralın canlı yükü, saniyelik kayıpsız akış,
+hacim erişimi, tüm kurumsal işlem düzeltmeleri ve takvim saat dilimi açık kalır.
+Son düzeltmeler seans kapandıktan sonra yayımlandı; önceki canlı örneklem yeni
+sürümün açık piyasa kabulü olarak sunulmaz.

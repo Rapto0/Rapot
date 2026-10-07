@@ -61,8 +61,10 @@ sınırlarını açıklar; keyfi Pine çalıştırma desteği değildir.
 Grafik 26 çizim aracı ve 1m/5m periyot sunar. Çizimler sembol/periyot başına
 tarayıcıda saklanır; sunucu alarmı veya emir oluşturmaz.
 7 Ekim 15:58 UTC'de API/frontend `c74c1ad` üretime alındı; 15:59 UTC ayrı kabul
-geçti. Bot `876f3f3`, middleware/Compose/current `279aa9f` korundu. Beş servis
-sağlıklı, 15 tablo ve üç gönderilmiş test olayı korundu. 1.693 Python/297 frontend
+geçti. 16:31 UTC'de yalnız API `a835ece` oldu: yavaş herkese açık şirket işlemi
+sorgusu hesap kilidini tutmaz; yönetici ve iki araştırma sınırı korunur.
+Frontend `c74c1ad`, bot `876f3f3`, middleware/Compose/current `279aa9f` korundu.
+Beş servis sağlıklı, 15 tablo ve üç gönderilmiş test olayı korundu. 1.697 Python/297 frontend
 testi geçti; Sharp 0.35.5/rsvg 2.63.2/vips 8.18.7 native metadata'sı doğrulandı.
 Doğal seyrek BIST
 mumları doldurulmadan saklanır; yeni boşluk, geçmiş mum revizyonu ve kayıp
