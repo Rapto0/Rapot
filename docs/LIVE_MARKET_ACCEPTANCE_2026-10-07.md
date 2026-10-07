@@ -70,6 +70,25 @@ korundu. Diğer kullanıcı kurallarına veya emir sistemine dokunulmadı.
 4. Borsapy eksik hacmi sıfırla doldurabiliyor. BIST hacim koşulları için
    doğal sağlayıcı alanının doğrulanması gerekir; doğrulanmayan hacim
    `unknown` olur. Fiyat ve fiyat tabanlı göstergeler bundan bağımsızdır.
+5. Teknik tarama, önce Türkiye genelindeki 200 sonucu alıp sonra istenen
+   sembolleri seçiyordu; bu sıra eşleşmeleri kaçırabiliyordu. Dar adaptör,
+   sembol filtresini sorguya baştan ekler; sonuç sayısı ve sembol kimliklerini
+   doğrular. Native koşul ayrıştırıcısı korunur. Seçilen periyodun gösterge
+   değerleri alınır; günlük değerler başka periyot etiketiyle sunulmaz.
+   Sağlayıcı/şema hatası başarılı boş sonuç olarak dönmez.
+
+İlk kaynak `6976127` için CI, frontend audit'te iki yeni yüksek bulgu nedeniyle
+durdu. Sharp 0.35.5 ve source-map-js 1.2.2 yamaları lock'a alındı; Next/React
+değişmedi. Temiz kurulumda 469 paket/0 bulgu ve 297 frontend testi,
+lint/typecheck/build/standalone geçti. Native Sharp değiştiği için yeni frontend
+tam runtime imajıyla yayımlanmalıdır; eski native tabanı koruyan kaynak imajı
+bu yamayı taşımaz. [Güvenlik kanıtı](FRONTEND_DEPENDENCY_SECURITY.md).
+
+Yayın öncesi güncel 15 tabloluk SQLite yedeği sunucu dışında bağımsız geri
+yüklenerek şema, satır sayıları ve içerik parmak izleri karşılaştırıldı.
+1.152.856.064 baytlık doğrulanan DB, 152.453.201 baytlık gzip arşivden üretildi;
+arşiv SHA256 `bde3ca0d71991596f38de7b174385ca8a53e9e3478fb76424aa07659b3f88609`.
+Üretime geri yükleme yapılmadı; özel yedek Git dışındadır.
 
 ## Henüz başarılı sayılmayan kontroller
 
@@ -82,6 +101,19 @@ EREGL'in 27 Kasım 2024 tarihli %100 bedelsiz işlemi için resmî referans
 [KAP 1360496](https://www.kap.org.tr/tr/Bildirim/1360496)'dır. Bu kaynak
 oran/tarihi destekler; Rapot geçmiş fiyat düzeltmesinin karşılaştırmalı
 kabulü değildir. `adjustment=splits`, temettü dahil toplam getiri anlamına gelmez.
+
+18:22 TSİ'de ayrı süreçte, henüz yayımlanmamış aday adaptörle salt okunur
+sağlayıcı kontrolleri yapıldı. EREGL şirket işlemleri 27.11.2024 için %100
+bedelsiz döndürdü; 500 günlük bölünmeye göre düzeltilmiş seride 26 Kasım
+kapanışı 25,05 ve 27 Kasım kapanışı 24,70 idi. Beklenen ikiye bölünme kaynaklı
+grafik kopukluğu bu örnekte yoktur; tüm şirket işlemlerinin doğruluğu veya
+temettü toplam getirisi kabul edilmez. TUPRS'ta 2023 %600 bedelsiz kaydı geldi.
+Türkiye takviminde 7 Ekim 17:00 kaynak saatiyle Hazine Nakit Bakiyesi olayı
+geldi; sağlayıcı saat dilimi bilinmediğinden Türkiye saati olarak kabul edilmedi.
+Dar teknik alan sorgusunda GARAN 129,9 < SMA50 130,184 ve THYAO 286,25 <
+SMA50 298,875 bulundu; bu iki sembolde `close > SMA50` boş sonucu tutarlıydı.
+Bu ayrı süreç sonuçları, henüz çalışan eski API'nin 429 sorununun giderildiğini
+kanıtlamaz; yayın sonrası HTTP kabulü ayrıca gereklidir.
 
 Tüm sembollerde kesintisiz/saniyelik kapsama, uzun süreli yük, tüm zaman
 dilimleri, hacim erişimi, tarihsel şirket işlemi düzeltmeleri ve takvim saat

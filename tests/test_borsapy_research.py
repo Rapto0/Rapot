@@ -11,9 +11,16 @@ import pytest
 
 
 @pytest.fixture
-def research():
+def research(monkeypatch, frame):
     from application.services import borsapy_research
 
+    def scan(symbols, condition, *, interval):
+        scan.calls.append((symbols, condition, interval))
+        return frame.copy()
+
+    scan.calls = []
+    # The scoped native Query path has separate real-parser/transport tests.
+    monkeypatch.setattr(borsapy_research, "_technical_scan", scan)
     return borsapy_research
 
 
@@ -281,9 +288,9 @@ def test_ha_real_local_calculation_produces_synthetic_chart(research, provider, 
 
 def test_weekly_scanner_mapping_and_fixed_condition(research, provider):
     research.run_operation(provider, "screener.technical", {"interval": "1wk"})
-    call = next(call for call in provider.calls if call[0] == "scan")
-    assert call[2]["interval"] == "1W"
-    assert call[1][1] == "rsi < 30"
+    call = research._technical_scan.calls[-1]
+    assert call[2] == "1W"
+    assert call[1] == "rsi < 30"
 
 
 def test_bank_request_does_not_fetch_metal_only_endpoint_for_usd(research, provider):

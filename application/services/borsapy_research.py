@@ -1,8 +1,9 @@
 """Bounded research adapter. No arbitrary attributes, strategies, code or URLs.
 
 The API gateway owns provider initialization, server-side credentials and its
-global lock. This module neither imports borsapy nor reads credentials. Its
-validation is pure and can run before acquiring the gateway or using the network.
+global lock. Validation is pure and runs before acquiring the gateway. The narrow
+technical scanner uses the pinned provider's parser and cookie accessor only
+inside that gateway boundary; it never stores or exposes credentials.
 """
 
 from __future__ import annotations
@@ -36,6 +37,64 @@ _SENSITIVE = re.compile(r"password|secret|token|cookie|authorization|sessionid|a
 
 class ResearchInputError(ValueError):
     """Safe, local validation failure; its message contains no upstream response."""
+
+
+def _technical_scan(symbols: list[str], condition: str, *, interval: str) -> pd.DataFrame:
+    """Scope the native query before its limit; keep native comparison semantics.
+
+    borsapy 0.11.0 instead filters symbols after a global Turkey top-200 query and
+    converts provider errors into empty results. Neither behavior is safe for an
+    explicit research universe. No shared provider or package code is modified.
+    """
+    from borsapy._providers.tradingview_screener_native import TVScreenerProvider
+    from tradingview_screener import Column, Query
+
+    provider = TVScreenerProvider()
+    try:
+        native_filter = provider._parse_condition(condition, interval)
+        if native_filter is None or interval not in provider.INTERVAL_MAP:
+            raise ValueError
+        fields = ["close", *provider._extract_fields_from_condition(condition)]
+        columns = list(dict.fromkeys(provider._get_tv_column(field, interval) for field in fields))
+        query = (
+            Query()
+            .set_markets("turkey")
+            .where(Column("name").isin(symbols), native_filter)
+            .select("name", *columns)
+            .limit(len(symbols) + 1)
+        )
+        count, frame = query.get_scanner_data(cookies=provider._get_auth_cookies(), timeout=10)
+        if (
+            not isinstance(count, int)
+            or isinstance(count, bool)
+            or not isinstance(frame, pd.DataFrame)
+            or count != len(frame)
+            or not 0 <= count <= len(symbols)
+        ):
+            raise ValueError
+        if count:
+            if not {"ticker", "name", *columns}.issubset(frame.columns):
+                raise ValueError
+            names = frame["name"].tolist()
+            if len(set(names)) != count or any(name not in symbols for name in names):
+                raise ValueError
+            if any(
+                ticker not in {f"BIST:{name}", f"BISTMIXED:{name}"}
+                for ticker, name in zip(frame["ticker"], names, strict=True)
+            ):
+                raise ValueError
+        # Strip only the selected interval suffix after fetching that interval's
+        # values; upstream selection would silently return daily indicator values.
+        suffix = provider.INTERVAL_MAP[interval]
+        frame = frame.rename(columns={column: column.removesuffix(suffix) for column in columns})
+        result = provider._normalize_columns(frame, interval)
+        if count:
+            result["symbol"] = names
+        return result
+    except Exception:
+        # Gateway converts this to its safe 502; a transport/schema failure must
+        # never masquerade as a successful scan with no matches.
+        raise RuntimeError("Teknik tarama tamamlanamadı; sonuç doğrulanamadı.") from None
 
 
 def _symbol(value: Any, label: str = "Sembol") -> str:
@@ -543,11 +602,10 @@ def run_operation(bp_module: Any, operation: str, params: dict[str, Any]) -> dic
             "sma20_crosses_sma50": "sma_20 crosses_above sma_50",
             "macd_above_signal": "macd > signal",
         }
-        raw = bp.scan(
+        raw = _technical_scan(
             p["symbols"],
             conditions[p["condition"]],
             interval="1W" if p["interval"] == "1wk" else p["interval"],
-            limit=20,
         )
     elif operation == "portfolio":
         portfolio = bp.Portfolio(benchmark="XU100")

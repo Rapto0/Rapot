@@ -52,6 +52,12 @@ veya sağlayıcının bütün metotlarına serbest erişim değildir.
 Şirket finansalları ve temettü/sermaye işlemleri de sunulur. Her aile için web
 yüzeyi bulunması, bütün sağlayıcıların canlı kabul edildiği anlamına gelmez.
 
+Teknik araştırma taraması en fazla 20 açık sembol ve beş hazır koşulla sınırlıdır.
+7 Ekim adaptörü, upstream'in genel sonuç sınırından sonra sembol seçme davranışını
+düzeltir: semboller sunucudaki sorguya baştan eklenir; sonuç sayısı/kimliği ve
+seçili periyodun sütunları doğrulanır. Native koşul ayrıştırıcısı korunur;
+sağlayıcı hatası boş eşleşme olarak sunulmaz. Bu yüzey genel Pine çalıştırmaz.
+
 İlk araştırma yayınının çevrimdışı kabulü: CI'da 1.204 Python testi (bir performans testi atlandı);
 227 frontend testi, lint/typecheck, build ve standalone proxy kontrolü geçti.
 Sentetik tarayıcı oturumunda katalog/formlar, kaydetme, replay, akış kontrolleri,

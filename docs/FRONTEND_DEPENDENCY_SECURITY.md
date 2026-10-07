@@ -1,10 +1,57 @@
 # Frontend bağımlılık güvenliği
 
-İlk inceleme tarihi: **13 Eylül 2026**; son takip **4 Ekim 2026**. İlk kaynak sürümü
+İlk inceleme tarihi: **13 Eylül 2026**; son takip **7 Ekim 2026**. İlk kaynak sürümü
 `d79f4cc841b3de411777730eb91a245ade96cd6e`; frontend kodu ve lock,
 P3-1 dördüncü adım kapanışındaki durumdur. İş sırası ve üretim kabulü
 [devam planında](RAPOT_DEVAM_PLANI.md#p1-g2--frontend-bağımlılık-güvenliği-takibi)
 tutulur.
+
+## 7 Ekim 2026 — Sharp ve source-map-js güvenlik yamaları
+
+[CI 37642524424](https://github.com/Rapto0/Rapot/actions/runs/37642524424)
+frontend işi tam audit'te durdu. Node **20.20.2** / npm **10.9.9** ile
+yerelde aynı **469 paket düğümü / 2 high** sonucu doğrulandı:
+
+| Paket | Önce | Sonra | Resmî düzeltme |
+|---|---|---|---|
+| `sharp` ve platform binding'leri | 0.35.4 | **0.35.5** | [GHSA-wq5f-xc86-pv6w](https://github.com/lovell/sharp/security/advisories/GHSA-wq5f-xc86-pv6w): librsvg bellek güvenliği düzeltmesi; bakımcı önceden derlenmiş paketlerde librsvg **2.63.2** ister. |
+| `source-map-js` | 1.2.1 | **1.2.2** | [v1.2.2 sürümü](https://github.com/7rulnik/source-map-js/releases/tag/v1.2.2): kötü niyetli indexed source-map offset'leriyle işlem döngüsünü bloke etme düzeltmesi ([GHSA-68fv-2mgg-jv7q](https://github.com/advisories/GHSA-68fv-2mgg-jv7q)). |
+
+Mevcut Next/PostCSS/Tailwind bağımlılık aralıkları iki yamayı da kabul eder.
+`npm update sharp source-map-js --package-lock-only --ignore-scripts --no-audit
+--no-fund` yalnız lock'u güncelledi; `package.json`, Next **16.3.8**, React ve
+mevcut override'lar değişmedi. Paket ekleme/çıkarma yoktur. **28 düğüm** değişti:
+Sharp, ona bağlı 26 platform/libvips düğümü ve source-map-js. libvips paketleri
+**1.3.3 → 1.3.4** oldu. Diğer tüm düğümler alan bazında aynıdır.
+
+Temiz `npm ci` ardından zorunlu prod/dev/optional/peer audit tekrar çalıştı:
+**469/469 düğüm, 0 bulgu**. Kurulum komutundaki `--no-audit`, ayrı tam güvenlik
+kontrolünü kaldırmaz. Yeni lock **251.746 B**, SHA256
+`a82ce8b0a43f37c437f4393c7cff6d434dbe40ee1090bc6e43a97db84f9e2d22`.
+
+İki çevrimdışı regresyon gerçek paketleri kullanır: büyük/iç içe source-map
+offset'leri reddedilirken normal eşlemeler korunur; küçük güvenilir SVG,
+güncel Sharp/librsvg ile çözülüp yeniden boyutlandırılır. Bu SVG uyumluluk
+kontrolü, advisory için exploit testi değildir. Temiz kurulumda **297 frontend
+testi**, tam lint/typecheck, Next production build ve standalone
+HTML/statik/API/sağlık/WebSocket proxy kontrolü geçti.
+
+Üretim hedefi **Linux/x64/musl** için resmi npm tarball'ları lock'taki SHA512
+integrity değerleriyle doğrulanarak yalnız paket/`versions.json` metadata'sı
+okundu; arşivler dosya sistemine çıkarılmadı. Beklenen değerler:
+`@img/sharp-linuxmusl-x64=0.35.5`, `@img/sharp-libvips-linuxmusl-x64=1.3.4`,
+`sharp=0.35.5`, `rsvg=2.63.2`, `vips=8.18.7`, `heif=1.23.5`.
+Bu metadata kanıtı, üretilen Linux imajının native runtime kabulü değildir.
+Native bağımlılık değiştiğinden eski `node_modules`'u koruyan frontend
+source-only imaj yolu bu güncellemeye uygun değildir; normal frontend imajı
+ve onun ayrı CI/üretim kabulü gerekir.
+
+Git dışı kanıtlar `runtime-data/20261007-live-acceptance/` altında
+`npm-audit-before/`, `npm-audit-after/`, `dependency-lock-delta.json` ve
+`sharp-linuxmusl-native-evidence.json` dosyalarındadır. Sonuncunun SHA256'sı
+`53ea67b59e0f225a3155c0909a9f8dcbd18e71f190e2cedd0d544214e13df6d2`.
+Bu kayıt yerel düzeltmeyi belgeler; yeni kaynak CI'sinin veya üretim yayınının
+tamamlandığı iddiası değildir.
 
 ## 4 Ekim 2026 — Next ESLint glob bağımlılığı
 

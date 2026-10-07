@@ -3,6 +3,9 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import sharp from 'sharp';
+import { SourceMapConsumer, SourceMapGenerator } from 'source-map-js';
+import semver from 'semver';
 import { auditArguments, lockedPackages, runAudit, validateAudit } from '../scripts/audit-dependencies.mjs';
 
 function lock() {
@@ -155,4 +158,38 @@ test('a changed lockfile or missing npm entry point cannot produce a clean resul
   assert.equal(runAudit({ ...fixture(), npmCli: '', execute() {
     assert.fail('Missing npm must not execute a command');
   } }).status, 'error');
+});
+
+test('patched indexed source maps reject oversized and nested offsets while valid maps still round-trip', () => {
+  const map = { version: 3, sources: ['fixture.js'], sourcesContent: ['answer();'], names: [], mappings: 'AAAA' };
+  const indexed = (line, child = map) => ({ version: 3, sections: [{ offset: { line, column: 0 }, map: child }] });
+  // Constructor-only probes stay cheap even if an old library is reintroduced.
+  for (const value of [indexed(1e8), indexed(6e6, indexed(6e6)), indexed(-1), indexed(Infinity)]) {
+    assert.throws(() => new SourceMapConsumer(value), /offset/i);
+  }
+  const consumer = new SourceMapConsumer(indexed(2));
+  const generator = new SourceMapGenerator();
+  consumer.eachMapping(mapping => generator.addMapping({
+    source: mapping.source,
+    original: { line: mapping.originalLine, column: mapping.originalColumn },
+    generated: { line: mapping.generatedLine, column: mapping.generatedColumn },
+  }));
+  const generated = generator.toJSON();
+  assert.equal(generated.mappings, ';;AAAA');
+  const restored = new SourceMapConsumer(generated);
+  assert.deepEqual(restored.originalPositionFor({ line: 3, column: 0 }), {
+    source: 'fixture.js', line: 1, column: 0, name: null,
+  });
+});
+
+test('installed patched Sharp native library retains ordinary SVG decoding and resize support', async () => {
+  assert.ok(semver.gte(sharp.versions.sharp, '0.35.5'));
+  assert.ok(semver.gte(sharp.versions.rsvg, '2.63.2'));
+  // A tiny trusted fixture checks native compatibility, not exploitation of the advisory.
+  const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"><rect width="4" height="4" fill="#f00"/></svg>');
+  const { data, info } = await sharp(svg).resize(2, 2).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  assert.equal(info.width, 2);
+  assert.equal(info.height, 2);
+  assert.equal(info.channels, 4);
+  assert.deepEqual([...data.subarray(0, 4)], [255, 0, 0, 255]);
 });
