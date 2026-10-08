@@ -1,6 +1,6 @@
 # Rapot Devam Planı
 
-**Güncel özet: 7 Ekim 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
+**Güncel özet: 8 Ekim 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
 Çalışma kuralı: **incele → düzelt → doğrula → belgeyi güncelle**.
 Teknik ayrıntılar [belge indeksinde](README.md), çalışma kuralları
 [AGENTS.md](../AGENTS.md), önceki planın eksiksiz metni
@@ -9,6 +9,14 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Kaldığımız nokta
 
+- **8 Ekim — kullanıcı “Hazırım” dedi, elle çalışma başladı:** İlk saat kontrolü
+  13:13 TSİ; sabah gözlenmiş sayılmaz. Codex takibi ve eski timer kapalı kalır.
+  İlk host örnekleri 131,6–189,7 MiB kullanılabilir RAM ve yüksek CPU/swap baskısı
+  gösterdi; 192 MiB gözlem / 256 MiB yük sınırları sağlanmadı. 3.000 kural
+  oluşturulmadı. Request-local Borsapy geçmişinde kullanılmayan HTTP/TLS kurulumu
+  için dar düzeltme hazırlandı; 52 ilgili test geçti, yayın/sonrası ölçüm henüz
+  yapılmadı. KAP 631 kod değişmedi; iki ek takvim saat örneği eşleşti, genel
+  saat dilimi/DST açık. [Bugünkü kanıt ve sınırlar](FULL_SESSION_ACCEPTANCE_2026-10-08.md).
 - **7 Ekim — veri kalitesi düzeltmeleri üretimde; yük kabulü kaynak sınırında:** Kullanıcı tam BIST,
   eşzamanlı 3.000 alarm, gün boyu süreklilik, hacim ve takvim saatini doğrulamamızı
   istedi. Dört canlı geçmiş sorgusunda 200 mumun doğal hacmi yok; sağlayıcı

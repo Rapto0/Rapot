@@ -1,9 +1,17 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-Kaynaklarla son karşılaştırma: **7 Ekim 2026 / veri kalitesi ve tam seans ölçümü**. İş sırası, kullanıcı
+Kaynaklarla son karşılaştırma: **8 Ekim 2026 / elle canlı doğrulama ve kaynak maliyeti**. İş sırası, kullanıcı
 yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DEVAM_PLANI.md)
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 Teknik rehberler [docs dizininde](docs/README.md) listelenir.
+
+8 Ekim kullanıcı **“Hazırım”** mesajıyla elle devamı başlattı; ilk saat kontrolü
+13:13 TSİ olduğundan sabah bölümü gözlenmiş sayılmaz. Codex takibi `PAUSED` ve
+eski gözlem timer'ı `disabled/inactive` kalır; ayrı otomatik takip istenmiyor.
+131,6–189,7 MiB kullanılabilir RAM ve yüksek CPU/swap baskısı nedeniyle gözlem
+ve 3.000 yük başlangıç sınırları sağlanmadı. Gateway'de kullanılmayan request-local
+HTTP/TLS kurulumunu kaldıran dar düzeltme hazır; 52 ilgili test geçti, bu kayıtta
+henüz üretime alınmadı. Güncel çalışma/sonuç devam planı ve kabul belgesindedir.
 
 7 Ekim ek doğrulamasında mevcut TradingView bağlantısı 200 THYAO/GARAN mumunu
 `BISTMIXED` ve hacimsiz döndürdü; eksik hacim gerçek sıfır sayılmaz. Takvimin

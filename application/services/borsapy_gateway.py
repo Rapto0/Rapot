@@ -436,8 +436,25 @@ class BorsapyGateway:
 
         class AuthenticatedHistory(TradingViewProvider):
             def __init__(self):
-                super().__init__()
+                # borsapy 0.11 native history uses only its WebSocket helpers.
+                # BaseProvider would build an unused HTTP client/TLS context for
+                # every symbol request. Account authentication stays in gateway.
+                self._session_id = None
+                self._chart_session_id = None
                 self._volume_quality = {}
+
+            def close(self):
+                # get_history owns/closes its native WebSocket; no HTTP client
+                # or reusable connection is created by this request adapter.
+                return None
+
+            def _http_unavailable(self, *args, **kwargs):
+                raise BorsapyGatewayError("Alarm geçmişi HTTP hesap işlemi desteklemiyor.", 503)
+
+            login_user = _http_unavailable
+            get_user = _http_unavailable
+            _get = _http_unavailable
+            _post = _http_unavailable
 
             def _get_auth_token(self):
                 return token
@@ -469,9 +486,7 @@ class BorsapyGateway:
                 ]
                 # Upstream may default an absent field to zero. Preserve price
                 # history, but never authenticate that placeholder for volume rules.
-                for stamp, valid in zip(frame.index, verified, strict=True):
-                    if not valid:
-                        frame.loc[stamp, "Volume"] = 0.0
+                frame.loc[[not valid for valid in verified], "Volume"] = 0.0
                 frame.attrs["volume_verified"] = bool(verified) and all(verified)
                 frame.attrs["volume_unavailable_rows"] = sum(not valid for valid in verified)
                 return frame

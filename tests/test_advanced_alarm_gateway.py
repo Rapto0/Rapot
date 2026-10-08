@@ -336,3 +336,88 @@ def test_native_packet_volume_provenance_precedes_upstream_zero_fallback(
     assert result.attrs["volume_unavailable_rows"] == (0 if verified else 1)
     assert result.Volume.iloc[0] == (raw_volume if verified else 0)
     assert result.Close.iloc[0] == 101
+
+
+def test_request_history_never_constructs_http_client_and_rejects_http_paths(monkeypatch):
+    from borsapy._providers.base import BaseProvider
+
+    def forbidden_constructor(*_args, **_kwargs):
+        pytest.fail("Request-local WebSocket history must not construct an HTTP provider")
+
+    monkeypatch.setattr(BaseProvider, "__init__", forbidden_constructor)
+    provider = BorsapyGateway._new_alarm_history_provider("synthetic-request-token")
+    assert not hasattr(provider, "_client") and not hasattr(provider, "_cache")
+    assert provider._session_id is None and provider._chart_session_id is None
+    for method in (provider.login_user, provider.get_user, provider._get, provider._post):
+        with pytest.raises(BorsapyGatewayError) as error:
+            method("synthetic-secret")
+        assert error.value.status_code == 503 and "synthetic" not in str(error.value)
+    provider.close()
+    provider.close()
+
+
+@pytest.mark.parametrize("missing_volume", [False, True])
+def test_real_native_history_websocket_replay_preserves_candles_and_volume_quality(
+    monkeypatch, missing_volume
+):
+    import websocket
+    from borsapy._providers.tradingview import get_tradingview_auth
+
+    # Exercise the installed native get_history, parser and period calculation.
+    # Only the network transport is replaced; OHLCV epoch data is genuine-shaped.
+    original_auth = get_tradingview_auth()
+    start = int(pd.Timestamp("2026-10-07T07:00:00Z").timestamp())
+    bars = []
+    for index in range(500):
+        values = [start + index * 60, 100, 102, 99, 101, 0 if index == 0 else 25]
+        if missing_volume and index % 3 == 1:
+            values.pop()
+        elif missing_volume and index % 3 == 2:
+            values[-1] = 1e100
+        bars.append({"v": values})
+    sent, transports = [], []
+
+    class ReplayTransport:
+        def __init__(self, url, *, on_open, on_message, on_error, header):
+            assert url.startswith("wss://") and header["Origin"] == "https://www.tradingview.com"
+            self.on_open, self.on_message = on_open, on_message
+            self.closed = False
+            transports.append(self)
+
+        def send(self, raw):
+            sent.append(json.loads(raw.split("~m~", 2)[2]))
+
+        def run_forever(self, **options):
+            assert options == {}  # Native TLS verification options remain unchanged.
+            self.on_open(self)
+            packet = {"m": "timescale_update", "p": ["session", {"$prices": {"s": bars}}]}
+            self.on_message(self, json.dumps(packet))
+
+        def close(self):
+            self.closed = True
+
+    monkeypatch.setattr(websocket, "WebSocketApp", ReplayTransport)
+    provider = BorsapyGateway._new_alarm_history_provider("synthetic-request-token")
+    try:
+        frame = provider.get_history("THYAO", period="5d", interval="1m")
+    finally:
+        provider.close()
+    assert len(transports) == 1 and transports[0].closed
+    assert sent[0] == {"m": "set_auth_token", "p": ["synthetic-request-token"]}
+    configuration = json.loads(
+        next(row for row in sent if row["m"] == "resolve_symbol")["p"][2][1:]
+    )
+    assert configuration == {"symbol": "BIST:THYAO", "adjustment": "splits", "session": "regular"}
+    assert next(row for row in sent if row["m"] == "create_series")["p"][4:6] == ["1", 500]
+    assert len(frame) == 500 and str(frame.index.tz) == "Europe/Istanbul"
+    assert [stamp.timestamp() for stamp in frame.index] == [
+        start + index * 60 for index in range(500)
+    ]
+    assert (frame.Close == 101).all() and frame.Volume.iloc[0] == 0
+    expected_volume = [
+        0 if index == 0 or (missing_volume and index % 3 in {1, 2}) else 25 for index in range(500)
+    ]
+    assert frame.Volume.tolist() == expected_volume
+    assert frame.attrs["volume_verified"] is (not missing_volume)
+    assert frame.attrs["volume_unavailable_rows"] == (333 if missing_volume else 0)
+    assert get_tradingview_auth() is original_auth

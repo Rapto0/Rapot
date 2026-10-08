@@ -1,9 +1,51 @@
 # BIST tam seans, 3.000 alarm ve veri kalitesi kabulü
 
-**Güncelleme: 7 Ekim 2026. Durum: düzeltmeler üretimde; canlı tam seans kabulü tamamlanmadı.**
+**Güncelleme: 8 Ekim 2026. Durum: kullanıcı elle devamı başlattı; tam seans ve 3.000 yük kabulü tamamlanmadı.**
 Kullanıcı tam BIST kapsamını, eşzamanlı 3.000 canlı alarmı, gün boyunca devamlılığı,
 hacim erişimini ve ekonomik takvim saat dilimini doğrulamamızı istedi.
 [Önceki kısa canlı kabul](LIVE_MARKET_ACCEPTANCE_2026-10-07.md) bundan ayrıdır.
+
+## 8 Ekim elle devam ve kaynak düzeltmesi
+
+Kullanıcının “Hazırım” mesajıyla çalışma elle devam etti. İlk saat kontrolü
+10:13 UTC / 13:13 TSİ; sabah bölümü gözlenmiş sayılmaz. Codex takibi `PAUSED`,
+eski gözlem timer'ı `disabled/inactive`, servis `inactive/MainPID0` olarak
+korundu. Ayrı otomatik takip veya yük zamanlayıcısı başlatılmadı.
+
+İlk üç host örneğinde kullanılabilir RAM 131,6 / 140,4 / 189,7 MiB; 192 MiB
+gözlem ve 256 MiB yük başlangıç sınırları sağlanmadı. Tek çekirdekte yaklaşık
+%100 kullanım ve swap sayfalama görüldü; API/bot etkin tüketicilerdi. Beş
+servis sağlıklı, restart0/OOMfalse. 10:39 UTC'deki ek sınırlı tanı denemesi
+145,5 MiB nedeniyle container çocuğunu ve HTTP isteklerini başlatmadan durdu.
+Kaynak guard'ları düşürülmedi; 3.000 test kuralı oluşturulmadı.
+
+Kod incelemesi, 805 sembol için request-local dakika geçmişi sağlayıcısının
+her seferinde kullanılmayan bir HTTP istemcisi/TLS context oluşturduğunu
+gösterdi. Native geçmiş yalnız WebSocket kullanır. Dar düzeltme bu HTTP
+kurulumunu kaldırır, HTTP hesap yollarını kapalı tutar ve eksik hacim
+işaretlemesini toplu uygular. WebSocket TLS, token/hesap epoch kontrolü,
+500 mum sınırı, fiyat/hacim kalitesi ve sembol kapsamı değişmez.
+
+Windows'ta ağsız sentetik ölçümde kurucu medyanı 191,1 → 0,0085 ms, 500
+eksik hacim satırının işlenmesi 11,74 → 0,603 ms oldu. Bu VPS CPU veya
+3.000 alarm kapasite kabulü değildir. 52 ilgili test, gerçek native
+`get_history` için sahte WebSocket replay'i dahil geçti. **Bu paragrafın
+yazımında düzeltme henüz üretime alınmadı; yayın ve sonrası ölçüm ayrıdır.**
+
+8 Ekim KAP kontrolü yine 631 kod içerdi; eklenen/çıkan/pazar değiştiren kod
+yok. Yeni iki saat örneği uyuştu: EIA 8 Ekim doğal gaz 10:30 Eastern →
+17:30 TSİ; BLS 14 Ekim TÜFE 08:30 Eastern → 15:30 TSİ.
+[EIA](https://ir.eia.gov/ngs/schedule.html),
+[BLS](https://www.bls.gov/schedule/2026/10_sched.htm).
+Kaynağın kasım olayları henüz yok; genel saat dilimi/DST hâlâ doğrulanmadı.
+
+Özel kanıtlar `runtime-data/20261008-live-verification/` altında:
+
+- `host-resources.json`: `06f3035560f068defdbf6ff30cda918ec1443ac645834df7123bd97c2e259f63`.
+- `stdlib-diagnostic-once.json`: `b519cabf75a0a708821498ffa9b5805e568663bec8b19b33723d853844daea54`.
+- `history-cost-probe-after.json`: `16a98483a959bc48e372fb7892d510a39d300b8c643421833310307b83c34871`.
+- `kap-equity-recheck.json`: `fb096f53598fa3f41c38a2d9548eb8783fe3d79e24247263be9e66ab4dea39ab`.
+- `public-source-verification.json`: `b24271f6825690eff0f93254a6f4ca9a8743bf2500ef9c96191ab17ae277f181`.
 
 ## Doğrulanmış hacim sonucu
 
