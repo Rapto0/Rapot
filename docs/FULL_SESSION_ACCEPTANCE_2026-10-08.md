@@ -1,6 +1,6 @@
 # BIST tam seans, 3.000 alarm ve veri kalitesi kabulü
 
-**Güncelleme: 8 Ekim 2026. Durum: kullanıcı elle devamı başlattı; tam seans ve 3.000 yük kabulü tamamlanmadı.**
+**Güncelleme: 8 Ekim 2026. Durum: API düzeltmesi yayımlandı; son kaynak kontrolü gözlem/yük başlangıcını engelledi. Tam seans ve 3.000 yük kabulü tamamlanmadı.**
 Kullanıcı tam BIST kapsamını, eşzamanlı 3.000 canlı alarmı, gün boyunca devamlılığı,
 hacim erişimini ve ekonomik takvim saat dilimini doğrulamamızı istedi.
 [Önceki kısa canlı kabul](LIVE_MARKET_ACCEPTANCE_2026-10-07.md) bundan ayrıdır.
@@ -37,7 +37,9 @@ yok. Yeni iki saat örneği uyuştu: EIA 8 Ekim doğal gaz 10:30 Eastern →
 17:30 TSİ; BLS 14 Ekim TÜFE 08:30 Eastern → 15:30 TSİ.
 [EIA](https://ir.eia.gov/ngs/schedule.html),
 [BLS](https://www.bls.gov/schedule/2026/10_sched.htm).
-Kaynağın kasım olayları henüz yok; genel saat dilimi/DST hâlâ doğrulanmadı.
+11:23:35 UTC'de mevcut yönetici ekranında 8 Ekim EIA 17:30, 14 Ekim TÜFE
+15:30 ve 15/22 Ekim EIA 17:30 satırları görüldü. Bu ekim örnekleri genel
+kaynak saat dilimini veya kasım yaz/kış saati geçişini doğrulamaz.
 
 Özel kanıtlar `runtime-data/20261008-live-verification/` altında:
 
@@ -46,8 +48,137 @@ Kaynağın kasım olayları henüz yok; genel saat dilimi/DST hâlâ doğrulanma
 - `history-cost-probe-after.json`: `16a98483a959bc48e372fb7892d510a39d300b8c643421833310307b83c34871`.
 - `kap-equity-recheck.json`: `fb096f53598fa3f41c38a2d9548eb8783fe3d79e24247263be9e66ab4dea39ab`.
 - `public-source-verification.json`: `b24271f6825690eff0f93254a6f4ca9a8743bf2500ef9c96191ab17ae277f181`.
+- `ui-calendar-confirmation.json`: `a0b956f13fc37333bdef0f1d6fd9ee2e68d84396a5327d86fc63bc0e87fb413e`.
+
+### 8 Ekim 11:26 UTC API yayını ve bağımsız kabul
+
+Yukarıdaki yayın öncesi ölçüm tarihsel olarak korunur. Kaynak
+`f1d832bd553b4f54f2bb5a31ab49414fe179a6c1`, **11:26:37 UTC / 14:26:37 TSİ**
+makbuzuyla yalnız API'ye yayımlandı. Yeni API imajı
+`sha256:0ef59ac11a653bdaa5a5efc1eec3106a5e24c2e4c5a7bf36244787d05f3673ad`,
+container kimliği `5cf37465e854…`. Frontend `e449375`, bot `876f3f3`,
+middleware/PostgreSQL ve Compose/current `279aa9f` korundu.
+
+Yerel tam testte **1.755 geçti, bir atlandı**. Aynı kaynak için
+[CI'nin beş işi](https://github.com/Rapto0/Rapot/actions/runs/37765051092) ve
+[iki imaj yayın işi](https://github.com/Rapto0/Rapot/actions/runs/37765095469)
+başarılı. **11:27:33 UTC** bağımsız kabul; beş servisin sağlıklı/restart0
+durumunu, değişmeyen 15 tabloyu, üç gönderilmiş test olayını ve tek kullanıcı
+listesini doğruladı. 23 seçilmiş kaynak dosyasının hash'i, 120 kurulu dağıtım,
+yedi yetkili salt okunur GET, 11 anonim 401/no-store, beş HTTPS sayfası ve
+13 statik dosya örneği kontrol edildi. Bu, tüm runtime dosyalarının tek tek
+incelendiği veya canlı piyasa kabulünün tamamlandığı iddiası değildir.
+Kimlik/ortam baytları ve diğer dört servis değişmedi; migration yapılmadı.
+
+Taze **1.317.625.856 bayt** binary SQLite snapshot, salt okunur kaynak üzerinden
+SQLite online backup API'siyle alındı. Tam integrity, 15 tablonun tür bilgili
+parmak izi ve ayrı logical restore karşılaştırması özel yerel dizinde,
+repo dışında tamamlandı; üretim restore'u yapılmadı. Kaynak sunucuda pahalı
+satır taraması yerine yerel doğrulama kullanıldı. Yalnız bu çalışmanın tam
+kimliği/hash'i doğrulanmış geçici sunucu snapshot'ı ayrı temizleme makbuzuyla
+kaldırıldı; özel yerel doğrulanmış yedek korundu.
+
+11:28:29–43 UTC kaynak örneklerinde kullanılabilir bellek **278,21 / 236,64 /
+239,64 MiB**; ardışık iki aralıkta host CPU **%79,67 / %75,82**, load1m
+**4,00 / 3,62 / 3,33** idi. API yeniden başlatması ve önbelleğin tekrar ısınması
+sonrasındaki kısa ölçüm, kalıcı CPU kazancını veya 3.000 yük baş boşluğunu tek
+başına kanıtlamaz. Üç örnekten ikisi 256 MiB yük sınırının altında; **3.000 test
+yükü çalıştırılmadı ve yeni elle gözlem henüz başlatılmadı**. Eski timer/Codex
+takibi kapalıdır; sonraki elle adımlar kendi güncel kaynak kontrollerine bağlıdır.
+
+Kabulde alarm motoru çalışıyordu, etkin kural sıfırdı. 805 adayın 461'inde
+taze fiyat, 40 hazır/48 önbellekli geçmiş seri ve 782 bekleyen geçmiş işi
+görüldü; bunlar yeni süreçte erken anlık örnektir. `history_ready` tazelik
+kontrolünü geçen seri, `history_pending` vadesi gelmiş veya çalışan iş sayısıdır;
+iki küme örtüşebilir. Sıfır kuralda da 805 adayın 1m geçmişi iki worker ile
+yenilenir; başarılı iş yeniden 30 saniye sonra uygun olur. Her iş en fazla
+500 doğal mum ister. CPU düzeltmesi bu ağ/yenileme düzenini değiştirmez;
+805 abonelik bütün sembollerin sağlayıcıca kabul edildiği veya gecikmesiz
+olduğu anlamına gelmez. Tam 631 pay kapsamı ve gün boyu süreklilik açık kalır.
+İki worker'ın 805 seriyi 30 saniyede yenileyebilmesi için toplam iş başına
+ortalama yaklaşık 75 ms gerekir; 180 saniyelik tazelik penceresi için bile
+yaklaşık 447 ms gerekir. Bunlar gerekli hız hesabıdır, ölçülmüş sağlayıcı
+kapasitesi değildir. Her seferinde yeni WebSocket ve 500 mum alınması,
+sağlayıcı beklemeleri/hataları ve eski kaynak mumları hâlâ kuyruğu uzatabilir.
+
+11:30:58 UTC / 14:30:58 TSİ mevcut alarm ekranında motor çalışıyor, etkin
+kural sıfır; 805 adaydan **480 taze**, **101 hazır geçmiş seri / 775 bekleyen
+iş** görüldü. Bu ayrı bir anlık ekran gözlemidir. Gösterilen kaynak/alıntı
+yaşları bütün önbelleğin maksimumudur; tek eski kaydın yaşı bütün piyasaya
+ait gecikme gibi yorumlanmaz. Resmî 631 payın ayrı tazelik dağılımı veya
+kesintisiz veri kapsamı bu ekran örneğiyle doğrulanmadı.
+11:50:34 UTC / 14:50:34 TSİ son ekran örneği **451/805 taze aday, 87 hazır
+seri / 762 bekleyen iş**, son motor turu 14:50:33 gösterdi; bu da sürekli
+gözlem değil, ayrı bir anlık kayıttır.
+
+**11:39:26.970 UTC** kaynak kapısı kimliği doğrulanmış çalışan API için
+**176.300.032 bayt / 168,13 MiB** kullanılabilir bellek, CPU başına load1m
+**2,3213**, **7.117.983.744 bayt** boş disk alanı ölçtü. Disk rezervi korunsa
+da 192 MiB gözlem ve 256 MiB yük bellek sınırları başarısız; 3.000 yükün
+CPU başına load1m < 1,5 koşulu da sağlanmadı. Sonuç
+**`NOT_STARTED_RESOURCE_GUARD`**. Yeni paket sunucuya aktarılmadı, gözlem veya
+yük başlatılmadı; test kuralı/lease oluşturulmadı. Ayrı otomatik takip açılmadı.
+Bu son örnekte container bazlı bellek dökümü yok; önceki ölçüme göre tüm
+bellek düşüşü yalnız API'ye veya önbelleğe yüklenemez. Ek bellek tanısı bir
+başlangıç/çalışma kabulü değildir.
+
+**11:47:01–15 UTC son kaynak ölçümü:** kullanılabilir RAM **146,43 / 146,27 /
+159,65 MiB**, iki aralıkta CPU **%94,51 / %98,49**, load1m **3,81 / 3,99 /
+3,91**. Üç örnekte cgroup `memory.current` API için 203,45–214,22 MiB,
+bot için 205,84–215,45 MiB aralığında; bunlar swap'taki belleği kapsamaz.
+Yayın hemen sonrasındaki 236–278 MiB baş boşluğu kalıcı olmadı. Dar kurucu
+düzeltmesinin yerel test kazancı doğrulansa da **sunucuda sürdürülebilir CPU
+ve yük kapasitesi iyileşmesi doğrulanmadı**. Hem gözlem hem 3.000 yük başlangıç
+kapısı hâlâ başarısızdır; bu tur yeni gözlem paketi aktarımı,
+gözlem başlatılması veya yük çalıştırılması yapılmadı. Yük testinin çalışması
+başarısız olmuş gibi gösterilmez: test çalıştırılmadı, başlangıç kabulü geçmedi.
+
+Yeni 15 dakikalık, göreli başlangıçlı 3.000 yük planının tam çalıştırıcısı
+tamamlanmadı; salt okunur ön kontrol bunun yerine geçmez. Yerel gözlem taslağının
+RSS kontrolü, container'ın ağ namespace'ini kullanacak biçimde düzeltilmeden ve
+yeni inceleme manifesti hazırlanmadan yayımlanmaz. Bu taslaklar üretimde çalışmaz.
+
+**11:52:08 UTC bağımsız son kontrol:** beş servisin kimliği, runtime hash'i,
+sağlığı/restart0/OOMfalse durumu; özel yapılandırma, şifreli kimlik dosyaları ve
+current işaretçisi korundu. Eski timer disabled/inactive, eski servis
+inactive/MainPID0; yeni gözlem servisi, altı yük birimi, yeni uzak gözlem dizini
+ve lease dizini yok. İki küçük alarm tablosunda salt okunur sayım ayrılmış
+TEST sahibi için sıfır kural/liste, genel etkin kural için sıfır gösterdi.
+Kullanılabilir RAM 188.592.128 bayt (179,86 MiB), boş alan 7.117.021.184 bayt.
+Bu son kontrol de 192 MiB gözlem başlangıç sınırını karşılamadı.
+
+Özel kanıtlar `runtime-data/20261008-history-efficiency-deploy/` altında:
+
+- `acceptance.json`: `27dc00877d2e14a622e10871c998702de13e331651270044623aafc72d16cdf1`.
+- Yayın makbuzu: `a137925d8e283021d8e26835b4929750d4c4f8b61f80eae332759dfb166918ec`.
+- `backup-verified.json`: `be6ab569a1cfd8d325f8b44c210bc7ed659f1bab24171c101af28eb03c676a16`.
+- `backup-cleanup.json`: `d8eb26e6219ad9cdb93fd9f83650b414fb3aee51b80e078688237ac745f971c5`.
+- `resources-after-deploy.json`: `c7150f74b1cd046fe9f2f69d3f38b14b37ca57e790c34a1a034d1e9d38c14be1`.
+- `resources-warm.json`: `9909946c90ef6bf271da46de28cfcc97414689ec315a0bd57d7f19f9efbbe403`.
+
+Son kaynak engeli `runtime-data/20261008-manual-observation/` altında:
+
+- `transport-resources.json`: `d68558fa1317d6c1c8b7a7d6fe857b0c3ca5158f34c39f544d10b871258fd418`.
+- `resource-blocker.json`: `9a91a6d07bf76ba3207bfe4b44d4eea3703442fca03ab13eb6c8cb82fa8d53bf`.
+
+Anlık ekran kanıtı `runtime-data/20261008-live-verification/ui-after-deploy.json`:
+`5d4007bb05de363b4275f019061fd83796859f3cbfafa4d5511349af9d72c9ee`.
+Son ekran kanıtı aynı dizindeki `ui-final-alarm-sample.json`:
+`bc9d8c07b9d80a06d59c40f7b7ac658edba12a9f784f90a183dec4af6069f9fd`.
+Bağımsız son durum aynı dizindeki `final-state.json`:
+`ca5384813a0601954308a87db51af1b7d96b1cd0edaf166bc9bb0aa4d8119cf6`.
+
+Tamamlanmış yayın/yedek/temizleme araçları yeniden çalıştırılmaz. Bu kayıt
+Telegram mesajı, emir veya yeni test kuralı oluşturulmuş sayılmaz.
 
 ## Doğrulanmış hacim sonucu
+
+8 Ekim 14:51:16 TSİ grafik ekranında THYAO günlük 1.000 mum için kullanılabilir
+hacim gelmediği uyarısı görüldü. Aynı ekrandaki beş hissede kaynak zamanları
+14:51:09–14 arasında günceldi; bu dar ekran örneği tüm piyasa veya her işlem
+kabulü değildir. Yeni ham sağlayıcı hacim sorgusu yapılmadı. Özel ekran kanıtı
+`runtime-data/20261008-live-verification/ui-final-chart-sample.json`, SHA256:
+`fde5f51f9d238eeab0baba4dbbb7c95be28ce018cbdc50706364aa366822bada`.
 
 7 Ekim 16:44 UTC'de mevcut şifreli hesapla, ayrı bir API container sürecinde
 THYAO/GARAN için 1m ve günlük olmak üzere dört sınırlı sorgu yapıldı. Her sorgu
@@ -101,12 +232,14 @@ SHA256 `2af787927b35c938f4d85344dc2e9852b0d828040027f4ec8e7a187e4238690f`.
 
 ## Tam seans ölçümünün sözleşmesi
 
-Önceki hedef gözlem 8 Ekim 09:30–18:15 TSİ idi; son kullanıcı talimatıyla
-otomatik başlangıç iptal edildi, elle devam için “hazırım” mesajı beklenir.
+7 Ekim'de hazırlanan hedef gözlem 8 Ekim 09:30–18:15 TSİ idi. Aynı akşam
+kullanıcı talimatıyla otomatik başlangıç iptal edildi. 8 Ekim “Hazırım”
+mesajıyla elle inceleme başladı; son kaynak engeli yukarıda ayrıca kaydedildi.
 Rapor 10:00–18:00 sürekli işlem bölümünü
 ayrıca değerlendirir. **3.000 kural yükü kaynak ön kontrolünde durdu; yük
 zamanlayıcısı kurulmadı ve test kuralları oluşturulmadı.** Yalnız veri gözlemi
-için ayrı zamanlayıcı kuruldu. 8 Ekim seansı henüz başlamadı.
+için ayrı zamanlayıcı kurulmuştu. **7 Ekim'deki kurulum kabulü sırasında**
+8 Ekim seansı henüz başlamamıştı; bu tarihsel kurulum seans gözlemi değildir.
 
 7 Ekim 17:21 UTC karşılaştırmasında [KAP resmî pazar listesi](https://www.kap.org.tr/tr/Pazarlar)
 Yıldız 149, Ana 394, Alt 49, Yakın İzleme 20, PÖİP 19 olmak üzere **631**

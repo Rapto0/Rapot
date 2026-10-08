@@ -8,10 +8,22 @@ Teknik rehberler [docs dizininde](docs/README.md) listelenir.
 8 Ekim kullanıcı **“Hazırım”** mesajıyla elle devamı başlattı; ilk saat kontrolü
 13:13 TSİ olduğundan sabah bölümü gözlenmiş sayılmaz. Codex takibi `PAUSED` ve
 eski gözlem timer'ı `disabled/inactive` kalır; ayrı otomatik takip istenmiyor.
-131,6–189,7 MiB kullanılabilir RAM ve yüksek CPU/swap baskısı nedeniyle gözlem
-ve 3.000 yük başlangıç sınırları sağlanmadı. Gateway'de kullanılmayan request-local
-HTTP/TLS kurulumunu kaldıran dar düzeltme hazır; 52 ilgili test geçti, bu kayıtta
-henüz üretime alınmadı. Güncel çalışma/sonuç devam planı ve kabul belgesindedir.
+İlk 131,6–189,7 MiB kullanılabilir RAM ve yüksek CPU/swap baskısı nedeniyle gözlem
+ve 3.000 yük başlangıç sınırları sağlanmadı. Kullanılmayan request-local HTTP/TLS
+kurulumunu kaldıran `f1d832bd`, **11:26:37 UTC'de yalnız API'ye yayımlandı**;
+11:27:33 UTC bağımsız kabul geçti. Diğer dört servis, 15 tablo, üç gönderilmiş
+test olayı ve tek kullanıcı listesi korundu. Yerelde 1.755 test/bir atlama,
+kaynakla eşleşen beş CI ve iki imaj yayın işi geçti. Taze binary SQLite yedeği
+sunucu dışında bağımsız restore ile doğrulandı; yalnız bu işin geçici sunucu
+snapshot'ı temizlendi. Yayın sonrası üç örnek 278,21 / 236,64 / 239,64 MiB RAM,
+iki aralık %79,67 / %75,82 CPU gösterdi; API yeniden başlatması sonrası kısa
+örnekler sürekli kapasite kanıtı değildir. **11:39:26 UTC kontrolde 168,13 MiB
+kullanılabilir RAM**, CPU başına load1m 2,3213 ölçüldü: hem 192 MiB gözlem hem
+256 MiB yük başlangıç sınırı başarısız. **11:47:01–15 UTC son örnekler 146,43 /
+146,27 / 159,65 MiB RAM ve %94,51 / %98,49 CPU** gösterdi; sürekli kapasite
+kazancı doğrulanmadı. Yeni gözlem paketi sunucuya aktarılmadı, gözlem/yük başlatılmadı;
+test kuralı veya lease oluşturulmadı. Bu tur başka gözlem/yük başlatma denemesi yapılmadı.
+Güncel sonuç `NOT_STARTED_RESOURCE_GUARD`; ayrıntılar devam planı ve kabul belgesindedir.
 
 7 Ekim ek doğrulamasında mevcut TradingView bağlantısı 200 THYAO/GARAN mumunu
 `BISTMIXED` ve hacimsiz döndürdü; eksik hacim gerçek sıfır sayılmaz. Takvimin
@@ -22,7 +34,7 @@ tamamı 805 aday içinde var; bu canlı fiyat kapsamı değildir. API/frontend
 ön kontrolü yetersiz kullanılabilir RAM'de durdu; test kuralı veya yük
 zamanlayıcısı oluşturulmadı. 8 Ekim 09:30–18:15 TSİ için yalnız veri gözlemi
 ayrı timer ile kuruldu; başlangıç/çalışma bellek sınırları 192/128 MiB.
-**Son kullanıcı talimatı:** 8 Ekim yaklaşık 10:00'da bilgisayarını açacak;
+**7 Ekim'deki kullanıcı talimatı:** 8 Ekim yaklaşık 10:00'da bilgisayarını açacak;
 ayrı otomatik takip istemiyor. Codex takibi `PAUSED`; yalnız bu gözleme ait
 timer 7 Ekim 18:38 UTC'de `disabled/inactive` doğrulandı. Yeni gözlem/çalışma
 yalnız kullanıcının **“hazırım”**

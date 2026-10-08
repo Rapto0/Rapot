@@ -9,14 +9,36 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Kaldığımız nokta
 
-- **8 Ekim — kullanıcı “Hazırım” dedi, elle çalışma başladı:** İlk saat kontrolü
-  13:13 TSİ; sabah gözlenmiş sayılmaz. Codex takibi ve eski timer kapalı kalır.
-  İlk host örnekleri 131,6–189,7 MiB kullanılabilir RAM ve yüksek CPU/swap baskısı
-  gösterdi; 192 MiB gözlem / 256 MiB yük sınırları sağlanmadı. 3.000 kural
-  oluşturulmadı. Request-local Borsapy geçmişinde kullanılmayan HTTP/TLS kurulumu
-  için dar düzeltme hazırlandı; 52 ilgili test geçti, yayın/sonrası ölçüm henüz
-  yapılmadı. KAP 631 kod değişmedi; iki ek takvim saat örneği eşleşti, genel
-  saat dilimi/DST açık. [Bugünkü kanıt ve sınırlar](FULL_SESSION_ACCEPTANCE_2026-10-08.md).
+- **8 Ekim — elle devam ve geçmiş sorgusu CPU düzeltmesi üretimde:** Kullanıcı
+  “Hazırım” dedi; ilk saat kontrolü 13:13 TSİ, sabah gözlenmiş sayılmaz. Codex
+  takibi ve eski timer kapalı kalır. İlk host örnekleri 131,6–189,7 MiB RAM ve
+  yüksek CPU/swap baskısı gösterdi; gözlem/yük başlangıç sınırları sağlanmadı.
+  Kullanılmayan request-local HTTP/TLS kurulumu kaldırıldı: **`f1d832bd`,
+  11:26:37 UTC yalnız API yayını / 11:27:33 UTC bağımsız kabul**. Yerelde
+  **1.755 Python testi/bir atlama**, aynı kaynakta beş CI ve iki imaj yayın işi
+  geçti. Diğer dört servis, 15 tablo, üç gönderilmiş test olayı, tek kullanıcı
+  listesi ve özel yapılandırma korundu; kabul 23 seçilmiş kaynak dosyasını
+  doğruladı. **1.317.625.856 bayt** taze binary SQLite yedeği sunucu dışında
+  integrity ve bağımsız restore/parmak iziyle doğrulandı; geçici sunucu snapshot'ı
+  hedefli temizlendi. Yayın sonrası üç kısa örnekte RAM 278,21 / 236,64 / 239,64
+  MiB, CPU %79,67 / %75,82, load1m 4,00 / 3,62 / 3,33 idi. Bu yeniden başlatma
+  sonrası örnekler sürekli kapasiteyi veya yalnız düzeltmenin etkisini kanıtlamaz.
+  **11:39:26 UTC kontrol: 168,13 MiB RAM, CPU başına load1m 2,3213 ve
+  7.117.983.744 bayt boş alan.** Hem 192 MiB gözlem hem 256 MiB yük kapısı
+  başarısız; yeni gözlem paketi aktarılmadı, gözlem/yük başlatılmadı, test kuralı/lease
+  oluşturulmadı. **11:47:01–15 UTC son örnekler 146,43 / 146,27 / 159,65 MiB
+  RAM, %94,51 / %98,49 CPU ve load1m 3,81 / 3,99 / 3,91** gösterdi. İlk
+  236–278 MiB örnekler kalıcı kazanç olmadı; sürdürülebilir CPU/kapasite kabulü
+  sağlanmadı. Yeni gözlem veya yük başlatılmadı. Sonuç `NOT_STARTED_RESOURCE_GUARD`.
+  11:52:08 UTC bağımsız son kontrolde beş servis sağlıklı ve korunan kimlikler
+  değişmemişti; RAM 179,86 MiB, eski timer kapalı, yeni gözlem/yük birimleri ve
+  TEST kuralı/lease yoktu. Yeni 15 dakikalık yük çalıştırıcısı henüz tamamlanmadı;
+  gözlem taslağının RSS namespace düzeltmesi ve yeni inceleme manifesti de gerekir.
+  14:30:58 TSİ ekranında
+  480/805 taze aday, 101 hazır seri/775 bekleyen iş görüldü; anlık ve örtüşen
+  sayaçlar tam seans kapsamı değildir. KAP 631 kod değişmedi; ekim takvim
+  örnekleri ekranda eşleşti, genel saat dilimi/DST açık.
+  [Bugünkü kanıt ve sınırlar](FULL_SESSION_ACCEPTANCE_2026-10-08.md).
 - **7 Ekim — veri kalitesi düzeltmeleri üretimde; yük kabulü kaynak sınırında:** Kullanıcı tam BIST,
   eşzamanlı 3.000 alarm, gün boyu süreklilik, hacim ve takvim saatini doğrulamamızı
   istedi. Dört canlı geçmiş sorgusunda 200 mumun doğal hacmi yok; sağlayıcı
