@@ -1,4 +1,4 @@
-import type { AdvancedAlarmRule, AdvancedAlarmWrite, AlarmCategory, AlarmField, AlarmSymbol, AlarmTimeframe, CompareOp, Condition, ConditionGroup, ConditionLeaf, FieldRef } from "./api/advanced-alarms-api"
+import type { AdvancedAlarmRule, AdvancedAlarmWrite, AlarmCategory, AlarmField, AlarmSymbol, AlarmTimeframe, CompareOp, Condition, ConditionGroup, ConditionLeaf, FieldRef, ServerWatchlist } from "./api/advanced-alarms-api"
 
 export const CATEGORY_LABELS: Record<AlarmCategory, string> = { price: "Fiyat", technical: "Teknik", watchlist: "İzleme listesi" }
 export const TIMEFRAME_LABELS: Record<AlarmTimeframe, string> = { "1m": "1 dakika", "5m": "5 dakika", "15m": "15 dakika", "30m": "30 dakika", "1h": "1 saat", "4h": "4 saat", "1d": "1 gün", "1wk": "1 hafta", "1mo": "1 ay" }
@@ -11,7 +11,10 @@ export const defaultLeaf = (category: AlarmCategory = "technical"): ConditionLea
 
 export interface AdvancedDraft extends Omit<AdvancedAlarmWrite, "symbols" | "revision"> { bist: string; crypto: string }
 export function emptyAdvancedDraft(category: AlarmCategory = "price"): AdvancedDraft {
-    return { name: "", category, scope: category === "watchlist" ? "all_bist" : "symbols", bist: "", crypto: "", watchlist_id: null, timeframe: "1m", trigger: "intrabar", condition: defaultLeaf(category), mode: "on_enter", cooldown_seconds: 60, enabled: true, notify_telegram: false }
+    return { name: "", category, scope: category === "watchlist" ? "watchlist" : "symbols", bist: "", crypto: "", watchlist_id: null, timeframe: "1m", trigger: "intrabar", condition: defaultLeaf(category), mode: "on_enter", cooldown_seconds: 60, enabled: true, notify_telegram: false }
+}
+export function draftForWatchlist(list: Pick<ServerWatchlist, "id" | "name">, conditionType: "price" | "technical" = "technical"): AdvancedDraft {
+    return { ...emptyAdvancedDraft("watchlist"), watchlist_id: list.id, condition: defaultLeaf(conditionType) }
 }
 export function parseAlarmSymbols(bist: string, crypto: string): AlarmSymbol[] {
     const rows: AlarmSymbol[] = []
@@ -26,6 +29,14 @@ export function parseAlarmSymbols(bist: string, crypto: string): AlarmSymbol[] {
     }
     if (rows.length > 2000) throw new Error("Bir liste en fazla 2.000 sembol içerebilir.")
     return rows
+}
+export function mergeWatchlistSnapshot(bist: string, crypto: string, market: "BIST" | "Kripto", snapshot: string[]) {
+    if (!Array.isArray(snapshot) || !snapshot.length || snapshot.length > 2000 || snapshot.some(symbol => typeof symbol !== "string" || !symbol.trim())) {
+        throw new Error("Sembol listesi alınamadı veya 2.000 sembol sınırını aşıyor. Mevcut üyeler korundu.")
+    }
+    const added = snapshot.join(", ")
+    const symbols = parseAlarmSymbols(market === "BIST" ? `${bist}, ${added}` : bist, market === "Kripto" ? `${crypto}, ${added}` : crypto)
+    return { bist: symbols.filter(row => row.market_type === "BIST").map(row => row.symbol).join(", "), crypto: symbols.filter(row => row.market_type === "Kripto").map(row => row.symbol).join(", "), count: symbols.length }
 }
 export function validateTree(tree: Condition): void {
     let leaves = 0, nodes = 0

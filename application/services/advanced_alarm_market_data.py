@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import math
 import random
 import re
@@ -26,9 +27,10 @@ import pandas as pd
 
 from application.services.advanced_alarm_conditions import (
     TIMEFRAMES,
-    condition_fields,
-    evaluate_condition,
+    PreparedCondition,
+    evaluate_prepared_condition,
     field_key,
+    prepare_condition,
 )
 from application.services.advanced_alarm_data_cache import MAX_BARS, MarketCache
 from application.services.advanced_alarm_data_provider import NativeMarketProvider
@@ -48,6 +50,8 @@ MAX_SERIES = 4096
 MAX_REFS = 128
 MAX_VALUE_CELLS = 120000
 MAX_REQUESTS = 18000
+MAX_CHART_REQUESTS = 128
+CHART_LEASE_SECONDS = 120
 DURATIONS = {**SECONDS, "1d": 86400, "1wk": 604800, "1mo": 2678400}
 Key = tuple[str, str, str]  # market, symbol, native timeframe
 
@@ -90,7 +94,7 @@ class AdvancedMarketData:
         self._reset_count = 0
         self._symbol_resets: dict[tuple[str, str], int] = {}
         self._rules: dict[str, tuple[dict, ...] | None] = {}
-        self._plans: dict[tuple, tuple[dict, list[dict]]] = {}
+        self._plans: dict[tuple, tuple[dict, list[dict], PreparedCondition]] = {}
         self._universe: tuple[dict, ...] = ()
         self._universe_due = 0.0
         self._global_refs: dict[str, dict[str, dict]] = {}
@@ -98,9 +102,13 @@ class AdvancedMarketData:
         self._explicit_bist: set[str] = set()
         self._crypto: set[str] = set()
         self._requests: OrderedDict[Key, Work] = OrderedDict()
+        self._chart_leases: OrderedDict[Key, float] = OrderedDict()
+        self._calculation_inputs: dict[Key, tuple] = {}
         self._active: set[Key] = set()
         self._requested_total = 0
         self._series: OrderedDict[Key, tuple[Series, Series | None]] = OrderedDict()
+        self._series_sizes: dict[Key, int] = {}
+        self._value_cells = 0
         self._hot: OrderedDict[Key, pd.DataFrame] = OrderedDict()
         self._quotes: dict[tuple[str, str], tuple[Quote, Quote | None]] = {}
         self._pending: dict[tuple[str, str], list[dict]] = {}
@@ -130,15 +138,23 @@ class AdvancedMarketData:
         explicit, crypto = set(), set()
         intern: dict[tuple, tuple[dict, ...]] = {}
         intern_refs: dict[tuple, list[dict]] = {}
+        prepared_plans = {}
         for rule in rules:
             if not rule.get("enabled", True):
                 continue
-            refs = condition_fields(rule["condition"], rule["timeframe"])
+            condition_id = (rule["timeframe"], json.dumps(rule["condition"], sort_keys=True))
+            if condition_id not in prepared_plans:
+                prepared_plans[condition_id] = prepare_condition(
+                    rule["condition"], rule["timeframe"]
+                )
+            prepared = prepared_plans[condition_id]
+            refs = [dict(ref) for ref in prepared.fields]
             signature = tuple(field_key(ref, rule["timeframe"]) for ref in refs)
             intern_refs.setdefault(signature, refs.copy())
             plans[(str(rule["id"]), rule.get("revision", 0))] = (
                 rule["condition"],
                 intern_refs[signature],
+                prepared,
             )
             # Bar-close price also requires the real primary candle series.
             if rule.get("trigger") == "bar_close" or rule.get("mode") == "once_per_bar":
@@ -219,18 +235,46 @@ class AdvancedMarketData:
         self._wake.set()
 
     def _rebuild_requests(self) -> None:
+        now = self._clock()
+        self._chart_leases = OrderedDict(
+            (key, expires) for key, expires in self._chart_leases.items() if expires > now
+        )
         active = set(self._local_refs)
         for member in self._universe:
             for tf in self._global_refs:
                 active.add(("BIST", member["symbol"], tf))
-        desired = set(active)
-        if self.settings.advanced_alarm_all_bist_enabled:
-            desired.update(("BIST", member["symbol"], "1m") for member in self._universe)
+        # Universe quotes remain continuous. Native candles are needed only by
+        # actual conditions and recently viewed charts, not by every price rule.
+        desired = active | set(self._chart_leases)
         self._active = active
         self._requested_total = len(desired)
+        ordered = sorted(active)[:MAX_REQUESTS]
+        ordered.extend(sorted(desired - active)[: max(0, MAX_REQUESTS - len(ordered))])
         self._requests = OrderedDict(
-            (key, self._requests.get(key, Work())) for key in sorted(desired)[:MAX_REQUESTS]
+            (key, self._requests[key] if key in self._requests else Work(due=now))
+            for key in ordered
         )
+        for key in list(self._series):
+            if key not in self._requests:
+                self._forget_series(key)
+        for store in (self._hot, self._calculation_inputs):
+            for key in list(store):
+                if key not in self._requests:
+                    store.pop(key, None)
+
+    def _forget_series(self, key: Key) -> None:
+        self._series.pop(key, None)
+        self._calculation_inputs.pop(key, None)
+        self._value_cells -= self._series_sizes.pop(key, 0)
+
+    def _store_series(self, key: Key, pair: tuple[Series, Series | None]) -> None:
+        self._forget_series(key)
+        cells = sum(len(point.values) for series in pair if series for point in series.points)
+        self._series[key] = pair
+        self._series_sizes[key] = cells
+        self._value_cells += cells
+        while len(self._series) > MAX_SERIES or self._value_cells > MAX_VALUE_CELLS:
+            self._forget_series(next(iter(self._series)))
 
     def symbols(self, rule_id) -> tuple[dict, ...]:
         with self._lock:
@@ -278,6 +322,9 @@ class AdvancedMarketData:
             # Fixed workers use native provider timeouts. Do not abandon an in-flight thread.
             for thread in self._threads:
                 thread.join()
+            close_provider = getattr(self._provider, "close", None)
+            if close_provider is not None:
+                close_provider()
             self._cache.close()
             with self._lock:
                 self._threads.clear()
@@ -295,10 +342,13 @@ class AdvancedMarketData:
         self._quotes.clear()
         self._pending.clear()
         self._series.clear()
+        self._series_sizes.clear()
+        self._value_cells = 0
         self._hot.clear()
+        self._calculation_inputs.clear()
         self._state, self._message = state, message
         for work in self._requests.values():
-            work.due = 0
+            work.due = self._clock()
 
     def _connection_loop(self) -> None:
         try:
@@ -366,7 +416,11 @@ class AdvancedMarketData:
         with self._lock:
             wanted = tuple(
                 sorted(self._explicit_bist)
-                + sorted({item["symbol"] for item in self._universe} - self._explicit_bist)
+                + sorted(
+                    ({item["symbol"] for item in self._universe} - self._explicit_bist)
+                    if needs_universe
+                    else ()
+                )
             )[: self.settings.advanced_alarm_max_symbols]
             connection = self._connection
         if connection and (not connection.connected or wanted != self._subscriptions):
@@ -486,20 +540,22 @@ class AdvancedMarketData:
         refs.setdefault(f"close:{timeframe}::", {"field": "close", "timeframe": timeframe})
         return list(refs.values())[:MAX_REFS]
 
-    def _take_work(self) -> tuple[Key, list[dict], int] | None:
+    def _take_work(self) -> tuple[Key, list[dict], int, Work] | None:
         now = self._clock()
         with self._lock:
+            if any(expires <= now for expires in self._chart_leases.values()):
+                self._rebuild_requests()
             due = [key for key, work in self._requests.items() if not work.busy and work.due <= now]
             if not due:
                 return None
-            # Three active turns followed by one background turn; no starvation in
-            # either direction when thousands of all-universe minute jobs are due.
+            # Three alarm turns followed by one chart turn; sharing a chart with
+            # an alarm still costs only one provider job.
             self._work_turn += 1
             prefer_active = self._work_turn % 4 != 0
             preferred = [key for key in due if (key in self._active) == prefer_active]
             key = min(preferred or due, key=lambda k: self._requests[k].due)
             self._requests[key].busy = True
-            return key, self._refs(key), self._reset_count
+            return key, self._refs(key), self._reset_count, self._requests[key]
 
     def _history_loop(self) -> None:
         while not self._stop.is_set():
@@ -510,13 +566,32 @@ class AdvancedMarketData:
                 self._wake.wait(1)
                 self._wake.clear()
 
-    def fetch_history(self, key: Key, refs: list[dict], generation: int) -> None:
+    def fetch_history(
+        self, key: Key, refs: list[dict], generation: int, selected_work: Work | None = None
+    ) -> None:
         """Bounded I/O worker seam. Late results never resurrect a stopped/old account."""
         market, symbol, timeframe = key
         now = self._clock()
         with self._lock:
             symbol_generation = self._symbol_resets.get((market, symbol), 0)
+            selected_work = selected_work or self._requests.get(key)
+            if selected_work is None or self._requests.get(key) is not selected_work:
+                return
+            refs_signature = tuple(sorted(field_key(ref, timeframe) for ref in refs))
+
+        def obsolete():
+            return (
+                self._stop.is_set()
+                or generation != self._reset_count
+                or symbol_generation != self._symbol_resets.get((market, symbol), 0)
+                or self._requests.get(key) is not selected_work
+                or refs_signature
+                != tuple(sorted(field_key(ref, timeframe) for ref in self._refs(key)))
+            )
+
         try:
+            if obsolete():
+                return
             provider_epoch = self._provider.epoch() if market == "BIST" else None
             if key not in self._hot:
                 try:
@@ -528,7 +603,7 @@ class AdvancedMarketData:
                         cached.attrs["timeframe"] = timeframe
                         cached = validate_frame(cached, timeframe, market, self._clock())
                         with self._lock:
-                            if generation == self._reset_count and not self._stop.is_set():
+                            if not obsolete():
                                 self._hot[key] = cached
                                 while len(self._hot) > MAX_HOT_SERIES:
                                     self._hot.popitem(last=False)
@@ -538,38 +613,56 @@ class AdvancedMarketData:
             frame = validate_frame(raw, timeframe, market, self._clock())
             with self._lock:
                 anchors = tuple(
-                    {
-                        point.end
-                        for tf in TIMEFRAMES
-                        if tf != timeframe
-                        for pair in [self._series.get((market, symbol, tf))]
-                        if pair
-                        for point in [p for p in pair[0].points if p.confirmed][-2:]
-                    }
+                    sorted(
+                        {
+                            point.end
+                            for tf in TIMEFRAMES
+                            if tf != timeframe
+                            for pair in [self._series.get((market, symbol, tf))]
+                            if pair
+                            for point in [p for p in pair[0].points if p.confirmed][-2:]
+                        }
+                    )
                 )
-            result = calculate_series(
-                frame, timeframe, market, refs, self._clock(), anchors=anchors
+                old_frame = self._hot.get(key)
+                old_result = self._series.get(key, (None, None))[0]
+                # Full history participates: a revision outside the last four
+                # bars must still recalculate indicators and reset continuity.
+                same_frame = bool(
+                    old_frame is not None
+                    and old_frame.equals(frame)
+                    and old_frame.attrs.get("volume_verified") == frame.attrs.get("volume_verified")
+                )
+                inputs = (refs_signature, anchors)
+                reusable = bool(
+                    same_frame
+                    and old_result
+                    and self._calculation_inputs.get(key) == inputs
+                    and not any(
+                        old_result.received < point.end <= self._clock()
+                        for point in old_result.points
+                    )
+                )
+            result = (
+                replace(old_result, received=self._clock())
+                if reusable
+                else calculate_series(
+                    frame, timeframe, market, refs, self._clock(), anchors=anchors
+                )
             )
             if market == "BIST" and self._provider.epoch() != provider_epoch:
                 return
-            if (
-                self._stop.is_set()
-                or generation != self._reset_count
-                or symbol_generation != self._symbol_resets.get((market, symbol), 0)
-            ):
+            if obsolete():
                 return
             try:
-                self._cache.save(":".join(key), candles(frame), result.received)
-                self._cache_bytes = self._cache.size()
-                self._storage_error = False
+                if not same_frame or self._storage_error:
+                    self._cache.save(":".join(key), candles(frame), result.received)
+                    self._cache_bytes = self._cache.size()
+                    self._storage_error = False
             except Exception:
                 self._storage_error = True
             with self._lock:
-                if (
-                    self._stop.is_set()
-                    or generation != self._reset_count
-                    or symbol_generation != self._symbol_resets.get((market, symbol), 0)
-                ):
+                if obsolete():
                     return
                 previous = self._series.get(key, (None, None))[0]
                 previous_sample = self._series.get(key, (None, None))[1]
@@ -609,7 +702,7 @@ class AdvancedMarketData:
                     self._quotes.pop(market_symbol, None)
                     for other in list(self._series):
                         if other[:2] == market_symbol:
-                            self._series.pop(other, None)
+                            self._forget_series(other)
                     previous = previous_sample = None
                 if previous and (
                     previous.version != result.version or previous.source_time != result.source_time
@@ -617,21 +710,9 @@ class AdvancedMarketData:
                     previous_sample = previous
                 elif previous:
                     result = replace(result, changed=previous.changed)
-                self._series[key] = (result, previous_sample)
-                self._series.move_to_end(key)
-                while len(self._series) > MAX_SERIES:
-                    self._series.popitem(last=False)
-                cells = sum(
-                    sum(len(point.values) for point in series.points)
-                    for pair in self._series.values()
-                    for series in pair
-                    if series is not None
-                )
-                while cells > MAX_VALUE_CELLS:
-                    _, removed = self._series.popitem(last=False)
-                    cells -= sum(
-                        len(point.values) for series in removed if series for point in series.points
-                    )
+                self._store_series(key, (result, previous_sample))
+                if key in self._series:
+                    self._calculation_inputs[key] = inputs
                 self._hot[key] = frame
                 self._hot.move_to_end(key)
                 while len(self._hot) > MAX_HOT_SERIES:
@@ -644,11 +725,11 @@ class AdvancedMarketData:
         except Exception as exc:
             with self._lock:
                 work = self._requests.get(key)
-                if work:
+                if work and not obsolete():
                     work.failures += 1
                     work.reason = exc.reason if isinstance(exc, SeriesError) else "provider"
                     work.due = now + min(300, 10 * 2 ** min(work.failures, 5))
-                    self._series.pop(key, None)
+                    self._forget_series(key)
                     self._hot.pop(key, None)
                     market_symbol = (market, symbol)
                     self._symbol_resets[market_symbol] = (
@@ -656,8 +737,8 @@ class AdvancedMarketData:
                     )
         finally:
             with self._lock:
-                if key in self._requests:
-                    self._requests[key].busy = False
+                if self._requests.get(key) is selected_work:
+                    selected_work.busy = False
 
     def _unknown(self, market: str, symbol: str, reason: str) -> dict:
         messages = {
@@ -704,11 +785,12 @@ class AdvancedMarketData:
         if market == "BIST" and self._state == "auth_required":
             return self._unknown(market, name, "auth")
         plan = self._plans.get((str(rule.get("id")), rule.get("revision", 0)))
-        refs = (
-            plan[1]
+        prepared = (
+            plan[2]
             if plan and plan[0] == rule["condition"]
-            else condition_fields(rule["condition"], timeframe)
+            else prepare_condition(rule["condition"], timeframe)
         )
+        refs = plan[1] if plan and plan[2] is prepared else prepared.fields
         closed = rule["trigger"] == "bar_close"
         data = {}
         for ref in refs:
@@ -797,7 +879,7 @@ class AdvancedMarketData:
             bar_time = primary[0].points[-1].time if primary else None
             observed = newest
             observation = ""  # Filled from the references actually used below.
-        result = evaluate_condition(rule["condition"], resolve, timeframe)
+        result = evaluate_prepared_condition(prepared, resolve)
         if not result["ready"]:
             return self._unknown(market, name, "warming")
         if not closed:
@@ -823,12 +905,15 @@ class AdvancedMarketData:
             raise ValueError("Geçersiz mum isteği.")
         key = (market_type, symbol, timeframe)
         with self._lock:
+            self._chart_leases[key] = self._clock() + CHART_LEASE_SECONDS
+            self._chart_leases.move_to_end(key)
+            while len(self._chart_leases) > MAX_CHART_REQUESTS:
+                self._chart_leases.popitem(last=False)
+            self._rebuild_requests()
             frame = self._hot.get(key)
             pair = self._series.get(key)
             generation = self._reset_count
             if frame is None:
-                if key not in self._requests and len(self._requests) < MAX_REQUESTS:
-                    self._requests[key] = Work()
                 # Existing provider failures retain their retry backoff on HTTP polls.
                 self._wake.set()
         cached_received = None
@@ -962,6 +1047,7 @@ class AdvancedMarketData:
                             "sequence": quote.sequence if quote else None,
                         },
                         "history_1m": {
+                            "requested": work is not None,
                             "state": "invalidated"
                             if invalidated
                             else "missing"
@@ -1055,11 +1141,23 @@ class AdvancedMarketData:
                 },
                 "history_requested": max(self._requested_total, len(self._requests)),
                 "history_scheduled": len(self._requests),
+                "history_alarm_series": len(self._active),
+                "history_chart_series": len(set(self._chart_leases) - self._active),
+                "history_policy": "alarm_requirements_and_recent_charts",
                 "history_pending": sum(
                     work.busy or work.due <= now for work in self._requests.values()
                 ),
+                "history_oldest_pending_seconds": max(
+                    (
+                        max(0, now - work.due)
+                        for work in self._requests.values()
+                        if work.busy or work.due <= now
+                    ),
+                    default=0,
+                ),
                 "history_capacity": MAX_SERIES,
                 "indicator_value_capacity": MAX_VALUE_CELLS,
+                "indicator_value_count": self._value_cells,
                 "queue_coalesced": self._coalesced,
                 "reconnect_attempts": self._attempts,
                 "disconnects": self._disconnects,

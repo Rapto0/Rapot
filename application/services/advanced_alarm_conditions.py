@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Any
 
 TIMEFRAMES = frozenset({"1m", "5m", "15m", "30m", "1h", "4h", "1d", "1wk", "1mo"})
@@ -32,7 +34,7 @@ MAX_DEPTH = 4
 MAX_LEAVES = 32
 MAX_NODES = 63
 MAX_PERIOD = 200
-Resolver = Callable[[dict[str, Any]], tuple[float | None, float | None]]
+Resolver = Callable[[Mapping[str, Any]], tuple[float | None, float | None]]
 
 
 def _number(value: Any) -> float:
@@ -121,23 +123,43 @@ def field_key(ref: dict[str, Any], default_timeframe: str) -> str:
     )
 
 
-def condition_fields(condition: dict, default_timeframe: str) -> list[dict[str, Any]]:
+@dataclass(frozen=True, slots=True)
+class PreparedCondition:
+    """Immutable expression plan; never retains observations or provider state."""
+
+    tree: tuple
+    fields: tuple[Mapping[str, Any], ...]
+    keys: tuple[str, ...]
+
+
+def prepare_condition(condition: dict, default_timeframe: str) -> PreparedCondition:
+    """Validate once and index repeated references for a configured rule revision."""
     if default_timeframe not in TIMEFRAMES:
         raise ValueError("Alarm periyodu desteklenmiyor.")
-    fields: dict[str, dict[str, Any]] = {}
+    indices: dict[str, int] = {}
+    fields = []
 
-    def visit(node: dict) -> None:
+    def operand(raw):
+        if not isinstance(raw, dict):
+            return raw  # Validation canonicalizes numeric constants to float.
+        ref = {**raw, "timeframe": raw.get("timeframe", default_timeframe)}
+        key = field_key(ref, default_timeframe)
+        if key not in indices:
+            indices[key] = len(fields)
+            fields.append(MappingProxyType(ref))
+        return indices[key]
+
+    def visit(node: dict) -> tuple:
         if node["op"] in {"and", "or"}:
-            for child in node["children"]:
-                visit(child)
-        else:
-            for raw in (node["left"], node["right"]):
-                if isinstance(raw, dict):
-                    ref = {**raw, "timeframe": raw.get("timeframe", default_timeframe)}
-                    fields[field_key(ref, default_timeframe)] = ref
+            return node["op"], tuple(visit(child) for child in node["children"])
+        return node["op"], operand(node["left"]), operand(node["right"])
 
-    visit(validate_condition(condition))
-    return list(fields.values())
+    tree = visit(validate_condition(condition))
+    return PreparedCondition(tree=tree, fields=tuple(fields), keys=tuple(indices))
+
+
+def condition_fields(condition: dict, default_timeframe: str) -> list[dict[str, Any]]:
+    return [dict(ref) for ref in prepare_condition(condition, default_timeframe).fields]
 
 
 def evaluate_condition(
@@ -149,12 +171,18 @@ def evaluate_condition(
     owns freshness, provider time and bar-finality checks. Repeated field reads
     within a tree are shared. Crossing needs two actual, contiguous observations.
     """
-    tree = validate_condition(condition)
-    refs = condition_fields(tree, default_timeframe)
-    observations: dict[str, tuple[float | None, float | None]] = {}
+    return evaluate_prepared_condition(prepare_condition(condition, default_timeframe), resolver)
+
+
+def evaluate_prepared_condition(plan: PreparedCondition, resolver: Resolver) -> dict[str, Any]:
+    """Evaluate a validated plan against this call's observations, without AST rebuilding.
+
+    The caller still owns freshness, continuity, credentials and bar-finality
+    checks for every snapshot. A plan may be shared; an evaluated result may not.
+    """
+    observations: list[tuple[float | None, float | None]] = []
     values: dict[str, float] = {}
-    for ref in refs:
-        key = field_key(ref, default_timeframe)
+    for ref, key in zip(plan.fields, plan.keys, strict=True):
         pair = resolver(ref)
         if not isinstance(pair, (tuple, list)) or len(pair) != 2:
             pair = (None, None)
@@ -165,31 +193,29 @@ def evaluate_condition(
                 normalized.append(_number(item))
             except ValueError:
                 normalized.append(None)
-        observations[key] = (normalized[0], normalized[1])
+        observations.append((normalized[0], normalized[1]))
         if normalized[0] is not None:
             values[key] = normalized[0]
-    missing = any(pair[0] is None for pair in observations.values())
+    missing = any(pair[0] is None for pair in observations)
 
-    def operand(ref: dict | float, index: int) -> float | None:
-        return (
-            observations[field_key(ref, default_timeframe)][index] if isinstance(ref, dict) else ref
-        )
+    def operand(ref: int | float, index: int) -> float | None:
+        return observations[ref][index] if isinstance(ref, int) else ref
 
-    def compare(node: dict, index: int) -> bool | None:
-        if node["op"] in {"and", "or"}:
-            children = [compare(child, index) for child in node["children"]]
+    def compare(node: tuple, index: int) -> bool | None:
+        op = node[0]
+        if op in {"and", "or"}:
+            children = [compare(child, index) for child in node[1]]
             if any(child is None for child in children):
                 return None
-            return all(children) if node["op"] == "and" else any(children)
-        left, right = operand(node["left"], index), operand(node["right"], index)
+            return all(children) if op == "and" else any(children)
+        left, right = operand(node[1], index), operand(node[2], index)
         if left is None or right is None:
             return None
-        op = node["op"]
         if op in {"crossed_above", "crossed_below"}:
             if index:
                 # Crossing is an event on this pair, not an assumed prior event.
                 return False
-            previous_left, previous_right = operand(node["left"], 1), operand(node["right"], 1)
+            previous_left, previous_right = operand(node[1], 1), operand(node[2], 1)
             if previous_left is None or previous_right is None:
                 return None
             if op == "crossed_above":
@@ -205,8 +231,8 @@ def evaluate_condition(
             return left <= right
         return left == right
 
-    matched = None if missing else compare(tree, 0)
-    previous_matched = compare(tree, 1)
+    matched = None if missing else compare(plan.tree, 0)
+    previous_matched = compare(plan.tree, 1)
     return {
         "ready": matched is not None,
         "reason": None

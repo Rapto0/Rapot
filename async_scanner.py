@@ -184,7 +184,7 @@ async def process_symbol_async(symbol: str, df_daily, market_type: str) -> dict[
 
     for tf_code, tf_label in TIMEFRAMES:
         try:
-            df_resampled = resample_market_data(df_daily.copy(), tf_code, market_type)
+            df_resampled = resample_market_data(df_daily, tf_code, market_type)
             if df_resampled is None or len(df_resampled) < 20:
                 continue
 
@@ -387,6 +387,44 @@ def _normalize_scan_markets(
     return normalized or {"BIST", "Kripto"}
 
 
+async def _process_fetched_batch(
+    data: dict, batch: list[str], market_type: str, notify: bool
+) -> None:
+    """Keep daily frames and analysis results scoped to the current provider batch."""
+    record_scan_error(len(set(batch) - data.keys()))
+    eligible = []
+    # Reject stale data on receipt and again before each symbol's writes in
+    # process_signals_batch; prior AI work can age an otherwise fresh batch.
+    for symbol in batch:
+        if symbol not in data:
+            continue
+        frame = data[symbol]
+        if frame is None or frame.empty:
+            record_scan_error()
+        elif market_type == "BIST" and not is_dataframe_fresh(
+            frame, signal_guard_settings.BIST_MAX_DATA_AGE_SECONDS
+        ):
+            record_scan_error()
+            logger.warning("BIST veri tazeligi dogrulanamadi: %s", symbol)
+        else:
+            eligible.append(symbol)
+    tasks = [process_symbol_async(sym, data[sym], market_type) for sym in eligible]
+    # Await every child before closing accounting, even if one fails.
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    successful_results = []
+    for result in results:
+        if isinstance(result, asyncio.CancelledError):
+            raise result
+        if isinstance(result, BaseException):
+            if not isinstance(result, Exception):
+                raise result
+            record_scan_error()
+            logger.error("Sembol analizi basarisiz: %s", type(result).__name__)
+        else:
+            successful_results.append(result)
+    await process_signals_batch(successful_results, notify)
+
+
 async def scan_market_async(
     notify: bool = True,
     progress_callback: Callable | None = None,
@@ -411,8 +449,8 @@ async def scan_market_async(
     selected_markets = _normalize_scan_markets(markets)
     market_label = " + ".join(m for m in ("BIST", "Kripto") if m in selected_markets)
 
-    bist_data = {}
-    crypto_data = {}
+    # Summary counts need symbol identity only, not every historical DataFrame.
+    fetched_symbols = {"BIST": set(), "Kripto": set()}
     scan_error = ""
 
     try:
@@ -440,42 +478,11 @@ async def scan_market_async(
                     progress.symbols_scanned += len(batch)
                     if market_type == "BIST":
                         data = await fetch_multiple_bist_async(batch, batch_size=batch_size)
-                        bist_data.update(data)
                     else:
                         data = await fetch_multiple_crypto_async(batch, batch_size=batch_size)
-                        crypto_data.update(data)
-                    record_scan_error(len(set(batch) - data.keys()))
-                    eligible = []
-                    # Reject stale provider data on receipt, then recheck each symbol
-                    # before writes because earlier AI work can age this same batch.
-                    for symbol in batch:
-                        if symbol not in data:
-                            continue
-                        frame = data[symbol]
-                        if frame is None or frame.empty:
-                            record_scan_error()
-                        elif market_type == "BIST" and not is_dataframe_fresh(
-                            frame, signal_guard_settings.BIST_MAX_DATA_AGE_SECONDS
-                        ):
-                            record_scan_error()
-                            logger.warning("BIST veri tazeligi dogrulanamadi: %s", symbol)
-                        else:
-                            eligible.append(symbol)
-                    tasks = [process_symbol_async(sym, data[sym], market_type) for sym in eligible]
-                    # Await every child before closing accounting, even if one fails.
-                    results = await asyncio.gather(*tasks, return_exceptions=True)
-                    successful_results = []
-                    for result in results:
-                        if isinstance(result, asyncio.CancelledError):
-                            raise result
-                        if isinstance(result, BaseException):
-                            if not isinstance(result, Exception):
-                                raise result
-                            record_scan_error()
-                            logger.error("Sembol analizi basarisiz: %s", type(result).__name__)
-                        else:
-                            successful_results.append(result)
-                    await process_signals_batch(successful_results, notify)
+                    fetched_symbols[market_type].update(data)
+                    await _process_fetched_batch(data, batch, market_type, notify)
+                    del data  # Release this batch before waiting for the next provider call.
     except Exception as e:
         scan_error = str(e)
         logger.exception("Async tarama hatasi.")
@@ -488,8 +495,8 @@ async def scan_market_async(
     summary = (
         f"Tarama #{scan_num} {outcome_label[progress.status]}\n"
         f"Sure: {duration:.1f}s\n"
-        f"BIST: {len(bist_data)} sembol\n"
-        f"Kripto: {len(crypto_data)} sembol\n"
+        f"BIST: {len(fetched_symbols['BIST'])} sembol\n"
+        f"Kripto: {len(fetched_symbols['Kripto'])} sembol\n"
         f"Toplam Sinyal: {total_signals}\n"
         f"Piyasalar: {market_label}"
     )
@@ -501,8 +508,8 @@ async def scan_market_async(
         "error": scan_error or None,
         "scan_num": scan_num,
         "duration": duration,
-        "bist_count": len(bist_data),
-        "crypto_count": len(crypto_data),
+        "bist_count": len(fetched_symbols["BIST"]),
+        "crypto_count": len(fetched_symbols["Kripto"]),
         "total_signals": total_signals,
         "errors_count": progress.errors_count,
         "history_id": progress.history_id,

@@ -725,3 +725,165 @@ def test_unchanged_rule_refresh_does_not_reconfigure_provider_jobs(engine):
     repo.save_rule("admin", payload(revision=1, name="Yeni ad"), rule["id"])
     value.tick()
     assert hub.configurations == 2
+
+
+def test_state_restore_is_bounded_by_actual_tick_work_for_three_thousand_rules(engine, monkeypatch):
+    value, _ = engine
+    for category in ("price", "technical", "watchlist"):
+        seed_rules(category, 1000)
+    loaded = []
+    original = repo.load_states
+
+    def load(keys):
+        loaded.append(len(keys))
+        return original(keys)
+
+    monkeypatch.setattr(repo, "load_states", load)
+    value.tick()
+    assert value._runtime["evaluation"]["checked"] == 250
+    assert loaded == [128, 122]
+    assert len(value._states) == 250
+    value.tick()
+    assert loaded == [128, 122, 128, 122]
+    assert len(value._states) == 500
+
+
+def test_time_budget_prefetch_does_not_skip_unevaluated_mixed_watchlist_members(
+    engine, monkeypatch
+):
+    value, hub = engine
+    symbols = [
+        {"symbol": f"S{i}", "market_type": "BIST"}
+        if i % 2 == 0
+        else {"symbol": f"C{i}USDT", "market_type": "Kripto"}
+        for i in range(300)
+    ]
+    watchlist = repo.save_watchlist("admin", {"name": "Karma liste", "symbols": symbols})
+    repo.save_rule(
+        "admin",
+        payload(category="watchlist", scope="watchlist", symbols=[], watchlist_id=watchlist["id"]),
+    )
+    clock, seen, loaded = [10.0], [], []
+    value._clock = lambda: clock[0]
+    original, load = hub.snapshot, repo.load_states
+
+    def observe(rule, symbol, now):
+        seen.append(symbol)
+        clock[0] += 1
+        return original(rule, symbol, now=now)
+
+    def restore(keys):
+        loaded.append(len(keys))
+        return load(keys)
+
+    monkeypatch.setattr(hub, "snapshot", observe)
+    monkeypatch.setattr(repo, "load_states", restore)
+    for _ in range(3):
+        value.tick()
+        assert value._runtime["evaluation"]["checked"] == 1
+    assert seen == symbols[:3]
+    assert loaded == [128, 1, 1]
+    assert value._cursor == (0, 3)
+
+
+def test_blocked_test_owner_cannot_restart_normal_cursor_at_periodic_reload(engine, monkeypatch):
+    value, hub = engine
+    symbols = [{"symbol": symbol, "market_type": "BIST"} for symbol in ("THYAO", "GARAN", "EREGL")]
+    repo.save_rule("admin", payload(symbols=symbols))
+    repo.save_rule("__acceptance__:" + "a" * 32, payload())
+    clock, seen = [10.0], []
+    value._clock = lambda: clock[0]
+    monkeypatch.setattr(service, "MAX_EVALUATIONS_PER_TICK", 1)
+    original = hub.snapshot
+
+    def observe(rule, symbol, now):
+        seen.append((rule["owner"], symbol["symbol"]))
+        return original(rule, symbol, now=now)
+
+    monkeypatch.setattr(hub, "snapshot", observe)
+    for _ in range(3):
+        value.tick()
+        clock[0] += 6  # Every tick forces the external-writer refresh path.
+        assert value._lease_gate.status["blocked_rules"] == 1
+    assert seen == [("admin", symbol["symbol"]) for symbol in symbols]
+    assert hub.configurations == 1
+
+
+def test_repository_change_during_reload_remains_visible_on_next_tick(engine, monkeypatch):
+    value, hub = engine
+    saved = repo.save_rule("admin", payload())
+    original = repo.active_rules
+    calls = []
+
+    def load_then_edit():
+        rows = original()
+        calls.append(True)
+        if len(calls) == 1:
+            repo.save_rule("admin", payload(enabled=False, revision=1), saved["id"])
+        return rows
+
+    monkeypatch.setattr(repo, "active_rules", load_then_edit)
+    value.tick()
+    value.tick()
+    assert len(calls) == 2
+    assert hub.calls == 1 and value._runtime["evaluation"]["total"] == 0
+
+
+def test_cached_states_skip_reads_but_stale_observation_still_breaks_continuity(
+    engine, monkeypatch
+):
+    value, hub = engine
+    repo.save_rule("admin", payload())
+    value.tick()
+    monkeypatch.setattr(repo, "load_states", lambda _: pytest.fail("Known state must not reload"))
+    hub.current = snapshot(ready=False, matched=None, observation_id=None, reason="stale")
+    value.tick()
+    assert value.rules("admin")[0]["state"] == "error"
+    hub.current = snapshot(matched=True, observation_id="fresh-after-gap")
+    value.tick()
+    assert repo.events("admin")["events"] == []
+
+
+def test_active_condition_interning_does_not_share_api_edits_or_next_revisions():
+    first = repo.save_rule("admin", payload())
+    second = repo.save_rule("admin", payload())
+    active = repo.active_rules()
+    assert active[0]["condition"] is active[1]["condition"]
+    public = repo.list_rules("admin")
+    public[0]["condition"]["right"] = 999
+    assert public[1]["condition"]["right"] == 100
+    assert active[0]["condition"]["right"] == 100
+    changed = {"op": "gt", "left": {"field": "price"}, "right": 200}
+    repo.save_rule("admin", payload(revision=1, condition=changed), first["id"])
+    refreshed = {rule["id"]: rule for rule in repo.active_rules()}
+    assert refreshed[first["id"]]["revision"] == 2
+    assert refreshed[first["id"]]["condition"]["right"] == 200
+    assert refreshed[second["id"]]["condition"]["right"] == 100
+    assert refreshed[second["id"]]["condition"] is not active[0]["condition"]
+
+
+def test_job_iterator_keeps_one_membership_snapshot_when_live_universe_becomes_empty(
+    engine, monkeypatch
+):
+    value, hub = engine
+    saved = repo.save_rule("admin", payload())
+    value.tick()
+    value._cursor = (0, 0)
+    expected = tuple(hub.symbols(saved["id"]))
+    jobs, total = value._jobs()
+    lookups = []
+
+    def emptied(_):
+        lookups.append(True)
+        if len(lookups) > 2:
+            pytest.fail("A changed empty universe must not cause an unbounded traversal")
+        return ()
+
+    monkeypatch.setattr(hub, "symbols", emptied)
+    result = list(jobs)
+    assert [symbol for _, symbol, _ in result] == list(expected)
+    assert len(result) == total == len(expected)
+    assert not lookups
+    # The next tick's iterator observes the new empty membership normally.
+    next_jobs, next_total = value._jobs()
+    assert next_total == 0 and list(next_jobs) == []

@@ -379,12 +379,12 @@ def test_auth_failure_visible_sanitized_and_retry_bounded(hub):
     assert len(hub._provider.calls) == count
 
 
-def test_all_bist_continuous_without_rules_and_shared_rule_membership(hub):
+def test_all_bist_quotes_without_unused_candles_and_shared_rule_membership(hub):
     hub.settings.advanced_alarm_all_bist_enabled = True
     hub.configure([])
     hub.connection_step()
     assert hub.status()["subscribed_symbols"] == 2
-    assert set(hub._requests) == {("BIST", "GARAN", "1m"), ("BIST", "THYAO", "1m")}
+    assert not hub._requests
     many = [{**rule("rsi"), "id": i, "scope": "all_bist"} for i in range(3000)]
     hub.configure(many)
     assert hub.symbols(1) is hub.symbols(2999)
@@ -398,6 +398,8 @@ def test_active_and_background_history_have_fair_turns(hub):
     hub.configure(
         [{**rule("rsi"), "symbols": [{"market_type": "BIST", "symbol": f"S{i}"} for i in range(6)]}]
     )
+    for i in range(6, 12):
+        hub.history(f"S{i}")
     jobs = [hub._take_work()[0] for _ in range(8)]
     assert all(key in hub._active for key in jobs[:3])
     assert jobs[3] not in hub._active and jobs[7] not in hub._active
@@ -653,15 +655,17 @@ def test_unchanged_config_and_history_http_poll_preserve_retry_backoff(hub):
     assert hub._requests[key].due <= hub.time[0]
 
 
-def test_active_rule_promotes_failed_job_ahead_of_805_passive_histories(hub):
+def test_active_rule_promotes_failed_chart_without_unused_805_histories(hub):
     hub.settings.advanced_alarm_all_bist_enabled = True
     hub._set_universe(["THYAO", *[f"S{i}" for i in range(804)]])
     hub.configure([])
+    hub.history("THYAO")
+    hub.history("S0")
     target = ("BIST", "THYAO", "1m")
     hub._requests[target].due = NOW + 300
     hub._requests[target].reason = "provider"
     hub.configure([rule("rsi")])
-    assert len(hub._requests) == 805
+    assert len(hub._requests) == 2
     assert hub._take_work()[0] == target
     assert hub._take_work()[0] != target  # A busy active job cannot starve passive work.
 
@@ -824,6 +828,7 @@ def test_indicator_cache_value_budget_evicts_old_series(hub, monkeypatch):
     selected = rule("close")
     load(hub, selected)
     other = ("BIST", "GARAN", "1m")
+    hub.history("GARAN")
     hub.fetch_history(other, [{"field": "close", "timeframe": "1m"}], hub._reset_count)
     assert len(hub._series) == 1 and other in hub._series
 
@@ -933,3 +938,112 @@ def test_daily_primary_can_resolve_previous_session_minute_within_history_window
     result = snapshot(hub, selected)
     assert result["ready"]
     assert result["values"]["close:1m::"] == minute.Close.iloc[299]
+
+
+def test_chart_lease_expires_but_alarm_history_persists_and_is_shared(hub):
+    hub.configure([rule("rsi")])
+    hub.history("THYAO")
+    hub.history("GARAN")
+    assert hub.status()["history_scheduled"] == 2
+    assert hub.status()["history_alarm_series"] == 1
+    assert hub.status()["history_chart_series"] == 1
+    hub.time[0] += 121
+    job = hub._take_work()
+    assert job[0] == ("BIST", "THYAO", "1m")
+    assert set(hub._requests) == {job[0]}
+    hub.configure([])
+    assert not hub._requests and not hub._series and not hub._hot
+
+
+def test_chart_demand_is_bounded_and_cannot_displace_active_alarms(hub):
+    hub.configure([rule("rsi")])
+    for i in range(200):
+        hub.history(f"S{i}")
+    assert len(hub._chart_leases) == 128
+    assert len(hub._requests) == 129
+    assert ("BIST", "THYAO", "1m") in hub._requests
+    assert ("BIST", "S0", "1m") not in hub._requests
+
+
+def test_removed_demand_rejects_late_result_and_new_job_keeps_ownership(hub):
+    hub.configure([rule("rsi")])
+    hub._provider.block = threading.Event()
+    job = hub._take_work()
+    task = threading.Thread(target=hub.fetch_history, args=job)
+    task.start()
+    assert hub._provider.entered.wait(1)
+    hub.configure([])
+    hub.configure([rule("rsi")])
+    replacement = hub._requests[job[0]]
+    replacement.busy = True
+    hub._provider.block.set()
+    task.join(2)
+    assert not task.is_alive()
+    assert not hub._series and not hub._cache.data
+    assert replacement.busy
+
+
+def test_equal_provider_history_reuses_calculation_not_freshness_or_observation(hub, monkeypatch):
+    from application.services import advanced_alarm_market_data as market
+
+    counts = {"calculation": 0, "save": 0}
+    calculate, save = market.calculate_series, hub._cache.save
+
+    def counted_calculate(*args, **kwargs):
+        counts["calculation"] += 1
+        return calculate(*args, **kwargs)
+
+    def counted_save(*args, **kwargs):
+        counts["save"] += 1
+        return save(*args, **kwargs)
+
+    monkeypatch.setattr(market, "calculate_series", counted_calculate)
+    monkeypatch.setattr(hub._cache, "save", counted_save)
+    selected = rule("rsi")
+    load(hub, selected)
+    first = snapshot(hub, selected)
+    hub.time[0] += 10
+    load(hub, selected)
+    repeated = snapshot(hub, selected)
+    assert counts == {"calculation": 1, "save": 1}
+    assert repeated["observation_id"] == first["observation_id"]
+    assert repeated["observed_at"] == first["observed_at"]
+    assert hub._series[("BIST", "THYAO", "1m")][0].received == hub.time[0]
+    hub.time[0] += 180
+    load(hub, selected)
+    assert snapshot(hub, selected)["continuity_reason"] == "stale"
+
+
+def test_equal_crypto_candle_recalculates_at_real_closing_boundary(hub):
+    selected = {
+        **rule("close", trigger="bar_close"),
+        "symbols": [{"symbol": "BTCUSDT", "market_type": "Kripto"}],
+    }
+    hub.configure([selected])
+    key = ("Kripto", "BTCUSDT", "1m")
+    hub.fetch_history(key, hub._refs(key), hub._reset_count)
+    assert not hub._series[key][0].points[-1].confirmed
+    hub.time[0] += 60
+    hub.fetch_history(key, hub._refs(key), hub._reset_count)
+    assert hub._series[key][0].points[-1].confirmed
+
+
+def test_bist_volume_entitlement_change_invalidates_equal_price_calculation(hub):
+    selected = rule("volume", right=0)
+    load(hub, selected)
+    assert not snapshot(hub, selected)["ready"]
+    hub._provider.frames["1m"].attrs["volume_verified"] = True
+    hub.time[0] += 1
+    load(hub, selected)
+    assert snapshot(hub, selected)["ready"]
+
+
+@pytest.mark.parametrize("unit", ["ms", "us", "ns"])
+def test_native_validation_respects_datetime_resolution_and_session_boundaries(unit):
+    raw = frame()
+    raw.index = raw.index.as_unit(unit)
+    sparse = raw.drop(raw.index[-3])
+    checked = validate_frame(sparse, "1m", "BIST", NOW)
+    assert checked.attrs["native_gap_starts"] == (raw.index[-2].timestamp(),)
+    with pytest.raises(SeriesError, match="boşluğu"):
+        validate_frame(sparse, "1m", "Kripto", NOW)

@@ -100,7 +100,7 @@ def storage_status():
         return dict(result)
 
 
-def _rule(row):
+def _rule(row, *, condition=None):
     names = (
         "id",
         "owner",
@@ -120,7 +120,7 @@ def _rule(row):
     result = {name: getattr(row, name) for name in names}
     result.update(
         symbols=json.loads(row.symbols_json),
-        condition=json.loads(row.condition_json),
+        condition=json.loads(row.condition_json) if condition is None else condition,
         created_at=iso(row.created_at),
         updated_at=iso(row.updated_at),
         last_triggered_at=iso(row.last_triggered_at),
@@ -331,8 +331,9 @@ def delete_watchlist(owner, watchlist_id):
 
 
 def active_rules():
+    """Return engine-owned, read-only plans with batch-local shared input definitions."""
     with get_session_factory()() as session:
-        symbols, memberships = {}, {}
+        symbols, memberships, conditions = {}, {}, {}
 
         def intern(raw):
             digest = hashlib.sha256(raw.encode()).digest()
@@ -356,7 +357,11 @@ def active_rules():
         for row in session.scalars(
             select(Rule).where(Rule.enabled.is_(True), Rule.deleted_at.is_(None)).order_by(Rule.id)
         ).yield_per(50):
-            item = _rule(row)
+            # Exact stored JSON only: no revalidation or semantic normalization here.
+            # API/list responses still parse fresh trees and cannot mutate this batch.
+            if row.condition_json not in conditions:
+                conditions[row.condition_json] = json.loads(row.condition_json)
+            item = _rule(row, condition=conditions[row.condition_json])
             item["symbols"] = intern(row.symbols_json)
             if row.scope == "watchlist":
                 target = lists.get(row.watchlist_id)

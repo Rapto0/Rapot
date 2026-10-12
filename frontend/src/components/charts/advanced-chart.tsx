@@ -19,6 +19,7 @@ import { useSession } from "@/lib/hooks/use-session"
 import { MarketDataStatus } from "@/components/market-data-status"
 import { BORSAPY_INTERVALS, borsapyVolumeWarning, fetchBorsapyCandles, fetchBorsapyChartSnapshot, mergeBorsapyCandles, releaseBorsapyChart } from "@/lib/api/borsapy-chart-api"
 import { ChartDrawingTools } from "./chart-drawing-tools"
+import { ServerWatchlistPanel } from "./server-watchlist-panel"
 import { ChartDataError, hasDisplayableCandles } from "./chart-data-error"
 import { chartTimeZone, createChartTimeFormatters, type ChartTimeZone } from "@/lib/chart-time"
 import { cn } from "@/lib/utils"
@@ -688,6 +689,7 @@ export function AdvancedChartPage({
     const [showWatchlistMenu, setShowWatchlistMenu] = useState(false)
     const [activeUtilityPanel, setActiveUtilityPanel] = useState<RightUtilityPanelId | null>("alerts")
     const [watchlistsHydrated, setWatchlistsHydrated] = useState(false)
+    const [watchlistSource, setWatchlistSource] = useState<"server" | "local">("server")
     const [watchlistNotice, setWatchlistNotice] = useState<string | null>(null)
     const [watchlistDialog, setWatchlistDialog] = useState<WatchlistDialogState>(null)
     const [serverClockLabel, setServerClockLabel] = useState("--")
@@ -1114,7 +1116,7 @@ export function AdvancedChartPage({
         queryKey: ['watchlist-ticker', session?.user.username, session?.expiresAt],
         queryFn: fetchTicker,
         refetchInterval: 30000,
-        enabled: canUseBorsapy,
+        enabled: canUseBorsapy && showRightPanel && watchlistSource === "local",
     })
 
     const activeWatchlistBistSymbolsForQuery = useMemo(() => {
@@ -1134,7 +1136,7 @@ export function AdvancedChartPage({
     const { data: activeWatchlistBistQuotes, refetch: refetchActiveWatchlistBistQuotes } = useQuery({
         queryKey: ['watchlist-active-bist-quotes', session?.user.username, session?.expiresAt, ...activeWatchlistBistSymbolsForQuery],
         queryFn: ({ signal }) => fetchGlobalIndices(activeWatchlistBistSymbolsForQuery, { signal }),
-        enabled: canUseBorsapy && activeWatchlistBistSymbolsForQuery.length > 0,
+        enabled: canUseBorsapy && showRightPanel && watchlistSource === "local" && activeWatchlistBistSymbolsForQuery.length > 0,
         refetchInterval: 10000,
         staleTime: 10_000,
     })
@@ -1174,11 +1176,12 @@ export function AdvancedChartPage({
         queryFn: () => fetchSignals({ limit: 300 }),
         refetchInterval: WATCHLIST_UTILITY_SIGNAL_REFRESH_MS,
         staleTime: 30_000,
+        enabled: canUseBorsapy && showRightPanel && watchlistSource === "local" && activeUtilityPanel === "news",
     })
 
     const watchlistCryptoSymbols = useMemo(() => {
-        const symbols = new Set<string>(CRYPTO_WATCHLIST)
-        for (const list of watchlists) {
+        const symbols = new Set<string>()
+        for (const list of showRightPanel && watchlistSource === "local" ? watchlists.filter(item => item.id === activeWatchlistId) : []) {
             for (const row of list.rows) {
                 if (row.kind === "symbol" && row.marketType === "Kripto") {
                     symbols.add(row.rawSymbol.toUpperCase())
@@ -1189,7 +1192,7 @@ export function AdvancedChartPage({
             symbols.add(symbol.toUpperCase())
         }
         return Array.from(symbols)
-    }, [watchlists, marketType, symbol])
+    }, [watchlists, activeWatchlistId, showRightPanel, watchlistSource, marketType, symbol])
 
     // Live crypto prices for watchlist
     const cryptoPrices = useBinanceTicker(watchlistCryptoSymbols, {
@@ -2765,8 +2768,14 @@ export function AdvancedChartPage({
 
             {/* Right Panel - Watchlist (TradingView Style) */}
             {showRightPanel && (
-                <div className="flex w-full shrink-0 border-t border-border/30 bg-surface text-foreground lg:w-[300px] lg:border-l lg:border-t-0 xl:w-[320px]">
+                <div className="flex w-full shrink-0 flex-col border-t border-border/30 bg-surface text-foreground lg:w-[300px] lg:border-l lg:border-t-0 xl:w-[320px]">
+                    <div className="flex shrink-0 gap-1 border-b border-border p-2" aria-label="İzleme listesi kaynağı">
+                        <button type="button" aria-pressed={watchlistSource === "server"} onClick={() => setWatchlistSource("server")} className={cn("min-h-11 flex-1 rounded px-2 text-xs", watchlistSource === "server" ? "bg-raised text-primary" : "text-muted-foreground")}>Sunucu listeleri</button>
+                        <button type="button" aria-pressed={watchlistSource === "local"} onClick={() => setWatchlistSource("local")} className={cn("min-h-11 flex-1 rounded px-2 text-xs", watchlistSource === "local" ? "bg-raised text-primary" : "text-muted-foreground")}>Eski yerel listeler</button>
+                    </div>
+                    {watchlistSource === "server" ? <ServerWatchlistPanel key={`${session?.user.username}:${session?.expiresAt}`} symbol={symbol} market={marketType} onSelect={handleSymbolSelect} /> : <div className="flex min-h-0 flex-1">
                     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                        <p className="border-b border-border px-3 py-2 text-[11px] text-muted-foreground">Bu listeler yalnız bu tarayıcıda saklanır. Sunucu listelerini etkilemez; alarm merkezinden elle kopyalayabilirsiniz.</p>
                         <div className="relative flex items-center gap-1 px-2 py-2 border-b border-border">
                             <div className="relative">
                                 <button
@@ -2958,7 +2967,7 @@ export function AdvancedChartPage({
                                                 <span>{symbol} için sunucu alarmı oluştur</span><ArrowUpRight className="h-4 w-4 shrink-0" />
                                             </Link>
                                             {activeWatchlist && <Link href={`/alarms?watchlist=${encodeURIComponent(activeWatchlist.id)}`} className="flex min-h-11 items-center justify-between rounded border border-border px-2 hover:bg-raised">
-                                                <span>Bu listeyle alarm formunu aç</span><ArrowUpRight className="h-4 w-4 shrink-0" />
+                                                <span>Bu listeyi sunucuya elle kopyala</span><ArrowUpRight className="h-4 w-4 shrink-0" />
                                             </Link>}
                                             <p className="text-[11px] text-muted-foreground">Semboller forma kopyalanır; kaydetmeden alarm başlamaz. Yönetici girişi gerekir.</p>
                                         </div>
@@ -3271,6 +3280,7 @@ export function AdvancedChartPage({
                             )
                         })}
                     </div>
+                    </div>}
                 </div>
             )}
 

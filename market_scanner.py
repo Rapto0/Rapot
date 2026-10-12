@@ -646,7 +646,7 @@ def _derive_technical_levels(
     resistance_candidates: list[float] = []
 
     for timeframe_code in ("W-FRI", "ME"):
-        df_source = resample_market_data(df_daily.copy(), timeframe_code, market_type)
+        df_source = resample_market_data(df_daily, timeframe_code, market_type)
         if (
             df_source is None
             or df_source.empty
@@ -717,7 +717,7 @@ def _verify_bist_second_source(
         return False, f"ikincil_kaynak_bayat ({age:.1f}s)"
 
     for timeframe_code in trigger_rule:
-        df_resampled = resample_market_data(secondary_df.copy(), timeframe_code, "BIST")
+        df_resampled = resample_market_data(secondary_df, timeframe_code, "BIST")
         if df_resampled is None or len(df_resampled) < 20:
             return False, f"ikincil_{timeframe_code}_veri_yetersiz"
         if not _strategy_matches_direction(strategy_name, df_resampled, timeframe_code, signal_dir):
@@ -883,7 +883,7 @@ def process_symbol(
 
     for tf_code, tf_label in TIMEFRAMES:
         try:
-            df_resampled = resample_market_data(df_daily.copy(), tf_code, market_type)
+            df_resampled = resample_market_data(df_daily, tf_code, market_type)
             if df_resampled is None or len(df_resampled) < 20:
                 continue
 

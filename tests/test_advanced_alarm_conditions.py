@@ -7,6 +7,8 @@ import pytest
 from application.services.advanced_alarm_conditions import (
     condition_fields,
     evaluate_condition,
+    evaluate_prepared_condition,
+    prepare_condition,
     validate_condition,
 )
 
@@ -137,3 +139,84 @@ def test_zero_values_and_negative_williams_values_are_valid():
     )
     assert result["ready"] and result["matched"] is True
     assert result["value"] == 0
+
+
+def test_prepared_plan_is_independent_immutable_and_does_not_revalidate(monkeypatch):
+    from dataclasses import FrozenInstanceError
+
+    from application.services import advanced_alarm_conditions as module
+
+    raw = {"op": "and", "children": [leaf(), leaf("rsi", right=50)]}
+    plan = prepare_condition(raw, "1m")
+    raw["children"][0]["right"] = 999
+    with pytest.raises(TypeError):
+        plan.fields[0]["field"] = "volume"
+    with pytest.raises(FrozenInstanceError):
+        plan.tree = ()
+    monkeypatch.setattr(
+        module, "validate_condition", lambda _: pytest.fail("Prepared evaluation must not parse")
+    )
+    result = evaluate_prepared_condition(
+        plan, lambda ref: (101, 99) if ref["field"] == "price" else (55, 45)
+    )
+    assert result["matched"] is True and result["previous_matched"] is False
+
+
+def test_prepared_plan_reuses_fields_but_never_reuses_observations_or_result():
+    plan = prepare_condition(
+        {"op": "or", "children": [leaf("rsi", right=50), leaf("rsi", op="lt", right=30)]},
+        "5m",
+    )
+    calls = []
+
+    def resolve(pair):
+        def read(ref):
+            calls.append(dict(ref))
+            return pair
+
+        return read
+
+    first = evaluate_prepared_condition(plan, resolve((60, 40)))
+    assert first["matched"] is True
+    first["values"].clear()
+    second = evaluate_prepared_condition(plan, resolve((None, 60)))
+    third = evaluate_prepared_condition(plan, resolve((40, None)))
+    assert second["matched"] is None and second["ready"] is False
+    assert third["matched"] is False and third["previous_ready"] is False
+    assert third["values"] == {"rsi:5m:14:": 40}
+    assert calls == [{"field": "rsi", "period": 14, "timeframe": "5m"}] * 3
+
+
+@pytest.mark.parametrize("default", ["1m", "1d"])
+def test_prepared_multitimeframe_field_crossing_and_numeric_zero(default):
+    plan = prepare_condition(
+        {
+            "op": "and",
+            "children": [
+                leaf("ema", op="crossed_above", right={"field": "ema", "timeframe": "1h"}),
+                leaf("volume", op="eq", right=0),
+            ],
+        },
+        default,
+    )
+    result = evaluate_prepared_condition(
+        plan,
+        lambda ref: (0, 0)
+        if ref["field"] == "volume"
+        else (100, 100)
+        if ref["timeframe"] == "1h"
+        else (101, 99),
+    )
+    assert result["matched"] is True and result["previous_matched"] is False
+    assert plan.keys == (f"ema:{default}:20:", "ema:1h:20:", f"volume:{default}::")
+
+
+def test_preparation_preserves_validation_and_returns_fresh_reference_lists():
+    with pytest.raises(ValueError):
+        prepare_condition(leaf(), "1s")
+    with pytest.raises(ValueError):
+        prepare_condition({"op": "and", "children": [leaf()] * 33}, "1m")
+    raw = leaf("rsi")
+    refs = condition_fields(raw, "1m")
+    refs[0]["period"] = 200
+    assert condition_fields(raw, "1m")[0]["period"] == 14

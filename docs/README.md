@@ -40,6 +40,7 @@ rehberlerdeki hazırlık adımları tamamlanmış emir testi veya işlem yetkisi
 - [21 Eylül Pine derleme/grafik kabulü](PINE_RUNTIME_ACCEPTANCE.md)
 - [7 Ekim canlı BIST, Telegram ve veri kalitesi kabulü](LIVE_MARKET_ACCEPTANCE_2026-10-07.md)
 - [8 Ekim tam seans ve 3.000 alarm kabulü; hacim/takvim bulguları](FULL_SESSION_ACCEPTANCE_2026-10-08.md)
+- [12 Ekim izleme listeleri, CPU/RAM ve ihtiyaç temelli mum kuyruğu](WATCHLIST_EFFICIENCY_2026-10-12.md)
 - [Backup branch karşılaştırması ve aktarım yapmama kararı](BACKUP_BRANCH_REVIEW.md)
 - [6–21 Eylül ayrıntılı devam geçmişi](archive/RAPOT_DEVAM_GECMISI_2026-09-21.md)
 

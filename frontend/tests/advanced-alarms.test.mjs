@@ -16,6 +16,7 @@ function load(path, imports = {}, globals = {}) {
 }
 const plain = value => JSON.parse(JSON.stringify(value));
 const form = load('../src/lib/advanced-alarm-form.ts');
+const listHelpers = load('../src/lib/server-watchlists.ts');
 
 test('advanced transport retains auth core, cancellation, revisions and escaped identifiers', async () => {
   const calls = [];
@@ -63,7 +64,8 @@ test('invalid thresholds, recursive groups and empty watchlists cannot be submit
 });
 
 test('all BIST and saved watchlists use server scopes without hidden frozen membership', () => {
-  const draft = { ...form.emptyAdvancedDraft('watchlist'), name: 'Evren', bist: 'IGNORED' };
+  assert.equal(form.emptyAdvancedDraft('watchlist').scope, 'watchlist');
+  const draft = { ...form.emptyAdvancedDraft('watchlist'), scope: 'all_bist', name: 'Evren', bist: 'IGNORED' };
   const all = form.writeFromAdvancedDraft(draft);
   assert.equal(all.scope, 'all_bist');
   assert.deepEqual(plain(all.symbols), []);
@@ -81,20 +83,21 @@ test('large watchlist parsing never silently truncates or changes symbol identit
 const allElements = node => React.isValidElement(node) ? [node, ...React.Children.toArray(node.props.children).flatMap(allElements)] : [];
 const text = node => Array.isArray(node) ? node.map(text).join('') : React.isValidElement(node) ? text(node.props.children) : typeof node === 'string' || typeof node === 'number' ? String(node) : '';
 
-function harness({ allowed = true, ruleRows = [] } = {}) {
+function harness({ allowed = true, ruleRows = [], listRows = [], localLists = [], searchParams = '', symbolLoader = async () => ({ symbols: [] }) } = {}) {
   const states = [], requests = [], queries = [];
-  let cursor = 0, tree;
+  const effectDeps = [];
+  let cursor = 0, effectCursor = 0, effects = [], dirty = false, tree;
   const runtime = { running: true, last_cycle_at: new Date().toISOString(), last_error: null, evaluation: { total: 3000, checked: 2500, ready: 2100, backlog: 500 }, market: { tracked_symbols: 600, fresh_symbols: 580, state: 'connected' }, delivery: { pending: 4, sent: 10, failed: 0 }, telegram_configured: true };
   const queryData = {
     'advanced-alarms': { rules: ruleRows, usage: { price: 1000, technical: 1000, watchlist: 1000 }, runtime },
-    'advanced-alarm-status': runtime, 'advanced-alarm-events': { events: [] }, 'advanced-alarm-watchlists': { watchlists: [] },
+    'advanced-alarm-status': runtime, 'advanced-alarm-events': { events: [] }, 'advanced-alarm-watchlists': { watchlists: listRows },
   };
   const hooks = {
-    useState(initial) { const index = cursor++; if (!(index in states)) states[index] = typeof initial === 'function' ? initial() : initial; return [states[index], next => { states[index] = typeof next === 'function' ? next(states[index]) : next; }]; },
+    useState(initial) { const index = cursor++; if (!(index in states)) states[index] = typeof initial === 'function' ? initial() : initial; return [states[index], next => { const value = typeof next === 'function' ? next(states[index]) : next; dirty ||= !Object.is(value, states[index]); states[index] = value; }]; },
     useRef(value) { const index = cursor++; states[index] ??= { current: value }; return states[index]; },
-    useMemo(fn) { return fn(); }, useEffect() {},
+    useMemo(fn) { return fn(); }, useEffect(callback, deps) { const index = effectCursor++; if (!effectDeps[index] || deps.some((value, i) => !Object.is(value, effectDeps[index][i]))) { effectDeps[index] = deps; effects.push(callback); } },
   };
-  const api = Object.fromEntries(['fetchAdvancedAlarms', 'fetchAdvancedAlarmStatus', 'fetchAdvancedEvents', 'fetchServerWatchlists', 'removeAdvancedAlarm', 'removeServerWatchlist', 'saveAdvancedAlarm', 'saveServerWatchlist'].map(name => [name, async (...args) => { requests.push({ name, args }); return { ...args[0], id: 'saved', category: args[0]?.category ?? 'price' }; }]));
+  const api = Object.fromEntries(['fetchAdvancedAlarms', 'fetchAdvancedAlarmStatus', 'fetchAdvancedEvents', 'fetchServerWatchlists', 'removeAdvancedAlarm', 'removeServerWatchlist', 'saveAdvancedAlarm', 'saveServerWatchlist'].map(name => [name, async (...args) => { requests.push({ name, args }); const result = { ...args[0], id: 'saved', revision: 1, category: args[0]?.category ?? 'price' }; if (name === 'saveServerWatchlist') queryData['advanced-alarm-watchlists'] = { watchlists: [...listRows, result] }; return result; }]));
   const componentModule = load('../src/components/alarms/advanced-alarm-center.tsx', {
     react: { ...React, ...hooks }, 'react/jsx-runtime': jsxRuntime, 'next/link': { default: 'a' },
     '@tanstack/react-query': { useQuery(options) { queries.push(options); return { data: queryData[options.queryKey[0]], isError: false, isLoading: false, refetch: async () => ({}) }; } },
@@ -103,10 +106,12 @@ function harness({ allowed = true, ruleRows = [] } = {}) {
     '@/components/alarms/condition-builder': { ConditionBuilder: 'condition-builder' },
     '@/lib/hooks/use-session': { useSession: () => allowed ? { user: { username: 'admin', is_admin: true }, expiresAt: 1000 } : null },
     '@/lib/api/core': { ApiError: class ApiError extends Error {} },
+    '@/lib/api/client': Object.fromEntries(['fetchBistSymbols', 'fetchCryptoSymbols'].map(name => [name, async () => { requests.push({ name, args: [] }); return symbolLoader(name); }])),
     '@/lib/api/advanced-alarms-api': api, '@/lib/advanced-alarm-form': form,
-    '@/lib/watchlist-alarms': { loadStoredWatchlists: () => [] },
-  });
-  function render() { cursor = 0; tree = componentModule.AdvancedAlarmCenter(); return tree; }
+    '@/lib/server-watchlists': listHelpers,
+    '@/lib/watchlist-alarms': { loadStoredWatchlists: () => localLists },
+  }, { window: { location: { search: searchParams } } });
+  function render() { let rounds = 0; do { assert.ok(++rounds < 10, 'Effects must settle'); cursor = 0; effectCursor = 0; effects = []; dirty = false; tree = componentModule.AdvancedAlarmCenter(); effects.forEach(effect => effect()); } while (dirty); return tree; }
   render();
   return { render, requests, queries, elements: () => allElements(tree), text: () => text(tree) };
 }
@@ -141,4 +146,167 @@ test('saving is explicit and never silently enables Telegram', async () => {
   assert.equal(view.requests[0].args[0].notify_telegram, false);
   assert.equal(view.requests[0].args[0].symbols[0].symbol, 'THYAO');
   assert.match(view.text(), /sunucuya kaydedildi/);
+});
+
+
+const mixedList = { id: 'server/list?one', name: 'Karma liste', revision: 3, symbols: [{ symbol: 'THYAO', market_type: 'BIST' }, { symbol: 'BTCUSDT', market_type: 'Kripto' }] };
+
+test('server list links and drafts keep an encoded identity without copying members or posting an alarm', () => {
+  assert.equal(listHelpers.serverWatchlistHref(mixedList.id), '/alarms?serverList=server%2Flist%3Fone&action=new');
+  assert.equal(listHelpers.serverWatchlistHref(mixedList.id, 'detail'), '/alarms?serverList=server%2Flist%3Fone');
+  assert.equal(listHelpers.serverWatchlistHref(mixedList.id, 'chart'), '/chart?serverList=server%2Flist%3Fone');
+  for (const kind of ['price', 'technical']) {
+    const draft = form.draftForWatchlist(mixedList, kind);
+    const payload = form.writeFromAdvancedDraft({ ...draft, name: 'Koşul' });
+    assert.equal(payload.category, 'watchlist');
+    assert.equal(payload.scope, 'watchlist');
+    assert.equal(payload.watchlist_id, mixedList.id);
+    assert.deepEqual(plain(payload.symbols), []);
+    assert.equal(payload.condition.left.field, kind === 'price' ? 'price' : 'rsi');
+    assert.equal(payload.notify_telegram, false);
+  }
+});
+
+test('a selected server-list link opens its draft exactly once and never mutates on navigation', () => {
+  const view = harness({ listRows: [mixedList], searchParams: '?serverList=server%2Flist%3Fone&action=new' });
+  assert.equal(view.requests.length, 0);
+  assert.match(view.text(), /Yeni izleme listesi alarmı/);
+  const listSelect = view.elements().find(e => e.type === 'select' && e.props.value === mixedList.id);
+  assert.ok(listSelect);
+  const nameLabel = view.elements().find(e => e.type === 'label' && text(e).startsWith('Alarm adı'));
+  allElements(nameLabel).find(e => e.type === 'input').props.onChange({ target: { value: 'Benim taslağım' } });
+  view.render(); view.render();
+  assert.equal(view.elements().find(e => e.type === 'input' && e.props.value === 'Benim taslağım').props.value, 'Benim taslağım');
+  assert.equal(view.requests.length, 0);
+  const detail = harness({ listRows: [mixedList], searchParams: '?serverList=server%2Flist%3Fone' });
+  assert.match(detail.text(), /Karma liste/);
+  assert.ok(detail.elements().some(e => e.type === 'a' && e.props.href === listHelpers.serverWatchlistHref(mixedList.id, 'chart')));
+  assert.equal(detail.elements().filter(e => e.type === 'form').length, 0);
+});
+
+test('missing server list never falls back to all BIST or creates an alarm', () => {
+  const view = harness({ listRows: [mixedList], searchParams: '?serverList=missing&action=new' });
+  assert.match(view.text(), /Seçilen sunucu listesi bulunamadı/);
+  assert.equal(view.elements().filter(e => e.type === 'form').length, 0);
+  assert.equal(view.requests.length, 0);
+});
+
+test('manual legacy import preserves mixed members and old data; saving opens only a new alarm draft', async () => {
+  const old = { id: 'local-list', name: 'Eski liste', notes: 'Notlar korunur', alarmsEnabled: true, rows: [
+    { kind: 'section', id: 'section-1', title: 'Bölüm' },
+    { kind: 'symbol', rawSymbol: 'THYAO', marketType: 'BIST' },
+    { kind: 'symbol', rawSymbol: 'BTCUSDT', marketType: 'Kripto' },
+  ] };
+  const before = JSON.stringify(old);
+  const view = harness({ localLists: [old], searchParams: '?watchlist=local-list' });
+  assert.equal(view.requests.length, 0);
+  await view.elements().find(e => e.type === 'form').props.onSubmit({ preventDefault() {} }); view.render();
+  assert.deepEqual(view.requests.map(x => x.name), ['saveServerWatchlist']);
+  assert.deepEqual(plain(view.requests[0].args[0].symbols), mixedList.symbols);
+  assert.equal(JSON.stringify(old), before);
+  assert.match(view.text(), /Alarm taslağı hazır/);
+  assert.match(view.text(), /Yeni izleme listesi alarmı/);
+  assert.ok(view.elements().some(e => e.type === 'select' && e.props.value === 'saved'));
+  const telegramLabel = view.elements().find(e => e.type === 'label' && text(e).startsWith('Telegram'));
+  assert.equal(allElements(telegramLabel).find(e => e.type === 'input').props.checked, false);
+});
+
+test('list detail filters its alarms but supports adding further price and technical conditions', () => {
+  const rules = ['first', 'second'].map((id, index) => ({ ...form.writeFromAdvancedDraft({ ...form.draftForWatchlist(mixedList), name: id }), id, revision: 1, state: 'pending', enabled: true, watchlist_id: index ? 'other' : mixedList.id }));
+  const view = harness({ listRows: [mixedList], ruleRows: rules, searchParams: '?serverList=server%2Flist%3Fone' });
+  assert.match(view.text(), /1 bağlı alarm/);
+  assert.ok(view.elements().some(e => e.type === 'h3' && text(e) === 'first'));
+  assert.ok(!view.elements().some(e => e.type === 'h3' && text(e) === 'second'));
+  view.elements().find(e => e.type === 'button' && text(e) === 'Fiyat koşulu ekle').props.onClick(); view.render();
+  assert.equal(view.elements().find(e => e.type === 'condition-builder').props.value.left.field, 'price');
+  assert.equal(view.requests.length, 0);
+  view.elements().find(e => e.type === 'button' && text(e) === 'Teknik koşul ekle').props.onClick(); view.render();
+  assert.equal(view.elements().find(e => e.type === 'condition-builder').props.value.left.field, 'rsi');
+  assert.equal(view.requests.length, 0);
+});
+
+test('pagination visits all mixed symbols without silent truncation or unbounded provider batches', () => {
+  const symbols = [...Array.from({ length: 51 }, (_, i) => ({ symbol: `B${i}`, market_type: 'BIST' })), ...Array.from({ length: 69 }, (_, i) => ({ symbol: `C${i}USDT`, market_type: 'Kripto' }))];
+  const pages = [0, 1, 2].map(page => listHelpers.serverWatchlistPage(symbols, page));
+  assert.deepEqual(plain(pages.flatMap(page => page.rows)), symbols);
+  assert.deepEqual(pages.map(page => page.rows.length), [50, 50, 20]);
+  assert.ok(pages.every(page => page.bist.length <= 50 && page.crypto.length <= 50));
+  assert.deepEqual(plain(pages[1].bist), ['B50.IS']);
+  assert.equal(listHelpers.serverWatchlistPage(symbols, 999).page, 2);
+  assert.equal(listHelpers.serverWatchlistPage([], -5).page, 0);
+});
+
+function serverPanelHarness({ allowed = true, listRows = [mixedList], quotes = [], failed = false } = {}) {
+  const states = [], queries = [], requests = [], streams = [], selections = [];
+  let cursor = 0, tree;
+  const hooks = { useEffect() {}, useMemo(fn) { return fn(); }, useState(initial) { const index = cursor++; if (!(index in states)) states[index] = typeof initial === 'function' ? initial() : initial; return [states[index], value => { states[index] = typeof value === 'function' ? value(states[index]) : value; }]; } };
+  const panel = load('../src/components/charts/server-watchlist-panel.tsx', {
+    react: { ...React, ...hooks }, 'react/jsx-runtime': jsxRuntime, 'next/link': { default: 'a' },
+    '@tanstack/react-query': { useQuery(options) { queries.push(options); return { data: options.queryKey[0] === 'advanced-alarm-watchlists' ? { watchlists: listRows } : quotes, isError: options.queryKey[0] === 'server-watchlist-quotes' && failed, isLoading: false, dataUpdatedAt: Date.now(), refetch() {} }; } },
+    '@/lib/api/advanced-alarms-api': { fetchServerWatchlists() { throw new Error('Unexpected automatic execution'); } },
+    '@/lib/api/client': { fetchGlobalIndices: async (symbols, options) => { requests.push({ symbols, options }); return []; } },
+    '@/lib/hooks/use-binance-ticker': { useBinanceTickerFeed(symbols, options) { streams.push({ symbols: plain(symbols), options }); return { prices: {}, receivedAtBySymbol: {}, status: 'connecting', reconnect() {} }; } },
+    '@/lib/hooks/use-session': { useSession: () => allowed ? { user: { username: 'admin', is_admin: true }, expiresAt: 1000 } : null },
+    '@/lib/server-watchlists': listHelpers, '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') },
+  });
+  function render() { cursor = 0; tree = panel.ServerWatchlistPanel({ symbol: 'THYAO', market: 'BIST', onSelect: (...args) => selections.push(args) }); }
+  render();
+  return { render, queries, requests, streams, selections, elements: () => allElements(tree), text: () => text(tree) };
+}
+
+test('chart server panel queries only the visible page and links the selected server identity', async () => {
+  const members = Array.from({ length: 61 }, (_, i) => ({ symbol: `B${i}`, market_type: 'BIST' }));
+  const list = { ...mixedList, symbols: members };
+  const view = serverPanelHarness({ listRows: [list] });
+  let query = view.queries.at(-1);
+  const signal = new AbortController().signal;
+  await query.queryFn({ signal });
+  assert.equal(view.requests[0].symbols.length, 50);
+  assert.equal(view.requests[0].options.signal, signal);
+  view.elements().find(e => e.type === 'button' && text(e) === 'Sonraki').props.onClick(); view.render();
+  query = view.queries.at(-1); await query.queryFn({ signal });
+  assert.equal(view.requests[1].symbols.length, 11);
+  assert.equal(view.requests[1].symbols[0], 'B50.IS');
+  assert.ok(view.elements().some(e => e.type === 'a' && e.props.href === listHelpers.serverWatchlistHref(list.id)));
+  view.elements().find(e => e.type === 'button' && e.props.title?.startsWith('B50 ·')).props.onClick();
+  assert.deepEqual(view.selections, [['B50', 'BIST']]);
+});
+
+test('chart server panel hides private lists when logged out and preserves unknown values on refresh failure', () => {
+  const anonymous = serverPanelHarness({ allowed: false });
+  assert.ok(anonymous.queries.every(query => query.enabled === false));
+  assert.ok(anonymous.streams.every(stream => stream.options.paused));
+  assert.doesNotMatch(anonymous.text(), /Karma liste|THYAO|BTCUSDT/);
+  const view = serverPanelHarness({ failed: true, quotes: [{ symbol: 'THYAO.IS', regularMarketPrice: 10, regularMarketChangePercent: null, message: 'Son veri' }] });
+  assert.match(view.text(), /Son kayıt · güncel olmayabilir/);
+  assert.match(view.text(), /BTCUSDT/);
+  assert.doesNotMatch(view.text(), /BTC\/USD|0%/);
+});
+
+
+test('universe snapshots merge and deduplicate both markets without overwriting existing entries or permitting overflow', () => {
+  assert.deepEqual(plain(form.mergeWatchlistSnapshot('thyao.IS', 'BTCUSDT', 'BIST', ['THYAO', 'GARAN'])), { bist: 'THYAO, GARAN', crypto: 'BTCUSDT', count: 3 });
+  assert.deepEqual(plain(form.mergeWatchlistSnapshot('THYAO', 'BTCUSDT', 'Kripto', ['BTCUSDT', 'ETHUSDT'])), { bist: 'THYAO', crypto: 'BTCUSDT, ETHUSDT', count: 3 });
+  for (const snapshot of [[], [''], [null], ['invalid/asset'], Array.from({ length: 2001 }, (_, i) => `B${i}`)]) assert.throws(() => form.mergeWatchlistSnapshot('THYAO', 'BTCUSDT', 'BIST', snapshot));
+  assert.throws(() => form.mergeWatchlistSnapshot('THYAO', 'BTCUSDT', 'BIST', Array.from({ length: 1999 }, (_, i) => `B${i}`)), /2.000/);
+});
+
+test('adding a fetched universe is explicit and draft-only; empty or failed responses preserve user text', async () => {
+  const local = { id: 'old', name: 'Liste', rows: [{ kind: 'symbol', rawSymbol: 'THYAO', marketType: 'BIST' }, { kind: 'symbol', rawSymbol: 'BTCUSDT', marketType: 'Kripto' }] };
+  const view = harness({ localLists: [local], searchParams: '?watchlist=old', symbolLoader: async name => ({ symbols: name === 'fetchBistSymbols' ? ['THYAO', 'GARAN'] : ['BTCUSDT', 'ETHUSDT'] }) });
+  assert.equal(view.requests.length, 0);
+  await view.elements().find(e => e.type === 'button' && text(e) === 'Tüm BIST kodlarını ekle').props.onClick(); view.render();
+  assert.equal(view.elements().find(e => e.type === 'textarea').props.value, 'THYAO, GARAN');
+  await view.elements().find(e => e.type === 'button' && text(e) === 'Binance USDT çiftlerini ekle').props.onClick(); view.render();
+  assert.ok(view.elements().some(e => e.type === 'input' && e.props.value === 'BTCUSDT, ETHUSDT'));
+  assert.deepEqual(view.requests.map(x => x.name), ['fetchBistSymbols', 'fetchCryptoSymbols']);
+  assert.match(view.text(), /anlık bir liste kopyası/);
+  for (const loader of [async () => ({ symbols: [] }), async () => { throw new Error('private provider message'); }]) {
+    const failed = harness({ localLists: [local], searchParams: '?watchlist=old', symbolLoader: loader });
+    await failed.elements().find(e => e.type === 'button' && text(e) === 'Tüm BIST kodlarını ekle').props.onClick(); failed.render();
+    assert.equal(failed.elements().find(e => e.type === 'textarea').props.value, 'THYAO');
+    assert.match(failed.text(), /Mevcut girişler korundu/);
+    assert.doesNotMatch(failed.text(), /private provider message/);
+    assert.equal(failed.requests.length, 1);
+  }
 });

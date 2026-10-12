@@ -472,43 +472,28 @@ def _normalize_ohlcv_frame_utc(df: pd.DataFrame | None) -> pd.DataFrame | None:
         return None
 
 
-def _aggregate_ohlcv_slice(slice_df: pd.DataFrame) -> dict:
-    """Aggregate one grouped OHLCV slice into a single candle row."""
-    candle = {}
-    if "Open" in slice_df.columns:
-        candle["Open"] = float(slice_df["Open"].iloc[0])
-    if "High" in slice_df.columns:
-        candle["High"] = float(slice_df["High"].max())
-    if "Low" in slice_df.columns:
-        candle["Low"] = float(slice_df["Low"].min())
-    if "Close" in slice_df.columns:
-        candle["Close"] = float(slice_df["Close"].iloc[-1])
-    if "Volume" in slice_df.columns:
-        candle["Volume"] = float(slice_df["Volume"].sum())
-    return candle
-
-
 def _aggregate_grouped_ohlcv(df: pd.DataFrame, group_keys: pd.Series) -> pd.DataFrame | None:
-    """Build grouped OHLCV candles preserving first trading day as candle timestamp."""
+    """Aggregate normalized candles without constructing a DataFrame for every group."""
     if df.empty:
         return None
 
-    work = df.copy()
-    work["_group_key"] = group_keys.to_numpy()
-
-    rows = []
-    for _, block in work.groupby("_group_key", sort=True):
-        block = block.drop(columns="_group_key")
-        if block.empty:
-            continue
-        rows.append((block.index[0], _aggregate_ohlcv_slice(block)))
-
-    if not rows:
+    keys = group_keys.to_numpy()
+    # Normalization has removed missing OHLC rows. Keep the existing Series.sum
+    # reduction for Volume: GroupBy.sum uses different floating-point summation.
+    aggregations = {
+        "Open": "first",
+        "High": "max",
+        "Low": "min",
+        "Close": "last",
+        "Volume": lambda values: values.sum(),
+    }
+    aggregations = {column: method for column, method in aggregations.items() if column in df}
+    result = df.groupby(keys, sort=True).agg(aggregations).astype(float)
+    if result.empty:
         return None
-
-    result_index = [idx for idx, _ in rows]
-    result_rows = [row for _, row in rows]
-    result = pd.DataFrame(result_rows, index=pd.DatetimeIndex(result_index))
+    first_days = pd.Series(df.index).groupby(keys, sort=True).first()
+    result.index = pd.DatetimeIndex(first_days.array)
+    result.attrs = {}
     return result.sort_index()
 
 

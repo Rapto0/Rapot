@@ -1,6 +1,6 @@
 # Rapot Devam Planı
 
-**Güncel özet: 8 Ekim 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
+**Güncel özet: 12 Ekim 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
 Çalışma kuralı: **incele → düzelt → doğrula → belgeyi güncelle**.
 Teknik ayrıntılar [belge indeksinde](README.md), çalışma kuralları
 [AGENTS.md](../AGENTS.md), önceki planın eksiksiz metni
@@ -9,6 +9,19 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Kaldığımız nokta
 
+- **12 Ekim — izleme listesi odaklı kaynak düzeltmesi hazırlanıyor:** Kullanıcı
+  mevcut sunucuda RAM/CPU ve mum kuyruğunun düzeltilmesini istedi; 3.000 kuralı
+  üretimde açma zorunluluğu yok, öncelik karma BIST/kripto listeleri ve birden çok
+  liste alarmı. Otomatik takip/timer kapalı kalır. 10:06 UTC canlı GET sıfır etkin
+  alarm yanında 805 planlı/720 bekleyen mum işi gösterdi. Kaynakta ihtiyaç temelli
+  paylaşılan mum planı, 120 saniyelik sınırlı grafik talepleri, aynı veride hesap/yazı
+  tekrarını azaltma, küçük durum batch'leri, ortak koşul planı, Binance oturum
+  paylaşımı ve scanner CPU/bellek düzeltmeleri hazırlandı. Grafik sunucu listelerine
+  bağlanıyor; eski yerel listeler elle aktarılabiliyor. Sentetik gerçek motor/SQLite
+  denemesinde 3.000 kural/6.000 durum/iki seri, 11,13 MiB retained/12,40 MiB peak
+  Python belleği ölçüldü. Yerel ölçüm üretim kapasitesi veya tam seans kabulü değildir.
+  Yayın öncesi tam kontroller ve ayrı üretim kabulü devam ediyor.
+  [Kaynak değişikliği, ölçümler ve sınırlar](WATCHLIST_EFFICIENCY_2026-10-12.md).
 - **8 Ekim — elle devam ve geçmiş sorgusu CPU düzeltmesi üretimde:** Kullanıcı
   “Hazırım” dedi; ilk saat kontrolü 13:13 TSİ, sabah gözlenmiş sayılmaz. Codex
   takibi ve eski timer kapalı kalır. İlk host örnekleri 131,6–189,7 MiB RAM ve

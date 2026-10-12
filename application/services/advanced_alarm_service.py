@@ -11,6 +11,7 @@ import uuid
 from collections import OrderedDict
 from collections.abc import Callable
 from datetime import UTC, datetime
+from itertools import islice
 from pathlib import Path
 
 import aiohttp
@@ -24,6 +25,7 @@ MAX_EVALUATIONS_PER_TICK = settings.advanced_alarm_eval_batch
 MAX_CHANGES_PER_TICK = 250
 EVALUATION_SECONDS = settings.advanced_alarm_eval_budget_seconds
 STATE_CACHE_LIMIT = settings.advanced_alarm_state_cache
+STATE_LOAD_BATCH = 128
 _delivery_retry_until = 0.0
 
 
@@ -211,12 +213,13 @@ class AdvancedAlarmEngine:
         return rows
 
     def _refresh(self):
-        if self._generation == repository.generation() and self._clock() - self._rules_at < 5:
+        generation = repository.generation()
+        if self._generation == generation and self._clock() - self._rules_at < 5:
             return
         rules = repository.active_rules()
         identity = [(r["id"], r["revision"]) for r in rules]
         changed = self._generation == -1 or identity != [
-            (r["id"], r["revision"]) for r in self._rules
+            (r["id"], r["revision"]) for r in self._source_rules
         ]
         if changed:
             self._cursor = (0, 0)
@@ -224,28 +227,33 @@ class AdvancedAlarmEngine:
             self._states = OrderedDict((k, v) for k, v in self._states.items() if k[:2] in valid)
             self._rule_health = {k: v for k, v in self._rule_health.items() if k in valid}
         self._source_rules = rules
-        self._rules_at, self._generation = self._clock(), repository.generation()
+        self._rules_at, self._generation = self._clock(), generation
 
     def _jobs(self):
         """Store only membership lists, not the potentially six-million-rule cross product."""
-        counts = [self.hub.symbol_count(rule["id"]) for rule in self._rules]
-        total = sum(counts)
+        # The provider may replace its universe during this tick. Retain the
+        # existing immutable tuples so the count and iterator see one snapshot;
+        # otherwise an emptied universe can spin forever without yielding work.
+        memberships = [tuple(self.hub.symbols(rule["id"])) for rule in self._rules]
+        total = sum(len(symbols) for symbols in memberships)
         if not total:
-            return [], 0
-        ri, si = self._cursor
-        ri %= len(self._rules)
-        jobs = []
-        visited = 0
-        while visited < total and len(jobs) < MAX_EVALUATIONS_PER_TICK:
-            symbols = self.hub.symbols(self._rules[ri]["id"])
-            if si >= len(symbols):
-                ri, si = (ri + 1) % len(self._rules), 0
-                continue
-            rule, symbol = self._rules[ri], symbols[si]
-            si += 1
-            visited += 1
-            jobs.append((rule, symbol, (ri, si)))
-        return jobs, total
+            return iter(()), 0
+
+        def jobs():
+            ri, si = self._cursor
+            ri %= len(self._rules)
+            visited = 0
+            while visited < min(total, MAX_EVALUATIONS_PER_TICK):
+                symbols = memberships[ri]
+                if si >= len(symbols):
+                    ri, si = (ri + 1) % len(self._rules), 0
+                    continue
+                rule, symbol = self._rules[ri], symbols[si]
+                si += 1
+                visited += 1
+                yield rule, symbol, (ri, si)
+
+        return jobs(), total
 
     @staticmethod
     def _evaluate(rule, snapshot, previous, now):
@@ -327,69 +335,85 @@ class AdvancedAlarmEngine:
                 self.hub.configure(eligible)
             self._rules = eligible
             jobs, total = self._jobs()
-            keys = [(r["id"], r["revision"], s["symbol"], s["market_type"]) for r, s, _ in jobs]
-            missing = [key for key in keys if key not in self._states]
-            restored = repository.load_states(missing)
-            for key in missing:
-                self._states[key] = restored.get(key)
             changes, ephemeral = [], []
             health = {}
             checked = ready_count = 0
             now = self._wall_clock()
-            for (rule, symbol, cursor), key in zip(jobs, keys, strict=True):
+            observed_at = now.isoformat()
+            while True:
                 if checked and (
                     self._clock() - started >= EVALUATION_SECONDS
                     or len(changes) >= MAX_CHANGES_PER_TICK
                 ):
                     break
-                previous = self._states.get(key)
-                snapshot = self.hub.snapshot(rule, symbol, now=now)
-                state, event = self._evaluate(rule, snapshot, previous, now)
-                checked += 1
-                ready_count += int(state.get("ready", False))
-                self._observe_rule(rule, snapshot, state.get("ready", False), now.isoformat())
-                self._diagnostic_totals["checked"] += 1
-                self._diagnostic_totals["ready"] += int(state.get("ready", False))
-                rule_key = (rule["id"], rule["revision"])
-                result = health.setdefault(
-                    rule_key,
-                    {
-                        "checked_this_tick": 0,
-                        "ready_this_tick": 0,
-                        "total_symbols": self.hub.symbol_count(rule["id"]),
-                        "last_checked_at": now.isoformat().replace("+00:00", "Z"),
-                        "last_error": None,
-                    },
+                # Do not restore thousands of states that cannot fit this tick's
+                # time/write budget. Advance the durable cursor only for evaluated pairs.
+                batch = list(
+                    islice(jobs, min(STATE_LOAD_BATCH, MAX_CHANGES_PER_TICK - len(changes)))
                 )
-                result["checked_this_tick"] += 1
-                result["ready_this_tick"] += int(state.get("ready", False))
-                if not state.get("ready"):
-                    reason = snapshot.get("reason")
-                    result["last_error"] = (
-                        reason[:240] if isinstance(reason, str) else "Veri hazır değil."
-                    )
-                # Quote receipt/observation churn does not generate writes each second.
-                meaningful = (
-                    event
-                    or (previous is None and state.get("ready"))
-                    or (
-                        previous is not None
-                        and any(
-                            state.get(k) != previous.get(k)
-                            for k in (
-                                "ready",
-                                "matched",
-                                "continuity_id",
-                                "last_bar",
-                                "last_triggered_at",
+                if not batch:
+                    break
+                keys = [
+                    (r["id"], r["revision"], s["symbol"], s["market_type"]) for r, s, _ in batch
+                ]
+                missing = [key for key in keys if key not in self._states]
+                if missing:
+                    restored = repository.load_states(missing)
+                    for key in missing:
+                        self._states[key] = restored.get(key)
+                for (rule, symbol, cursor), key in zip(batch, keys, strict=True):
+                    if checked and (
+                        self._clock() - started >= EVALUATION_SECONDS
+                        or len(changes) >= MAX_CHANGES_PER_TICK
+                    ):
+                        break
+                    previous = self._states.get(key)
+                    snapshot = self.hub.snapshot(rule, symbol, now=now)
+                    state, event = self._evaluate(rule, snapshot, previous, now)
+                    checked += 1
+                    ready_count += int(state.get("ready", False))
+                    self._observe_rule(rule, snapshot, state.get("ready", False), observed_at)
+                    self._diagnostic_totals["checked"] += 1
+                    self._diagnostic_totals["ready"] += int(state.get("ready", False))
+                    rule_key = (rule["id"], rule["revision"])
+                    if rule_key not in health:
+                        health[rule_key] = {
+                            "checked_this_tick": 0,
+                            "ready_this_tick": 0,
+                            "total_symbols": self.hub.symbol_count(rule["id"]),
+                            "last_checked_at": observed_at.replace("+00:00", "Z"),
+                            "last_error": None,
+                        }
+                    result = health[rule_key]
+                    result["checked_this_tick"] += 1
+                    result["ready_this_tick"] += int(state.get("ready", False))
+                    if not state.get("ready"):
+                        reason = snapshot.get("reason")
+                        result["last_error"] = (
+                            reason[:240] if isinstance(reason, str) else "Veri hazır değil."
+                        )
+                    # Quote receipt/observation churn does not generate writes each second.
+                    meaningful = (
+                        event
+                        or (previous is None and state.get("ready"))
+                        or (
+                            previous is not None
+                            and any(
+                                state.get(k) != previous.get(k)
+                                for k in (
+                                    "ready",
+                                    "matched",
+                                    "continuity_id",
+                                    "last_bar",
+                                    "last_triggered_at",
+                                )
                             )
                         )
                     )
-                )
-                if meaningful:
-                    changes.append({"key": key, "state": state, "event": event})
-                ephemeral.append((key, state))
-                self._cursor = cursor
+                    if meaningful:
+                        changes.append({"key": key, "state": state, "event": event})
+                    ephemeral.append((key, state))
+                    self._cursor = cursor
             accepted = repository.apply_batch(changes)
             for key, result in health.items():
                 result["state"] = (

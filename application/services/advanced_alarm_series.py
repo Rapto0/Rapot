@@ -8,6 +8,7 @@ the next session. Crypto uses its native continuous UTC interval boundary.
 from __future__ import annotations
 
 import math
+from bisect import bisect_right
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -77,29 +78,26 @@ def validate_frame(raw: pd.DataFrame, timeframe: str, market: str, now: float) -
         raise SeriesError("Mum zamanı gelecekte.")
     local = frame.index.tz_convert("Europe/Istanbul" if market == "BIST" else "UTC")
     native_gaps = []
-    for previous, current in zip(local[:-1], local[1:], strict=True):
-        if market == "BIST" and previous.date() != current.date():
-            # Actual provider session sequence, not an invented holiday calendar.
-            continue
-        if timeframe in SECONDS:
-            distance = current.timestamp() - previous.timestamp()
-            if (
-                market == "BIST"
-                and distance > SECONDS[timeframe]
-                and distance % SECONDS[timeframe] == 0
-            ):
-                # Native exchange bars may omit no-trade/auction intervals. Keep
-                # the actual observations, without resampling or fabricated bars.
-                # Mark the new segment so a live crossing cannot bridge the gap.
-                native_gaps.append(current.timestamp())
-            elif distance != SECONDS[timeframe]:
-                raise SeriesError("Mum dizisinde periyot boşluğu veya örtüşmesi var.", reason="gap")
-        if (
-            market == "Kripto"
-            and timeframe not in SECONDS
-            and current.timestamp() != bar_end(previous, timeframe, market)
-        ):
-            raise SeriesError("Mum dizisinde periyot boşluğu var.", reason="gap")
+    if timeframe in SECONDS:
+        # Use integer nanoseconds; DatetimeIndex may have an ms/us resolution.
+        stamps = frame.index.as_unit("ns").asi8
+        distance = np.diff(stamps)
+        step = SECONDS[timeframe] * 1_000_000_000
+        same_session = np.ones(len(distance), dtype=bool)
+        if market == "BIST":
+            days = local.normalize()
+            same_session = days[:-1] == days[1:]
+        gaps = same_session & (distance > step) & (distance % step == 0)
+        valid = (~same_session) | (distance == step)
+        if market == "BIST":
+            valid |= gaps
+            native_gaps = (stamps[1:][gaps] / 1_000_000_000).tolist()
+        if not valid.all():
+            raise SeriesError("Mum dizisinde periyot boşluğu veya örtüşmesi var.", reason="gap")
+    elif market == "Kripto":
+        for previous, current in zip(local[:-1], local[1:], strict=True):
+            if current.timestamp() != bar_end(previous, timeframe, market):
+                raise SeriesError("Mum dizisinde periyot boşluğu var.", reason="gap")
     frame.attrs["native_gap_starts"] = tuple(native_gaps)
     return frame
 
@@ -144,11 +142,18 @@ def calculate_series(
     """Compute each field once per series refresh, outside the alarm evaluation loop."""
     tail_start = max(0, len(frame) - 4)
     selected = set(range(tail_start, len(frame)))
-    ends = [bar_end(stamp, timeframe, market) for stamp in frame.index]
-    for anchor in anchors:
-        eligible = [i for i, end in enumerate(ends) if end <= anchor]
-        if eligible:
-            selected.add(eligible[-1])
+    # Most rules need only four points. Calendar DateOffset conversion for all
+    # 500 bars is necessary only when another timeframe supplies close anchors.
+    if anchors:
+        ends = (
+            (frame.index.as_unit("ns").asi8 / 1_000_000_000 + SECONDS[timeframe]).tolist()
+            if timeframe in SECONDS
+            else [bar_end(stamp, timeframe, market) for stamp in frame.index]
+        )
+        for anchor in anchors:
+            eligible = bisect_right(ends, anchor) - 1
+            if eligible >= 0:
+                selected.add(eligible)
     indices = sorted(selected)
     values = [{} for _ in indices]
     for ref in refs:

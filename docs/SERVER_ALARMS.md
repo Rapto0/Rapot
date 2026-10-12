@@ -44,8 +44,12 @@ değerlendirme ve Telegram döngüleri tarayıcıdan bağımsız çalışır. Co
 yeniden başladığında kayıtlı etkin kurallar yeniden yüklenir. API/sunucu kapalı
 olduğunda değerlendirme yapılamaz; geri dönüşte eski fiyatlardan toplu tetik üretilmez.
 
-BIST için kayıtlı Borsapy/TradingView hesabıyla sürekli fiyat aboneliği ve
-dakikalık mum geçmişi tutulur. Yetki/oturum hatası anonim veya Yahoo verisiyle
+BIST için kayıtlı Borsapy/TradingView hesabıyla sürekli fiyat aboneliği tutulur.
+Mum geçmişi etkin alarm koşullarının gerçek sembol/periyot ihtiyacına göre alınır;
+son 120 saniyede görüntülenen en fazla 128 grafik isteği de bu kuyruğu paylaşır.
+Fiyat evrenindeki her sembol için otomatik 1m geçmiş işi açılmaz. Aynı seri tüm
+kurallar arasında paylaşılır, ihtiyaç bitince iş ve sıcak bellek bırakılır.
+Yetki/oturum hatası anonim veya Yahoo verisiyle
 gizlenmez. Kripto açıkça Binance kullanır. Fiyatın sağlayıcı zamanı ve alınma
 zamanı ayrıdır; bağlantının açık olması gecikmesiz fiyat kanıtı değildir.
 Kopma, tekrar bağlanma, güncel/bayat sembol sayıları ve bekleyen geçmiş işleri
@@ -98,8 +102,16 @@ korunur. Kapasite nedeniyle bekleyen işler başarı olarak gösterilmez.
 `ADVANCED_ALARM_ALL_BIST_ENABLED` varsayılan açıktır. Test ortamı bunları kapatır
 ve sahte sağlayıcı kullanır. Kullanıcının ertelediği canlı kabul, üretimde
 normal veri servisinin çalışmasını kapatmaz.
+`ADVANCED_ALARM_ALL_BIST_ENABLED` BIST evreni/fiyat takibini yönetir; gereksiz mum
+geçmişi üretmez. [12 Ekim verimlilik kaydı](WATCHLIST_EFFICIENCY_2026-10-12.md)
+paylaşılmış koşul planını, küçük durum batch'lerini ve test sınırlarını açıklar.
 
 ### Kalıcılık, erişim ve grafik
+
+Grafikte sunucu listeleri varsayılan paneldir; BIST ve Binance USDT üyeleri aynı
+listede saklanır. Liste üzerinden birden çok alarm taslağı açılabilir. Eski yerel
+listeler ayrı seçimde korunur ve yalnız elle kopyalanır; kaydetmeden alarm başlamaz.
+50 satırlık fiyat sayfalaması sunucu alarm kapsamını değiştirmez.
 
 7 Ekim'de eklenen yöneticiye özel `/advanced-alarms/heartbeat` ve `/coverage`
 tanı yolları yalnız belleği okur; sağlayıcı/DB sorgusu veya geçmiş işi başlatmaz.

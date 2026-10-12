@@ -1,9 +1,21 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-Kaynaklarla son karşılaştırma: **8 Ekim 2026 / elle canlı doğrulama ve kaynak maliyeti**. İş sırası, kullanıcı
+Kaynaklarla son karşılaştırma: **12 Ekim 2026 / izleme listeleri ve kaynak verimliliği**. İş sırası, kullanıcı
 yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DEVAM_PLANI.md)
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 Teknik rehberler [docs dizininde](docs/README.md) listelenir.
+
+12 Ekim kullanıcı RAM/CPU ve mum kuyruğuna kalıcı çözüm istedi; **3.000 etkin kural
+zorunlu değil**, karma BIST/kripto listeleri ve liste başına birden çok alarm öncelikli.
+Sıfır etkin alarm varken 805 planlı/720 bekleyen mum işi canlı GET ile görüldü.
+Yeni kaynak mumları gerçek alarm ihtiyaçları ve son 120 saniyelik en fazla 128 grafik
+talebiyle sınırlar; BIST fiyat evreni takibi sürer. Koşul/seri paylaşımı, küçük durum
+batch'leri, Binance public oturum tekrar kullanımı ve ortak scanner birleştirme
+iyileştirmeleri eklendi. Grafik sunucu listelerini kullanır; eski yerel listeler
+yalnız elle kopyalanır. Yerel 3.000 kural ölçümü üretim kapasitesi kanıtı değildir.
+Yayın/tam test/ayrı kabul devam eder; [12 Ekim kaydı](docs/WATCHLIST_EFFICIENCY_2026-10-12.md)
+ve devam planından gerçek durumu okuyun. Yeni otomatik takip/timer veya 3.000 üretim
+TEST kuralı oluşturulmaz. Mevcut emir, hacim ve tazelik korumaları sürer.
 
 8 Ekim kullanıcı **“Hazırım”** mesajıyla elle devamı başlattı; ilk saat kontrolü
 13:13 TSİ olduğundan sabah bölümü gözlenmiş sayılmaz. Codex takibi `PAUSED` ve
