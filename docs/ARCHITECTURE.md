@@ -1,8 +1,8 @@
 # Rapot mimarisi
 
 Mimari harita P2-2'de kaynakla karşılaştırıldı; aktif girişler
-**12 Ekim 2026 / eski otomatik botun kaldırılması** için güncellendi. Bu kaynak
-değişikliğinin üretim yayını ve kabulü henüz tamamlanmış sayılmaz. Bu belge mimariyi açıklar;
+**12 Ekim 2026 / eski otomatik botun kaldırılması** için güncellendi. `a099dbb`
+12:05:39 UTC'de yayımlandı; 12:15:02 UTC bağımsız kabul geçti. Bu belge mimariyi açıklar;
 öncelik, üretim sürümü ve kabul durumu [RAPOT_DEVAM_PLANI.md](RAPOT_DEVAM_PLANI.md)
 içindedir. Eski statik fan-in/fan-out sayıları yeniden ölçülmeden güncel kanıt sayılmaz.
 
@@ -116,8 +116,9 @@ ağ isteğini iptal etmez ve sağlayıcı yanıt süresine kesin üst sınır de
 Eski BIST yayın servisi varsayılan modda başlamaz; ihtiyaç üzerine açılan Borsapy
 bağlantısının henüz yapılandırılmaması API/DB feed/Binance sağlık hatası sayılmaz.
 
-12 Ekim bot kaldırma değişikliği API/frontend yayını ve ayrı bot servisinin
-durdurulmasını gerektirir; burada kaynak kapsamı anlatılır. Önceki dar canlı
+12 Ekim bot kaldırma değişikliği API/frontend yayını, botsuz Compose/current
+geçişi ve eski bot container'ının kaldırılmasıyla uygulandı; kabul kanıtı
+[göç kaydındadır](SERVER_ONLY_MIGRATION_2026-10-12.md). Önceki dar canlı
 kabul, bütün sembollerde tazelik veya sürekli kapasite garantisi değildir.
 
 ### TradingView → ayrı emir hattı

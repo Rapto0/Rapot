@@ -13,6 +13,12 @@ bağlantısının hacim alanı vermediği doğrulandı; tam canlı kapsam ve tak
 genel saat dilimi kabulü açık. Hacim/takvim düzeltmeleri `e449375` ile üretimde;
 [son doğrulama ve yayın durumu](FULL_SESSION_ACCEPTANCE_2026-10-08.md).
 
+12 Ekim'de eski otomatik COMBO/HUNTER tarayıcısı ve Telegram AI/komut yolu
+kaldırıldı. Borsapy'nin siteden başlatılan taramaları, grafikler, `/ai` ve
+kullanıcının sunucu alarmları korunur. Güncel API/frontend yayını ve bağımsız
+kabul [sunucu geçiş kaydında](SERVER_ONLY_MIGRATION_2026-10-12.md) izlenir;
+aşağıdaki 4 Ekim bot/Flask kabul kayıtları tarihsel kanıttır.
+
 Kaynak: borsapy 0.11.0,
 [`a9e41ae398fc2d25b35f864a5c7028d5f98862c3`](https://github.com/saidsurucu/borsapy/tree/a9e41ae398fc2d25b35f864a5c7028d5f98862c3).
 `borsapy[twitter]==0.11.0` ve geliştirme/CI bağımlılıkları kilitlidir. Kurulan
@@ -175,8 +181,8 @@ değildir; `realtime_verified=false` korunur.
   ve Fernet ile şifrelenir. Varsayılan ana DB yanında `.borsapy/credentials.enc`;
   `BORSAPY_CREDENTIALS_PATH` ile değişebilir. Linux dizin/dosya izinleri 0700/0600.
   JWT değişirse bağlantı yeniden tanımlanır. Dosya kalıcı özel volume'da olmalı.
-- API'de kimlik değişince ayrı bot süreci sonraki sağlayıcı çağrısında dosya
-  revizyonunu yeniden okur; aktif akışlar da en geç kiralama kontrolünde yenilenir.
+- API gateway'i kimlik dosyasının revizyonunu denetler. Kimlik değişimi veri
+  epoch'unu değiştirir; önceki kimliğe ait akış/önbellek sonucu yeni oturuma taşınmaz.
   Süresi dolan TradingView oturumu, bağımsız TEFAS/EVDS gibi sorguları engellemez;
   okunamayan şifreli dosyada bütün kimlikli yollar durur.
 - `.borsapy/` Git ve Docker build context'inden çıkarılır. Gizli yedekler genel
@@ -186,10 +192,8 @@ değildir; `realtime_verified=false` korunur.
   `private, no-store` taşır. Ana API kök/health, auth ve belge yolları global
   sınırın dışındadır; `/auth/me` kendi JWT doğrulamasını korur. Sağlayıcı
   oturumu ile Rapot JWT oturumu ayrıdır.
-- Ayrı Flask bot proxy'si de bu sınırı korur: sinyal, istatistik ve isteğe bağlı
-  Prometheus yolları admin ister. Başlıksız `/status` yalnız DB/yerel lifecycle
-  döndürür; ayrıntılı sayaç/hata bilgisi admin ister. Başlığı geçersiz bir istek
-  anonim yanıta düşmez. Cevaplar `private, no-store` ve `Vary: Authorization` taşır.
+- Ayrı Flask bot sağlık yüzeyi kaldırılmıştır. Site sağlığı ana API `/health`,
+  özel alarm durumu `/advanced-alarms/status` üzerinden okunur.
 - Backend WS ilk beş saniyede `{type: "auth", token}` mesajı, SSE Bearer başlığı
   ister. WS `authenticated` yanıtından önce abonelik/veri akışı başlamaz.
   URL'de token kabul edilmez. JWT süresi ve erişim veri tesliminde yeniden
@@ -219,8 +223,9 @@ eşlemeleri açık sembol/borsa listesi kullanır; tanımsız araç desteklenmiy
 olarak döner. Spot yerine vadeli kontratla sessiz ikame yapılmaz.
 
 `/scanner`, mevcut COMBO/HUNTER sinyal geçmişinin yanında Borsapy temel/teknik
-tarama yüzeylerini sunar. Bu araştırma taramaları mevcut bot stratejilerini
-ve ikinci kaynak teyidini değiştirmez.
+tarama yüzeylerini sunar. Kullanıcı isteğiyle çalışan bu sorgular otomatik
+COMBO/HUNTER taraması, sinyal kaydı veya Telegram AI bildirimi başlatmaz.
+Korunan COMBO/HUNTER hesaplayıcılarının eşikleri değiştirilmemiştir.
 
 `/calendar` Borsapy/Doviz.com `EconomicCalendar` kaynağını kullanır; Finnhub
 veya TradingView kimliği istemez, Rapot yönetici oturumu ister. İstanbul gününe
@@ -265,19 +270,21 @@ değişmez. Araştırma işlemleri borsaya emir veya kullanıcı adına alarm g�
 ## Scanner ve sunucu alarmları
 
 Gelişmiş `/advanced-alarms` motoru, tarayıcının kısa süreli akış kiralarından
-bağımsız BIST abonelikleri ve gerçek dakika geçmişi tutar. Kayıtlı kimliği
-gateway üzerinden kullanır; kopma/kimlik değişiminde önceki gözlemleri geçersiz
+bağımsız BIST fiyat abonelikleri tutar. Gerçek mum geçmişi yalnız etkin kural
+ihtiyaçları ve sınırlı grafik kiraları için hazırlanır; bütün evrene kendiliğinden
+dakika geçmişi işi açılmaz. Kayıtlı kimliği gateway üzerinden kullanır;
+kopma/kimlik değişiminde önceki gözlemleri geçersiz
 kılar. Son fiyat kotasyonlarıyla OHLCV uydurulmaz. Süresiz, çok koşullu kurallar,
 saniyelik tur hedefi, veri ısınması/kapsamı ve sınırlı disk/bellek politikası
-[alarm sözleşmesinde](SERVER_ALARMS.md) açıklanır. Günlük scanner/önceki alarm
-motoru aşağıdaki sözleşmeyi korur.
+[alarm sözleşmesinde](SERVER_ALARMS.md) açıklanır. Günlük veri yükleyici ve önceki
+alarm motoru aşağıdaki sözleşmeyi korur.
 
-`BORSAPY_USE_FOR_BIST` varsayılan true'dur: `get_bist_data`, sync/async scanner ve
+`BORSAPY_USE_FOR_BIST` varsayılan true'dur: `get_bist_data` ve
 günlük BIST alarm sağlayıcısı kimlikli gateway'i kullanır. False eski sağlayıcı
 yolunu açıkça seçer. Kimlik veya sağlayıcı hatasında başka kaynağa sessiz fallback
 olmaz. Günlük İstanbul işlem tarihi mevcut
 hesaplamaya uyarlanır; `open_quality=provider`, `adjustment=splits` taşınır.
-Scanner'ın alım tazeliği metadata'sı korunur; alım zamanı işlem zamanı değildir.
+Verinin alınma zamanı işlem zamanı değildir.
 `adjustment=splits` temettü dahil toplam getiri veya tüm sermaye işlemlerinin
 canlı doğrulaması değildir. Borsapy verisi eski fiyat önbelleğine yazılmaz.
 Alarmın ek 30 saniyelik önbelleği Borsapy BIST yolunda atlanır; kimlik değişimi
@@ -289,18 +296,18 @@ yerel TTL bir saat, upstream KAP önbelleği 24 saattir. Tek worker ve paylaşı
 işle bekleme 25 saniyeyle sınırlıdır; hata/eski veri sessiz statik listeye düşmez.
 `/borsapy/market/status` kaynak politikasını ve sembol durumunu açıklar.
 
-Mevcut özel sinyal/AI/bildirim koşullarında gereken bağımsız Yahoo teyidi
-korunur. Borsapy'yi ikinci kez okumak bağımsız teyit sayılmaz; aynı sağlayıcı
-eşleşmesi reddedilir. Sinyal metadata'sı birincil kaynak ve teyit politikasını
-taşır; politika alanı tek başına başarılı teyit sonucu değildir. Strateji
-eşikleri ve COMBO/HUNTER hesaplama sözleşmesi değiştirilmez.
+Otomatik scanner'a ait bağımsız Yahoo teyidi ve sinyalden başlayan AI/bildirim
+yolu kaldırılmıştır. Geçmiş sinyallerdeki kaynak/teyit metadata'sı korunur;
+bu alanlar yeni bir teyit yapıldığı anlamına gelmez. Strateji eşikleri ve
+COMBO/HUNTER hesaplama sözleşmesi değiştirilmez.
 
 API bootstrap varsayılan modda eski BIST fiyat servisini başlatmaz; Borsapy
 akışları ihtiyaç olduğunda açılır. Hesap henüz tanımlı değilse bu durum kişisel
 veri hatasıdır; çalışan API/DB sinyal feed'i ve Binance sağlık durumu bununla
-başarısız sayılmaz. Bot da bu kaynak değişikliği için yenilenmelidir.
+başarısız sayılmaz. Ayrı otomatik bot servisi gerekmez.
 
-BIST sunucu alarmlarının günlük kısıtı korunur. Gün içi grafik bulunması BIST
+Yalnız önceki `/alarms/legacy` motorunda BIST günlük kısıtı korunur; gelişmiş
+alarmlar gün içi periyotları da destekler. Gün içi grafik bulunması BIST
 seans/tatil/yarım gün ve mum kapanış takviminin doğrulandığı anlamına gelmez.
 Mevcut alarm kalıcılığı, sahiplik, Telegram sınırları ve DRY_RUN/emir ayarları korunur.
 

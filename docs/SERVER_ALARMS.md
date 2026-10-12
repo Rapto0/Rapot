@@ -8,10 +8,11 @@ isteğiyle çalışan `/ai` korunur. COMBO/HUNTER koşullu kullanıcı alarmlar�
 otomatik tarayıcıdan bağımsızdır. Telegram yalnız alarmda açıkça seçildiğinde kullanılır;
 `TELEGRAM_TOKEN` / `TELEGRAM_CHAT_ID` boşken site ve bildirimsiz alarmlar çalışabilir.
 
-Bu kaynak değişikliğinin yeni API/frontend yayını henüz doğrulanmadı. Eski üretim
-botu 12 Ekim 11:25:39 UTC'de durduruldu ve yeniden başlatma politikası `no` yapıldı.
-Bu işlem alarm motorunun yeni sürümüne ait kabul değildir; güncel durum
-[devam planında](RAPOT_DEVAM_PLANI.md) tutulur. Geçmiş sinyal/AI/tarama kayıtları
+`a099dbb` API/frontend sürümü 12 Ekim 12:05:39 UTC'de yayımlandı; 12:15:02 UTC
+bağımsız kabulde alarm motoru hatasız, Telegram yapılandırılmış ve sıfır etkin
+kuralda mum kuyruğu boştu. Eski bot container'ı kaldırıldı. Bu geçiş yeni Telegram
+teslimi veya 3.000 canlı kural yük kabulü değildir; ayrıntılar
+[göç kaydında](SERVER_ONLY_MIGRATION_2026-10-12.md) tutulur. Geçmiş sinyal/AI/tarama kayıtları
 korunur; tarama sayacı artık saklanan tarama kaydı adedidir.
 
 ## Gelişmiş gün içi alarm merkezi — 4 Ekim 2026

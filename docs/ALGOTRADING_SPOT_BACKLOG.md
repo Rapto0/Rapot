@@ -4,11 +4,11 @@ Son ALG eşleştirmesi: **11 Eylül 2026 / P2-2**; Pine kabul notu ve belge yoll
 
 ## Mevcut kapsam ve çalışma sınırı
 
-- Doğrulanan middleware girişi **TradingView webhook → Binance Spot** akışıdır. Python tarayıcısından middleware'e yeni doğrudan emir köprüsü tamamlanmış sayılmaz; ana bot/API ve middleware ayrı servis/veri alanlarıdır.
+- Doğrulanan middleware girişi **TradingView webhook → Binance Spot** akışıdır. Site taraması veya sunucu alarmından middleware'e doğrudan emir köprüsü yoktur; ana API ve middleware ayrı servis/veri alanlarıdır. Eski otomatik tarama botu 12 Ekim'de kaldırılmıştır.
 - Üretim **`MW_EXECUTION_MODE=DRY_RUN`, `MW_TRADING_ENABLED=false`, `MW_BINANCE_LIVE_ENABLED=false`** kalır. Gerçek/testnet emir gönderimi belge veya deploy yetkisiyle açılmaz.
 - Kullanıcı **10 Eylül 2026'da** borsa/alarm dış kabulünü erteledi. Gerçek TradingView alarm JSON'u/HTTPS teslimi, ALL/FIRST ve saat filtresi runtime kabulü, sınırlı testnet emirleri ve canlı geçiş tamamlanmadı. Artık yanıt beklenmiyor; kullanıcı yeniden seçtiğinde mevcut araç/kanıtlardan devam edilir.
 - Pine'ın 9–10 Eylül derleme ve standart Spot/engelli grafik kontrolleri **kullanıcı gözlemidir**. Güncel kaynak için 21 Eylül **araçla gözlenen derleme/Spot grafik kabulü** [ayrı kayıttadır](PINE_RUNTIME_ACCEPTANCE.md); güncel futures/standart olmayan grafik kabulünü kapsamaz. Ayrı PG16 üzerinde HTTPS, iki BUY/iki FIFO SELL ve restart/duplicate kabulü **operatör kaynaklı simülasyondur**; gerçek TradingView teslimi veya hesap dolumu değildir.
-- P2-1 dashboard alarmları `/alarms` açıkken çalışan tarayıcı kurallarıdır; borsa emri, sunucu alarm servisi veya TradingView kabulü yerine geçmez.
+- Tarihsel P2-1 tarayıcı kuralları artık `/alarms/local` altında sayfa açıkken çalışır. Güncel `/alarms` API içinde çalışan sunucu kurallarını yönetir; iki yol da borsa emri veya TradingView webhook kabulü yerine geçmez.
 
 ## Eski taslaktan değişen kararlar
 

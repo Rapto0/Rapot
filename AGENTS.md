@@ -6,10 +6,11 @@ tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değil
 Teknik rehberler [docs dizininde](docs/README.md) listelenir.
 
 **Güncel kullanıcı kararı:** Otomatik COMBO/HUNTER Telegram taraması, Telegram
-komutları ve bu taramaların otomatik AI/haber zinciri kaldırılır. Site Borsapy
+komutları ve bu taramaların otomatik AI/haber zinciri kaldırıldı. Site Borsapy
 taraması, COMBO/HUNTER hesaplayıcıları, backtest, `/ai` ve sunucu alarmlarının
-isteğe bağlı Telegram teslimi korunur. Eski bot **11:25:39 UTC'de durduruldu,
-restart=no**; yeni kaynak yayınının kabulü henüz bekleniyor. API içine gömülü bot,
+isteğe bağlı Telegram teslimi korunur. Eski bot **11:25:39 UTC'de durduruldu**;
+**`a099dbb`, 12:05:39 UTC API/frontend/Compose/current yayını ve 12:15:02 UTC
+bağımsız kabul geçti**, eski bot container'ı kaldırıldı. API içine gömülü bot,
 Flask sağlık servisi ve `scripts.runtime bot` yolu artık yok. Dört sürekli servis
 API/frontend/middleware/PostgreSQL; main-init ve middleware-migrate tek seferliktir.
 `/analyze/{symbol}` yöneticiye 410 döner; site AI yolu `/market/analysis` kalır.
@@ -17,6 +18,18 @@ Tarama geçmişi salt okunur arşivdir; `scan_count` saklanan arşiv satırı sa
 Kaldırılan dosyaların saf testleri kaldırıldı, paylaşılan hesaplayıcı/veri/DB
 sözleşmeleri korundu. Temiz backend imajı zorunludur; eski additive/delta imaj
 korumaları atlanmaz. [Göç kaydı](docs/SERVER_ONLY_MIGRATION_2026-10-12.md).
+1.709 Python/bir atlama, 309 frontend testi, beş CI işi ve temiz imaj yayını geçti.
+15 tablo şeması, tek liste, üç eski olay ve diğer iki servis korundu. Taze
+1.342.660.608 bayt yedek sunucu dışında bağımsız restore ile doğrulandı.
+`main.env` içinden yalnız `RUN_EMBEDDED_BOT`/`BOT_LOCK_PATH` kaldırıldı; kalan
+baytlar ve diğer özel dosyalar korundu. Yedi SSR/26 statik/altı anonim 401,
+eski sağlık ve analiz yollarının 410 yanıtı doğrulandı. Alarm motoru hatasız,
+Telegram yapılandırılmış; sıfır etkin kuralda mum işi/kuyruk 0/0. 805 abonelik,
+488 taze sembol anlık örnektir; tam evren/tam seans veya 3.000 yük kanıtı değildir.
+Üç kısa örnek 289,53–290,23 MiB kullanılabilir RAM, iki aralık %10,98/%22,33 CPU;
+dört servis healthy/restart0, eski timer kapalı. Kabul aracındaki Windows/Linux
+satır sonu ve AI yolunun GET/POST varsayımı düzeltildi; başarısız kayıtlar korundu.
+Üretim imajları bu tanı sırasında değiştirilmedi. Yeni mesaj, AI üretimi veya emir yok.
 Alttaki bot/beş servis kabul kayıtları gerçekleştiği tarihe ait tarihsel kanıtlardır.
 
 12 Ekim kullanıcı RAM/CPU ve mum kuyruğuna kalıcı çözüm istedi; **3.000 etkin kural
@@ -112,9 +125,9 @@ gözlemleri, bulunan kilit/grafik/önbellek sorunlarını ve yayın durumunu ay�
 |---|---|
 | Alarm motorları | `api/runtime/server_alarms.py`, `api/runtime/advanced_alarms.py`; API yaşam döngüsü |
 | Hesaplama | `signals.py`, `config.py`, `strategy_inspector.py`, `data_loader.py` |
-| Scanner uygulaması | `application/scanner/signal_handlers.py`, `application/scanner/scan_history.py`; `domain/events/signal_domain_event.py` |
+| Sinyal/tarama arşivi uyumluluğu | `application/scanner/signal_handlers.py`, `application/scanner/scan_history.py`; `domain/events/signal_domain_event.py`; otomatik bot girişi yok |
 | Ana API | `api/main.py`, `api/routes/`, `api/auth.py`; port 8000 |
-| Servis/repository | `application/services/` → `infrastructure/repositories/`; scanner yazıları `infrastructure/persistence/` |
+| Servis/repository | `application/services/` → `infrastructure/repositories/`; tarihsel sinyal kalıcılığı `infrastructure/persistence/` |
 | Ana veri | `models.py`, `db_session.py`, `database.py`; SQLite ve ayrı fiyat önbelleği |
 | Realtime | `api/runtime/signal_feed.py` ortak SQLite kayıtlarını okur; `api/realtime.py` WS/SSE sunar |
 | Sağlık | Ana API `/health`; özel alarm durumu `/advanced-alarms/status` |
@@ -158,7 +171,7 @@ hesap bağlantılarını yöneticiye sunar. Kişisel dashboard HTTP verileri yö
 özeldir ve `private, no-store` döner; WS ilk mesajla, SSE Bearer başlığıyla
 kimlik doğrular. TradingView/EVDS/X kimlikleri sunucuda şifrelenir;
 `research_workspaces` yalnız kullanıcı girdilerini tutar. `/chart`, dashboard
-ve izleme listelerinde BIST kaynağı Borsapy/TradingView'dur. Scanner ve günlük
+ve izleme listelerinde BIST kaynağı Borsapy/TradingView'dur. Günlük veri yükleyici ve
 BIST alarmları için `BORSAPY_USE_FOR_BIST` varsayılan true'dur; false eski
 sağlayıcıları açıkça seçer. Kimlik/sağlayıcı hatası sessiz kaynak değişimi yapmaz.
 Ortak fiyat akışı en fazla 200 etkin sembol, istek başına 50 sembol taşır;
@@ -242,7 +255,7 @@ uv pip check --python .venv/Scripts/python.exe
 
 `pytest.ini` varsayılan olarak `tests/` ve `middleware/tests/` toplar. Kök
 `conftest.py` ortam ayarlarını sentetik değerlerle değiştirir, geçici DB/cache
-kullanır, HTTP/socket/curl ağını engeller. Bu izolasyon normal API/bot başlatma
+kullanır, HTTP/socket/curl ağını engeller. Bu izolasyon normal API başlatma
 komutlarını veya keyfi native subprocess'leri kapsamaz.
 
 Tam pytest paketindeki `tests/test_strategy_comparison.py` ayrıca Node 20 ve

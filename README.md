@@ -15,10 +15,11 @@ The [documentation index](docs/README.md) groups the current technical guides an
 The old scheduled COMBO/HUNTER scanner, Telegram commands and scanner-triggered
 news/Gemini messages have been removed from the source. Website indicators,
 backtests, `/ai`, historical records and opt-in alarm delivery remain supported.
-This change has not yet been deployed: the old production bot was stopped at
-**11:25:39 UTC on 12 October**, with its restart policy set to `no`. That stop is
-not acceptance of the new API/frontend images; the continuation plan records the
-subsequent release outcome.
+Source **`a099dbb` was deployed at 12:05:39 UTC on 12 October**; independent
+acceptance passed at **12:15:02 UTC**. API/frontend and Compose now use the botless
+release. All four persistent services are healthy; stored data and account
+connections were preserved. The [migration record](docs/SERVER_ONLY_MIGRATION_2026-10-12.md)
+separates release checks from live-market and full-session capacity acceptance.
 
 ## Architecture
 

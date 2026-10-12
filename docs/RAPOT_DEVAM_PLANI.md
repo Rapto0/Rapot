@@ -12,8 +12,19 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 - **12 Ekim — eski Telegram botunun emekliliği:** Kullanıcı otomatik COMBO/HUNTER
   Telegram taramasını ve Telegram AI zincirini kaldırdı; site indikatörleri,
   Borsapy tarayıcı, site AI ve isteğe bağlı sunucu alarmı Telegram teslimi korunur.
-  Eski bot 11:25:39 UTC'de durduruldu, restart=no. Kod/Compose/sağlık arayüzü
-  botsuz yapıya geçiriliyor; yeni API/frontend yayını henüz kabul edilmedi.
+  Eski bot 11:25:39 UTC'de durduruldu; **`a099dbb`, 12:05:39 UTC API/frontend/
+  Compose/current yayını ve 12:15:02 UTC bağımsız kabul geçti**. Eski bot container'ı
+  ve sağlık proxy'si kaldırıldı. Dört servis healthy/restart0; middleware/PG aynı
+  kimlikte. 1.709 Python/bir atlama, 309 frontend testi, beş CI işi ve temiz imaj
+  yayını geçti. 15 tablo, tek liste ve üç eski olay korundu; 1.342.660.608 bayt
+  taze yedek sunucu dışında bağımsız restore ile doğrulandı. Yalnız iki eski bot
+  env satırı kaldırıldı; diğer özel ayarlar/kimlikler korundu. Yedi SSR/26 statik/
+  altı anonim 401, emekli yolların 410 yanıtları geçti. Alarm motoru hatasız,
+  Telegram yapılandırılmış; sıfır etkin kuralda mum işi/kuyruk 0/0. 805 abonelik/
+  488 taze sembol anlık durumdur. Üç kısa örnek 289,53–290,23 MiB RAM,
+  %10,98/%22,33 CPU gösterdi; tam seans/3.000 yük kabulü değildir. Eski takip timer'ı
+  kapalı, yeni mesaj/AI üretimi/emir yok. Kabul aracındaki satır sonu ve GET/POST
+  varsayımları düzeltilip başarısız kanıtlar korundu; servisler tekrar değiştirilmedi.
   DB/geçmiş/kimlikler korunur; yeni otomatik takip açılmaz. Aktif mimari için
   [göç kaydı](SERVER_ONLY_MIGRATION_2026-10-12.md) önce okunur; alttaki beş servis
   kayıtları tarihseldir.
@@ -735,19 +746,16 @@ repodan kaldırıldı. Dağıtım ve geri dönüş adımları [DEPLOY.md](DEPLOY
 | Alan | Son kayıt |
 |---|---|
 | Sunucu / erişim | `root@138.68.71.27`, IP üzerinden HTTPS |
-| API kaynak | `3df9640737ddb4b3f3a2cd006a2188b79d603a72` |
-| Frontend kaynak | `9592c69adb355f907b6c84642bed5259fbbe6ba1` |
-| Bot kaynak | `876f3f37b9d56624d17c46ab924684de559c5530` |
-| API imaj | `sha256:c6a1afda9f2267e1feeb12cfe649cb75c3341ccadbe656765774b009ce14fe17` |
-| Frontend imaj | `sha256:43c1755eaf03d66e2d9b222cfc08bc269d78d51b2e23228972ca016bbf5e7376` |
-| Bot imaj | `sha256:a6d0e72e9430d99d01e31409b347000d175cf1d116b0b83d6298079a2fd869d5` |
-| API / bot doğrudan Borsapy tabanı | `sha256:384674f3a7230ae4a6b182ac26e6114808627555988cb3305e7ed906b7d59def` (`ab18dc4`) |
-| Middleware / Compose / current kaynak | `279aa9fea99b520e661b43f104a2bf4791893ac3` |
-| Middleware / ortak eski backend tabanı imajı | `sha256:9be0fdb6097f52bf97730f44c86d28c24e2c0cea1fe181e7e8fd668177fdb034` |
+| API / frontend / Compose / current kaynak | `a099dbb9353bc7965cb03755fe6f166df16c4f6a` |
+| API imaj referansı | `ghcr.io/rapto0/rapot/backend@sha256:9893c31713ba18eb878f8e899d5f33e11922cda5d6e022bc767ed388f75cd0dc` |
+| Frontend imaj referansı | `ghcr.io/rapto0/rapot/frontend@sha256:c52866cae8b0e990c9196ac9ee984e852b5afabb4ec6980d40376ac8afc6c32a` |
+| Bot | 12 Ekim kaldırıldı; Compose servisi/5000 dinleyicisi yok |
+| Middleware kaynak | `279aa9fea99b520e661b43f104a2bf4791893ac3`; container kimliği korunuyor |
+| Middleware imajı | `sha256:9be0fdb6097f52bf97730f44c86d28c24e2c0cea1fe181e7e8fd668177fdb034` |
 | Veri / kaynak pointer | `/var/lib/rapot/main` ve `/opt/rapot/current`; operator kaynak kopyası bunlardan ayrıdır |
-| Çalışma modu | `MW_EXECUTION_MODE=DRY_RUN`, `MW_TRADING_ENABLED=false`, `MW_BINANCE_LIVE_ENABLED=false`; AI kapalı; API/bot `BORSAPY_USE_FOR_BIST=true` |
-| Son uzak kabul | 4 Ekim 16:19:02 UTC API düzeltmesi: 15 tablo şeması, motor ve özel GET, beş sayfa/13 statik/11 anonim 401 geçti. 16:19:14 UTC beş servis sağlıklı/restart0, OOM yok; boş alan 7.626.874.880 bayt. Frontend/bot/middleware/PostgreSQL kimlikleri korundu. |
-| TradingView bağlantısı | Mevcut kayıtlı oturum siteden doğrulandı; canlı fiyat/mum/bölünme kabulü erteli, `realtime_verified=false` |
+| Çalışma modu | `MW_EXECUTION_MODE=DRY_RUN`, `MW_TRADING_ENABLED=false`, `MW_BINANCE_LIVE_ENABLED=false`; otomatik Telegram AI kaldırıldı, site AI korunur; API `BORSAPY_USE_FOR_BIST=true` |
+| Son uzak kabul | 12 Ekim 12:15:02 UTC: dört servis healthy/restart0/OOMfalse; 15 tablo, yedi SSR/26 statik/altı anonim 401 ve özel alarm durumu geçti. Boş alan 5.486.444.544 bayt. [Göç kanıtı](SERVER_ONLY_MIGRATION_2026-10-12.md). |
+| TradingView bağlantısı | Şifreli kimlik korundu; 7 Ekim dar canlı kabulü mevcut. Tam evren/hacim/bölünme/tam seans kabulü açık, `realtime_verified=false` |
 
 Son kayıtlar:
 

@@ -1,6 +1,6 @@
 # Rapot Dashboard 📈
 
-Rapot'un BIST/Kripto sinyallerini, ana veritabanındaki işlemleri ve bot durumunu
+Rapot'un BIST/Kripto piyasa verilerini, geçmiş sinyal/işlem kayıtlarını ve API durumunu
 gösteren Next.js dashboard'u. Grafikler Lightweight Charts kullanır; TradingView
 Pine/webhook akışı ve ayrı Spot middleware bu arayüzden yönetilmez.
 Rapot'un kendi kalıcı sunucu alarmları `/alarms` ekranından yönetilir.
@@ -24,13 +24,13 @@ npm run dev
 
 Tarayıcınızda [http://localhost:3000](http://localhost:3000) adresine gidin.
 
-Dashboard'un gerçek verisi için ana API ve bot health servisi ayrıca çalışmalıdır.
-Varsayılan tarayıcı yolları `/api` ve `/health-api`; Next proxy hedefleri sırasıyla
-`http://localhost:8000` ve `http://localhost:5000`'dir. Bunlar
-[`next.config.ts`](../frontend/next.config.ts) içindeki `API_PROXY_TARGET` ve
-`HEALTH_PROXY_TARGET` ile yapılandırılır. Public istemci adresleri
-`NEXT_PUBLIC_API_URL` ve `NEXT_PUBLIC_HEALTH_API_URL` ile değiştirilebilir;
-standalone dağıtımda build sırasında kullanılan hedefleri de kontrol edin.
+Dashboard'un gerçek verisi için ana API ayrıca çalışmalıdır. Varsayılan tarayıcı
+yolu `/api`, Next proxy hedefi `http://localhost:8000`'dir.
+[`next.config.ts`](../frontend/next.config.ts) içindeki `API_PROXY_TARGET` hedefi,
+`NEXT_PUBLIC_API_URL` istemci adresini yapılandırır. Sistem sağlığı aynı API'nin
+`/health` yanıtından, alarm durumu yöneticiye özel `/advanced-alarms/status`
+yolundan okunur. Ayrı Flask servisi, 5000 portu ve health proxy ayarları kaldırılmıştır.
+Standalone dağıtımda build sırasında kullanılan hedefi de kontrol edin.
 Sunucu sırları `NEXT_PUBLIC_*` değişkenlerine konmaz.
 
 ## Oturum ve doğrulama
@@ -42,12 +42,11 @@ rolü bu özel verilere erişmez. HTTP yanıtları `private, no-store` taşır.
 
 Token yalnız sekme belleğinde tutulur; sayfa yenileme, süre dolumu veya çıkış oturumu
 sonlandırır. Oturum değişince sorgu önbelleği ve önceki kullanıcıya ait bileşen durumu
-temizlenir. Token yapılandırılmış ana API adresine ve aynı origin'deki
-yapılandırılmış health API'nin yalnız `/status` yoluna eklenir; harici health
-adresine veya başka sağlık yollarına otomatik gönderilmez. `MW_ADMIN_AUTH_TOKEN`
-frontend'e verilmez. Başlıksız bot `/status` yanıtı yalnız DB/yerel lifecycle
-sağlığıdır; kişisel sayaç/hata ayrıntıları admin ister. İki yanıt da
-`private, no-store` ve `Vary: Authorization` kullanır.
+temizlenir. Token yalnız yapılandırılmış ana API adresinin origin ve yol sınırı
+içindeki isteklere eklenir; başka hedeflere otomatik gönderilmez.
+`MW_ADMIN_AUTH_TOKEN` frontend'e verilmez. Ana API `/health` anonim okunabilir;
+sağlık ekranındaki alarm durumu, loglar ve tarama arşivi yönetici oturumu ister.
+Kaldırılan bot `/status` yolu oturum veya sağlık kaynağı değildir.
 Backend WebSocket bağlantısı yalnız admin oturumunda açılır. İlk mesaj
 `{type: "auth", token}` olur; `authenticated` yanıtı gelmeden abonelik başlamaz.
 Token URL'ye konmaz. 4401/4403 bağlantıyı yeniden denemeyi durdurur ve özel
@@ -76,9 +75,9 @@ npm run test:standalone
 ```
 
 Bu smoke testi `.next/standalone` altında statik dosyaları hazırlar, geçici Next
-sunucusu ve sahte API/health dinleyicileri açar; HTTP, statik varlık, chart SSR/RSC
-ve WebSocket upgrade yollarını denetler. Varsayılan 8000/5000 portları test için
-boş olmalıdır. Gerçek API/bot veya üretim hedefi kullanmaz; gerçek piyasa verisi
+sunucusu ve sahte API dinleyicisi açar; HTTP, statik varlık, chart SSR/RSC
+ve WebSocket upgrade yollarını denetler. Varsayılan 8000 portu test için
+boş olmalıdır. Gerçek API veya üretim hedefi kullanmaz; gerçek piyasa verisi
 ve sunucu kabulünün yerine geçmez.
 
 Kilitli bağımlılık güvenliğini ayrıca doğrulayın:
@@ -110,14 +109,14 @@ platform paketi için ürettiği `npm ls` uyarısı
 |-------|----------|
 | **Dashboard** | Piyasa özetleri, BIST/Kripto sembol araması ve ekranlara hızlı erişim |
 | **Piyasa Tarayıcı** | `/scanner` - BIST/Kripto COMBO-HUNTER geçmişi, Borsapy temel/teknik tarama |
-| **Aktif Sinyaller** | `/signals` - Filtre/arama, HUNTER/COMBO sinyalleri ve görünür satırların CSV çıktısı |
+| **Sinyal Geçmişi** | `/signals` - Korunan HUNTER/COMBO kayıtlarında filtre/arama ve görünür satırların CSV çıktısı |
 | **Grafik** | `/chart` - BIST Borsapy/TradingView, Kripto Binance, izleme listeleri ve sunucu alarmı taslağı |
 | **Araştırma** | `/research` - Borsapy katalog, sanal portföy, replay ve sunucu hesap bağlantıları |
 | **Ekonomik Takvim** | `/calendar` - Borsapy/Doviz.com olayları, ülke/önem/tarih filtreleri ve kaynak uyarıları |
 | **Sunucu Alarmları** | `/alarms` - Yöneticiye ait kalıcı kural oluşturma/düzenleme, duraklatma ve teslim geçmişi |
 | **Eski Yerel Alarmlar** | `/alarms/local` - Bu sayfa açıkken eski tarayıcı kurallarının kontrolü |
 | **İşlem Geçmişi** | `/trades` - Ana DB işlemleri; hesaplanabilir PnL, eksik veride bilinmeyen değer |
-| **Bot Sağlığı** | `/health` - Bot yaşam döngüsü, tarama sonucu, admin logları ve sistem metrikleri |
+| **Sistem Sağlığı** | `/health` - API/DB/realtime sağlığı, ayrı alarm motoru durumu, admin logları ve tarama arşivi |
 | **Ayarlar** | `/settings` - Sunucuda yönetilen ayarların açıklaması ve tarayıcı tercihlerinin kapsamı |
 
 ## Ekran davranışları ve sınırlar
@@ -150,11 +149,12 @@ platform paketi için ürettiği `npm ls` uyarısı
   API motoru tarayıcı ve oturumdan bağımsız çalışır. Grafik üzerinden sembol/listeden
   kural taslağı açılabilir. Telegram varsayılan kapalıdır. Durum, son kontrol,
   hata ve teslim geçmişi görünür; başarısız yenileme mevcut kayıtları silmez.
-  BIST yalnız günlük (`1d`), Binance Spot USDT ise `1h`/`4h`/`1d` destekler;
-  BIST içeren karma listelerde de saatlik seçim reddedilir. BIST günlük mumları,
-  Türkiye saatinde ertesi gün 00.00 geçince kapanmış kabul edilir. Her kontrol
-  turundan sonra yaklaşık 60 saniye beklenir; tüm semboller aynı turda
-  tamamlanamayabilir. Form, desteklenmeyen periyodu sessizce değiştirmez.
+  Gelişmiş motor fiyat, teknik ve izleme listesi kurallarında BIST/Binance USDT
+  ve karma listeleri; `1m`/`5m`/`15m`/`30m`/`1h`/`4h`/`1d`/`1wk`/`1mo`
+  periyotlarını destekler. Saniyelik tur hedefi bütün kural/sembollerin aynı
+  saniyede kontrol edildiği anlamına gelmez. Eksik/bayat veri ve doğrulanamayan
+  mum kapanışı değerlendirmeyi bekletir. Önceki `/alarms/legacy` motorunun
+  BIST `1d`, kripto `1h`/`4h`/`1d` ve yaklaşık 60 saniyelik tur sözleşmesi ayrıdır.
   [Hesaplama, periyot ve teslim sınırları](SERVER_ALARMS.md) geçerlidir.
 - **Piyasa kaynağı:** BIST grafik, dashboard ve izleme listesi Borsapy/TradingView
   kullanır; kimlik veya sağlayıcı hatasında eski kaynağa sessiz dönüş yoktur.
@@ -184,8 +184,13 @@ platform paketi için ürettiği `npm ls` uyarısı
   kaydedilmez. Bozuk/erişilemeyen depolamada değişiklik başarısız görünür.
   localStorage işlem kilidi sağlamadığından gerçekten eşzamanlı iki yazımda son
   yazan davranışı devam eder.
-- **Ayarlar:** API anahtarı girme veya bot stratejisi/tarama/Telegram ayarı
-  değiştirme formu yoktur. Bot yapılandırması sunucuda yönetilir. Başlangıçta
+- **Tarama ve AI:** Borsapy piyasa taraması kullanıcı isteğiyle çalışır;
+  COMBO/HUNTER sekmesi ve sağlık ekranındaki taramalar salt okunur geçmiş kayıtlardır.
+  Otomatik tarama ve Telegram AI komutları kaldırılmıştır. Grafik göstergeleri,
+  backtest ve `/ai` ekranından başlatılan site analizi korunur.
+- **Ayarlar:** Veri bağlantıları `/research`, site AI `/ai`, kurallar ve isteğe
+  bağlı Telegram bildirimi `/alarms` üzerinden yönetilir. Telegram hedefi
+  sunucuda yapılandırılır; bağlantı sırları ayarlar ekranında gösterilmez. Başlangıçta
   eski `rapot.settings.v1` ve `rapot-settings` kayıtlarından gizli alanlar
   allowlist ile temizlenir; tutulan sayısal/bool değerler etkisiz geçmiş kaydıdır.
   Gerçek izleme listesi/sütun/filtre tercihleri kendi ekranlarından düzenlenir.
@@ -194,9 +199,13 @@ platform paketi için ürettiği `npm ls` uyarısı
   bağlandığı varsayılmamalıdır. Frontend COMBO/HUNTER hesaplamalarıyla Python/Pine
   hesaplamalarının birebir eşitliği ayrıca doğrulanmış değildir.
 
-Bu site geneli özel veri ve Borsapy kaynak değişikliklerinin API/frontend/bot
-yayını henüz tamamlanmadı. Sentetik yerel tarayıcı kabulü gerçek hesap, piyasa
-gecikmesi veya bildirim teslimi kabulünün yerine geçmez; güncel durum devam planındadır.
+12 Ekim `a099dbb` API/frontend yayını, eski botun kaldırılması ve bağımsız
+kabulün güncel durumu [sunucu geçiş kaydında](SERVER_ONLY_MIGRATION_2026-10-12.md)
+tutulur. Sentetik yerel tarayıcı kabulü gerçek hesap, piyasa gecikmesi veya
+bildirim teslimi kabulünün yerine geçmez.
+
+Aşağıdaki tarihli UI kayıtları önceki sürümlerin kabul kanıtlarıdır; eski
+bot/health adları ve test sayıları güncel kurulum talimatı değildir.
 
 ## Gezinme ve arama iyileştirmesi — 21 Eylül 2026
 

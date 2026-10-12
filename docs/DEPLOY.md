@@ -5,11 +5,14 @@ constrained by `requirements-dev.lock`, Node 20.20.2/npm 10.9.9 and Next.js stan
 Unused legacy PM2/API launcher files were removed in the 21 September repository cleanup.
 Docker Compose is the supported production path; historical cutover evidence remains below.
 
-**12 October source transition, deployment pending:** the legacy scheduled scanner,
+**12 October transition deployed and accepted:** the legacy scheduled scanner,
 Telegram command bot, automatic scanner AI and Flask health process are removed.
-The old production bot was stopped at 11:25:39 UTC with `restart=no`; this does not
-mean that the new API/frontend release has passed production acceptance. See the
-[continuation plan](RAPOT_DEVAM_PLANI.md) for the actual release status.
+Source `a099dbb` reached API/frontend and Compose/current at 12:05:39 UTC;
+independent acceptance passed at 12:15:02 UTC. The old bot container is absent,
+all four persistent services are healthy, and middleware/PostgreSQL identities
+are unchanged. Only two obsolete bot assignments were removed from `main.env`;
+other bytes and private files were preserved. See the
+[migration record](SERVER_ONLY_MIGRATION_2026-10-12.md) for exact evidence and limits.
 
 Use normal clean backend/frontend builds for this transition. `Dockerfile`, runtime
 entry points and dependency inputs changed. The historical API-delta and Borsapy
@@ -237,12 +240,14 @@ Registry compressed-layer sizes, added unpacked sizes, fresh server capacity,
 the fixed 528 MiB reserve, a verified offhost database backup and rollback images
 remain mandatory deployment gates. No image pruning is implied. The first
 research release updated API/frontend while preserving the old bot. The later
-site-wide Borsapy request requires API, bot and frontend to move together: API
-and bot share the same verified source-only backend digest, with explicit
-`BORSAPY_USE_FOR_BIST=true` overrides. This selects the provider without claiming
-successful live-market or account acceptance. Middleware, PostgreSQL, the shared
-older backend anchor, initializer/migration services and all private env files
-remain unchanged. A fresh backup must include all eleven current SQLite tables.
+4 October site-wide Borsapy transition moved API, bot and frontend together: API
+and bot shared the verified source-only backend digest, with explicit
+`BORSAPY_USE_FOR_BIST=true` overrides. That historical transition preserved
+middleware, PostgreSQL, the older backend anchor, initializer/migration services
+and private env files, with an eleven-table backup. It does not prescribe the
+current topology: the 12 October clean release removes the bot, preserves all
+15 SQLite tables, and removes exactly two obsolete bot lines from `main.env`.
+Use the current [migration record](SERVER_ONLY_MIGRATION_2026-10-12.md).
 
 The 4 October 2026 release deployed API/frontend source `4b15335` using this
 extension. Exact-source CI `37159767810` and publication `37159767909` passed.

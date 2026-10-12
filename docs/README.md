@@ -8,12 +8,13 @@ Güncel iş sırası, kullanıcı yetkileri ve tarihli kabul kanıtları
 servislerdir; init/migrate işleri tek seferliktir. Eski otomatik COMBO/HUNTER
 Telegram tarayıcısı, Telegram komutları ve tarayıcıya bağlı AI kaldırılmıştır.
 Site Borsapy taraması, indikatörler, backtest, `/ai` ve kullanıcı alarmlarının
-isteğe bağlı Telegram teslimi korunur. Kaynak değişikliği henüz yeni üretim
-yayını olarak kabul edilmedi; eski botun 11:25:39 UTC'de durdurulması ayrı işlemdir.
+isteğe bağlı Telegram teslimi korunur. `a099dbb` API/frontend yayını 12:05:39 UTC'de
+yapıldı ve eski bot kaldırıldı; bağımsız kabulün güncel sonucu
+[sunucu geçiş kaydında](SERVER_ONLY_MIGRATION_2026-10-12.md) tutulur.
 
 ## Mimari ve geliştirme
 
-- [Mimari ve veri akışları](ARCHITECTURE.md) — eski bot bölümleri tarihsel; güncel giriş noktaları kök README ve DEPLOY içindedir.
+- [Mimari ve veri akışları](ARCHITECTURE.md) — güncel giriş noktaları, veri yolları ve korunan geçmiş kayıtlar.
 - [Frontend: kurulum, testler ve ekran davranışları](FRONTEND.md)
 - [Sunucuda çalışan alarmlar: kurallar, bildirim ve sınırlar](SERVER_ALARMS.md)
 - [Borsapy araştırma merkezi, hesap bağlantısı ve kabul sınırları](BORSAPY_INTEGRATION.md)
@@ -45,6 +46,7 @@ middleware/emir kabulünü tamamlamaz.
 ## Dağıtım ve kabul kayıtları
 
 - [Doğrulanmış commit ile Docker Compose dağıtımı](DEPLOY.md)
+- [12 Ekim eski otomatik botun kaldırılması ve sunucu geçişi](SERVER_ONLY_MIGRATION_2026-10-12.md)
 - [Frontend bağımlılık güvenliği ve üretim kabulü](FRONTEND_DEPENDENCY_SECURITY.md)
 - [21 Eylül Pine derleme/grafik kabulü](PINE_RUNTIME_ACCEPTANCE.md)
 - [7 Ekim canlı BIST, Telegram ve veri kalitesi kabulü](LIVE_MARKET_ACCEPTANCE_2026-10-07.md)
