@@ -93,13 +93,6 @@ def get_trade_stats_summary() -> dict[str, int | float]:
     winning_trades = int(stats["winning_trades"])
     win_rate = (winning_trades / closed_trades * 100) if closed_trades > 0 else 0.0
 
-    try:
-        from market_scanner import get_scan_count
-
-        scan_count = get_scan_count()
-    except Exception:
-        scan_count = 0
-
     return {
         "total_signals": int(stats["total_signals"]),
         "total_trades": int(stats["total_trades"]),
@@ -107,5 +100,6 @@ def get_trade_stats_summary() -> dict[str, int | float]:
         "closed_trades": closed_trades,
         "total_pnl": float(stats["total_pnl"]),
         "win_rate": round(float(win_rate), 2),
-        "scan_count": int(scan_count),
+        # Historical scan rows, not the removed bot's lifetime/in-memory counter.
+        "scan_count": int(stats["scan_count"]),
     }

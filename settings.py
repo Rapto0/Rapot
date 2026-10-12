@@ -13,8 +13,8 @@ class Settings(BaseSettings):
     """Runtime configuration loaded from environment / .env."""
 
     # ==================== TELEGRAM ====================
-    telegram_token: str = Field(..., description="Telegram Bot Token")
-    telegram_chat_id: str = Field(..., description="Telegram Chat ID")
+    telegram_token: str = Field("", description="Optional Telegram token for website alarms")
+    telegram_chat_id: str = Field("", description="Optional Telegram chat for website alarms")
 
     # ==================== BINANCE ====================
     binance_api_key: str = Field("", description="Binance API Key")
@@ -35,7 +35,6 @@ class Settings(BaseSettings):
 
     # ==================== APP RUNTIME ====================
     app_env: str = Field("production", description="Runtime env: production/development/test")
-    run_embedded_bot: bool = Field(False, description="Run scheduler inside API process")
     server_alarms_enabled: bool = Field(True, description="Run persistent alarms in the API")
     advanced_alarms_enabled: bool = Field(True, description="Run persistent advanced alarm engine")
     advanced_alarm_market_enabled: bool = Field(True, description="Run server-owned market input")
@@ -56,7 +55,6 @@ class Settings(BaseSettings):
         description="Borsapy is the BIST primary source; false explicitly selects legacy providers",
     )
     borsapy_stream_idle_seconds: int = Field(120, ge=30, le=600, description="Chart lease lifetime")
-    bot_lock_path: str | None = Field(None, description="Shared bot instance lock file path")
     cors_allow_origins: str = Field(
         "http://localhost:3000,http://127.0.0.1:3000",
         description="Comma separated CORS origins",
@@ -64,7 +62,6 @@ class Settings(BaseSettings):
     cors_allow_credentials: bool = Field(True, description="Enable CORS credentials")
 
     # ==================== SCANNING ====================
-    scan_interval_hours: int = Field(4, ge=1, le=24, description="Scan interval (hours)")
     min_data_days: int = Field(30, ge=7, description="Min data days")
     warmup_days: int = Field(60, ge=30, description="Warmup days")
     min_backtest_days: int = Field(120, ge=60, description="Min backtest days")
@@ -72,13 +69,8 @@ class Settings(BaseSettings):
     # ==================== RATE LIMITS ====================
     bist_delay: float = Field(0.3, ge=0.1, description="BIST API delay (seconds)")
     crypto_delay: float = Field(0.1, ge=0.05, description="Crypto API delay (seconds)")
-    telegram_delay: float = Field(0.5, ge=0.1, description="Telegram delay (seconds)")
     max_retries: int = Field(3, ge=1, le=10, description="Max retries")
     retry_wait: float = Field(2.0, ge=1.0, description="Retry wait (seconds)")
-
-    # ==================== HEALTH API ====================
-    health_api_port: int = Field(5000, ge=1024, le=65535, description="Health API port")
-    health_api_host: str = Field("0.0.0.0", description="Health API host")
 
     # ==================== AI ====================
     ai_enabled: bool = Field(True, description="Master switch for AI analysis")

@@ -1,23 +1,32 @@
 # Rapot
 
-Rapot scans BIST and crypto markets, records COMBO/HUNTER signals, and presents them
-in a Next.js dashboard through a Python/FastAPI backend. Gemini analysis and Telegram
-notifications are configurable integrations. A separate Binance Spot middleware
-process handles TradingView webhooks and order accounting.
+Rapot provides BIST and crypto charts, on-demand Borsapy screening, COMBO/HUNTER
+indicators, manual Gemini analysis and persistent server alarms through a Next.js
+dashboard and Python/FastAPI API. Telegram is optional for alarms explicitly created
+on the site. A separate Binance Spot middleware handles TradingView webhooks and
+order accounting.
 
 Current priorities, production evidence and deferred acceptance:
 [Rapot continuation plan](docs/RAPOT_DEVAM_PLANI.md). Documentation was compared with
-the source on **4 October 2026 (personal Borsapy data infrastructure)**. Old backlog
+the source on **12 October 2026 (legacy Telegram bot removal)**. Old backlog
 IDs and unchecked boxes are historical planning information; use the continuation plan for current work.
 The [documentation index](docs/README.md) groups the current technical guides and acceptance records.
+
+The old scheduled COMBO/HUNTER scanner, Telegram commands and scanner-triggered
+news/Gemini messages have been removed from the source. Website indicators,
+backtests, `/ai`, historical records and opt-in alarm delivery remain supported.
+This change has not yet been deployed: the old production bot was stopped at
+**11:25:39 UTC on 12 October**, with its restart policy set to `no`. That stop is
+not acceptance of the new API/frontend images; the continuation plan records the
+subsequent release outcome.
 
 ## Architecture
 
 | Component | Entry points and data |
 |---|---|
-| Scanner bot | `main.py` → `scheduler.py` → `market_scanner.py` / `async_scanner.py` |
+| On-demand screening | `/scanner` and `/research` → Borsapy research API; no scheduled Telegram scanner |
 | Signal engine | `signals.py`, `strategy_inspector.py`, `data_loader.py` |
-| Shared scanner handlers | `application/scanner/`, `domain/events/`, `infrastructure/persistence/` |
+| Historical signal compatibility | `application/scanner/`, `domain/events/`, `infrastructure/persistence/`; preserved without an automatic bot entry point |
 | Main API | `api/main.py`, `api/routes/` → `application/services/` → `infrastructure/repositories/` |
 | Main storage | SQLite via `models.py` / `db_session.py`; legacy `database.py` access remains; separate price cache |
 | Signal delivery | API `api/runtime/signal_feed.py` reads committed SQLite rows and broadcasts WS/SSE; clients refresh REST on reconnect |
@@ -25,6 +34,10 @@ The [documentation index](docs/README.md) groups the current technical guides an
 | Order middleware | `middleware/api/main.py` → `middleware/services/trading_service.py`; separate PostgreSQL/Alembic schema |
 
 Main dashboard trades/stats and middleware orders/positions are separate datasets.
+Stored signals, trades, AI analyses and scan history remain readable. The `scan_count`
+field now counts stored scan-history rows, not the former bot's lifetime counter.
+Removing the old scheduler stops its automatic signal/archive production; it does
+not disable interactive Borsapy screening or user-created COMBO/HUNTER alarms.
 The `/alarms` page manages 1,000 each of price, technical and watchlist alarms,
 including compound conditions and intrabar or confirmed-candle triggers. The API
 owns bounded market tracking and evaluation even when the browser is closed;
@@ -64,13 +77,13 @@ the supported dashboard is Next.js. Tests additionally use httpx2 for Starlette'
 TestClient; application SDKs still use httpx. Both transports are blocked from
 external I/O in the isolated test harness.
 The stack includes FastAPI, SQLAlchemy, pandas/NumPy/ta, python-binance,
-isyatirimhisse/yfinance, google-genai, python-telegram-bot, Flask, Alembic and psycopg.
+isyatirimhisse/yfinance, Borsapy, google-genai, cryptography, Alembic and psycopg.
 Gemini uses `google.genai` first; the old SDK is an optional code fallback.
 The locked environment uses the `ta` compatibility accessor in `signals.py`;
 installing optional `pandas_ta` can change the calculation path.
 
 Frontend versions come from `frontend/package.json` and its lock: Node 20.20.2,
-npm 10.9.9, Next.js 16.3.5, React 19.2.3, TypeScript 5.9.3, Tailwind 4.1.18,
+npm 10.9.9, Next.js 16.3.8, React 19.2.3, TypeScript 5.9.3, Tailwind 4.1.18,
 Lightweight Charts 5.1.0, Zustand 5.0.10 and React Query 5.90.19.
 
 ## Quick Start
@@ -80,33 +93,34 @@ Install the selected Python 3.12 / Node 20.20.2 / npm 10.9.9 development environ
 
 1. Copy environment template:
    - `cp .env.example .env`
-2. Set `TELEGRAM_TOKEN` and `TELEGRAM_CHAT_ID` (required settings fields), and a
-   `JWT_SECRET_KEY`. Configure `ADMIN_PASSWORD` / `USER_PASSWORD` or their hash
+2. Set a strong `JWT_SECRET_KEY`. Configure `ADMIN_PASSWORD` / `USER_PASSWORD` or their hash
    alternatives for the accounts you want to enable. Use an isolated development
-   database path. Tests below need none of these real credentials.
+   database path. `TELEGRAM_TOKEN` and `TELEGRAM_CHAT_ID` may remain empty; set both
+   only if you want Telegram delivery for explicitly enabled website alarms.
+   Tests below need none of these real credentials.
 3. Optional AI uses `GEMINI_API_KEY` with `AI_ENABLED`. BIST charts and the default
-   BIST scanner/alarm source use the server-side Borsapy/TradingView connection
+   BIST history/daily-alarm source use the server-side Borsapy/TradingView connection
    configured by an admin in `/research`. `BORSAPY_USE_FOR_BIST` defaults to true;
-   false explicitly selects legacy scanner/alarm providers. Provider or account
+   false explicitly selects legacy history/daily-alarm providers. Provider or account
    failure never silently selects a different BIST source. The economic calendar
    uses public Borsapy/Doviz.com data without Finnhub or TradingView credentials.
    Binance market data preserves its exchange identity and does not require enabling
    the middleware's order execution.
 4. Run services with the selected virtual environment activated:
    - API: `python -m uvicorn api.main:app --reload --port 8000`
-   - Bot: `python main.py` (or `python main.py --async`)
    - Frontend, in `frontend/`: `npm ci`, then `npm run dev`
 
 These startup commands use application settings, databases and external providers.
-They are not the isolated test harness. Keep `RUN_EMBEDDED_BOT=0` when the bot runs
-as a separate process.
+They are not the isolated test harness. The API owns server alarm evaluation and
+delivery; no separate or embedded bot process is required.
 
 ## Docker
 
-The supported production topology uses **Compose 2.24+**, `main-init`, `api`, `bot`
-and `frontend`. The optional `middleware` profile adds `postgres`,
-`middleware-migrate` and `middleware`. Init/migrate are one-shot jobs; middleware
-uses its own database, with DRY_RUN and trading/live disabled in Compose.
+The supported production topology uses **Compose 2.24+**, `main-init`, `api`
+and `frontend`. With the middleware profile, the four persistent services are
+API, frontend, middleware and PostgreSQL. `main-init` and `middleware-migrate`
+are one-shot jobs. Middleware uses its own database, with DRY_RUN and trading/live
+disabled in Compose.
 
 Prepare the data directory and configuration using [the deployment guide](docs/DEPLOY.md)
 before starting Compose. Main SQLite uses `db_session.init_db()` and compatible
@@ -114,11 +128,15 @@ schema additions; middleware uses Alembic migrations and a production revision
 check. The legacy `migrate_db.py` script is not a general deployment command.
 See [the two database migration policies](docs/DB_MIGRATION_POLICY.md).
 
-Browser HTTP/WebSockets use `/api`, health uses `/health-api`. Next.js rewrites
-target `API_PROXY_TARGET` and `HEALTH_PROXY_TARGET`; container builds use `api:8000`
-and `bot:5000`. Host Nginx uses explicit `127.0.0.1` upstreams and HTTPS.
+Browser HTTP/WebSockets use `/api`; health uses `/api/health` and authenticated
+alarm runtime status. Next.js rewrites target `API_PROXY_TARGET`; container builds
+use `http://api:8000`. The former Flask port 5000 and `/health-api` proxy are removed.
+Host Nginx uses explicit `127.0.0.1` upstreams and HTTPS.
 `deploy.yml` publishes images; it does not deploy them to the server. A documentation
 commit does not change the running application images.
+This architecture/dependency change requires normal clean backend and frontend
+builds. The historical additive/source-only image paths do not satisfy its build
+input guards; those guards must not be bypassed.
 
 ## Tests
 
@@ -169,7 +187,6 @@ commit does not change the running application images.
   |---|---|---|
   | `POST /auth/token` | Login credentials | 5/minute |
   | `GET /logs` | Admin JWT; 1–500 rows | 30/minute |
-  | `POST /analyze/{symbol}` | Admin JWT | 2/minute |
   | `GET /ops/strategy-inspector` | Admin JWT | 30/minute |
   | `GET /market/analysis`, `GET /api/market/analysis` | Admin JWT | Shared 2/minute |
   | `/borsapy/*` research, saved inputs and provider connections | Admin JWT; private, no-store | Query 20/minute; candles 30/minute; stream 120/minute |
@@ -192,17 +209,11 @@ commit does not change the running application images.
   clients wait for `authenticated` before subscribing. SSE uses the Bearer header.
   Tokens never belong in URLs. Expiry or revoked access stops private delivery;
   WebSocket close codes 4401/4403 stop automatic reconnects and clear private data.
-- The separate Flask bot surface also protects `/signals`, `/stats` and the optional
-  `/metrics` with an admin JWT. Anonymous `/status` exposes only database/local
-  lifecycle health; an admin token enables scan/error details. Invalid supplied
-  credentials are rejected. Both variants use `private, no-store` and
-  `Vary: Authorization`. The frontend sends its token to the health service only
-  for the configured same-origin `/status` path, never an external health origin.
-- The site-wide private data changes were deployed as `ab18dc4` to API, bot and
-  frontend on 4 October at 08:02 UTC. Separate read-only acceptance verified the
-  HTTP/Flask access boundaries, WebSocket authentication, pages/assets and unchanged
-  database schemas. Provider connections remain unconfigured; live account and
-  market acceptance is deferred. Exact evidence is in the continuation plan.
+- The old Flask bot surface and Telegram-only `POST /analyze/{symbol}` endpoint
+  are removed. Manual site AI continues through `/market/analysis`; alarm status
+  and delivery remain behind the API's admin boundary.
+- Dated HTTP/Flask and bot rollout records describe earlier deployments. See the
+  continuation plan for current component identities and acceptance limits.
 - The dashboard stores tokens only in tab memory. Reload, expiry, or logout ends the session;
   account changes clear query caches and private component state. No middleware admin key
   belongs in a frontend environment variable.

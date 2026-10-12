@@ -22,17 +22,19 @@ def test_published_services_are_loopback_only(services: dict) -> None:
     )
 
 
-def test_bot_has_one_owner_and_api_cannot_start_an_embedded_bot(services: dict) -> None:
-    bot_services = [
-        service for service in services.values() if service.get("command", [])[-1:] == ["bot"]
-    ]
-    assert len(bot_services) == 1
-    assert bot_services[0].get("container_name"), "Compose must reject scaling this singleton"
-    assert services["api"]["environment"]["RUN_EMBEDDED_BOT"] == "false"
+def test_legacy_bot_cannot_be_started_by_the_production_topology(services: dict) -> None:
+    assert "bot" not in services
+    for service in services.values():
+        assert service.get("command", [])[-1:] != ["bot"]
+        assert "bot" not in service.get("depends_on", {})
+        assert "RUN_EMBEDDED_BOT" not in service.get("environment", {})
+        assert "HEALTH_PROXY_TARGET" not in service.get("environment", {})
+        assert not any(":5000" in port for port in service.get("ports", []))
+    assert "HEALTH_PROXY_TARGET" not in services["frontend"]["build"]["args"]
 
 
 def test_schema_jobs_finish_before_database_consumers_start(services: dict) -> None:
-    for name in ("api", "bot"):
+    for name in ("api",):
         assert services[name]["depends_on"]["main-init"] == {
             "condition": "service_completed_successfully"
         }
@@ -52,7 +54,7 @@ def test_main_sqlite_directory_is_shared_but_middleware_storage_is_separate(serv
     mount_target = PurePosixPath(main_mount["target"])
     assert mount_target != PurePosixPath("/app"), "Production code must come from the built image"
     assert not mount_target.suffix, "SQLite WAL/SHM and process locks require a directory mount"
-    for name in ("main-init", "api", "bot"):
+    for name in ("main-init", "api"):
         service = services[name]
         assert service["volumes"] == [main_mount]
         for setting in ("DATABASE_PATH", "CACHE_DATABASE_PATH"):

@@ -20,7 +20,7 @@ PROTECTED = [
 
 @pytest.fixture
 def manual_analysis(monkeypatch):
-    analyze = Mock()
+    analyze = Mock(side_effect=AssertionError("retired Telegram analysis must never run"))
     monkeypatch.setitem(sys.modules, "command_handler", SimpleNamespace(analyze_manual=analyze))
     return analyze
 
@@ -74,8 +74,10 @@ def test_login_and_admin_operations(api_auth_users, manual_analysis, tmp_path):
     assert client.get("/auth/me").json()["is_admin"] is True
     assert client.get("/logs").json()[0]["message"] == "test log"
     assert client.get("/logs?limit=-1").status_code == 422
-    assert client.post("/analyze/THYAO").status_code == 200
-    manual_analysis.assert_called_once_with("THYAO")
+    retired = client.post("/analyze/THYAO")
+    assert retired.status_code == 410
+    assert retired.headers["cache-control"] == "private, no-store"
+    manual_analysis.assert_not_called()
 
 
 @pytest.mark.parametrize("username,password", [("admin", "wrong"), ("disabled", "test-password")])
@@ -112,23 +114,16 @@ def test_ai_aliases_share_rate_limit(authenticated_api_client, monkeypatch):
 def test_manual_analysis_rate_limit(api_auth_users, manual_analysis):
     token = api_auth_users.create_access_token({"sub": "admin"})
     client = TestClient(api_main.app, headers={"Authorization": f"Bearer {token}"})
-    assert [client.post("/analyze/THYAO").status_code for _ in range(3)] == [200, 200, 429]
-    assert manual_analysis.call_count == 2
+    assert [client.post("/analyze/THYAO").status_code for _ in range(3)] == [410, 410, 429]
+    manual_analysis.assert_not_called()
 
 
-@pytest.mark.parametrize("operation", ["manual", "ai"])
-def test_provider_errors_do_not_expose_secrets(
-    operation, api_auth_users, monkeypatch, manual_analysis, caplog
-):
+def test_provider_errors_do_not_expose_secrets(api_auth_users, monkeypatch, caplog):
     secret = "injected-private-provider-secret"
     token = api_auth_users.create_access_token({"sub": "admin"})
     client = TestClient(api_main.app, headers={"Authorization": f"Bearer {token}"})
-    if operation == "manual":
-        manual_analysis.side_effect = RuntimeError(secret)
-        response = client.post("/analyze/THYAO")
-    else:
-        monkeypatch.setattr(api_main, "inspect_strategy", Mock(side_effect=RuntimeError(secret)))
-        response = client.get("/market/analysis?symbol=THYAO")
+    monkeypatch.setattr(api_main, "inspect_strategy", Mock(side_effect=RuntimeError(secret)))
+    response = client.get("/market/analysis?symbol=THYAO")
     assert response.status_code == 500
     assert secret not in response.text
     assert secret not in caplog.text

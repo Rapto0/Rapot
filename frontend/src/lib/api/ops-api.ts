@@ -1,6 +1,5 @@
-import { API_BASE_URL, HEALTH_API_URL, fetchApi } from './core';
+import { API_BASE_URL, fetchApi } from './core';
 import type {
-    ApiBotStatus,
     ApiHealth,
     ApiSpecialTagHealth,
     ApiStrategyInspector,
@@ -13,12 +12,8 @@ import type {
     SymbolsResponse,
 } from './types';
 
-export async function fetchHealth(): Promise<ApiHealth> {
-    return fetchApi<ApiHealth>(`${HEALTH_API_URL}/health`);
-}
-
-export async function fetchBotStatus(): Promise<ApiBotStatus> {
-    return fetchApi<ApiBotStatus>(`${HEALTH_API_URL}/status`);
+export async function fetchHealth(signal?: AbortSignal): Promise<ApiHealth> {
+    return fetchApi<ApiHealth>(`${API_BASE_URL}/health`, { signal });
 }
 
 export async function fetchBistSymbols(): Promise<SymbolsResponse> {
@@ -89,13 +84,4 @@ export async function fetchScannerActivityReadModel(
     return fetchApi<ScannerActivityItem[]>(
         `${API_BASE_URL}/ops/read-model/scanner-feed?limit=${Math.max(1, limit)}`
     );
-}
-
-export async function analyzeSymbol(
-    symbol: string,
-    marketType: string = 'BIST'
-): Promise<{ message: string; status: string }> {
-    return fetchApi(`${API_BASE_URL}/analyze/${symbol}?market_type=${marketType}`, {
-        method: 'POST',
-    });
 }

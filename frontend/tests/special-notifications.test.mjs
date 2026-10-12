@@ -17,10 +17,11 @@ function loadSource(path, imports = {}) {
 }
 
 const normalizers = loadSource('../src/lib/api/normalizers.ts');
-function notificationQuery(fetchSignals, limit = 100) {
+function notificationQuery(fetchSignals, limit = 100, session = { user: { username: 'admin', is_admin: true }, expiresAt: 1000 }) {
   const hooks = loadSource('../src/lib/hooks/use-signals.ts', {
     '@tanstack/react-query': { useQuery: options => options },
     '@/lib/api/client': { ...normalizers, fetchSignals },
+    './use-session': { useSession: () => session },
   });
   return hooks.useSpecialNotificationSignals(limit);
 }
@@ -55,9 +56,18 @@ test('two tag queries start concurrently and merge both strategies, deduplicate 
   resolve[0]([signal(1), signal(4, 'HUNTER'), signal(4, 'HUNTER')]);
   resolve[1]([signal(2, 'HUNTER', 'COK_UCUZ'), signal(3, 'COMBO', 'COK_UCUZ')]);
   assert.deepEqual(Array.from(await pending, row => row.id), [4, 3, 2]);
-  assert.deepEqual(Array.from(query.queryKey), ['signals', 'special-notifications', 3]);
-  assert.equal(query.refetchInterval, 45000);
+  assert.deepEqual(Array.from(query.queryKey), ['signals', 'special-notifications', 3, 'admin', 1000]);
+  assert.equal(query.refetchInterval, false);
   assert.equal(query.staleTime, 15000);
+});
+
+test('historical notifications do not poll and stay disabled without an admin session', () => {
+  for (const session of [null, { user: { is_admin: false } }, { user: { is_admin: true, disabled: true } }]) {
+    const query = notificationQuery(() => assert.fail('Anonymous history request'), 100, session);
+    assert.equal(query.enabled, false);
+    assert.equal(query.refetchInterval, false);
+  }
+  assert.equal(notificationQuery(async () => []).enabled, true);
 });
 
 test('unexpected expensive or missing tags never become special notifications', async () => {

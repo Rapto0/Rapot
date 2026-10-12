@@ -231,7 +231,6 @@ async def test_offline_api_read_benchmark(monkeypatch, tmp_path):
     import api.main as api_main
     import api.realtime as realtime
     import db_session
-    import market_scanner
     from infrastructure.repositories import signal_trade_repository as repository
 
     for name in ("_engine", "_SessionFactory", "_ScopedSession"):
@@ -239,7 +238,6 @@ async def test_offline_api_read_benchmark(monkeypatch, tmp_path):
     engine = db_session.get_engine(tmp_path / "benchmark.sqlite3")
     monkeypatch.setattr(api_main.limiter, "enabled", False)
     monkeypatch.setattr(api_main, "_RUNTIME_STATE", {"db_ready": True, "realtime_ready": True})
-    monkeypatch.setattr(market_scanner, "get_scan_count", lambda: 0)
     manager = realtime.ConnectionManager()
     monkeypatch.setattr(realtime, "manager", manager)
     started = time.perf_counter()

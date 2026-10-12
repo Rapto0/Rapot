@@ -7,7 +7,7 @@ from sqlalchemy import event, text
 
 from db_session import get_engine, get_session
 from infrastructure.repositories.signal_trade_repository import get_trade_stats_aggregate
-from models import Signal, Trade
+from models import BotStat, ScanHistory, Signal, Trade
 
 
 def test_stats_counts_only_closed_trades_and_realized_pnl(authenticated_api_client) -> None:
@@ -52,6 +52,26 @@ def test_empty_stats_exposes_zero_closed_trades(authenticated_api_client) -> Non
     assert stats["closed_trades"] == 0
     assert stats["total_pnl"] == 0.0
     assert stats["win_rate"] == 0.0
+    assert stats["scan_count"] == 0
+
+
+def test_stats_returns_archived_scan_rows_not_removed_bot_counters(authenticated_api_client):
+    with get_session() as session:
+        session.add_all(
+            [
+                BotStat(stat_name="sync_scan_count", stat_value="900"),
+                BotStat(stat_name="async_scan_count", stat_value="700"),
+                ScanHistory(scan_type="BIST", mode="sync", status="success"),
+                ScanHistory(scan_type="Kripto", mode="async", status="failed"),
+                ScanHistory(scan_type="Full", status="unknown"),
+            ]
+        )
+    response = authenticated_api_client.get("/stats")
+    assert response.status_code == 200
+    assert response.json()["scan_count"] == 3
+    with get_session() as session:
+        assert session.query(ScanHistory).count() == 3
+        assert {row.stat_value for row in session.query(BotStat)} == {"900", "700"}
 
 
 @pytest.mark.parametrize("tags", [[], [None] * 7, ["BELES", "", "LEGACY"], [None, "", "BELES"]])

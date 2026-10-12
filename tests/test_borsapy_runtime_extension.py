@@ -40,18 +40,35 @@ def snapshots():
 
 @pytest.fixture
 def inputs():
-    return {
+    result = {
         "requirements": (ROOT / "requirements.txt").read_text(encoding="utf-8"),
         "lock": (ROOT / "requirements-dev.lock").read_text(encoding="utf-8"),
         "security": (ROOT / "requirements-security.txt").read_text(encoding="utf-8"),
     }
+    # Historical proof fixtures retain the exact old pins; the current clean
+    # server lock must reject that image instead of silently blessing its bot.
+    removed = {
+        "blinker",
+        "feedparser",
+        "flask",
+        "itsdangerous",
+        "jinja2",
+        "python-telegram-bot",
+        "schedule",
+        "sgmllib3k",
+        "werkzeug",
+    }
+    result["lock"] += "\n" + "\n".join(
+        f"{name}=={verifier.BASE_PINS[name]}" for name in sorted(removed)
+    )
+    return result
 
 
 def refresh(snapshot):
     snapshot["inventory_sha256"] = verifier.fingerprint(snapshot["distributions"])
 
 
-def test_exact_reviewed_extension_matches_current_full_requirements(snapshots, inputs):
+def test_exact_reviewed_extension_matches_historical_full_requirements(snapshots, inputs):
     result = verifier.verify_extension(*snapshots, **inputs)
     assert result["status"] == "verified_additive_runtime"
     assert result["added_distribution_count"] == 22
@@ -59,6 +76,12 @@ def test_exact_reviewed_extension_matches_current_full_requirements(snapshots, i
     assert {"httpx2", "httpcore2", "truststore"}.issubset(verifier.ADDED_PINS)
     assert verifier.BASE_PINS.keys().isdisjoint(verifier.ADDED_PINS)
     assert result["base_pins_sha256"] == verifier.fingerprint(verifier.BASE_PINS)
+
+
+def test_clean_server_lock_rejects_historical_additive_bot_runtime(snapshots, inputs):
+    inputs["lock"] = (ROOT / "requirements-dev.lock").read_text(encoding="utf-8")
+    with pytest.raises(verifier.VerificationError, match="complete reviewed lock"):
+        verifier.verify_extension(*snapshots, **inputs)
 
 
 @pytest.mark.parametrize(
@@ -213,7 +236,7 @@ def test_pip_check_failure_is_not_reported_as_verified(monkeypatch):
     assert calls[0][0][0][-3:] == ["-m", "pip", "check"]
 
 
-def test_cli_writes_combined_proof_only_after_pip_check(snapshots, tmp_path, monkeypatch):
+def test_cli_writes_combined_proof_only_after_pip_check(snapshots, inputs, tmp_path, monkeypatch):
     before, after = snapshots
     documents = {
         "before": before,
@@ -224,7 +247,15 @@ def test_cli_writes_combined_proof_only_after_pip_check(snapshots, tmp_path, mon
             "layers": ["sha256:" + "a" * 64, "sha256:" + "b" * 64],
         },
     }
-    arguments = ["verify", "--root", str(ROOT), "--output", str(tmp_path / "proof.json")]
+    historical = tmp_path / "historical"
+    historical.mkdir()
+    for key, filename in (
+        ("requirements", "requirements.txt"),
+        ("lock", "requirements-dev.lock"),
+        ("security", "requirements-security.txt"),
+    ):
+        (historical / filename).write_text(inputs[key], encoding="utf-8")
+    arguments = ["verify", "--root", str(historical), "--output", str(tmp_path / "proof.json")]
     for flag, data in documents.items():
         path = tmp_path / f"{flag}.json"
         path.write_text(json.dumps(data), encoding="utf-8")

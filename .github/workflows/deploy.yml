@@ -28,6 +28,7 @@ jobs:
     outputs:
       source_sha: ${{ steps.source.outputs.sha }}
       repository: ${{ steps.source.outputs.repository }}
+      backend_digest: ${{ steps.backend.outputs.digest }}
       frontend_digest: ${{ steps.frontend.outputs.digest }}
     permissions:
       contents: read
@@ -42,6 +43,21 @@ jobs:
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           echo "repository=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
 
+      - name: Prepare server runtime source evidence
+        shell: bash
+        run: |
+          mkdir "$RUNNER_TEMP/server-runtime-proof"
+          python - <<'PY'
+          import hashlib, json, os, pathlib, subprocess
+          files = subprocess.check_output(["git", "ls-files", "-z"]).decode().split("\0")
+          wanted = [name for name in files if name.endswith(".py") and not name.startswith(".")]
+          wanted += ["Dockerfile", ".python-version", "requirements.txt",
+                     "requirements-security.txt", "requirements-dev.lock"]
+          result = {name: hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest() for name in wanted}
+          target = pathlib.Path(os.environ["RUNNER_TEMP"]) / "server-runtime-proof/source-sha256.json"
+          target.write_text(json.dumps(result, sort_keys=True), encoding="utf-8")
+          PY
+
       - uses: docker/setup-buildx-action@v4
 
       - name: Log in to Container Registry
@@ -52,6 +68,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish backend image at exact source SHA
+        id: backend
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -74,9 +91,52 @@ jobs:
           build-args: |
             NEXT_PUBLIC_API_URL=/api
             API_PROXY_TARGET=http://api:8000
-            HEALTH_PROXY_TARGET=http://bot:5000
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
+
+      - name: Verify published clean server runtime without network
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          BACKEND_IMAGE: ghcr.io/${{ steps.source.outputs.repository }}/backend@${{ steps.backend.outputs.digest }}
+          FRONTEND_IMAGE: ghcr.io/${{ steps.source.outputs.repository }}/frontend@${{ steps.frontend.outputs.digest }}
+        shell: bash
+        run: |
+          docker pull "$BACKEND_IMAGE"
+          docker pull "$FRONTEND_IMAGE"
+          docker run --rm --network none "$BACKEND_IMAGE" python -m pip check
+          docker run --rm --network none --read-only --tmpfs /tmp:rw,size=64m \
+            --mount "type=bind,source=$RUNNER_TEMP/server-runtime-proof/source-sha256.json,target=/proof/source-sha256.json,readonly" \
+            "$BACKEND_IMAGE" python -m scripts.verify_server_runtime \
+            --source-sha "$SOURCE_SHA" --source-manifest /proof/source-sha256.json \
+            > "$RUNNER_TEMP/server-runtime-proof/runtime.json"
+          docker image inspect "$BACKEND_IMAGE" > "$RUNNER_TEMP/server-runtime-proof/backend-image.json"
+          docker image inspect "$FRONTEND_IMAGE" > "$RUNNER_TEMP/server-runtime-proof/frontend-image.json"
+          docker run --rm --network none --read-only "$FRONTEND_IMAGE" node -e \
+            'const s=require("sharp"); console.log(JSON.stringify({node:process.versions.node,next:require("next/package.json").version,sharp:s.versions.sharp,vips:s.versions.vips,rsvg:s.versions.rsvg,platform:process.platform,arch:process.arch}));' \
+            > "$RUNNER_TEMP/server-runtime-proof/frontend-native.json"
+          python - <<'PY'
+          import json, os, pathlib
+          root = pathlib.Path(os.environ["RUNNER_TEMP"]) / "server-runtime-proof"
+          for name in ("backend", "frontend"):
+              image = json.loads((root / f"{name}-image.json").read_text())[0]
+              assert image["Config"]["Labels"]["org.opencontainers.image.revision"] == os.environ["SOURCE_SHA"]
+              assert image["Os"] == "linux" and image["Architecture"] == "amd64"
+              if name == "backend":
+                  assert image["Config"]["Cmd"] == ["python", "-m", "scripts.runtime", "api"]
+          native = json.loads((root / "frontend-native.json").read_text())
+          assert native["platform"] == "linux" and native["arch"] == "x64"
+          assert native["next"] == "16.3.8" and native["sharp"] == "0.35.5"
+          assert native["vips"] == "8.18.7" and native["rsvg"] == "2.63.2"
+          PY
+
+      - name: Preserve clean server runtime evidence
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: server-runtime-evidence-${{ github.sha }}
+          path: ${{ runner.temp }}/server-runtime-proof/
+          if-no-files-found: error
+          retention-days: 14
 
       - name: Record publication status (no server deployment)
         env:

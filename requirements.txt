@@ -9,8 +9,6 @@ sqlalchemy>=2.0.0
 pydantic>=2.5.0
 pydantic-settings>=2.14.2
 requests>=2.33.0
-python-telegram-bot>=20.0
-schedule>=1.2.0
 PyJWT>=2.14.0,<3
 passlib[bcrypt]>=1.7.4
 slowapi>=0.1.9
@@ -21,8 +19,6 @@ ta>=0.10.0
 watchfiles
 python-binance>=1.0.0
 isyatirimhisse>=1.2.0
-feedparser>=6.0.0
-flask>=3.1.3
 lxml>=6.1.0
 yfinance>=1.2.1
 python-dotenv>=1.2.2

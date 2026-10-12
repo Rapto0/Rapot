@@ -133,7 +133,7 @@ export default function SignalsPage() {
     <PageShell
       label="Sinyaller"
       title="Sinyal kayıtları"
-      description="COMBO ve HUNTER kayıtlarını filtreleyin; incelemek için bir sembol seçin."
+      description="Geçmiş COMBO ve HUNTER kayıtlarını inceleyin. Otomatik sinyal taraması kaldırıldı; kendi kurallarınızı Alarmlar ekranında yönetebilirsiniz."
       className="min-w-0"
       contentClassName="min-w-0"
       actions={

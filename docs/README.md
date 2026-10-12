@@ -4,9 +4,16 @@ Güncel iş sırası, kullanıcı yetkileri ve tarihli kabul kanıtları
 [devam planında](RAPOT_DEVAM_PLANI.md) tutulur. Kod tabanıyla çalışma kuralları
 [AGENTS.md](../AGENTS.md), ilk kurulum ise [kök README](../README.md) içindedir.
 
+12 Ekim güncel kaynak düzeni: API, frontend, middleware ve PostgreSQL sürekli
+servislerdir; init/migrate işleri tek seferliktir. Eski otomatik COMBO/HUNTER
+Telegram tarayıcısı, Telegram komutları ve tarayıcıya bağlı AI kaldırılmıştır.
+Site Borsapy taraması, indikatörler, backtest, `/ai` ve kullanıcı alarmlarının
+isteğe bağlı Telegram teslimi korunur. Kaynak değişikliği henüz yeni üretim
+yayını olarak kabul edilmedi; eski botun 11:25:39 UTC'de durdurulması ayrı işlemdir.
+
 ## Mimari ve geliştirme
 
-- [Mimari ve veri akışları](ARCHITECTURE.md)
+- [Mimari ve veri akışları](ARCHITECTURE.md) — eski bot bölümleri tarihsel; güncel giriş noktaları kök README ve DEPLOY içindedir.
 - [Frontend: kurulum, testler ve ekran davranışları](FRONTEND.md)
 - [Sunucuda çalışan alarmlar: kurallar, bildirim ve sınırlar](SERVER_ALARMS.md)
 - [Borsapy araştırma merkezi, hesap bağlantısı ve kabul sınırları](BORSAPY_INTEGRATION.md)
@@ -30,8 +37,10 @@ Güncel iş sırası, kullanıcı yetkileri ve tarihli kabul kanıtları
 - [Pine grafik, payload ve alarm sözleşmesi](PINE_CONTRACT.md)
 - [Spot kapsamı ve eski ALG işlerinin karşılıkları](ALGOTRADING_SPOT_BACKLOG.md)
 
-Gerçek alarm teslimi ve testnet/gerçek emir kabulü kullanıcı tarafından ertelidir;
+Gerçek TradingView webhook teslimi ve testnet/gerçek emir kabulü kullanıcı tarafından ertelidir;
 rehberlerdeki hazırlık adımları tamamlanmış emir testi veya işlem yetkisi değildir.
+Rapot sunucu alarmından Telegram tesliminin 7 Ekim dar canlı kabulü bu ayrı
+middleware/emir kabulünü tamamlamaz.
 
 ## Dağıtım ve kabul kayıtları
 

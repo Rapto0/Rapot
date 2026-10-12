@@ -20,108 +20,133 @@ function load(relativePath, imports = {}, suffix = '') {
 }
 
 const healthModel = load('../src/lib/health-status.ts');
-const { deriveBotHealth } = healthModel;
-const status = {
-  bot: { is_running: true, state: 'running', database: 'connected', is_scanning: false, uptime_human: '1h' },
-  scanning: { data_available: true, last_scan_available: true, last_scan_time: '2026-09-10T10:00:00Z', scan_count: 12, signal_count: 3 },
-  errors: { error_count: 0 },
-};
-const query = { data: status, isLoading: false, isError: false, isFetching: false, isStale: false };
+const { deriveApiHealth, deriveAlarmRuntime } = healthModel;
+const now = Date.parse('2026-10-12T12:00:00Z');
+const api = { status: 'healthy', database: 'connected', realtime: 'running', uptime_seconds: 3600, uptime_human: '1h', timestamp: '2026-10-12T12:00:00Z' };
+const runtime = { running: true, last_cycle_at: '2026-10-12T11:59:59Z', last_error: null, telegram_configured: true, delivery: { pending: 0 } };
+const query = { data: api, isLoading: false, isError: false, isFetching: false, isStale: false };
+const admin = { user: { username: 'admin', is_admin: true, disabled: false }, expiresAt: 1000 };
 
-test('missing, malformed and contradictory server flags never imply running or stopped', () => {
-  assert.equal(deriveBotHealth({ ...query, data: {} }).state, 'unknown');
-  for (const bot of [undefined, {}, { is_running: true }, { is_running: false },
-    { ...status.bot, state: 'unknown' }, { ...status.bot, is_running: 'true' },
-    { ...status.bot, state: 'stopped' }, { ...status.bot, database: 'disconnected' }]) {
-    const data = bot ? { ...status, bot } : undefined;
-    const health = deriveBotHealth({ ...query, data });
-    assert.equal(health.state, 'unknown');
-    assert.equal(health.isRunning, null);
-    assert.equal(health.label, 'Bilinmiyor');
+test('only explicit current API database and realtime health imply a connection', () => {
+  assert.equal(deriveApiHealth(query).apiState, 'connected');
+  assert.equal(deriveApiHealth(query).uptime, '1h');
+  for (const data of [undefined, {}, { ...api, status: 'unhealthy' }, { ...api, database: 'error' }, { ...api, realtime: undefined }, { ...api, realtime: 'error' }]) {
+    assert.equal(deriveApiHealth({ ...query, data }).apiState, 'unknown');
+    assert.equal(deriveApiHealth({ ...query, data }).uptime, '—');
   }
 });
 
-test('current explicit running and stopped remain distinct', () => {
-  assert.equal(deriveBotHealth(query).state, 'running');
-  const stopped = deriveBotHealth({ ...query, data: { ...status, bot: { ...status.bot, state: 'stopped', is_running: false } } });
-  assert.equal(stopped.state, 'stopped');
-  assert.equal(stopped.isRunning, false);
-  assert.equal(stopped.label, 'Durdu');
-});
-
-test('failed or stale refresh cannot display an older true response as active', () => {
-  for (const flags of [{ isError: true }, { isStale: true }, { isError: true, isFetching: true }]) {
-    const health = deriveBotHealth({ ...query, ...flags });
-    assert.equal(health.state, 'unknown');
-    assert.equal(health.isRunning, null);
-    assert.equal(health.scanCount, null);
-    assert.equal(health.uptime, '--');
-  }
-  for (const flags of [{ isLoading: true, data: undefined }, { isFetching: true }]) {
-    const health = deriveBotHealth({ ...query, ...flags });
-    assert.equal(health.state, 'loading');
-    assert.equal(health.isRunning, null);
+test('failed, stale or in-progress refresh never shows an older API response as connected', () => {
+  for (const flags of [{ isError: true }, { isStale: true }, { isFetching: true }, { isLoading: true }]) {
+    const health = deriveApiHealth({ ...query, ...flags });
+    assert.notEqual(health.apiState, 'connected');
+    assert.notEqual(health.tone, 'profit');
+    assert.equal(health.uptime, '—');
   }
 });
 
-test('DB and counter failures remain unavailable; explicit zero is real data', () => {
-  const disconnected = deriveBotHealth({ ...query, data: { ...status, bot: { ...status.bot, database: 'disconnected' } } });
-  for (const key of ['scanCount', 'signalCount', 'errorCount', 'lastScan', 'isScanning']) assert.equal(disconnected[key], null);
-  const unavailable = deriveBotHealth({ ...query, data: { ...status, scanning: { ...status.scanning, data_available: false } } });
-  assert.equal(unavailable.scanCount, null);
-  assert.equal(unavailable.signalCount, null);
-  assert.equal(unavailable.lastScan, status.scanning.last_scan_time);
-  const zero = deriveBotHealth({ ...query, data: { ...status, scanning: { ...status.scanning, scan_count: 0 } } });
-  assert.equal(zero.scanCount, 0);
+test('alarm health requires a recent completed cycle and does not infer market freshness', () => {
+  const active = deriveAlarmRuntime({ ...query, data: runtime }, now);
+  assert.equal(active.state, 'running');
+  assert.equal(active.pendingDeliveries, 0);
+  assert.equal(active.telegramConfigured, true);
+  for (const data of [undefined, {}, { ...runtime, running: 'true' }, { ...runtime, last_cycle_at: 'bad' },
+    { ...runtime, last_cycle_at: '2026-10-12T11:59:29Z' }, { ...runtime, last_cycle_at: '2026-10-12T12:00:06Z' }]) {
+    assert.equal(deriveAlarmRuntime({ ...query, data }, now).state, 'unknown');
+  }
+  assert.equal(deriveAlarmRuntime({ ...query, data: { ...runtime, running: false } }, now).state, 'stopped');
+  assert.equal(deriveAlarmRuntime({ ...query, data: { ...runtime, last_cycle_at: null } }, now).state, 'starting');
 });
 
-test('hook uses the same model and existing 30-second polling freshness window', () => {
+test('alarm errors and API health remain independent; stale runtime counts are hidden', () => {
+  assert.equal(deriveApiHealth(query).apiState, 'connected');
+  const failed = deriveAlarmRuntime({ ...query, data: { ...runtime, last_error: 'synthetic private failure' } }, now);
+  assert.equal(failed.label, 'Kontrol hatası');
+  assert.ok(!JSON.stringify(failed).includes('synthetic private'));
+  for (const flags of [{ isError: true }, { isStale: true }, { isFetching: true }]) {
+    const health = deriveAlarmRuntime({ ...query, data: runtime, ...flags }, now);
+    assert.notEqual(health.state, 'running');
+    assert.equal(health.pendingDeliveries, null);
+    assert.equal(health.telegramConfigured, null);
+  }
+});
+
+test('health hooks are session scoped and disabled for anonymous or non-admin users', async () => {
+  let session = null;
   let options;
-  const hook = load('../src/lib/hooks/use-health.ts', {
-    '@tanstack/react-query': { useQuery: (value) => { options = value; return { ...query, isError: true }; } },
-    '@/lib/api/client': {}, '@/lib/health-status': healthModel,
+  const requests = [];
+  const hooks = load('../src/lib/hooks/use-health.ts', {
+    '@tanstack/react-query': { useQuery: value => { options = value; return query; } },
+    '@/lib/api/client': { fetchHealth: signal => requests.push(['health', signal]) },
+    '@/lib/api/advanced-alarms-api': { fetchAdvancedAlarmStatus: signal => requests.push(['alarm', signal]) },
+    '@/lib/health-status': healthModel,
+    './use-session': { useSession: () => session },
   });
-  assert.equal(hook.useBotHealth().state, 'unknown');
+  for (const value of [null, { ...admin, user: { ...admin.user, is_admin: false } }, { ...admin, user: { ...admin.user, disabled: true } }]) {
+    session = value;
+    assert.equal(hooks.useApiHealth().apiState, 'unknown');
+    assert.equal(options.enabled, false);
+    assert.equal(hooks.useAlarmRuntimeHealth().state, 'unknown');
+    assert.equal(options.enabled, false);
+  }
+  assert.equal(requests.length, 0);
+  session = admin;
+  assert.equal(hooks.useApiHealth().apiState, 'connected');
+  assert.deepEqual(Array.from(options.queryKey), ['api-health', 'admin', 1000]);
   assert.equal(options.refetchInterval, 30000);
-  assert.equal(options.staleTime, 30000);
-  assert.equal(Array.from(options.queryKey).join('/'), 'bot/status');
+  assert.equal(options.refetchIntervalInBackground, false);
+  const signal = new AbortController().signal;
+  await options.queryFn({ signal });
+  hooks.useAlarmRuntimeHealth();
+  assert.equal(options.enabled, true);
+  assert.deepEqual(Array.from(options.queryKey), ['advanced-alarm-status', 'admin', 1000]);
+  await options.queryFn({ signal });
+  assert.deepEqual(requests, [['health', signal], ['alarm', signal]]);
 });
 
-function renderHealth(health) {
+function renderHealth(health, alarms, session = admin, onQuery = () => {}) {
   const page = load('../src/app/health/page.tsx', {
-    react: React, 'react/jsx-runtime': jsxRuntime,
-    '@tanstack/react-query': { useQuery: () => ({ data: [], isLoading: false, isError: false }) },
-    '@/lib/api/client': {}, '@/lib/hooks/use-health': { useBotHealth: () => health },
+    react: React, 'react/jsx-runtime': jsxRuntime, 'next/link': { default: 'a' },
+    '@tanstack/react-query': { useQuery: options => { onQuery(options); return { data: [], isLoading: false, isError: false }; } },
+    '@/lib/api/client': {}, '@/lib/hooks/use-health': { useApiHealth: () => health, useAlarmRuntimeHealth: () => alarms },
+    '@/lib/hooks/use-session': { useSession: () => session },
     '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') },
-    '@/components/ui/page-shell': { PageShell: ({ children, actions }) => React.createElement('main', null, actions, children) },
-    '@/components/ui/kpi-ribbon': { KpiRibbon: ({ items }) => React.createElement('section', null, ...items.map((item) => React.createElement('span', { key: item.label }, `${item.label}:${item.value}`))) },
+    '@/components/ui/page-shell': { PageShell: ({ children, actions, title }) => React.createElement('main', null, title, actions, children) },
+    '@/components/ui/kpi-ribbon': { KpiRibbon: ({ items }) => React.createElement('section', null, ...items.map(item => React.createElement('span', { key: item.label }, item.label + ':' + item.value))) },
     '@/components/ui/button': { Button: 'button' }, '@/components/scanner/scan-status': { ScanStatus: () => null },
   });
   return renderToStaticMarkup(React.createElement(page.default));
 }
 
-test('health page SSR renders unknown/loading without an active or stopped badge', () => {
-  for (const flags of [{ isError: true }, { isStale: true }, { isLoading: true, data: undefined }]) {
-    const health = deriveBotHealth({ ...query, ...flags });
-    const html = renderHealth(health);
-    assert.ok(html.includes(health.label));
-    assert.ok(!html.includes('signal-buy'));
-    assert.ok(!html.includes('signal-sell'));
-    assert.ok(html.includes('Toplam:--'));
-    assert.ok(!html.includes('Hazır'));
-  }
-  assert.ok(renderHealth(deriveBotHealth(query)).includes('Çalışıyor'));
-  assert.ok(renderHealth(deriveBotHealth({ ...query, data: { ...status, bot: { ...status.bot, state: 'stopped', is_running: false } } })).includes('Durdu'));
+test('health page keeps API connected while the alarm worker is stopped and preserves opt-in Telegram', () => {
+  const html = renderHealth(deriveApiHealth(query), deriveAlarmRuntime({ ...query, data: { ...runtime, running: false } }, now));
+  assert.ok(html.includes('API:Bağlı'));
+  assert.ok(html.includes('Durduruldu'));
+  assert.ok(html.includes('Telegram yalnız kendi alarmınızda'));
+  assert.ok(html.includes('href="/alarms"'));
+  assert.ok(html.includes('Tarama arşivi'));
+  assert.ok(html.includes('Yeni otomatik tarama çalıştırılmaz'));
+  assert.ok(!html.includes('Bot durum ekranı'));
 });
 
-test('header SSR does not mark an unconfirmed API connection green', () => {
-  for (const flags of [{ isLoading: true, data: undefined }, { isError: true }, { isStale: true }]) {
+test('anonymous health page hides cached private content and disables both private queries', () => {
+  const queries = [];
+  const html = renderHealth(deriveApiHealth(query), deriveAlarmRuntime({ ...query, data: runtime }, now), null, value => queries.push(value));
+  assert.equal(queries.length, 2);
+  assert.ok(queries.every(value => value.enabled === false));
+  assert.ok(html.includes('/login?next=%2Fhealth'));
+  assert.ok(!html.includes('Telegram bağlantısı'));
+  assert.ok(!html.includes('signal-buy'));
+});
+
+test('header SSR cannot mark failed or unconfirmed health green', () => {
+  for (const flags of [{ isError: true }, { isStale: true }, { isLoading: true, data: undefined }]) {
     const header = load('../src/components/layout/header.tsx', {
       react: React, 'react/jsx-runtime': jsxRuntime, 'next/link': { default: 'a' },
       'lucide-react': { Bell: () => null, Check: () => null, X: () => null },
       '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') },
       '@/lib/hooks/use-signals': { useSpecialNotificationSignals: () => ({ data: [] }) },
-      '@/lib/hooks/use-health': { useBotHealth: () => deriveBotHealth({ ...query, ...flags }) },
+      '@/lib/hooks/use-health': { useApiHealth: () => deriveApiHealth({ ...query, ...flags }) },
       '@/components/auth/session-controls': { SessionControls: () => null },
     });
     const html = renderToStaticMarkup(React.createElement(header.Header));
@@ -130,46 +155,24 @@ test('header SSR does not mark an unconfirmed API connection green', () => {
   }
 });
 
-test('scanner page SSR uses the same explicit status instead of defaulting to active', () => {
+test('scanner history renders API status without implying an automatic scanning process', () => {
   const primitive = ({ children }) => React.createElement('div', null, children);
-  const icons = Object.fromEntries(['AlertTriangle', 'Check', 'ListPlus', 'RefreshCw', 'Search', 'Settings2', 'Star', 'StarOff'].map((name) => [name, () => null]));
-  for (const flags of [{ isError: true }, { isLoading: true, data: undefined }, {}]) {
-    const health = deriveBotHealth({ ...query, ...flags });
-    const page = load('../src/app/scanner/page.tsx', {
-      react: React, 'react/jsx-runtime': jsxRuntime, 'lucide-react': icons,
-      '@tanstack/react-query': { useQuery: () => ({ data: undefined, isLoading: false, isError: false }) },
-      '@/lib/api/client': {}, '@/lib/hooks/use-health': { useBotHealth: () => health },
-      '@/lib/hooks/use-private-market': { usePrivateMarket: () => ({ allowed: true, sessionKey: 'admin:123' }) },
-      '@/components/market-data-status': { MarketDataStatus: () => null },
-      '@/components/scanner/borsapy-screener': { BorsapyScreener: () => null },
-      '@/components/ui/button': { Button: primitive }, '@/components/ui/input': { Input: () => null },
-      '@/components/ui/select': { Select: primitive }, '@/components/ui/action-dialog': { ActionDialog: () => null },
-      '@/components/ui/toast': { useToast: () => ({ addToast: () => {} }) },
-      '@/components/scanner/scan-status': { ScanStatus: () => null },
-      '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' '), getTimeAgo: () => '--' },
-    }, '\nexport { SignalHistoryScanner };');
-    const html = renderToStaticMarkup(React.createElement(page.SignalHistoryScanner));
-    assert.ok(html.includes('Bot Durumu'));
-    assert.match(html, new RegExp(`Bot Durumu</span><span[^>]*>${health.label}</span>`));
-    assert.ok(!html.includes('AKTIF'));
-    assert.ok(!html.includes('PASIF'));
-  }
-});
-
-test('bot dashboard SSR does not render cached success after a query error', () => {
-  const primitive = ({ children }) => React.createElement('div', null, children);
-  const dashboard = load('../src/components/dashboard/bot-dashboard.tsx', {
-    'react/jsx-runtime': jsxRuntime,
-    '@/components/ui/card': { Card: primitive, CardContent: primitive, CardHeader: primitive, CardTitle: primitive },
-    '@/components/ui/badge': { Badge: primitive }, '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') },
-    'lucide-react': Object.fromEntries(['Bot', 'Pause', 'Activity', 'TrendingUp', 'Clock'].map((name) => [name, () => null])),
-    '@tanstack/react-query': { useQuery: () => ({ data: undefined }) }, '@/lib/api/client': {},
-    '@/lib/hooks/use-health': { useBotHealth: () => deriveBotHealth({ ...query, isError: true }) },
-    '@/lib/metric-display': { formatMetric: () => '--', formatMetricPercent: () => '--', formatTradePrice: () => '--', metricTextClass: () => '' },
-  });
-  const html = renderToStaticMarkup(React.createElement(dashboard.BotDashboard));
-  assert.ok(html.includes('Bilinmiyor'));
-  assert.ok(!html.includes('AKTİF'));
-  assert.ok(!html.includes('DURDURULDU'));
-  assert.ok(html.includes('Uptime: --'));
+  const page = load('../src/app/scanner/page.tsx', {
+    react: React, 'react/jsx-runtime': jsxRuntime,
+    'lucide-react': Object.fromEntries(['AlertTriangle', 'Check', 'ListPlus', 'RefreshCw', 'Search', 'Settings2', 'Star', 'StarOff'].map(name => [name, () => null])),
+    '@tanstack/react-query': { useQuery: () => ({ data: undefined, isLoading: false, isError: false }) },
+    '@/lib/api/client': {}, '@/lib/hooks/use-health': { useApiHealth: () => deriveApiHealth(query) },
+    '@/lib/hooks/use-private-market': { usePrivateMarket: () => ({ allowed: true, sessionKey: 'admin:123' }) },
+    '@/components/market-data-status': { MarketDataStatus: () => null },
+    '@/components/scanner/borsapy-screener': { BorsapyScreener: () => null },
+    '@/components/ui/button': { Button: primitive }, '@/components/ui/input': { Input: () => null },
+    '@/components/ui/select': { Select: primitive }, '@/components/ui/action-dialog': { ActionDialog: () => null },
+    '@/components/ui/toast': { useToast: () => ({ addToast: () => {} }) },
+    '@/components/scanner/scan-status': { ScanStatus: () => null },
+    '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' '), getTimeAgo: () => '--' },
+  }, '\nexport { SignalHistoryScanner };');
+  const html = renderToStaticMarkup(React.createElement(page.SignalHistoryScanner));
+  assert.match(html, /API<\/span><span[^>]*>Bağlı<\/span>/);
+  assert.ok(html.includes('Otomatik tarama kaldırıldı'));
+  assert.ok(!html.includes('Bot Durumu'));
 });

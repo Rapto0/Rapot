@@ -1,4 +1,4 @@
-// Run after a local build with the default localhost proxy targets. No real API/bot is used.
+// Run after a local build with the default localhost proxy targets. No real API is used.
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -13,8 +13,8 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const manifest = JSON.parse(readFileSync(path.join(root, '.next/routes-manifest.json'), 'utf8'));
 const rewrites = Object.values(manifest.rewrites).flat();
 const apiTarget = new URL(rewrites.find(r => r.source === '/api/:path*').destination);
-const healthTarget = new URL(rewrites.find(r => r.source === '/health-api/:path*').destination);
-for (const target of [apiTarget, healthTarget]) {
+assert.ok(!rewrites.some(r => r.source.startsWith('/health-api')), 'Retired bot proxy must not remain');
+for (const target of [apiTarget]) {
   assert.ok(['localhost', '127.0.0.1', '[::1]'].includes(target.hostname), 'Smoke test requires local build targets');
 }
 
@@ -49,7 +49,6 @@ try {
     socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
   });
   await listen(api, Number(apiTarget.port), apiTarget.hostname);
-  await listen(mockService('bot-health'), Number(healthTarget.port), healthTarget.hostname);
   const reservation = net.createServer();
   const frontendPort = await listen(reservation, 0, '127.0.0.1');
   await new Promise(resolve => reservation.close(resolve));
@@ -83,8 +82,8 @@ try {
   assert.ok((await staticAsset.arrayBuffer()).byteLength > 0);
   const proxied = await localFetch(origin + '/api/auth/me?smoke=1', { headers: { Authorization: 'Bearer local-smoke' } });
   assert.deepEqual(await proxied.json(), { service: 'api', path: '/auth/me?smoke=1', authorization: 'Bearer local-smoke' });
-  const health = await localFetch(origin + '/health-api/health');
-  assert.deepEqual(await health.json(), { service: 'bot-health', path: '/health' });
+  const health = await localFetch(origin + '/api/health');
+  assert.deepEqual(await health.json(), { service: 'api', path: '/health' });
   const research = await localFetch(origin + '/research');
   assert.equal(research.status, 200);
   assert.ok((await research.text()).includes('Araştırma'));
@@ -118,7 +117,7 @@ try {
       socket.destroy();
     });
   });
-  console.log('Standalone HTML/static assets, chart URL/Flight props, authenticated API proxy, bot health proxy and WebSocket upgrade passed.');
+  console.log('Standalone HTML/static assets, chart URL/Flight props, authenticated API proxy, main API health and WebSocket upgrade passed.');
 } finally {
   // Close mock upstream sockets before waiting for Next's POSIX graceful shutdown.
   // Open upgraded connections can otherwise keep server.close() waiting forever.

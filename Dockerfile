@@ -24,4 +24,4 @@ RUN pip install --no-cache-dir -r requirements.txt -c requirements-dev.lock \
 COPY . .
 
 # Default command (can be overridden)
-CMD ["python", "-m", "scripts.runtime", "bot"]
+CMD ["python", "-m", "scripts.runtime", "api"]

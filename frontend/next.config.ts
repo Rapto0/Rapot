@@ -12,16 +12,11 @@ const nextConfig: NextConfig = {
     const normalizedApiBasePath =
       apiBasePath.startsWith('/') ? apiBasePath.replace(/\/$/, '') : '/api'
     const apiProxyTarget = (process.env.API_PROXY_TARGET || 'http://localhost:8000').replace(/\/$/, '')
-    const healthProxyTarget = (process.env.HEALTH_PROXY_TARGET || 'http://localhost:5000').replace(/\/$/, '')
 
     return [
       {
         source: `${normalizedApiBasePath}/:path*`,
         destination: `${apiProxyTarget}/:path*`, // Proxy to FastAPI
-      },
-      {
-        source: '/health-api/:path*',
-        destination: `${healthProxyTarget}/:path*`,
       },
     ]
   },

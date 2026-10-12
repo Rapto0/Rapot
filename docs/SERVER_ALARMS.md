@@ -1,5 +1,19 @@
 # Sunucuda çalışan alarmlar
 
+12 Ekim kaynak düzenlemesinde eski zamanlanmış COMBO/HUNTER tarayıcısı, Telegram
+komutları ve bu taramalardan başlayan haber/AI mesajları kaldırıldı. Buradaki
+sunucu alarm motorları API içinde çalışmaya devam eder; ayrı bot veya Flask sağlık
+servisi gerekmez. Site indikatörleri, Borsapy taraması, backtest ve kullanıcı
+isteğiyle çalışan `/ai` korunur. COMBO/HUNTER koşullu kullanıcı alarmları kaldırılan
+otomatik tarayıcıdan bağımsızdır. Telegram yalnız alarmda açıkça seçildiğinde kullanılır;
+`TELEGRAM_TOKEN` / `TELEGRAM_CHAT_ID` boşken site ve bildirimsiz alarmlar çalışabilir.
+
+Bu kaynak değişikliğinin yeni API/frontend yayını henüz doğrulanmadı. Eski üretim
+botu 12 Ekim 11:25:39 UTC'de durduruldu ve yeniden başlatma politikası `no` yapıldı.
+Bu işlem alarm motorunun yeni sürümüne ait kabul değildir; güncel durum
+[devam planında](RAPOT_DEVAM_PLANI.md) tutulur. Geçmiş sinyal/AI/tarama kayıtları
+korunur; tarama sayacı artık saklanan tarama kaydı adedidir.
+
 ## Gelişmiş gün içi alarm merkezi — 4 Ekim 2026
 
 Yeni `/alarms` ekranı `/advanced-alarms` API'sini kullanır. Önceki günlük motor
@@ -181,7 +195,7 @@ kaynak/formül incelemesi ve sabit verili doğrulama gerektirir.
 
 API lifespan'i `api/runtime/server_alarms.py` üzerinden tek alarm döngüsü
 başlatır. Aynı SQLite dizinindeki `server-alarms.lock` süreç kilidi ikinci
-motorun aynı anda çalışmasını engeller; scanner kilidi ayrıdır. Compose'un
+motorun aynı anda çalışmasını engeller; gelişmiş motorun kilidi ayrıdır. Compose'un
 mevcut tek API worker düzeni korunur, yeni bir ücretli servis gerekmez.
 `SERVER_ALARMS_ENABLED=false` motoru durdurur. API kapalıysa alarmlar çalışmaz.
 
@@ -246,9 +260,11 @@ girdi sınırları, kapanmış mumlar, veri hataları, kalıcı tekilleştirme, 
 başlatma, bildirim hataları ve motor kapanışı ayrı doğrulanır. Yerel testler
 gerçek Telegram teslimi veya gerçek sağlayıcı kabulü değildir.
 
-Alarm motorunun yayını API ve frontend değişikliği gerektirir; sonraki ortak
-Borsapy veri geçişi scanner nedeniyle botun da yenilenmesini gerektirir.
-Bu site geneli Borsapy geçişi `ab18dc4` ile tamamlandı. Ana DB için doğrulanmış yedek,
+Alarm motorunun yayını API ve frontend değişikliği gerektirir. Eski `ab18dc4`
+Borsapy geçişinde bot da güncellenmişti; bu tarihsel uygulama yeni yayına bot
+ekleme talimatı değildir. 12 Ekim bot kaldırma geçişi değişen runtime/dependency
+girdileri nedeniyle normal backend/frontend imajı gerektirir; eski additive veya
+source-only kapılarının hash denetimleri atlanmaz. Ana DB için doğrulanmış yedek,
 tam kaynak SHA'sının CI/imajı ve 528 MiB disk rezervi kontrol edilir. İlk açılış
 boş alarm tablolarıyla gelir; kullanıcının yerine canlı alarm oluşturulmaz.
 Geri dönüş eski API/frontend imajlarını kullanır ve uyumlu ek tabloları korur;

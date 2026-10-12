@@ -8,23 +8,6 @@ APPLICATION_SERVICES_DIR = REPO_ROOT / "application" / "services"
 INFRA_REPOSITORIES_DIR = REPO_ROOT / "infrastructure" / "repositories"
 
 
-def test_scanners_do_not_import_api_realtime_directly():
-    scanner_files = [
-        REPO_ROOT / "market_scanner.py",
-        REPO_ROOT / "async_scanner.py",
-    ]
-
-    offenders: list[str] = []
-    for file_path in scanner_files:
-        source = file_path.read_text(encoding="utf-8", errors="ignore")
-        if "from api.realtime import publish_signal" in source:
-            offenders.append(file_path.name)
-
-    assert offenders == [], (
-        f"Domain scanner modules must not import API transport directly. Offenders: {offenders}"
-    )
-
-
 def test_route_modules_do_not_import_runtime_or_scanner_modules():
     forbidden_imports = (
         "from market_scanner import",
@@ -55,8 +38,6 @@ def test_route_modules_do_not_import_runtime_or_scanner_modules():
 
 def test_domain_modules_do_not_import_fastapi_layer():
     domain_files = [
-        REPO_ROOT / "market_scanner.py",
-        REPO_ROOT / "async_scanner.py",
         REPO_ROOT / "signals.py",
         REPO_ROOT / "strategy_inspector.py",
     ]
@@ -253,11 +234,6 @@ def test_backfill_script_uses_orm_repository_path():
 def test_runtime_modules_use_canonical_persistence_imports():
     target_files = [
         REPO_ROOT / "api" / "main.py",
-        REPO_ROOT / "market_scanner.py",
-        REPO_ROOT / "async_scanner.py",
-        REPO_ROOT / "health_api.py",
-        REPO_ROOT / "scheduler.py",
-        REPO_ROOT / "trade_manager.py",
         REPO_ROOT / "scripts" / "backfill_special_tags.py",
     ]
     forbidden_tokens = (
@@ -301,8 +277,6 @@ def test_runtime_modules_use_canonical_application_service_imports():
 
 def test_scanner_modules_use_domain_events_instead_of_legacy_wrapper():
     target_files = [
-        REPO_ROOT / "market_scanner.py",
-        REPO_ROOT / "async_scanner.py",
         REPO_ROOT / "scanner_side_effects.py",
     ]
 
@@ -320,8 +294,6 @@ def test_scanner_modules_use_domain_events_instead_of_legacy_wrapper():
 
 def test_scanner_runtime_modules_use_canonical_side_effect_handlers():
     target_files = [
-        REPO_ROOT / "market_scanner.py",
-        REPO_ROOT / "async_scanner.py",
         REPO_ROOT / "application" / "scanner" / "signal_handlers.py",
     ]
 

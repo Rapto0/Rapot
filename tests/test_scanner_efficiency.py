@@ -1,15 +1,11 @@
 """Offline lifetime and candle parity checks; no provider or notification work."""
 
-import asyncio
-import gc
 import time
-import weakref
 
 import numpy as np
 import pandas as pd
 import pytest
 
-import async_scanner
 import data_loader
 
 
@@ -118,57 +114,3 @@ def test_resampling_preserves_absent_volume_and_real_zero(market):
     frame["Volume"] = 0.0
     known_zero = data_loader.resample_market_data(frame, "ME", market)
     assert known_zero["Volume"].tolist() == [0.0]
-
-
-@pytest.mark.asyncio
-async def test_async_scan_releases_finished_frames_before_next_market_batch(monkeypatch):
-    living: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
-    batches = []
-    all_bytes = 0
-    peak_bytes = 0
-    observed = []
-    monkeypatch.setattr(async_scanner, "_async_state", async_scanner.AsyncScannerState())
-    monkeypatch.setattr(async_scanner, "get_all_bist_symbols", lambda: [f"S{i}" for i in range(61)])
-    monkeypatch.setattr(
-        async_scanner, "get_all_binance_symbols_async", lambda: [f"C{i}USDT" for i in range(101)]
-    )
-    monkeypatch.setattr(async_scanner, "send_message", lambda *_: pytest.fail("No Telegram"))
-
-    async def fetch(symbols, **_kwargs):
-        nonlocal all_bytes, peak_bytes
-        await asyncio.sleep(0)
-        gc.collect()
-        assert not living, "Completed batches must not remain alive during the next fetch"
-        data = {}
-        for symbol in symbols:
-            frame = _frame()
-            data[symbol] = frame
-            living[symbol] = frame
-            all_bytes += int(frame.memory_usage(deep=True).sum())
-        peak_bytes = max(
-            peak_bytes, sum(int(f.memory_usage(deep=True).sum()) for f in data.values())
-        )
-        batches.append(len(symbols))
-        return data
-
-    async def analyze(symbol, frame, market):
-        return {"symbol": symbol, "market_type": market, "df_daily": frame, "signals": []}
-
-    async def persist(results, notify):
-        assert notify is False
-        observed.extend((result["market_type"], result["symbol"]) for result in results)
-        assert all(result["df_daily"] is living[result["symbol"]] for result in results)
-
-    monkeypatch.setattr(async_scanner, "fetch_multiple_bist_async", fetch)
-    monkeypatch.setattr(async_scanner, "fetch_multiple_crypto_async", fetch)
-    monkeypatch.setattr(async_scanner, "process_symbol_async", analyze)
-    monkeypatch.setattr(async_scanner, "process_signals_batch", persist)
-    result = await async_scanner.scan_market_async(notify=False)
-    await asyncio.sleep(0)
-    gc.collect()
-    assert not living
-    assert batches == [30, 30, 1, 50, 50, 1]
-    assert result["bist_count"] == 61 and result["crypto_count"] == 101
-    assert result["status"] == "success" and len(set(observed)) == 162
-    assert peak_bytes == 50 * 2100 * 6 * 8
-    assert all_bytes == 162 * 2100 * 6 * 8

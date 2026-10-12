@@ -1,47 +1,53 @@
-import type { ApiBotStatus } from './api/types';
+import type { ApiHealth } from './api/types';
+import type { AdvancedAlarmStatus } from './api/advanced-alarms-api';
 
-export type BotState = 'loading' | 'unknown' | 'running' | 'stopped';
-
-interface StatusQuery {
-  data?: ApiBotStatus;
+interface StatusQuery<T> {
+  data?: T;
   isLoading: boolean;
   isError: boolean;
   isFetching: boolean;
   isStale: boolean;
 }
 
-/** Old successful responses cannot assert current liveness during an error or refresh. */
-export function deriveBotHealth(query: StatusQuery) {
-  const status = query.data;
-  let state: BotState = 'unknown';
-  if (query.isError) state = 'unknown';
-  else if (query.isLoading || query.isFetching) state = 'loading';
-  else if (!query.isStale && status?.bot?.database === 'connected') {
-    if (status.bot.state === 'running' && status.bot.is_running === true) state = 'running';
-    else if (status.bot.state === 'stopped' && status.bot.is_running === false) state = 'stopped';
-  }
+function usable<T>(query: StatusQuery<T>) {
+  return !query.isError && !query.isLoading && !query.isFetching && !query.isStale;
+}
 
-  const usable = !query.isError && !query.isLoading && !query.isFetching && !query.isStale
-    && status?.bot?.database === 'connected';
-  const countersUsable = usable && status?.scanning?.data_available !== false;
-  const isRunning = state === 'running' ? true : state === 'stopped' ? false : null;
-  const isScanning = usable && isRunning !== null
-    && typeof status.bot.is_scanning === 'boolean' ? status.bot.is_scanning : null;
+/** A reachable API, an alarm worker and fresh market data are separate facts. */
+export function deriveApiHealth(query: StatusQuery<ApiHealth>) {
+  const data = usable(query) ? query.data : undefined;
+  const confirmed = data?.status === 'healthy' && data.database === 'connected'
+    && data.realtime === 'running';
+  const apiState = query.isError ? 'error' as const
+    : query.isLoading || query.isFetching ? 'loading' as const
+      : confirmed ? 'connected' as const : 'unknown' as const;
+  return {
+    apiState,
+    label: { connected: 'Bağlı', error: 'Doğrulanamadı', loading: 'Yükleniyor', unknown: 'Bilinmiyor' }[apiState],
+    tone: apiState === 'connected' ? 'profit' as const : apiState === 'error' ? 'loss' as const : 'neutral' as const,
+    uptime: confirmed && Number.isFinite(data.uptime_seconds) && data.uptime_seconds >= 0
+      && typeof data.uptime_human === 'string' ? data.uptime_human : '—',
+    database: data?.database === 'connected' ? 'Bağlı' : data?.database === 'error' ? 'Hata' : 'Bilinmiyor',
+    realtime: data?.realtime === 'running' ? 'Çalışıyor' : data?.realtime === 'error' ? 'Hata' : 'Bilinmiyor',
+  };
+}
+
+export function deriveAlarmRuntime(query: StatusQuery<AdvancedAlarmStatus>, now = Date.now()) {
+  const data = usable(query) ? query.data : undefined;
+  const lastCycle = typeof data?.last_cycle_at === 'string' ? Date.parse(data.last_cycle_at) : NaN;
+  const recentCycle = Number.isFinite(lastCycle) && now - lastCycle >= -5000 && now - lastCycle <= 30_000;
+  const state = query.isLoading || query.isFetching ? 'loading'
+    : !data || query.isError ? 'unknown'
+      : data.last_error != null ? 'error'
+        : data.running === false ? 'stopped'
+          : data.running === true && recentCycle ? 'running'
+            : data.running === true && data.last_cycle_at === null ? 'starting' : 'unknown';
   return {
     state,
-    label: { loading: 'Yükleniyor', unknown: 'Bilinmiyor', running: 'Çalışıyor', stopped: 'Durdu' }[state],
-    tone: state === 'running' ? 'profit' as const : state === 'stopped' ? 'loss' as const : 'neutral' as const,
-    isRunning,
-    isScanning,
-    scanningLabel: isScanning === true ? 'Sürüyor' : isScanning === false ? 'Bekliyor' : 'Bilinmiyor',
-    uptime: usable && isRunning !== null ? status?.bot.uptime_human ?? '--' : '--',
-    lastScan: usable && status?.scanning?.last_scan_available !== false ? status?.scanning?.last_scan_time ?? null : null,
-    scanCount: countersUsable ? status?.scanning?.scan_count ?? null : null,
-    signalCount: countersUsable ? status?.scanning?.signal_count ?? null : null,
-    errorCount: usable ? status?.errors?.error_count ?? null : null,
-    apiState: query.isError ? 'error' as const : query.isLoading || query.isFetching ? 'loading' as const
-      : query.isStale || !status ? 'unknown' as const : 'connected' as const,
-    isLoading: query.isLoading,
-    isError: query.isError,
+    label: { loading: 'Yükleniyor', unknown: 'Doğrulanamadı', error: 'Kontrol hatası', stopped: 'Durduruldu', running: 'Çalışıyor', starting: 'İlk kontrol bekleniyor' }[state],
+    tone: state === 'running' ? 'profit' as const : state === 'error' || state === 'stopped' ? 'loss' as const : 'neutral' as const,
+    lastCycle: data && Number.isFinite(lastCycle) ? lastCycle : null,
+    telegramConfigured: typeof data?.telegram_configured === 'boolean' ? data.telegram_configured : null,
+    pendingDeliveries: typeof data?.delivery?.pending === 'number' && Number.isSafeInteger(data.delivery.pending) && data.delivery.pending >= 0 ? data.delivery.pending : null,
   };
 }

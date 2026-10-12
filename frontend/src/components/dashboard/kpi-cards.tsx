@@ -100,7 +100,7 @@ export function KPICards() {
                 <KPICard title="Gerçekleşmiş PnL" value="—" icon={TrendingUp} trend="neutral" />
                 <KPICard title="Win Rate" value="—" icon={Target} trend="neutral" />
                 <KPICard title="Açık Pozisyonlar" value="—" icon={Briefcase} trend="neutral" />
-                <KPICard title="Son Tarama" value="—" icon={Clock} trend="neutral" />
+                <KPICard title="Arşivde son tarama" value="—" icon={Clock} trend="neutral" />
             </div>
         )
     }
@@ -127,7 +127,7 @@ export function KPICards() {
                 trend="neutral"
             />
             <KPICard
-                title="Son Tarama"
+                title="Arşivde son tarama"
                 value={stats.lastScanTime ? getTimeAgo(stats.lastScanTime) : "—"}
                 icon={Clock}
                 trend="neutral"

@@ -1,15 +1,15 @@
 # Veritabanı şema ve veri göçü politikası
 
-Son kaynak doğrulaması: **13 Eylül 2026 / P2-4**. Rapot'un iki ayrı veritabanı yaşam döngüsü vardır. **Ana SQLite şemasında Alembic kullanılmaz; trading middleware PostgreSQL şeması Alembic ile yönetilir.** `db_session.py` ve `migrate_db.py` içindeki eski “No Alembic” ifadeleri yalnız ana uygulama için geçerlidir.
+Son kaynak karşılaştırması: **12 Ekim 2026 / bot girişlerinin kaldırılması**. Bu değişiklik şema veya geçmiş kayıt silmez; üretim kabulü [devam planında](RAPOT_DEVAM_PLANI.md) ayrıca izlenir. Rapot'un iki ayrı veritabanı yaşam döngüsü vardır. **Ana SQLite şemasında Alembic kullanılmaz; trading middleware PostgreSQL şeması Alembic ile yönetilir.** `db_session.py` ve `migrate_db.py` içindeki eski “No Alembic” ifadeleri yalnız ana uygulama için geçerlidir.
 
 ## İki ayrı veri alanı
 
 | Alan | Kaynak / bağlantı | Şema yönetimi | Üretim başlangıcı |
 | --- | --- | --- | --- |
-| Ana bot/API | [models.py](../models.py), [db_session.py](../db_session.py); `DATABASE_URL` veya `DATABASE_PATH` | `init_db()` → `create_all()` → `ensure_sqlite_columns()` | Compose `main-init` başarısından sonra API/bot; API ve bot başlangıcı da `init_db()` çağırır. |
+| Ana API ve site alarmları | [models.py](../models.py), [db_session.py](../db_session.py); `DATABASE_URL` veya `DATABASE_PATH` | `init_db()` → `create_all()` → `ensure_sqlite_columns()` | Compose `main-init` başarısından sonra API; API başlangıcı da `init_db()` çağırır. |
 | Trading middleware | [middleware/infra/models.py](../middleware/infra/models.py), [db.py](../middleware/infra/db.py); ayrı `MW_DATABASE_URL` | [Alembic revision zinciri](../middleware/infra/alembic/versions), [schema.py](../middleware/infra/schema.py) | PostgreSQL sağlığı → `middleware-migrate` → güncel revision kontrolü → middleware. |
 
-[docker-compose.yml](../docker-compose.yml) ana SQLite **dizinini** `main-init`, API ve bot arasında paylaşır; DB, WAL/SHM ve süreç kilidi birlikte kalır. Middleware bu dizini bağlamaz; PostgreSQL'in ayrı volume'u vardır. Fiyat önbelleği ayrı bir SQLite dosyasıdır. Ana uygulamanın SQLite PRAGMA/DDL kodu, farklı bir URL verilerek PostgreSQL desteği varmış gibi yorumlanmamalıdır.
+[docker-compose.yml](../docker-compose.yml) ana SQLite **dizinini** `main-init` ve API arasında paylaşır; DB, WAL/SHM ve site alarm motorlarının süreç kilitleri birlikte kalır. Eski bot servisi kaynak Compose'dan kaldırılmıştır; geçmiş sinyal/trade/AI/tarama tabloları korunur. Middleware bu dizini bağlamaz; PostgreSQL'in ayrı volume'u vardır. Fiyat önbelleği ayrı bir SQLite dosyasıdır. Ana uygulamanın SQLite PRAGMA/DDL kodu, farklı bir URL verilerek PostgreSQL desteği varmış gibi yorumlanmamalıdır.
 
 ## Ana SQLite: eklemeli şema güncellemeleri
 
@@ -77,7 +77,7 @@ Bu araçlar otomatik deploy adımı değildir. Kaynak/hedef, tekrar çalıştır
 1. Bileşen source SHA/image digest'lerini, `current` hedefini, gerçek env ve veri yollarını belirle. Yalnız frontend yayını backend migration'ı gerektirmez; karma imaj sürümleri bileşen bazında kaydedilir.
 2. Şemaya/veriye yazılacaksa SQLite ve PostgreSQL için ayrı, geri okunarak doğrulanmış yedek hazırla. WAL, yazıcılar, disk rezervi ve önceki kodun yeni şemayı okuyabilirliği incelenir. Genel Compose config çıktısı sırları gösterebilir; `config --quiet` veya çıktısı yayımlanmayan kontrollü inceleme kullanılır.
 3. Ana SQLite'da sütun/indeks ve temsilî okumalar; middleware'de mevcut revision/head eşleşmesi kontrol edilir. Ana `/health` tablolara erişimi sınar; bütün alanların, veri dönüşümlerinin veya tarama ilerlemesinin kanıtı değildir.
-4. İncelenmiş tam deploy'da `main-init` ve `middleware-migrate` kendi veri alanlarında çalışır; korunması gereken veri ve servis kabulü kaydedilir. Bot durdurulmadıysa doğal yeni kayıtları koşulsuz öncesi/sonrası eşitlik hatası sayma.
+4. İncelenmiş tam deploy'da `main-init` ve `middleware-migrate` yalnız gerekli veri alanlarında ve yetkilendirilmiş kapsamda çalışır; sırf bot kaldırma için migration gerekmez. Korunması gereken veri ve servis kabulü kaydedilir. API alarm motorları gibi etkin yazıcıların doğal yeni kayıtlarını koşulsuz öncesi/sonrası eşitlik hatası sayma.
 5. Üretim middleware ayarları `MW_EXECUTION_MODE=DRY_RUN`, `MW_TRADING_ENABLED=false`, `MW_BINANCE_LIVE_ENABLED=false` kalır. Migration/deploy başarısı gerçek veya testnet emir yetkisi sağlamaz.
 
 [Devam arşivindeki P1-2/P1-3/P1-4 kayıtları](archive/RAPOT_DEVAM_GECMISI_2026-09-21.md#p1--önemli-tamamlamalar), PG16/head `0006` üretim geçişini, ayrı boş PG16 simülasyon kabulünü ve ana scan-history şema kabulünü ayrı kanıtlarla içerir. P2-2 belge düzenlemesinde üretim DB'si açılmadı; üretim migration/backfill'i çalıştırılmadı. Gerçek TradingView alarm teslimi ve testnet/canlı emir kabulü kullanıcı tarafından ertelenmiştir.

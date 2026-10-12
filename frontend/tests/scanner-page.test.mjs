@@ -114,7 +114,7 @@ function harness({ storage = memoryStorage(), blockedStorage = false, queryOverr
       async fetchLogs(limit) { requests.push(['logs', limit]); return []; },
       async fetchSpecialTagHealth(params) { requests.push(['health', params]); return {}; },
     },
-    '@/lib/hooks/use-health': { useBotHealth: () => ({ label: 'Durum bilinmiyor', scanningLabel: 'Bekleniyor', tone: 'neutral', scanCount: null }) },
+    '@/lib/hooks/use-health': { useApiHealth: () => ({ label: 'Durum bilinmiyor', scanningLabel: 'Bekleniyor', tone: 'neutral', scanCount: null }) },
     '@/lib/hooks/use-private-market': { usePrivateMarket: () => ({ allowed, sessionKey: allowed ? 'admin:123' : 'guest' }) },
     '@/components/market-data-status': { MarketDataStatus: () => null },
     '@/components/scanner/borsapy-screener': { BorsapyScreener: () => null },

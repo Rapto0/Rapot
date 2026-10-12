@@ -102,23 +102,6 @@ def test_independent_yahoo_confirmation_is_retained_and_not_claimed_completed(mo
     assert not any("confirmed" in key.lower() for key in metadata)
 
 
-@pytest.mark.parametrize("source", ["yfinance_bist", "borsapy_tradingview"])
-def test_identical_source_cannot_pass_as_independent_confirmation(source):
-    import market_scanner
-
-    frame = bars()
-    frame.attrs.update(source_hint=source, fetched_at_ts=time.time())
-    result = market_scanner._verify_bist_second_source(
-        symbol="THYAO",
-        strategy_name="COMBO",
-        signal_dir="AL",
-        trigger_rule=[],
-        secondary_df=frame,
-        primary_source=source,
-    )
-    assert result == (False, "ikincil_kaynak_bagimsiz_degil")
-
-
 @pytest.mark.asyncio
 async def test_async_scanner_uses_the_same_selected_primary_without_fallback(monkeypatch, caplog):
     import async_data_loader

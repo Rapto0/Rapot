@@ -53,10 +53,8 @@ from strategy_inspector import (  # noqa: E402
 # Başlangıç zamanı
 _start_time = datetime.now()
 
-import threading  # noqa: E402
 from contextlib import asynccontextmanager, suppress  # noqa: E402
 
-RUN_EMBEDDED_BOT = bool(settings.run_embedded_bot)
 CORS_ALLOW_ORIGINS = settings.cors_origins_list
 # Credentials + wildcard kombinasyonu tarayici tarafinda desteklenmez.
 CORS_ALLOW_CREDENTIALS = bool(settings.cors_allow_credentials)
@@ -75,8 +73,7 @@ _RUNTIME_STATE = {
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
-    Uygulama yaşam döngüsü.
-    Opsiyonel olarak bot scheduler döngüsünü arka plan thread'inde başlatır.
+    Own realtime market data and persistent website alarms for the API lifetime.
     """
     _run_startup_sequence()
     await _start_realtime_services()
@@ -88,22 +85,6 @@ async def lifespan(app: FastAPI):
         await stop_server_alarms()
         await _stop_realtime_services()
         raise
-
-    if RUN_EMBEDDED_BOT:
-        # Bot Thread Başlat
-        def run_scheduler():
-            try:
-                logger.info("Embedded bot mode enabled in API process.")
-                from scheduler import start_bot
-
-                # Async modda çalıştır (kendi event loop'unu yönetir)
-                start_bot(use_async=True)
-            except Exception:
-                logger.exception("Embedded bot thread error.")
-
-        # Daemon thread: Ana process kapanınca bu da kapanır
-        bot_thread = threading.Thread(target=run_scheduler, daemon=True)
-        bot_thread.start()
 
     try:
         yield
@@ -592,7 +573,7 @@ async def health_check(request: Request, response: Response):
     """
     Sistem sağlık kontrolü.
 
-    Bot durumu, uptime ve veritabanı bağlantısını kontrol eder.
+    API uptime, realtime readiness and database connectivity.
     """
     uptime = (datetime.now() - _start_time).total_seconds()
 
@@ -843,24 +824,24 @@ async def get_stats(request: Request):
     return StatsResponse(**stats)
 
 
-@app.post("/analyze/{symbol}", tags=["Analysis"], dependencies=[Depends(get_current_admin_user)])
+@app.post(
+    "/analyze/{symbol}",
+    tags=["Analysis"],
+    dependencies=[Depends(get_current_admin_user)],
+    deprecated=True,
+    responses={410: {"description": "Legacy Telegram analysis was removed"}},
+)
 @limiter.limit("2/minute")
 async def analyze_symbol(
     request: Request,
     symbol: str,
     market_type: str = Query("BIST", description="Piyasa türü"),
 ):
-    """
-    Belirli bir sembol için manuel analiz başlatır.
-    """
-    try:
-        from command_handler import analyze_manual
-
-        analyze_manual(symbol.upper())
-        return {"message": f"{symbol.upper()} analizi başlatıldı", "status": "started"}
-    except Exception as e:
-        logger.error("Manual analysis failed (%s)", type(e).__name__)
-        raise HTTPException(status_code=500, detail="Analiz baslatilamadi.") from e
+    """Keep the retired URL explicit; website AI uses /market/analysis."""
+    raise HTTPException(
+        status_code=410,
+        detail="Eski Telegram analiz yolu kaldırıldı. Site içindeki AI analizini kullanın.",
+    )
 
 
 # ==================== AI ANALYSIS ENDPOINTS ====================
@@ -1419,18 +1400,6 @@ def _run_startup_sequence() -> None:
             reconcile_summary.get("exchange_sync_attempted", False),
             reconcile_summary.get("exchange_errors", 0),
         )
-        try:
-            from market_scanner import restore_scanner_state_from_db
-
-            restore_scanner_state_from_db()
-        except Exception as exc:
-            logger.warning("Sync scanner state restore at startup failed: %s", exc)
-        try:
-            from async_scanner import restore_async_scanner_state_from_db
-
-            restore_async_scanner_state_from_db()
-        except Exception as exc:
-            logger.warning("Async scanner state restore at startup failed: %s", exc)
         _RUNTIME_STATE["db_ready"] = True
         logger.info("Startup DB initialization completed.")
     except Exception:

@@ -1,9 +1,23 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-Kaynaklarla son karşılaştırma: **12 Ekim 2026 / izleme listeleri ve kaynak verimliliği**. İş sırası, kullanıcı
+Kaynaklarla son karşılaştırma: **12 Ekim 2026 / Telegram botunun emekliliği**. İş sırası, kullanıcı
 yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DEVAM_PLANI.md)
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 Teknik rehberler [docs dizininde](docs/README.md) listelenir.
+
+**Güncel kullanıcı kararı:** Otomatik COMBO/HUNTER Telegram taraması, Telegram
+komutları ve bu taramaların otomatik AI/haber zinciri kaldırılır. Site Borsapy
+taraması, COMBO/HUNTER hesaplayıcıları, backtest, `/ai` ve sunucu alarmlarının
+isteğe bağlı Telegram teslimi korunur. Eski bot **11:25:39 UTC'de durduruldu,
+restart=no**; yeni kaynak yayınının kabulü henüz bekleniyor. API içine gömülü bot,
+Flask sağlık servisi ve `scripts.runtime bot` yolu artık yok. Dört sürekli servis
+API/frontend/middleware/PostgreSQL; main-init ve middleware-migrate tek seferliktir.
+`/analyze/{symbol}` yöneticiye 410 döner; site AI yolu `/market/analysis` kalır.
+Tarama geçmişi salt okunur arşivdir; `scan_count` saklanan arşiv satırı sayısıdır.
+Kaldırılan dosyaların saf testleri kaldırıldı, paylaşılan hesaplayıcı/veri/DB
+sözleşmeleri korundu. Temiz backend imajı zorunludur; eski additive/delta imaj
+korumaları atlanmaz. [Göç kaydı](docs/SERVER_ONLY_MIGRATION_2026-10-12.md).
+Alttaki bot/beş servis kabul kayıtları gerçekleştiği tarihe ait tarihsel kanıtlardır.
 
 12 Ekim kullanıcı RAM/CPU ve mum kuyruğuna kalıcı çözüm istedi; **3.000 etkin kural
 zorunlu değil**, karma BIST/kripto listeleri ve liste başına birden çok alarm öncelikli.
@@ -96,17 +110,17 @@ gözlemleri, bulunan kilit/grafik/önbellek sorunlarını ve yayın durumunu ay�
 
 | Katman | Kaynak ve görev |
 |---|---|
-| Bot | `main.py` → `scheduler.py` → `market_scanner.py` veya `async_scanner.py`; `--async` seçimidir |
+| Alarm motorları | `api/runtime/server_alarms.py`, `api/runtime/advanced_alarms.py`; API yaşam döngüsü |
 | Hesaplama | `signals.py`, `config.py`, `strategy_inspector.py`, `data_loader.py` |
 | Scanner uygulaması | `application/scanner/signal_handlers.py`, `application/scanner/scan_history.py`; `domain/events/signal_domain_event.py` |
 | Ana API | `api/main.py`, `api/routes/`, `api/auth.py`; port 8000 |
 | Servis/repository | `application/services/` → `infrastructure/repositories/`; scanner yazıları `infrastructure/persistence/` |
 | Ana veri | `models.py`, `db_session.py`, `database.py`; SQLite ve ayrı fiyat önbelleği |
 | Realtime | `api/runtime/signal_feed.py` ortak SQLite kayıtlarını okur; `api/realtime.py` WS/SSE sunar |
-| Bot sağlık | `health_api.py`, Flask; port 5000 |
+| Sağlık | Ana API `/health`; özel alarm durumu `/advanced-alarms/status` |
 | Middleware | `middleware/api/main.py` → `middleware/services/trading_service.py`; port 8001; ayrı PostgreSQL/Alembic |
 | Frontend | `frontend/src/app/`, `frontend/src/components/`, `frontend/src/lib/api/client.ts`, `frontend/src/lib/hooks/`; port 3000 |
-| Container girişleri | `scripts/runtime.py`: init-main-db, api, bot, migrate-middleware, middleware |
+| Container girişleri | `scripts/runtime.py`: init-main-db, api, migrate-middleware, middleware |
 
 Ana dashboard `/`; diğer sayfalar `/signals`, `/trades`, `/scanner`, `/health`,
 `/settings`, `/chart`, `/research`, `/alarms`, `/ai`, `/calendar`, `/tradingview`, `/login`.
@@ -205,7 +219,7 @@ gerekir; [takvim](docs/WRAPPER_DEPRECATION_SCHEDULE.md) otomatik silme emri değ
 - Frontend: Next.js **16.3.8**, React **19.2.3**, TypeScript **5.9.3**, Tailwind
   **4.1.18**, Lightweight Charts **5.1.0**, Zustand **5.0.10**, React Query **5.90.19**.
 - Backend: FastAPI/Uvicorn, SQLAlchemy/Pydantic, pandas/NumPy/ta, python-binance,
-  isyatirimhisse/yfinance, google-genai, python-telegram-bot, Flask, Alembic/psycopg.
+  isyatirimhisse/yfinance, google-genai, Alembic/psycopg. Telegram alarm teslimi HTTP kullanır.
   `requirements.txt` sürüm aralıklarını ve `requirements-security.txt` güvenlik
   kısıtlarını kullanır; kesin geliştirme/CI çözümü
   `requirements-dev.lock`, araç tanımları `requirements-dev.txt` içindedir.
@@ -393,19 +407,17 @@ kök/health, auth ve API belge yolları dışındaki HTTP yolları admin ister;
 dashboard okuması da bu sınırdadır. `/auth/me` kendi JWT kontrolünü korur.
 WS beş saniye içinde `{type: "auth", token}` bekler; `authenticated` yanıtından
 sonra abonelik başlar. Token URL'ye konmaz; süre dolumu ve çıkış özel veriyi temizler.
-Botun ayrı Flask yüzeyinde `/signals`, `/stats` ve varsa `/metrics` de admin ister.
-Başlıksız `/status` yalnız DB/yerel lifecycle durumunu verir; yönetici başlığıyla
-kişisel sayaç/hata ayrıntıları eklenir. Her iki yanıt `private, no-store` ve
-`Vary: Authorization` taşır. Frontend JWT'yi sağlık yüzeyinde yalnız aynı origin'deki
-yapılandırılmış `/status` yoluna ekler; başka sağlık sunucusuna göndermez.
+Eski Flask sağlık yüzeyi kaldırıldı. Frontend ana API'nin `/health` yanıtını
+okur; sağlıklı API, çalışan alarm motoru ve taze piyasa verisini ayrı gösterir.
+Özel alarm durumuna erişim yönetici oturumu gerektirir.
 Middleware webhook token'ı ve X-Admin-Token yönetim kimliği ana JWT'den ayrıdır.
 [README erişim tablosu](README.md#security-notes) ve [middleware rehberi](docs/MIDDLEWARE.md)
 güncel sözleşmeyi gösterir. Gizli anahtarlar NEXT_PUBLIC değişkenlerine konmaz.
 
-Üretim yolu Docker Compose 2.24+ ve HTTPS Nginx'tir. API/bot/frontend sürekli
+Üretim yolu Docker Compose 2.24+ ve HTTPS Nginx'tir. API/frontend sürekli
 servislerdir; main-init bir defalık iştir. Middleware profili PostgreSQL,
-middleware-migrate ve middleware'i ekler. API embedded bot'u kapatır; scanner
-paylaşılan dosya kilidiyle tek süreçte çalışır. Kullanılmayan eski PM2/API
+middleware-migrate ve middleware'i ekler. Site alarm motorları ayrı paylaşılan
+dosya kilitleriyle tek süreçte çalışır. Kullanılmayan eski PM2/API
 launcher dosyaları 21 Eylül repo temizliğinde kaldırıldı; Compose yolu kullanılır.
 Host upstream'leri açıkça 127.0.0.1 kullanır; portlar loopback'e bağlıdır.
 

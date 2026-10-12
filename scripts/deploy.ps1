@@ -126,7 +126,10 @@ check_port() {
 }
 check_port 3000 frontend 3000
 check_port 8000 api 8000
-check_port 5000 bot 5000
+if ss -H -ltn 'sport = :5000' | grep -q .; then
+  echo 'STOP: retired bot health port is still listening; inspect and retire its identified owner first'
+  exit 1
+fi
 __MIDDLEWARE_PORT__
 git fetch --no-tags __REMOTE__ __BRANCH__
 test "$(git rev-parse FETCH_HEAD)" = "$EXPECTED_COMMIT" || { echo 'STOP: remote commit changed'; exit 1; }
@@ -142,11 +145,10 @@ test -f "$RAPOT_DATA_DIR/trading_bot.db" || {
 }
 export RAPOT_RELEASE="$EXPECTED_COMMIT"
 docker compose config --quiet
-docker compose build api bot frontend
-docker compose up -d --wait --wait-timeout 180 api bot frontend
+docker compose build api frontend
+docker compose up -d --wait --wait-timeout 180 api frontend
 __MIDDLEWARE__
 curl --fail --silent --show-error http://127.0.0.1:8000/health
-curl --fail --silent --show-error http://127.0.0.1:5000/health
 curl --fail --silent --show-error --output /dev/null http://127.0.0.1:3000/
 test "$(git rev-parse HEAD)" = "$EXPECTED_COMMIT"
 docker compose ps --all
@@ -182,7 +184,7 @@ Write-Host "Open an authorized server shell. First run this read-only inventory 
 Write-Host $preflight
 Write-Host ""
 Write-Host "Before proceeding, follow docs/DEPLOY.md: identify legacy processes, back up data, and prepare the environment." -ForegroundColor Yellow
-Write-Host "Unknown bot ownership or unresolved data paths block deployment. Never stop unknown processes automatically."
+Write-Host "A remaining legacy bot or unresolved data paths block deployment. Never stop unknown processes automatically."
 Write-Host "Then review and run this deployment block:" -ForegroundColor Cyan
 Write-Host $deployment
 Write-Host ""

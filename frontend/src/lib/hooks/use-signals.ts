@@ -1,5 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 import { fetchSignals, transformSignal, type ApiSignal, type SignalsParams } from '@/lib/api/client';
+import { useSession } from './use-session';
+
+function useSignalAccess() {
+    const session = useSession();
+    return {
+        enabled: Boolean(session?.user.is_admin && !session.user.disabled),
+        identity: [session?.user.username, session?.expiresAt],
+    };
+}
 
 export interface Signal {
     id: number;
@@ -61,6 +70,7 @@ async function fetchSignalsData(options: UseSignalsOptions = {}): Promise<Signal
 }
 
 export function useSignals(options: UseSignalsOptions = {}) {
+    const access = useSignalAccess();
     const {
         marketType = 'all',
         strategy = 'all',
@@ -71,9 +81,10 @@ export function useSignals(options: UseSignalsOptions = {}) {
     } = options;
 
     return useQuery({
-        queryKey: ['signals', marketType, strategy, direction, specialTag, searchQuery, limit],
+        queryKey: ['signals', marketType, strategy, direction, specialTag, searchQuery, limit, ...access.identity],
+        enabled: access.enabled,
         queryFn: () => fetchSignalsData({ marketType, strategy, direction, specialTag, limit }),
-        refetchInterval: 45000, // Reduce API pressure while keeping UI fresh
+        refetchInterval: false, // Historical scanner records; refresh explicitly when needed.
         staleTime: 15000,
         select: (data) => {
             // Client-side search filter
@@ -88,10 +99,12 @@ export function useSignals(options: UseSignalsOptions = {}) {
 }
 
 export function useRecentSignals(limit: number = 5) {
+    const access = useSignalAccess();
     return useQuery({
-        queryKey: ['signals', 'recent', limit],
+        queryKey: ['signals', 'recent', limit, ...access.identity],
+        enabled: access.enabled,
         queryFn: () => fetchSignalsData({ limit }),
-        refetchInterval: 45000,
+        refetchInterval: false,
         staleTime: 15000,
     });
 }
@@ -104,8 +117,10 @@ function isAllowedSpecialNotification(signal: ApiSignal): boolean {
 }
 
 export function useSpecialNotificationSignals(limit: number = 100) {
+    const access = useSignalAccess();
     return useQuery({
-        queryKey: ['signals', 'special-notifications', limit],
+        queryKey: ['signals', 'special-notifications', limit, ...access.identity],
+        enabled: access.enabled,
         queryFn: async () => {
             const perTagLimit = Math.max(1, Math.ceil(limit / SPECIAL_NOTIFICATION_RULES.length));
 
@@ -131,14 +146,16 @@ export function useSpecialNotificationSignals(limit: number = 100) {
                 .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
                 .slice(0, limit);
         },
-        refetchInterval: 45000,
+        refetchInterval: false,
         staleTime: 15000,
     });
 }
 
 export function useSignalStats() {
+    const access = useSignalAccess();
     return useQuery({
-        queryKey: ['signals', 'stats'],
+        queryKey: ['signals', 'stats', ...access.identity],
+        enabled: access.enabled,
         queryFn: () => fetchSignalsData({}),
         select: (data) => ({
             total: data.length,

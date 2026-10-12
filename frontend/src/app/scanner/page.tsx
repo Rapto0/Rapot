@@ -15,7 +15,7 @@ import {
   type ApiSpecialTagHealth,
   type MarketSourceMetadata,
 } from "@/lib/api/client"
-import { useBotHealth } from "@/lib/hooks/use-health"
+import { useApiHealth } from "@/lib/hooks/use-health"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
@@ -242,7 +242,7 @@ const COLUMN_HELP: Record<ColumnId, string> = {
   changePct: "BIST: sağlayıcının seans değişimi; kripto: Binance son 24 saat değişimi. Veri yoksa boş gösterilir.",
   perf7d: "Yaklasik 7 gunluk performans.",
   perf30d: "Yaklasik 30 gunluk performans.",
-  lastSignal: "Botun son verdigi sinyal yonu.",
+  lastSignal: "Arşivdeki son sinyal yönü.",
   strategy: "Son sinyali ureten strateji.",
   timeframe: "Son sinyalin ait oldugu periyot.",
   rsi14: "RSI(14) degeri.",
@@ -346,7 +346,7 @@ export default function ScannerPage() {
 function SignalHistoryScanner() {
   const { sessionKey } = usePrivateMarket()
   const { addToast } = useToast()
-  const health = useBotHealth()
+  const health = useApiHealth()
 
   const [searchQuery, setSearchQuery] = useState("")
   const [marketFilter, setMarketFilter] = useState<MarketFilter>("ALL")
@@ -376,7 +376,7 @@ function SignalHistoryScanner() {
     queryKey: ["scanner-v2", "scanHistory"],
     queryFn: () => fetchScanHistory(180),
     staleTime: 30_000,
-    refetchInterval: 90_000,
+    refetchInterval: false,
     refetchIntervalInBackground: false,
   })
 
@@ -384,7 +384,7 @@ function SignalHistoryScanner() {
     queryKey: ["scanner-v2", "logs"],
     queryFn: () => fetchLogs(120),
     staleTime: 30_000,
-    refetchInterval: 90_000,
+    refetchInterval: false,
     refetchIntervalInBackground: false,
   })
 
@@ -392,7 +392,7 @@ function SignalHistoryScanner() {
     queryKey: ["scanner-v2", "special-tag-health"],
     queryFn: () => fetchSpecialTagHealth({ market_type: "BIST", since_hours: 24, window_seconds: 900 }),
     staleTime: 60_000,
-    refetchInterval: 120_000,
+    refetchInterval: false,
     refetchIntervalInBackground: false,
   })
 
@@ -400,7 +400,7 @@ function SignalHistoryScanner() {
     queryKey: ["scanner-v2", "signals", "BIST"],
     queryFn: async () => (await fetchSignals({ market_type: "BIST", limit: 700 })).map(mapApiSignal),
     staleTime: 30_000,
-    refetchInterval: 60_000,
+    refetchInterval: false,
     refetchIntervalInBackground: false,
   })
 
@@ -408,7 +408,7 @@ function SignalHistoryScanner() {
     queryKey: ["scanner-v2", "signals", "Kripto"],
     queryFn: async () => (await fetchSignals({ market_type: "Kripto", limit: 700 })).map(mapApiSignal),
     staleTime: 30_000,
-    refetchInterval: 60_000,
+    refetchInterval: false,
     refetchIntervalInBackground: false,
   })
 
@@ -918,6 +918,7 @@ function SignalHistoryScanner() {
               <div className="label-uppercase">BIST ve Kripto</div>
               <h2 className="mt-1 text-lg font-semibold tracking-[-0.02em]">COMBO / HUNTER sinyal geçmişi</h2>
               <p className="mt-1 text-xs text-muted-foreground">{VIEW_PRESETS[activeView].subtitle}</p>
+              <p className="mt-2 text-xs text-muted-foreground">Otomatik COMBO / HUNTER taraması kaldırıldı. Bu bölüm geçmiş kayıtları gösterir; yeni alarm kurmak için Alarmlar ekranını kullanın. Grafik göstergeleri ve Borsapy piyasa taraması kullanılabilir.</p>
               <p className="mt-2 text-xs text-muted-foreground">Güncel fiyatlar filtrelere uyan ilk 100 sembol için alınır; seçili sembole öncelik verilir. BIST: Borsapy / TradingView; kripto: Binance. Eksik fiyat, geçmiş sinyal fiyatıyla doldurulmaz.</p>
               {marketMetricQuery.isError && <p role="alert" className="mt-2 text-xs text-loss">Güncel piyasa verileri yenilenemedi.</p>}
             </div>
@@ -938,7 +939,7 @@ function SignalHistoryScanner() {
         </div>
 
         <div className="grid grid-cols-2 border-b border-border md:grid-cols-3 xl:grid-cols-6">
-          <RibbonCell label="Bot Durumu" value={health.label} tone={health.tone} />
+          <RibbonCell label="API" value={health.label} tone={health.tone} />
           <RibbonCell label="Gösterilen sembol" value={hasSignalSnapshot ? formatCount(sortedRows.length) : "—"} />
           <RibbonCell label="Yüklenen sembol" value={hasSignalSnapshot ? formatCount(screenerRows.length) : "—"} />
           <RibbonCell label="Kayıtlarda son 24s" value={hasSignalSnapshot ? formatCount(signals24h) : "—"} />
@@ -1233,7 +1234,7 @@ function SignalHistoryScanner() {
           )}
         </Panel>
 
-        <Panel title="Sistem sağlığı" subtitle="Tarama ritmi ve kritik günlük özetleri">
+        <Panel title="Geçmiş taramalar" subtitle="Arşivdeki tarama kayıtları ve günlük özetleri">
           <div className="space-y-2">
             <div className={cn("border p-2", specialTagHealth?.missing_total ? "border-[rgba(255,77,109,0.4)] bg-[rgba(97,26,40,0.35)]" : "border-border bg-base")}>
               <div className="mb-2 flex items-center justify-between gap-2">
@@ -1311,12 +1312,12 @@ function SignalHistoryScanner() {
 
             <div className="border border-border bg-base p-2">
               <div className="mb-2 flex items-center justify-between">
-                <span className="label-uppercase">Tarama Ozet</span>
-                <span className="signal-badge signal-neutral">{health.scanningLabel}</span>
+                <span className="label-uppercase">Tarama arşivi</span>
+                <span className="signal-badge signal-neutral">Otomatik tarama kaldırıldı</span>
               </div>
               <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
-                <span className="text-muted-foreground">Toplam tarama</span>
-                <span className="mono-numbers text-right">{health.scanCount == null ? "--" : formatCount(health.scanCount)}</span>
+                <span className="text-muted-foreground">Yüklenen tarama</span>
+                <span className="mono-numbers text-right">{scansQuery.isError ? "—" : formatCount(scans.length)}</span>
                 <span className="text-muted-foreground">Son tarama</span>
                 <span className="mono-numbers text-right">{scansQuery.isError ? "Alınamadı" : latestScan ? getTimeAgo(latestScan.created_at) : "--"}</span>
                 {latestScan && !scansQuery.isError ? (

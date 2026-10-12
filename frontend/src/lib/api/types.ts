@@ -63,36 +63,11 @@ export interface ApiAIAnalysis {
 
 export interface ApiHealth {
     status: string;
+    database: string;
+    realtime: string;
+    version: string;
     uptime_seconds: number;
     uptime_human: string;
-    timestamp: string;
-}
-
-export interface ApiBotStatus {
-    bot: {
-        is_running: boolean | null;
-        state?: 'running' | 'stopped' | 'unknown';
-        state_source?: 'local_lifecycle' | 'unverified_repository' | 'unavailable';
-        observed_at?: string | null;
-        last_reported_is_running?: boolean | null;
-        is_scanning: boolean | null;
-        database?: 'connected' | 'disconnected';
-        uptime_seconds: number;
-        uptime_human: string;
-        started_at: string;
-    };
-    scanning: {
-        data_available?: boolean;
-        last_scan_available?: boolean;
-        counters_updated_at?: string | null;
-        last_scan_time: string | null;
-        scan_count: number | null;
-        signal_count: number | null;
-    };
-    errors: {
-        error_count: number | null;
-        last_error: string | null;
-    };
     timestamp: string;
 }
 

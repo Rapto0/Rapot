@@ -24,9 +24,9 @@ def cli_runs(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Path]:
     working = root / "working"
     working.mkdir()
     # Reading caller dotenv or trusting caller application settings must not be necessary.
-    (working / ".env").write_text("SCAN_INTERVAL_HOURS=not-a-number\n", encoding="utf-8")
+    (working / ".env").write_text("AI_TIMEOUT=not-a-number\n", encoding="utf-8")
     environment = dict(os.environ)
-    environment.update({"PYTHONPATH": str(ROOT), "SCAN_INTERVAL_HOURS": "invalid-caller-setting"})
+    environment.update({"PYTHONPATH": str(ROOT), "AI_TIMEOUT": "invalid-caller-setting"})
     outputs = (root / "first", root / "second")
     for output in outputs:
         result = subprocess.run(

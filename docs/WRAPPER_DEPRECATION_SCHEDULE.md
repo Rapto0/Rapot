@@ -1,6 +1,6 @@
 # Wrapper Deprecation Schedule
 
-**Güncelleme: 2026-09-11 — P2-2.** Güncel karar: [envanterdeki 12 compatibility wrapper](PACKAGING_REFACTOR_MAP.md#korunan-wrapper-envanteri) korunuyor. Depoda uygulama importlarının canonical olması doğrulandı; tüm çalışan sürümlerde ve harici tüketicilerde kullanımın bittiği doğrulanmadı. Bu belge güncellemesi kod kaldırmaz ve yeni bir otomatik kaldırma tarihi belirlemez.
+**Aktif kaynak güncellemesi: 2026-10-12.** Güncel karar: [envanterdeki 12 compatibility wrapper](PACKAGING_REFACTOR_MAP.md#korunan-wrapper-envanteri) korunuyor. Eski otomatik bot/scanner ve Flask sağlık runtime'ının kaldırılması bu wrapper'ların kaldırılması değildir. Depoda uygulama importlarının canonical olması P2-2'de doğrulandı; tüm çalışan sürümlerde ve harici tüketicilerde kullanımın bittiği doğrulanmadı. Bu belge yeni bir otomatik kaldırma tarihi belirlemez; üretim geçişi [devam planında](RAPOT_DEVAM_PLANI.md) ayrıca izlenir.
 
 ## Eski tarihler ile güncel kararın ayrımı
 
@@ -20,7 +20,7 @@
 Kaynak: [wrapper_telemetry.py](../infrastructure/compat/wrapper_telemetry.py). Her wrapper modül gövdesinde `register_wrapper_usage(...)` çağırır.
 
 - `usage_count`, wrapper gövdesinin çalışıp kayıt çağrısı yapmasını sayar. Python modül önbelleği nedeniyle sonraki sıradan importlar yeniden sayılmaz; `importlib.reload` sayıyı artırır. Bu, işlev çağrısı veya istek sayacı değildir.
-- Veri `_wrapper_usage` sözlüğünde **yalnız o Python sürecinin belleğinde** tutulur. Süreç yeniden başlarsa kaybolur; API, bot, worker ve ayrı komut süreçleri ortak bir gözlem geçmişi paylaşmaz. Kilit thread erişimini korur, süreçler arası toplama yapmaz.
+- Veri `_wrapper_usage` sözlüğünde **yalnız o Python sürecinin belleğinde** tutulur. Süreç yeniden başlarsa kaybolur; API, worker ve ayrı komut süreçleri ortak bir gözlem geçmişi paylaşmaz. Kilit thread erişimini korur, süreçler arası toplama yapmaz.
 - `total_wrappers`, kayıtta görülen modül sayısıdır; depodaki 12 modülün envanter sayısı değildir. Kayıt yalnız import sırasında oluştuğundan `active_wrappers` “halen iş yapan modül” anlamına gelmez.
 - Uyarı logları örneklemeli/zaman sınırlıdır; log satırı sayısı kullanım sayısı değildir. `planned_removal` yalnız metin metadata'sıdır.
 - `reset_wrapper_usage_snapshot()` test yardımcısıdır. Testlerin reload/reset sonuçları üretim kullanımı veya geçmiş gözlem penceresi olarak yorumlanmaz.
@@ -30,11 +30,10 @@ Kaynakta mevcut opt-in okuma yüzeyleri:
 | Süreç / kod | İstek |
 | --- | --- |
 | FastAPI: `api/routes/system_routes.py` → `application/services/system_service.py` | `GET /ops/read-model/overview?include_compat_telemetry=true` |
-| Bot health: `health_api.py` | `GET /status?include_compat_telemetry=true` |
 
-Yollar servis içi route'lardır; dış proxy prefix'i dağıtım konfigürasyonuna bağlıdır. İki yüzey varsayılan olarak telemetry toplamasını yanıta eklemez. `include_wrapper_details=true`, yalnız `APP_ENV` production değilse ayrıntıları açar; production'da özet kalır ve `details_disabled_in_production` nedeni yazılır. Her iki çağrı da sadece yanıt veren sürecin kaydını okur.
+Yol yöneticiye özel servis içi route'tur; dış proxy prefix'i dağıtım konfigürasyonuna bağlıdır. Varsayılan olarak telemetry toplamasını yanıta eklemez. `include_wrapper_details=true`, yalnız `APP_ENV` production değilse ayrıntıları açar; production'da özet kalır ve `details_disabled_in_production` nedeni yazılır. Çağrı sadece yanıt veren API sürecinin kaydını okur. Eski Flask `GET /status?include_compat_telemetry=true` yüzeyi kaynakta kaldırılmıştır; eski kabul kayıtları tarihsel kalır.
 
-**Boş snapshot kaldırma kanıtı değildir.** Sürecin henüz ilgili yolu yüklememesi, yeniden başlaması veya eski tüketicinin başka süreçte/cihazda çalışması aynı sıfır sonucunu üretir. Tek `/ops` veya `/status` yanıtından “kullanım tamamen bitti” sonucu çıkarılmayacak. Bu belge turunda canlı telemetry çağrısı yapılmadı.
+**Boş snapshot kaldırma kanıtı değildir.** Sürecin henüz ilgili yolu yüklememesi, yeniden başlaması veya eski tüketicinin başka süreçte/cihazda çalışması aynı sıfır sonucunu üretir. Tek `/ops` yanıtından “kullanım tamamen bitti” sonucu çıkarılmayacak. Bu belge turunda canlı telemetry çağrısı yapılmadı.
 
 ## Kanıta bağlı kaldırma sırası
 
@@ -47,4 +46,4 @@ Yollar servis içi route'lardır; dış proxy prefix'i dağıtım konfigürasyon
 
 2026-09-11, `ee49508` tabanında 211 tracked Python dosyasının AST envanteri: 12 wrapper, uygulama/script tarafında doğrudan eski yol tüketicisi yok. Test importları ve üç telemetry reload örneği [paketleme haritasında](PACKAGING_REFACTOR_MAP.md) listelidir. Depo dışı veya hesaplanan dinamik yollar bu sonucun kapsamı değildir.
 
-Aynı haritadaki tekrar üretilebilir komutla Python 3.12.8 altında **37/37** test geçti: boundary, örnek alias kimliği, telemetry, opt-in read-model ve handler kayıt/yayın davranışı. Ağ ve gerçek DB/dotenv erişimi kök test izolasyonu tarafından engellendi. Testler telemetry mekanizmasını doğrular; üretimde gözlem döneminin tamamlandığını veya kaldırmanın dış tüketicileri bozmayacağını doğrulamaz.
+Aynı haritada korunan **11 Eylül tarihsel koşumunda** Python 3.12.8 altında **37/37** test geçti: boundary, örnek alias kimliği, telemetry, opt-in read-model ve handler kayıt/yayın davranışı. O komut kaldırılan Flask testini içerir; güncel koşum notu haritada ayrıca verilir. Ağ ve gerçek DB/dotenv erişimi kök test izolasyonu tarafından engellendi. Testler telemetry mekanizmasını doğrular; üretimde gözlem döneminin tamamlandığını veya kaldırmanın dış tüketicileri bozmayacağını doğrulamaz.

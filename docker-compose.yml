@@ -18,12 +18,9 @@ x-python: &python
 
 x-main-environment: &main-environment
   APP_ENV: production
-  RUN_EMBEDDED_BOT: "false"
   DATABASE_URL: ""
   DATABASE_PATH: /app/runtime-data/trading_bot.db
   CACHE_DATABASE_PATH: /app/runtime-data/price_cache.db
-  HEALTH_API_HOST: 0.0.0.0
-  HEALTH_API_PORT: "5000"
 
 x-main-volumes: &main-volumes
   # The directory includes SQLite database, WAL, SHM and the process lock.
@@ -75,30 +72,6 @@ services:
       retries: 3
       start_period: 30s
 
-  bot:
-    <<: *python
-    # A fixed name per project also prevents accidental Compose scaling of the scanner.
-    container_name: ${COMPOSE_PROJECT_NAME:-rapot}-bot
-    command: ["python", "-m", "scripts.runtime", "bot"]
-    env_file:
-      - ${RAPOT_MAIN_ENV_FILE:-.env}
-    environment: *main-environment
-    volumes: *main-volumes
-    ports:
-      - "127.0.0.1:5000:5000"
-    depends_on:
-      main-init:
-        condition: service_completed_successfully
-      api:
-        condition: service_healthy
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=5)"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-
   frontend:
     image: rapot-frontend:${RAPOT_RELEASE:-local}
     build:
@@ -107,13 +80,11 @@ services:
       args:
         NEXT_PUBLIC_API_URL: /api
         API_PROXY_TARGET: http://api:8000
-        HEALTH_PROXY_TARGET: http://bot:5000
     init: true
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_API_URL: /api
       API_PROXY_TARGET: http://api:8000
-      HEALTH_PROXY_TARGET: http://bot:5000
     ports:
       - "127.0.0.1:3000:3000"
     depends_on:

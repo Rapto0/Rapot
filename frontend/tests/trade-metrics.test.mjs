@@ -274,7 +274,7 @@ test('portfolio has no executable buy, sell or close event path', () => {
   }
 });
 
-test('bot dashboard and open positions apply the shared measured-source contract', () => {
+test('open positions apply the shared measured-source contract', () => {
   const rawRows = [
     { ...trade, status: 'OPEN', pnl: 123 },
     { ...trade, id: 2, status: 'CANCELLED', pnl: 123 },
@@ -286,17 +286,6 @@ test('bot dashboard and open positions apply the shared measured-source contract
       return { data: options.select(raw), isLoading: false, isError: false };
     },
   };
-  const bot = loadSource('../src/components/dashboard/bot-dashboard.tsx', {
-    ...sharedImports,
-    '@tanstack/react-query': query,
-    '@/lib/api/client': { ...normalizers, fetchStats() {}, fetchTrades() {} },
-    '@/lib/hooks/use-health': { useBotHealth: () => ({ state: 'unknown', lastScanTime: null }) },
-  });
-  const botHtml = renderToStaticMarkup(React.createElement(bot.BotDashboard));
-  assert.ok(botHtml.includes('AÇIK'));
-  assert.ok(botHtml.includes('İPTAL'));
-  assert.ok(botHtml.includes('—'));
-  assert.ok(!botHtml.includes('123'));
   const positions = loadSource('../src/components/dashboard/market-overview.tsx', {
     ...sharedImports,
     '@tanstack/react-query': query,

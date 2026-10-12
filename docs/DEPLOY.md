@@ -5,32 +5,50 @@ constrained by `requirements-dev.lock`, Node 20.20.2/npm 10.9.9 and Next.js stan
 Unused legacy PM2/API launcher files were removed in the 21 September repository cleanup.
 Docker Compose is the supported production path; historical cutover evidence remains below.
 
+**12 October source transition, deployment pending:** the legacy scheduled scanner,
+Telegram command bot, automatic scanner AI and Flask health process are removed.
+The old production bot was stopped at 11:25:39 UTC with `restart=no`; this does not
+mean that the new API/frontend release has passed production acceptance. See the
+[continuation plan](RAPOT_DEVAM_PLANI.md) for the actual release status.
+
+Use normal clean backend/frontend builds for this transition. `Dockerfile`, runtime
+entry points and dependency inputs changed. The historical API-delta and Borsapy
+additive/source-only paths below require unchanged base inputs and are not suitable
+for this release; do not bypass their hash guards. The old frontend derivative also
+requires exact base/config equivalence, which is not a substitute for a reviewed
+normal image after the health-proxy/build-input change.
+
 ## Services
 
 | Service | Host endpoint | Storage/start condition |
 |---|---|---|
 | main-init | none | Main SQLite schema preparation via existing `db_session.init_db` policy |
-| api | 127.0.0.1:8000 | main-init success; one worker; embedded bot disabled |
-| bot | 127.0.0.1:5000 health | main-init + API health; one scanner with lifetime process lock |
+| api | 127.0.0.1:8000 | main-init success; one worker; server alarms and market-data workers |
 | frontend | 127.0.0.1:3000 | API health; standalone output |
 | postgres | internal only | Optional middleware profile; dedicated named volume |
 | middleware-migrate | none | PostgreSQL health; Alembic upgrade |
 | middleware | 127.0.0.1:8001 | Migration success and current revision check |
 
-API, bot and main-init share the **directory** `RAPOT_DATA_DIR` (default `./runtime-data`),
-including `trading_bot.db`, `price_cache.db`, SQLite WAL/SHM files and the bot lock. Code
-comes from images, without a source bind mount. Direct and embedded `scheduler.start_bot`
-calls use the same database-derived lock; if working directories or database URLs differ,
-set `BOT_LOCK_PATH` to the same shared file. Do not delete a live lock file.
+With the middleware profile enabled, API, frontend, middleware and PostgreSQL are
+the four persistent services. `main-init` and `middleware-migrate` are one-shot jobs.
+There is no `bot` service or port 5000 listener in the current Compose source.
+
+API and main-init share the **directory** `RAPOT_DATA_DIR` (default `./runtime-data`),
+including `trading_bot.db`, caches, encrypted provider credentials and SQLite WAL/SHM
+files. Code comes from images, without a source bind mount. The API's two alarm
+engines retain their separate database-adjacent process locks; do not delete live
+lock files. Removing the old bot does not remove stored signals, analyses, trades,
+scan history or user alarm rules. `scan_count` is now the stored scan-history row count.
 
 Middleware never mounts the main SQLite directory. Its optional profile pins DRY_RUN,
 trading disabled and live adapter disabled. Deployment does not enable or send broker orders.
 
 ## First cutover from the old layout
 
-The verified target is `root@138.68.71.27`, with releases under `/opt/rapot/releases`
+The deployment target is `root@138.68.71.27`, with releases under `/opt/rapot/releases`
 and `/opt/rapot/current` selecting the active release. The original `/root/Rapot` checkout
-is retained as history. P1-2 cutover and HTTPS were verified after SSH access was restored;
+was retained at the initial cutover; later scoped cleanup is recorded separately.
+P1-2 cutover and HTTPS were verified after SSH access was restored;
 see [the current release and evidence record](RAPOT_DEVAM_PLANI.md). Keep private
 keys and passwords outside reports. The following checklist describes the initial cutover.
 
@@ -47,21 +65,25 @@ keys and passwords outside reports. The following checklist describes the initia
    headers. Backend ports bind to loopback. A public webhook route must not expose middleware
    management paths. Verify P0-2 login/admin configuration before publishing.
 
-Host Nginx upstreams must explicitly use `127.0.0.1` for ports 3000, 8000, 5000 and 8001,
+Host Nginx upstreams must explicitly use `127.0.0.1` for ports 3000, 8000 and 8001,
 matching the Compose bindings. `localhost` can resolve to `::1`, where these services do
 not listen, causing intermittent 502 responses even when containers are healthy. Preserve
 each location's existing path/trailing-slash and WebSocket behavior when changing the host.
 Back up the active configuration, run `nginx -t`, reload Nginx, then verify public HTTPS
 routes. On this VPS, the reviewed configuration is `/etc/nginx/sites-available/default`.
 
-Frontend image builds use `API_PROXY_TARGET=http://api:8000` and
-`HEALTH_PROXY_TARGET=http://bot:5000`; changing these targets requires a rebuild. Browser HTTP
-and WebSockets use `/api`, health uses `/health-api`. Local npm builds default to localhost
-8000/5000. These defaults must not be confused with container-local localhost.
+Frontend image builds use `API_PROXY_TARGET=http://api:8000`; changing this target
+requires a rebuild. Browser HTTP/WebSockets use `/api`; health uses `/api/health`
+and authenticated `/api/advanced-alarms/status`. Local npm builds default to
+`http://localhost:8000`, which is not the API address inside the frontend container.
+The removed `/health-api` location must not keep proxying to the stopped port 5000
+service. Any host Nginx change needs its own exact configuration diff, backup,
+`nginx -t` and HTTPS verification; rebuilding Next.js alone does not update host Nginx.
 
 ## Release
 
-For a frontend-only change with unchanged runtime files, the optional
+Outside the 12 October architecture transition, for a frontend-only change with
+unchanged runtime files, the optional
 `publish_frontend_source` workflow input publishes a smaller source image.
 The ordinary image is built first at the exact source commit. The source image
 derives from the pinned accepted frontend and replaces only `/app/.next`,
@@ -99,24 +121,36 @@ After the cutover/data checks and exact server checkout:
 export RAPOT_DATA_DIR=/absolute/reviewed/rapot-data
 export RAPOT_RELEASE="$(git rev-parse HEAD)"
 docker compose config --quiet
-docker compose build api bot frontend
-docker compose up -d --wait --wait-timeout 180 api bot frontend
+docker compose build api frontend
+docker compose up -d --wait --wait-timeout 180 api frontend
 docker compose ps --all
-docker compose logs --tail 100 api bot frontend
+docker compose logs --tail 100 api frontend
 curl --fail http://127.0.0.1:8000/health
-curl --fail http://127.0.0.1:5000/health
 curl --fail --output /dev/null http://127.0.0.1:3000/
 ```
 
 Also verify authenticated UI and WebSockets through the real reverse proxy. Record full
 server SHA, image IDs and services. Local health alone does not prove TLS/login/webhook routing.
-Bot database health can become ready before scheduler startup finishes. Separately verify
-`/health-api/status` reports `bot.state=running` with `state_source=local_lifecycle`.
-The P1-6 operator allows 180 seconds for this startup observation, with status requests
-bounded to seven seconds; it retains the separate 20-second API health request limit.
-This observation allowance is not a guarantee that startup finishes within 180 seconds.
+API health is separate from proving that alarm evaluation and its market input are
+ready. Read authenticated `/advanced-alarms/status` and `/alarms` runtime metadata,
+including freshness/backlog/errors; do not create test rules or send Telegram as
+an implicit health check. The site AI and Borsapy scanner are user-requested features.
 
-### API source update with an unchanged runtime
+For this transition, the deployment plan must remove the obsolete `bot` service
+and its image override without changing the protected middleware/PostgreSQL runtime,
+private environment/credential bytes or user data. Do not restart the stopped bot
+as an automatic rollback step. Keep its image and historical evidence until a
+separate cleanup decision. Use exact-source CI and published digests, a fresh
+offhost SQLite backup with independent integrity/schema/typed-fingerprint restore
+verification, measured image-layer costs and the fixed 528 MiB disk reserve.
+The main schema is unchanged by retiring the bot; no data deletion or restoration
+is part of the rollout. Verify stored records and opt-in alarm configuration after
+the API/frontend switch; publication or stopping the bot is not deployment acceptance.
+
+### Historical API source update with an unchanged runtime
+
+This path describes earlier releases. Its unchanged-input guards reject the
+12 October bot-removal runtime; the normal backend build is required for that change.
 
 `Dockerfile.api-delta` can reuse the immutable `279aa9f` production backend
 runtime when Python/dependency build inputs have not changed. The optional
@@ -157,7 +191,11 @@ The final recorded free space was 1,056,694,272 bytes, above the fixed 528 MiB
 reserve. Exact evidence hashes and acceptance boundaries are in the
 [continuation plan](RAPOT_DEVAM_PLANI.md#son-üretim-ve-yayın-kanıtları).
 
-### Borsapy runtime extension
+### Historical Borsapy runtime extension
+
+The following recipe and dated evidence belong to the former runtime. They do not
+authorize retaining removed dependencies or bypassing changed `Dockerfile` guards.
+The current four-service transition uses a newly built standard backend image.
 
 `Dockerfile.borsapy-runtime` is a separate additive dependency path. It reuses the
 same immutable `279aa9f` backend image and installs the complete production
@@ -261,7 +299,7 @@ test was performed. Normal startup traffic was not measured. Ignored evidence
 is retained in `runtime-data/borsapy-market-deploy/`; exact backup and deployment
 records are summarized in the [continuation plan](RAPOT_DEVAM_PLANI.md#son-üretim-ve-yayın-kanıtları).
 
-### Frontend-only releases on the current VPS
+### Historical frontend-only release procedure
 
 The historical P2-1 archive procedure below applies to changes confined to frontend
 application code and release documentation: its exact source diff requires backend code,
@@ -755,8 +793,8 @@ compatibility; never automatically downgrade live data.
 `ci.yml` checks Python/frontend and builds both images. It verifies backend imports without
 network access, migrates a disposable PostgreSQL database to Alembic head, starts middleware
 with production schema checks and trading disabled, and serves frontend HTML/static assets
-from the built container. The separate standalone proxy test uses local mock API/health
-servers, including a WebSocket upgrade.
+from the built container. The separate standalone proxy test uses a local mock API,
+including API health and a WebSocket upgrade; the former Flask health proxy is absent.
 
 P2-3 enables Ruff lint/format for all tracked Python sources. Security artifacts contain
 Bandit source findings and pip-audit results for the exact active Python lock pins.

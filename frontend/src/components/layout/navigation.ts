@@ -8,7 +8,7 @@ export const navigation = [
   { name: "Sinyaller", shortName: "Sinyaller", href: "/signals", icon: Bell },
   { name: "Alarmlar", shortName: "Alarmlar", href: "/alarms", icon: AlarmClock },
   { name: "İşlemler", shortName: "İşlemler", href: "/trades", icon: History },
-  { name: "Bot Sağlığı", shortName: "Sağlık", href: "/health", icon: Activity },
+  { name: "Sistem Sağlığı", shortName: "Sağlık", href: "/health", icon: Activity },
   { name: "AI Analizi", shortName: "AI", href: "/ai", icon: Brain },
   { name: "Takvim", shortName: "Takvim", href: "/calendar", icon: CalendarDays },
   { name: "Ayarlar", shortName: "Ayarlar", href: "/settings", icon: Settings },

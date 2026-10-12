@@ -1,27 +1,30 @@
 # Rapot mimarisi
 
-Mimari harita P2-2'de kaynakla karşılaştırıldı; sürüm ve kabul notları
-**21 Eylül 2026** tarihinde güncellendi. Bu belge mimariyi açıklar;
+Mimari harita P2-2'de kaynakla karşılaştırıldı; aktif girişler
+**12 Ekim 2026 / eski otomatik botun kaldırılması** için güncellendi. Bu kaynak
+değişikliğinin üretim yayını ve kabulü henüz tamamlanmış sayılmaz. Bu belge mimariyi açıklar;
 öncelik, üretim sürümü ve kabul durumu [RAPOT_DEVAM_PLANI.md](RAPOT_DEVAM_PLANI.md)
 içindedir. Eski statik fan-in/fan-out sayıları yeniden ölçülmeden güncel kanıt sayılmaz.
 
 ## Sistem ve veri akışı
 
-Rapot'un ana uygulaması BIST/kripto verisini tarar, COMBO/HUNTER sinyallerini
-kaydeder, isteğe bağlı Gemini analizi ve Telegram bildirimi üretir. Next.js
-dashboard bu kayıtları HTTP ve realtime kanallarıyla gösterir. Binance Spot
+Rapot'un ana API'si BIST/kripto verisini, kalıcı site alarmlarını, kullanıcı
+isteğiyle Borsapy taramasını ve site içi Gemini analizini sunar. Eski otomatik
+COMBO/HUNTER tarayıcısı, Telegram komutları ve otomatik AI akışı kaldırılmıştır.
+Geçmiş sinyal/analiz/işlem kayıtları korunur; Telegram yalnız ilgili site alarmında
+seçilirse kullanılır. Next.js dashboard HTTP ve realtime kanallarıyla çalışır. Binance Spot
 emir middleware'i ayrı uygulama, erişim kimliği ve veritabanına sahiptir.
 
 ```text
-main.py → scheduler → sync / async scanner → signals.py
-                          ↓ SignalDomainEvent
-              application.scanner.signal_handlers
-                          ↓
-              infrastructure.persistence → ana SQLite
-                                               ↓
-                  api.runtime.signal_feed → WS/SSE → frontend
-                                               ↑
-API route → application.services → infrastructure.repositories
+scripts.runtime api → api.main lifespan → piyasa verisi + site alarm motorları
+                                                 ↓
+                                      ana SQLite olay/teslim → opt-in Telegram
+
+frontend → API route → application.services → infrastructure.repositories
+                         ↓                              ↓
+             manuel tarama / site AI          geçmiş ana SQLite kayıtları
+                                                        ↓
+                             api.runtime.signal_feed → kimlikli WS/SSE
 
 TradingView Pine → /webhooks/tradingview → TradingService
                          ↓                         ↓
@@ -39,43 +42,40 @@ Eski `/alarms/local` kuralları yalnız tarayıcıda değerlendirilir.
 
 | Alan | Başlangıç noktaları | Etki |
 |---|---|---|
-| Bot yaşam döngüsü | `main.py`, `scheduler.py`, `infrastructure/runtime_lock.py` | Tek scanner, periyodik görevler, Telegram komutları, Flask sağlık |
+| API yaşam döngüsü | `api/main.py`, `api/runtime/{advanced_alarms,server_alarms}.py`, `infrastructure/runtime_lock.py` | API'ye bağlı site alarm motorları; her motorun süreç kilidi, başlangıç ve kapanış yönetimi |
 | Veri/hazırlık | `data_loader.py`, `application/services/borsapy_gateway.py`, `borsapy_market_data.py`, `price_cache.py`, `config.py`, `settings.py` | BIST varsayılan Borsapy, kimlikli ortak fiyat/geçmiş; eski fiyat önbelleği ayrı |
 | Hesaplama | `signals.py`, `strategy_inspector.py`, `frontend/src/lib/indicators.ts`, `middleware/pine/` | Python/TypeScript/Pine ayrı uygulamalar; eşdeğerlik test ister |
-| Scanner | `market_scanner.py`, `async_scanner.py`, `application/scanner/scan_history.py` | Ortak kayıt/event/scan history; sync AI/haber/Telegram akışı daha geniş |
+| Manuel tarama | `api/routes/borsapy_routes.py`, `application/services/borsapy_research.py` | Kullanıcının Borsapy sorgusu; otomatik eski scanner veya Telegram/AI yan etkisi başlatmaz |
 | Domain event | `domain/events/signal_domain_event.py` | Typed event, kayıt ve yayın payload alanları |
 | Kayıt handler'ı | `application/scanner/signal_handlers.py` | Başarılı kayıt sonrası callback ve publisher adapter |
-| Ana persistence | `infrastructure/persistence/`, `models.py`, `db_session.py` | Scanner kayıtları, ops/trade yardımcıları ve signal feed okuması |
+| Ana persistence | `infrastructure/persistence/`, `models.py`, `db_session.py` | Korunan sinyal/ops/trade yardımcıları ve signal feed okuması; eski kayıtlar silinmez |
 | API servisleri | `application/services/`, `infrastructure/repositories/` | Sinyal/işlem/analiz/system read-model ve piyasa verisi |
 | REST/auth | `api/main.py`, `api/routes/`, `api/auth.py`, `api/private_data_access.py`, `api/rate_limit.py` | DTO, login, kişisel HTTP/WS/SSE için admin sınırı |
 | Realtime | `api/runtime/realtime_bootstrap.py`, `api/runtime/signal_feed.py`, `api/realtime.py` | Ortak DB sinyal akışı, provider yaşam döngüsü, WS/SSE |
 | AI | `ai_analyst.py`, `ai_schema.py`, `ai_evaluation.py` | google.genai, normalize cevap/metadata, kayıt ve değerlendirme |
-| Bildirim/komut | `telegram_notify.py`, `command_handler.py`, `trade_manager.py` | Telegram I/O ve ana uygulama işlem kayıtları |
+| Alarm bildirimi | `application/services/{advanced_alarm,server_alarm}_service.py` | Kuralda seçilen Telegram teslimi; eski Telegram komut dinleyicisi yok |
 | Middleware | `middleware/api/`, `middleware/services/trading_service.py`, `middleware/risk/`, `middleware/broker_adapters/`, `middleware/repositories/`, `middleware/infra/` | Webhook, idempotency, scoped envanter, emir sonucu, komisyon/FIFO ve recovery |
 | Frontend | `frontend/src/app/`, `frontend/src/components/`, `frontend/src/lib/api/client.ts`, `frontend/src/lib/hooks/` | Sayfa → hook/client → REST/WS; bazı bileşenler client'ı doğrudan çağırır |
 
-`database.py` legacy doğrudan SQLite erişimini korur; scanner sinyal yazısının
-canonical yolu artık SQLAlchemy repository'dir. Paket ayrımı tüm application
+`database.py` legacy doğrudan SQLite erişimini korur; korunan sinyal kayıt
+yardımcılarının canonical yolu SQLAlchemy repository'dir. Paket ayrımı tüm application
 kodunun framework'ten bağımsız olduğu anlamına gelmez: market_data_service
 hâlâ FastAPI HTTPException ve api.providers bağımlılığı taşır.
 
 ## Uçtan uca akışlar
 
-### Tarama → sinyal → ekran
+### Manuel tarama, geçmiş sinyaller ve ekran
 
-1. main.py varsayılan sync, --async ile async scanner'ı seçer. Scheduler tarama
-   ve bot yaşam döngüsünü yönetir; paylaşılan kilit ikinci botu engeller.
-2. Scanner veri alır, periyotları hazırlar, COMBO/HUNTER hesaplar ve veri/sinyal
-   korumalarını uygular. Sync ve async her yan etki bakımından özdeş değildir.
-3. SignalDomainEvent, canonical handler ve save_signal üzerinden ana SQLite'a
-   yazılır. Uniqueness çakışmasında yeni sinyal ID'si üretilmez.
-4. Handler başarılı kayıt sonrası callback ve publisher adapter'ını çağırır.
-   API bootstrap süreç içi publisher'ı kapalı tutar: üretimde UI yayın kaynağı
-   ortak DB'dir; bot içindeki adapter süreçler arası mesaj kuyruğu değildir.
-5. API SignalFeed başlangıçta mevcut en büyük ID'yi alır, sonraki commit edilmiş
+1. `/scanner` içindeki Borsapy taraması yönetici isteğiyle çalışır; sonucu ekranda
+   gösterir. Eski otomatik COMBO/HUNTER görevini veya Telegram komut akışını başlatmaz.
+2. COMBO/HUNTER geçmişi, kayıtlı AI ve işlemler API servis/repository katmanından
+   okunur. `scan_count` kalıcı `scan_history` satırlarını sayar; çalışan scheduler sayacı değildir.
+3. `SignalDomainEvent`, canonical handler ve persistence yardımcıları compatibility
+   ve davranış testleri için korunur; bunların varlığı otomatik tarayıcı çalıştığı anlamına gelmez.
+4. API SignalFeed başlangıçta mevcut en büyük ID'yi alır, sonraki commit edilmiş
    satırları periyodik ve thread üzerinden okur; kimlikli admin WS/SSE'ye yayınlar.
    Cursor süreç belleğindedir, kalıcı teslim alındısı veya replay offset'i değildir.
-6. Frontend bağlantı/yeniden bağlantı sırasında REST ile eşitler; geçmişi WS
+5. Frontend bağlantı/yeniden bağlantı sırasında REST ile eşitler; geçmişi WS
    replay garantisine bağlamaz. DB geri yüklenmesi cursor gerilemesi yaratırsa
    resync olayı REST yenilemesini ister.
 
@@ -86,19 +86,18 @@ hâlâ FastAPI HTTPException ve api.providers bağımlılığı taşır.
 - GET /market/analysis (ve servis içi /api/market/analysis alias'ı), JWT →
   strategy_inspector → ai_analyst/ai_schema → UI cevabı yoludur. Bu endpoint
   analyze_with_gemini'yi save_to_db=False ile çağırır; cevap DB'ye kaydedilmez.
-- Admin POST /analyze/{symbol}, command_handler.analyze_manual üzerinden
-  Telegram mesajları da içeren manuel tarama/analiz akışını başlatır.
-- Scanner'ın kayıtlı AI analizi gerçek sinyal ID'sine bağlanır. AI_ENABLED=0
+- Admin POST /analyze/{symbol}, eski yolu açıkça kapatan `410 Gone` döndürür;
+  eski modül yüklemez, Telegram göndermez. Site AI yolu `/market/analysis` kalır.
+- Tarihsel kayıtlı AI analizi gerçek sinyal ID'sine bağlı kalır. AI_ENABLED=0
   kapalı durumu üretir; kayıtlı analizleri okumak yeni sağlayıcı isteği değildir.
 
 ### Kişisel piyasa verisi
 
 Dashboard, izleme listesi ve BIST grafiği Borsapy gateway'i kullanır. Varsayılan
-`BORSAPY_USE_FOR_BIST=true` sync/async scanner ve günlük BIST alarmlarını aynı
+`BORSAPY_USE_FOR_BIST=true` korunan veri yükleyicisi ve günlük BIST alarmlarını aynı
 kaynağa bağlar; false eski sağlayıcı yolunu açıkça seçer. Hatalar sessiz kaynak
 değişimi yapmaz. Kimlikli sonuçlar eski SQLite `price_cache` ile karıştırılmaz.
-Scanner'da gereken bağımsız Yahoo teyidi korunur; kaynak politikası teyidin
-başarılı olduğu anlamına gelmez.
+Kaldırılan otomatik scanner'ın bağımsız Yahoo teyidi artık aktif yürütme yolu değildir.
 
 `borsapy_market_data.py` tek quote bağlantısında en fazla 200 etkin sembol ve
 istek başına 50 sembolle ortak read-model sunar. Günlük metrik geçmişi tek worker,
@@ -108,15 +107,18 @@ Kripto grafik/alarm/quote kaynağı Binance kalır; BtcTurk araştırması ayrı
 Ekonomik takvim Borsapy/Doviz.com genel veri yolunu kullanır; TradingView/Finnhub
 kimliği istemez. Kaynak saat dilimi doğrulanmadığı için olay saati dönüştürülmez.
 
-Provider kimliği süreç genelinde olduğu için kimlikli ağ işleri gateway kilidi
-altında sırayla çalışır. Kilit edinme beklemesi bir saniyeyle sınırlıdır; mevcut
-fiyat/grafik tamponu kimlik revizyonu ve epoch denetlenerek okunabilir. Bu sınır
+Paylaşılan provider işlemleri gateway hesap kilidiyle korunur. Alarm geçmişi,
+isteğe özel doğrulanmış token ve epoch denetimiyle ayrı sınırlı worker yolunu kullanır;
+geçmiş gereksinimleri etkin alarm ve süreli grafik taleplerinden türetilir. Kilit
+edinme beklemesi bir saniyeyle sınırlıdır; mevcut fiyat/grafik tamponu kimlik
+revizyonu ve epoch denetlenerek okunabilir. Bu sınır
 ağ isteğini iptal etmez ve sağlayıcı yanıt süresine kesin üst sınır değildir.
 Eski BIST yayın servisi varsayılan modda başlamaz; ihtiyaç üzerine açılan Borsapy
 bağlantısının henüz yapılandırılmaması API/DB feed/Binance sağlık hatası sayılmaz.
 
-Bu site geneli kaynak/erişim değişikliği yeni API/frontend/bot yayını gerektirir;
-üretim kabulü ve gerçek piyasa/hesap kabulü henüz tamamlanmadı.
+12 Ekim bot kaldırma değişikliği API/frontend yayını ve ayrı bot servisinin
+durdurulmasını gerektirir; burada kaynak kapsamı anlatılır. Önceki dar canlı
+kabul, bütün sembollerde tazelik veya sürekli kapasite garantisi değildir.
 
 ### TradingView → ayrı emir hattı
 
@@ -154,7 +156,7 @@ sınırları P3-1'de düzeltildi. Güncel Pine'ın 21 Eylül derleme/grafik kabu
 [ayrı kayıttadır](PINE_RUNTIME_ACCEPTANCE.md); üç motorun bütünüyle eşdeğer
 olduğu doğrulanmadı. [Ölçülen farklar](STRATEGY_COMPARISON.md) korunur.
 
-Seçili ortam Python 3.12, Node 20.20.2/npm 10.9.9; frontend Next 16.3.5 /
+Seçili ortam Python 3.12, Node 20.20.2/npm 10.9.9; frontend Next 16.3.8 /
 React 19.2.3 / TS 5.9.3. Kesin paket kaynakları requirements-dev.lock ve
 frontend/package-lock.json'dır; requirements.txt alt/üst sınırlar içerir.
 Gemini'nin öncelikli SDK'sı google-genai; eski SDK yalnız opsiyonel fallback'tir.
@@ -163,17 +165,20 @@ Signals.py, opsiyonel pandas_ta yokluğunda lock'taki ta ile accessor sağlar.
 ## Frontend veri ve erişim sınırları
 
 - Ana ekran /; sayfalar frontend/src/app altındaki App Router klasörleridir.
-  HTTP /api, bot sağlığı /health-api proxy'sinden gelir.
+  HTTP `/api` proxy'sinden gelir; sağlık ekranı ana API `/health` yanıtını kullanır.
+  Eski `/health-api` ve Flask bot sağlık yüzeyi kaldırılmıştır.
 - Backend WS/SSE ve doğrudan Binance WS ayrı kanallardır. Birindeki hata
   diğerinin de bozuk olduğunu kanıtlamaz; bağlantılar ayrı incelenir.
 - /chart?symbol=BTCUSDT&market=Kripto başlangıç seçimini taşır. Route helper
   girdiyi normalize eder; sembolün borsada listeli olduğuna dair kontrol yapmaz.
 - /signals CSV çıktısı yüklenmiş ve filtrelenmiş satırlardır; tüm tarihsel DB
   export'u değildir. Hatalı/yüklenen/boş veri durumunda export devre dışıdır.
-- /alarms yöneticiye ait RSI/Williams %R/COMBO/HUNTER kurallarını sunucuda saklar.
-  API lifespan'indeki tek motor kapanmış mumları değerlendirir; kural, sembol
-  durumu ve bildirim olayları ana SQLite'dadır. Telegram teslimi kalıcı olay
-  durumuyla izlenir. [Sunucu alarm sözleşmesi](SERVER_ALARMS.md) sınırları açıklar.
+- /alarms fiyat, teknik ve izleme listesi kurallarını sunucuda saklar;
+  `/advanced-alarms` çok koşullu intrabar/kapanmış mum değerlendirmesini sunar.
+  `/alarms/legacy` önceki günlük motorun ekranıdır. Motorlar API lifespan'ine
+  bağlıdır ve ayrı süreç kilitleri kullanır; kural, sembol durumu ve olaylar
+  ana SQLite'dadır. Telegram isteğe bağlıdır, teslim kalıcı olay durumuyla
+  izlenir. [Sunucu alarm sözleşmesi](SERVER_ALARMS.md) sınırları açıklar.
   /alarms/local eski tarayıcı kurallarını sayfa açıkken yaklaşık 60 saniyelik
   turlarla değerlendirir; yerel kurallar otomatik sunucuya taşınmaz.
 - /settings sunucu ve tarayıcı ayarlarının kapsamını açıklar; tarayıcı tercihleri
@@ -215,14 +220,14 @@ izole eder. Node testleri ayrıca npm test ile çalışır. Frontend build ardı
 npm run test:standalone, yerel HTTP/WS proxy mock'larını sınar. Bu testler gerçek
 AI/Telegram/emir hizmetlerinin dış kabulünün yerine geçmez.
 
-Üretim Compose 2.24+, API/bot/frontend ve opsiyonel middleware/PostgreSQL;
-main-init/middleware-migrate başlangıç işleridir. API ve bot ayrıdır, embedded
-bot kapalıdır. Aynı DB dizini WAL/SHM/kilit dahil paylaşılır; middleware bu dizini
+Kaynak Compose 2.24+, API/frontend ve opsiyonel middleware/PostgreSQL;
+main-init/middleware-migrate başlangıç işleridir. Ayrı bot servisi ve embedded
+bot girişi kaldırılmıştır. API/main-init DB dizinini WAL/SHM/kilit dahil paylaşır; middleware bu dizini
 bağlamaz. Kullanılmayan eski PM2/API launcher dosyaları 21 Eylül repo
 temizliğinde kaldırıldı; desteklenen dağıtım yolu Docker Compose'dur.
 
-Nginx HTTPS proxy host'ta 127.0.0.1:3000/8000/5000/8001 kullanır. Next container
-build hedefleri http://api:8000, http://bot:5000 olur; container içi localhost
+Yeni dağıtımda Nginx HTTPS proxy host'ta 127.0.0.1:3000/8000/8001 kullanır;
+eski 5000 upstream'i kaldırılır. Next container build hedefi http://api:8000 olur; container içi localhost
 ile host loopback'i karıştırılmaz. [DEPLOY.md](DEPLOY.md) doğrulanmış SHA,
 yedek, migration, health ve rollback adımlarının kaynağıdır.
 

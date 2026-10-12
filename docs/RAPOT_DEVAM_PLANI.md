@@ -9,6 +9,15 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Kaldığımız nokta
 
+- **12 Ekim — eski Telegram botunun emekliliği:** Kullanıcı otomatik COMBO/HUNTER
+  Telegram taramasını ve Telegram AI zincirini kaldırdı; site indikatörleri,
+  Borsapy tarayıcı, site AI ve isteğe bağlı sunucu alarmı Telegram teslimi korunur.
+  Eski bot 11:25:39 UTC'de durduruldu, restart=no. Kod/Compose/sağlık arayüzü
+  botsuz yapıya geçiriliyor; yeni API/frontend yayını henüz kabul edilmedi.
+  DB/geçmiş/kimlikler korunur; yeni otomatik takip açılmaz. Aktif mimari için
+  [göç kaydı](SERVER_ONLY_MIGRATION_2026-10-12.md) önce okunur; alttaki beş servis
+  kayıtları tarihseldir.
+
 - **12 Ekim — izleme listesi odaklı kaynak düzeltmesi üretimde:** Kullanıcı
   mevcut sunucuda RAM/CPU ve mum kuyruğunun düzeltilmesini istedi; 3.000 kuralı
   üretimde açma zorunluluğu yok, öncelik karma BIST/kripto listeleri ve birden çok

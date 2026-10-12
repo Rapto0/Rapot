@@ -30,6 +30,8 @@ function renderHistory(scans) {
   const status = loadTsx('../src/components/scanner/scan-status.tsx', { 'react/jsx-runtime': jsxRuntime });
   const page = loadTsx('../src/app/health/page.tsx', {
     react: React,
+    'next/link': { default: 'a' },
+    '@/lib/hooks/use-session': { useSession: () => ({ user: { username: 'admin', is_admin: true }, expiresAt: 100 }) },
     'react/jsx-runtime': jsxRuntime,
     '@tanstack/react-query': {
       useQuery: ({ queryKey }) => ({
@@ -39,7 +41,7 @@ function renderHistory(scans) {
       }),
     },
     '@/lib/api/client': {},
-    '@/lib/hooks/use-health': { useBotHealth: () => ({ isRunning: true, scanCount: scans.length }) },
+    '@/lib/hooks/use-health': { useApiHealth: () => ({ apiState: 'unknown' }), useAlarmRuntimeHealth: () => ({ lastCycle: null, telegramConfigured: null }) },
     '@/lib/utils': { cn: (...classes) => classes.filter(Boolean).join(' ') },
     '@/components/ui/page-shell': { PageShell: ({ children }) => React.createElement('main', null, children) },
     '@/components/ui/kpi-ribbon': { KpiRibbon: () => null },

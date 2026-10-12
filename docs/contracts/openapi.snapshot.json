@@ -3045,7 +3045,8 @@
     },
     "/analyze/{symbol}": {
       "post": {
-        "description": "Belirli bir sembol için manuel analiz başlatır.",
+        "deprecated": true,
+        "description": "Keep the retired URL explicit; website AI uses /market/analysis.",
         "operationId": "analyze_symbol_analyze__symbol__post",
         "parameters": [
           {
@@ -3078,6 +3079,9 @@
               }
             },
             "description": "Successful Response"
+          },
+          "410": {
+            "description": "Legacy Telegram analysis was removed"
           },
           "422": {
             "content": {
@@ -4505,7 +4509,7 @@
     },
     "/health": {
       "get": {
-        "description": "Sistem sağlık kontrolü.\n\nBot durumu, uptime ve veritabanı bağlantısını kontrol eder.",
+        "description": "Sistem sağlık kontrolü.\n\nAPI uptime, realtime readiness and database connectivity.",
         "operationId": "health_check_health_get",
         "responses": {
           "200": {

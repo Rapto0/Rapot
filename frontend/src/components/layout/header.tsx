@@ -5,7 +5,7 @@ import Link from "next/link"
 import { Bell, Check, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useSpecialNotificationSignals } from "@/lib/hooks/use-signals"
-import { useBotHealth } from "@/lib/hooks/use-health"
+import { useApiHealth } from "@/lib/hooks/use-health"
 import { SessionControls } from "@/components/auth/session-controls"
 
 const READ_SIGNALS_KEY = "rapot_read_signal_ids"
@@ -41,7 +41,7 @@ export function Header() {
   const panelRef = useRef<HTMLDivElement | null>(null)
 
   const { data: signals } = useSpecialNotificationSignals(100)
-  const { apiState } = useBotHealth()
+  const { apiState } = useApiHealth()
 
   const unreadSignals = useMemo(
     () => (signals ?? []).filter((signal) => !readSignalIds.has(signal.id)),
@@ -87,7 +87,7 @@ export function Header() {
             Rapot
           </Link>
           <span className="text-muted-foreground">|</span>
-          <span className="hidden text-muted-foreground lg:inline">Otonom Piyasa Analizi</span>
+          <span className="hidden text-muted-foreground lg:inline">Piyasa Analizi</span>
         </div>
 
         <div className="flex items-center gap-4">
@@ -136,7 +136,7 @@ export function Header() {
             {showNotifications ? (
               <div className="absolute right-0 top-10 z-50 w-[360px] border border-border bg-overlay">
                 <div className="flex items-center justify-between border-b border-border px-3 py-2">
-                  <span className="label-uppercase">Özel Bildirimler</span>
+                  <span className="label-uppercase">Geçmiş özel sinyaller</span>
                   <div className="flex items-center gap-2">
                     <button
                       type="button"

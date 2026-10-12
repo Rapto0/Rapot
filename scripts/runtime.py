@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import argparse
 import os
-import runpy
 import sys
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "service", choices=("init-main-db", "api", "bot", "migrate-middleware", "middleware")
+        "service", choices=("init-main-db", "api", "migrate-middleware", "middleware")
     )
     args = parser.parse_args()
     if sys.version_info[:2] != (3, 12):
@@ -37,13 +36,9 @@ def main() -> None:
 
         init_db()
     elif args.service == "api":
-        # Apply before settings or the API module is imported.
-        os.environ["RUN_EMBEDDED_BOT"] = "false"
         import uvicorn
 
         uvicorn.run("api.main:app", host="0.0.0.0", port=8000, workers=1)
-    else:
-        runpy.run_module("main", run_name="__main__")
 
 
 if __name__ == "__main__":

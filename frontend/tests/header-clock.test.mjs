@@ -20,7 +20,7 @@ function loadHeader(hooks, globals) {
     'next/link': { default: ({ children, ...props }) => React.createElement('a', props, children) },
     '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') },
     '@/lib/hooks/use-signals': { useSpecialNotificationSignals: () => ({ data: undefined }) },
-    '@/lib/hooks/use-health': { useBotHealth: () => ({ apiState: 'loading' }) },
+    '@/lib/hooks/use-health': { useApiHealth: () => ({ apiState: 'loading' }) },
     '@/components/auth/session-controls': { SessionControls: () => null },
   };
   const context = vm.createContext({ exports: {}, ...globals, require(name) {

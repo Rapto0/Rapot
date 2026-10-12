@@ -1,8 +1,10 @@
 ﻿"use client"
 
 import { useQuery } from "@tanstack/react-query"
+import Link from "next/link"
 import { fetchLogs, fetchScanHistory } from "@/lib/api/client"
-import { useBotHealth } from "@/lib/hooks/use-health"
+import { useApiHealth, useAlarmRuntimeHealth } from "@/lib/hooks/use-health"
+import { useSession } from "@/lib/hooks/use-session"
 import { cn } from "@/lib/utils"
 import { PageShell } from "@/components/ui/page-shell"
 import { KpiRibbon } from "@/components/ui/kpi-ribbon"
@@ -10,7 +12,11 @@ import { Button } from "@/components/ui/button"
 import { ScanStatus } from "@/components/scanner/scan-status"
 
 export default function HealthPage() {
-  const health = useBotHealth()
+  const health = useApiHealth()
+  const alarms = useAlarmRuntimeHealth()
+  const session = useSession()
+  const allowed = Boolean(session?.user.is_admin && !session.user.disabled)
+  const identity = [session?.user.username, session?.expiresAt]
 
   const {
     data: logs,
@@ -20,8 +26,9 @@ export default function HealthPage() {
     refetch: refetchLogs,
     isFetching: logsFetching,
   } = useQuery({
-    queryKey: ["logs"],
+    queryKey: ["logs", ...identity],
     queryFn: () => fetchLogs(60),
+    enabled: allowed,
     refetchInterval: 15_000,
     refetchIntervalInBackground: false,
   })
@@ -34,39 +41,52 @@ export default function HealthPage() {
     refetch: refetchScans,
     isFetching: scansFetching,
   } = useQuery({
-    queryKey: ["scanHistory", "health"],
+    queryKey: ["scanHistory", "health", ...identity],
     queryFn: () => fetchScanHistory(10),
-    refetchInterval: 30_000,
+    enabled: allowed,
+    refetchInterval: false,
     refetchIntervalInBackground: false,
   })
 
-  const apiState = health.apiState === "connected" ? "Bağlı"
-    : health.apiState === "error" ? "Hata"
-      : health.apiState === "loading" ? "Yükleniyor" : "Bilinmiyor"
+  if (!allowed) return <PageShell label="Sağlık" title="Sistem sağlığı" description="API ve sunucu alarm motorunun durumu.">
+    <p className="text-sm text-muted-foreground">Bu ekran yönetici oturumu gerektirir.</p>
+    <Link href="/login?next=%2Fhealth" className="text-sm text-primary underline">Giriş yap</Link>
+  </PageShell>
 
   return (
     <PageShell
       label="Sağlık"
-      title="Bot durum ekranı"
-      description="Süreç durumu, log akışı ve son taramalar."
+      title="Sistem sağlığı"
+      description="Ana API, sunucu alarm motoru ve kayıtlar."
       actions={
-        <span className={cn("signal-badge", health.state === "running" ? "signal-buy" : health.state === "stopped" ? "signal-sell" : "signal-neutral")}>
-          {health.label}
+        <span className={cn("signal-badge", health.apiState === "connected" ? "signal-buy" : health.apiState === "error" ? "signal-sell" : "signal-neutral")}>
+          API: {health.label}
         </span>
       }
     >
       <KpiRibbon
         items={[
-          { label: "API", value: apiState, tone: health.apiState === "connected" ? "profit" : health.apiState === "error" ? "loss" : "neutral" },
-          {
-            label: "Tarama",
-            value: health.scanningLabel,
-            tone: "neutral",
-          },
-          { label: "Toplam", value: health.scanCount == null ? "--" : `${health.scanCount}` },
-          { label: "Uptime", value: health.uptime },
+          { label: "API", value: health.label, tone: health.tone },
+          { label: "Veritabanı", value: health.database },
+          { label: "Realtime servisi", value: health.realtime },
+          { label: "API çalışma süresi", value: health.uptime },
         ]}
       />
+
+      <section className="space-y-3 border border-border bg-surface p-4" aria-labelledby="alarm-runtime-heading">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 id="alarm-runtime-heading" className="text-sm font-semibold text-foreground">Sunucu alarm motoru</h2>
+          <span className={cn("signal-badge", alarms.tone === "profit" ? "signal-buy" : alarms.tone === "loss" ? "signal-sell" : "signal-neutral")}>{alarms.label}</span>
+        </div>
+        <p className="text-xs text-muted-foreground">API bağlantısı ve alarm motoru ayrı kontrol edilir. Motorun çalışması, bütün fiyatların güncel veya bütün kuralların kontrol edilmiş olduğu anlamına gelmez.</p>
+        <dl className="grid gap-2 text-xs sm:grid-cols-3">
+          <div><dt className="text-muted-foreground">Son kontrol turu</dt><dd>{alarms.lastCycle === null ? "—" : new Date(alarms.lastCycle).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" })}</dd></div>
+          <div><dt className="text-muted-foreground">Bekleyen bildirim</dt><dd>{alarms.pendingDeliveries ?? "—"}</dd></div>
+          <div><dt className="text-muted-foreground">Telegram bağlantısı</dt><dd>{alarms.telegramConfigured === null ? "Bilinmiyor" : alarms.telegramConfigured ? "Tanımlı" : "Tanımlı değil"}</dd></div>
+        </dl>
+        <p className="text-xs text-muted-foreground">Telegram yalnız kendi alarmınızda bildirim seçeneğini açtığınızda kullanılır. Otomatik COMBO / HUNTER botu ve Telegram AI komutları kaldırıldı.</p>
+        <Link href="/alarms" className="inline-flex min-h-11 items-center text-xs text-primary underline">Alarm merkezini aç</Link>
+      </section>
 
       <section className="grid min-h-0 flex-1 gap-3 lg:grid-cols-2">
         <div className="min-h-[420px] border border-border bg-surface">
@@ -105,7 +125,8 @@ export default function HealthPage() {
 
         <div className="min-h-[420px] border border-border bg-surface">
           <div className="border-b border-border px-3 py-2">
-            <span className="label-uppercase">Son taramalar</span>
+            <span className="label-uppercase">Tarama arşivi</span>
+            <p className="mt-1 text-xs text-muted-foreground">Önceki otomatik taramalar korunur. Yeni otomatik tarama çalıştırılmaz.</p>
           </div>
 
           {scansLoading ? (

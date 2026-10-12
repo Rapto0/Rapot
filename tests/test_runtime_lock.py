@@ -37,21 +37,3 @@ def test_other_process_cannot_acquire_active_bot_lock(tmp_path):
     released = subprocess.run(command, cwd=root, capture_output=True, text=True, timeout=10)
     assert released.returncode == 0
     assert released.stdout.strip() == "acquired"
-
-
-def test_scheduler_entry_point_holds_lock_for_entire_run(monkeypatch, tmp_path):
-    import scheduler
-    from settings import settings
-
-    path = tmp_path / "entry.bot.lock"
-    monkeypatch.setattr(settings, "bot_lock_path", str(path))
-    ran = []
-
-    def run(*, use_async):
-        with pytest.raises(BotAlreadyRunningError), bot_instance_lock(path):
-            pytest.fail("scheduler did not hold the lock")
-        ran.append(use_async)
-
-    monkeypatch.setattr(scheduler, "_run_bot", run)
-    scheduler.start_bot(use_async=False)
-    assert ran == [False]
