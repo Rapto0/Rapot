@@ -9,7 +9,7 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Kaldığımız nokta
 
-- **12 Ekim — izleme listesi odaklı kaynak düzeltmesi hazırlanıyor:** Kullanıcı
+- **12 Ekim — izleme listesi odaklı kaynak düzeltmesi üretimde:** Kullanıcı
   mevcut sunucuda RAM/CPU ve mum kuyruğunun düzeltilmesini istedi; 3.000 kuralı
   üretimde açma zorunluluğu yok, öncelik karma BIST/kripto listeleri ve birden çok
   liste alarmı. Otomatik takip/timer kapalı kalır. 10:06 UTC canlı GET sıfır etkin
@@ -20,7 +20,19 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
   bağlanıyor; eski yerel listeler elle aktarılabiliyor. Sentetik gerçek motor/SQLite
   denemesinde 3.000 kural/6.000 durum/iki seri, 11,13 MiB retained/12,40 MiB peak
   Python belleği ölçüldü. Yerel ölçüm üretim kapasitesi veya tam seans kabulü değildir.
-  Yayın öncesi tam kontroller ve ayrı üretim kabulü devam ediyor.
+  **`6a84fa3c`, 10:47:19 UTC API/bot/frontend yayını, 10:51:50 UTC bağımsız kabul**
+  geçti. Beş CI/iki imaj işi, 309 frontend testi ve tam Python kontrolleri geçti.
+  15 tablo, tek kişisel liste ve üç önceki olay, diğer iki servis ve
+  Compose/current `279aa9f` korundu. Taze 1.342.013.440 bayt yedek sunucu dışında
+  bağımsız restore edildi; yalnız geçici sunucu snapshot'ı temizlendi.
+  Alarm yokken 805 adayın fiyat aboneliği sürer, mum işi/kuyruk **0/0** oldu.
+  GARAN ve BTCUSDT grafik talepleri gerçek taze mum verdi; 120 saniyelik talepler
+  bitince işler/değer hücreleri sıfıra döndü. 11:00 örnekleri **296,98–297,13 MiB
+  RAM / %19,83–23,03 CPU**; beş servis sağlıklı/restart0, eski timer kapalı,
+  son boş alan 6.934.380.544 bayt. İlk ayrı kabul AssertionError verdi; tanılı
+  tekrar ve değiştirilmemiş asıl araç geçti, kesin ilk neden saptanmadı. Yaklaşık
+  13 dakikalık kabul tam seans, BIST hacim yetkisi veya tüm evrende 3.000 canlı
+  teknik alarm kabulü değildir. Yeni otomatik takip/TEST kuralı oluşturulmadı.
   [Kaynak değişikliği, ölçümler ve sınırlar](WATCHLIST_EFFICIENCY_2026-10-12.md).
 - **8 Ekim — elle devam ve geçmiş sorgusu CPU düzeltmesi üretimde:** Kullanıcı
   “Hazırım” dedi; ilk saat kontrolü 13:13 TSİ, sabah gözlenmiş sayılmaz. Codex

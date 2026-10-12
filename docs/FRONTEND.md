@@ -159,10 +159,14 @@ platform paketi için ürettiği `npm ls` uyarısı
 - **Piyasa kaynağı:** BIST grafik, dashboard ve izleme listesi Borsapy/TradingView
   kullanır; kimlik veya sağlayıcı hatasında eski kaynağa sessiz dönüş yoktur.
   Kaynak, alınma zamanı, sağlayıcı zamanı ve bayat/bekleniyor/hata durumu ayrı
-  gösterilir. Bağlantı açık olması gecikmesiz veri kanıtı değildir. İzleme
-  listesindeki ilk 50 BIST sembolü takip edilir; sunucu ortak havuzu en fazla
-  200 etkin sembolle sınırlıdır. Günlük geçmiş hazırlanırken 7/30 günlük
-  performans/mini grafik beklenebilir; bilinmeyen değişim sıfır yapılmaz.
+  gösterilir. Bağlantı açık olması gecikmesiz veri kanıtı değildir. Grafiğin
+  varsayılan sunucu listesi BIST/Binance USDT üyelerini 50 satırlık sayfalarda
+  gösterir; yalnız görünen sayfanın fiyatları istenir. Sonraki sayfalar da
+  seçilerek izlenebilir; sayfalama sunucu alarmının liste kapsamını değiştirmez.
+  Eski yerel liste panelinde ilk 50 BIST sembolü sınırı korunur. Dashboard/liste
+  BIST kotasyonlarının sunucudaki ortak havuzu en fazla 200 etkin sembolle sınırlıdır.
+  Günlük geçmiş hazırlanırken 7/30 günlük performans/mini grafik beklenebilir;
+  bilinmeyen değişim sıfır yapılmaz.
   Binance sembolleri BtcTurk verisiyle değiştirilmez.
 - **Takvim:** Borsapy/Doviz.com genel kaynağı TradingView/Finnhub kimliği istemez;
   Rapot admin oturumu gerekir. En fazla üç ülke ve 31 günlük aralık seçilir;

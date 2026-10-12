@@ -13,9 +13,20 @@ talebiyle sınırlar; BIST fiyat evreni takibi sürer. Koşul/seri paylaşımı,
 batch'leri, Binance public oturum tekrar kullanımı ve ortak scanner birleştirme
 iyileştirmeleri eklendi. Grafik sunucu listelerini kullanır; eski yerel listeler
 yalnız elle kopyalanır. Yerel 3.000 kural ölçümü üretim kapasitesi kanıtı değildir.
-Yayın/tam test/ayrı kabul devam eder; [12 Ekim kaydı](docs/WATCHLIST_EFFICIENCY_2026-10-12.md)
-ve devam planından gerçek durumu okuyun. Yeni otomatik takip/timer veya 3.000 üretim
-TEST kuralı oluşturulmaz. Mevcut emir, hacim ve tazelik korumaları sürer.
+**`6a84fa3c`, 10:47:19 UTC API/bot/frontend yayını ve 10:51:50 UTC bağımsız kabul
+geçti.** Yerelde 1.804 Python/bir atlama, ardından son düzeltmenin 51 ilgili testi,
+309 frontend testi; aynı kaynakta beş CI ve iki imaj yayın işi geçti. 15 tablo,
+tek kişisel liste, üç önceki olay, diğer iki servis ve Compose/current `279aa9f`
+korundu. Taze 1.342.013.440 bayt yedek sunucu dışında bağımsız restore ile doğrulandı.
+Canlı GET'te alarm yokken mum işi/kuyruk 0/0 oldu; GARAN/BTCUSDT için iki grafik
+talebi taze veri verdi ve süre sonunda işler/değer hücreleri tekrar sıfırlandı.
+11:00 son örnekler **296,98–297,13 MiB kullanılabilir RAM, %19,83/%23,03 CPU**;
+beş servis sağlıklı/restart0, eski timer kapalı. Bu yaklaşık 13 dakikalık kabul
+tam seans veya tüm evrende 3.000 canlı teknik alarm kanıtı değildir. İlk bağımsız
+kabul AssertionError verdi; tanılı tekrar ve değiştirilmemiş asıl araç geçti,
+ilk hatanın kesin nedeni saptanmadı. [12 Ekim kaydı](docs/WATCHLIST_EFFICIENCY_2026-10-12.md)
+kanıtları ve sınırları ayırır. Yeni otomatik takip/timer veya 3.000 üretim TEST
+kuralı oluşturulmadı. Mevcut emir, hacim ve tazelik korumaları sürer.
 
 8 Ekim kullanıcı **“Hazırım”** mesajıyla elle devamı başlattı; ilk saat kontrolü
 13:13 TSİ olduğundan sabah bölümü gözlenmiş sayılmaz. Codex takibi `PAUSED` ve
@@ -35,7 +46,7 @@ kullanılabilir RAM**, CPU başına load1m 2,3213 ölçüldü: hem 192 MiB gözl
 146,27 / 159,65 MiB RAM ve %94,51 / %98,49 CPU** gösterdi; sürekli kapasite
 kazancı doğrulanmadı. Yeni gözlem paketi sunucuya aktarılmadı, gözlem/yük başlatılmadı;
 test kuralı veya lease oluşturulmadı. Bu tur başka gözlem/yük başlatma denemesi yapılmadı.
-Güncel sonuç `NOT_STARTED_RESOURCE_GUARD`; ayrıntılar devam planı ve kabul belgesindedir.
+8 Ekim sonucu `NOT_STARTED_RESOURCE_GUARD`; ayrıntılar devam planı ve kabul belgesindedir.
 
 7 Ekim ek doğrulamasında mevcut TradingView bağlantısı 200 THYAO/GARAN mumunu
 `BISTMIXED` ve hacimsiz döndürdü; eksik hacim gerçek sıfır sayılmaz. Takvimin
