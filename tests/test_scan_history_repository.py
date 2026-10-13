@@ -7,11 +7,7 @@ from sqlalchemy import Engine, create_engine
 
 import db_session
 from infrastructure.persistence.ops_repository import save_scan_history
-from infrastructure.repositories.system_repository import (
-    get_ops_overview_read_model,
-    list_scan_history,
-    list_scanner_activity_projection,
-)
+from infrastructure.repositories.system_repository import list_scan_history
 
 
 @pytest.fixture(params=[False, True], ids=["legacy-sqlite", "previous-orm"])
@@ -80,11 +76,6 @@ def test_historical_schema_upgrade_is_repeatable_and_preserves_unknown_evidence(
         assert scans[8]["mode"] == "async"
         assert scans[8]["errors_count"] == 3
         assert scans[8]["status"] == "unknown"
-    assert get_ops_overview_read_model()["total_scans"] == len(before)
-    activity = list_scanner_activity_projection(10)
-    assert all(row["status"] == "unknown" for row in activity)
-    assert next(row for row in activity if row["item_id"] == "7")["strategy"] == "unknown"
-
     new_id = save_scan_history(
         scan_type="Full",
         mode="sync",
@@ -96,14 +87,12 @@ def test_historical_schema_upgrade_is_repeatable_and_preserves_unknown_evidence(
     )
     assert new_id > max(row[0] for row in before)
     assert list_scan_history(1)[0]["status"] == "partial"
-    assert get_ops_overview_read_model()["total_scans"] == len(before) + 1
+    assert len(list_scan_history(10)) == len(before) + 1
 
 
 @pytest.mark.parametrize("status", ["success", "partial", "failed", "cancelled"])
 @pytest.mark.parametrize("mode", ["sync", "async"])
-def test_terminal_writer_commits_id_and_exposes_status_in_read_models(
-    status: str, mode: str
-) -> None:
+def test_terminal_writer_commits_id_and_preserves_status_in_history(status: str, mode: str) -> None:
     scan_id = save_scan_history(
         scan_type="BIST",
         mode=mode,
@@ -123,14 +112,6 @@ def test_terminal_writer_commits_id_and_exposes_status_in_read_models(
     assert scan["status"] == status
     assert scan["mode"] == mode
     assert scan["errors_count"] == 0
-    overview = get_ops_overview_read_model()
-    assert overview["total_scans"] == 1
-    assert overview["last_scan_at"] is not None
-    activity = list_scanner_activity_projection(1)[0]
-    assert activity["item_type"] == "scan"
-    assert activity["item_id"] == str(scan_id)
-    assert activity["status"] == status
-    assert activity["strategy"] == mode
 
 
 def test_legacy_raw_insert_keeps_unknown_status_and_error_count() -> None:

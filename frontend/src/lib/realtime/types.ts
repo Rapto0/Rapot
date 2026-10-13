@@ -47,19 +47,6 @@ export interface TradeData {
   timestamp: string;
 }
 
-export interface SignalData {
-  id: number;
-  symbol: string;
-  marketType: string;
-  strategy: string;
-  signalType: 'AL' | 'SAT';
-  timeframe: string;
-  score: string;
-  price: number;
-  createdAt: string;
-  specialTag?: 'BELES' | 'COK_UCUZ' | 'PAHALI' | 'FAHIS_FIYAT' | null;
-}
-
 export type ConnectionState =
   | 'connecting'
   | 'connected'

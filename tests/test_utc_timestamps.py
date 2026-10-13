@@ -14,10 +14,8 @@ import data_loader
 import infrastructure.time as clock
 import migrate_db
 from api.calendar_service import CalendarService
-from application.services import signal_trade_service
 from db_session import get_engine, get_session
 from infrastructure.persistence import ops_repository, signal_repository
-from infrastructure.persistence.signal_feed_repository import read_signal_feed_batch
 from models import AIAnalysis, BotStat, Order, ScanHistory, Signal, Trade
 
 pytestmark = pytest.mark.filterwarnings("error:.*utcnow.*:DeprecationWarning")
@@ -142,7 +140,7 @@ def test_updates_trade_close_and_counter_use_current_utc_without_changing_create
     assert ops_repository.get_bot_stats_last_updated(("utc_test", "counter")) == updated
 
 
-def test_legacy_row_and_api_timestamp_shapes_are_preserved(
+def test_legacy_row_and_new_naive_utc_storage_are_preserved(
     fixed_clock: dict[str, datetime],
 ) -> None:
     legacy = "2020-01-02 03:04:05.678901"
@@ -153,14 +151,10 @@ def test_legacy_row_and_api_timestamp_shapes_are_preserved(
             (legacy,),
         )
     new_id = signal_repository.save_signal("NEW", "BIST", "COMBO", "AL", "1D")
-    expected = fixed_clock["now"].replace(tzinfo=None).isoformat()
-    listed = signal_trade_service.list_signals(
-        symbol="NEW", strategy=None, signal_type=None, market_type=None, special_tag=None, limit=10
-    )
-    assert listed[0]["created_at"] == expected + "Z"
-    assert signal_trade_service.get_signal_by_id(new_id)["created_at"] == expected
-    feed = read_signal_feed_batch(after_id=0, limit=10)
-    assert next(row for row in feed.signals if row["id"] == new_id)["createdAt"] == expected + "Z"
+    expected = fixed_clock["now"].replace(tzinfo=None)
+    with get_session() as session:
+        assert session.get(Signal, new_id).created_at == expected
+        assert session.get(Signal, new_id).created_at.tzinfo is None
     with get_engine().connect() as connection:
         assert (
             connection.exec_driver_sql(

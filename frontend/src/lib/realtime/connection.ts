@@ -1,6 +1,6 @@
-import { dispatchSignalSocketMessage, dispatchTickerSocketMessage } from './message-parser';
+import { dispatchTickerSocketMessage } from './message-parser';
 import type { useRealtimeStore } from './store';
-import type { BISTStock, ConnectionState, KlineData, SignalData, TickerData, TradeData } from './types';
+import type { BISTStock, ConnectionState, KlineData, TickerData, TradeData } from './types';
 
 interface SocketOptions {
   url: () => string;
@@ -123,47 +123,16 @@ export function createReconnectingSocket(options: SocketOptions) {
   };
 }
 
-/** A fixed window coalesces bursts without postponing refresh during a steady feed. */
-export function createSignalRefreshScheduler(refresh: () => void, delay = 30_000) {
-  let pending: ReturnType<typeof setTimeout> | null = null;
-  return {
-    schedule() {
-      if (pending !== null) return;
-      pending = setTimeout(() => {
-        pending = null;
-        refresh();
-      }, delay);
-    },
-    flush() {
-      if (pending !== null) clearTimeout(pending);
-      pending = null;
-      refresh();
-    },
-    cancel() {
-      if (pending !== null) clearTimeout(pending);
-      pending = null;
-    },
-  };
-}
-
 interface RealtimeConnectionOptions {
   baseUrl: () => string;
   getStore: typeof useRealtimeStore.getState;
-  refreshSignals: () => void;
-  onSignal?: (signal: SignalData) => void;
   getToken?: () => string | null;
 }
 
 export function createRealtimeConnection(options: RealtimeConnectionOptions) {
-  const refresh = createSignalRefreshScheduler(options.refreshSignals);
   const subscriptions = new Map<string, { count: number; socket: ReturnType<typeof createReconnectingSocket> }>();
   let disposed = false;
 
-  const onSignal = (signal: SignalData) => {
-    options.getStore().addSignal(signal);
-    refresh.schedule();
-    options.onSignal?.(signal);
-  };
   const tickerHandlers = {
     onInit: (payload: { crypto?: Record<string, unknown>; bist?: unknown }) => {
       if (payload.crypto) Object.values(payload.crypto).forEach((ticker) => options.getStore().updateTicker(ticker as TickerData));
@@ -173,7 +142,6 @@ export function createRealtimeConnection(options: RealtimeConnectionOptions) {
     onBist: (stocks: BISTStock[]) => options.getStore().updateBistStocks(stocks),
     onKline: (kline: KlineData) => options.getStore().updateKline(kline),
     onTrade: (trade: TradeData) => options.getStore().addTrade(trade),
-    onSignal,
   };
   const ticker = createReconnectingSocket({
     getToken: options.getToken,
@@ -182,29 +150,9 @@ export function createRealtimeConnection(options: RealtimeConnectionOptions) {
     onState: (state) => options.getStore().setConnectionState(state),
     onMessage: (raw) => dispatchTickerSocketMessage(raw, tickerHandlers),
   });
-  const signals = createReconnectingSocket({
-    getToken: options.getToken,
-    onAuthFailure: denyAll,
-    url: () => `${options.baseUrl()}/signals`,
-    onState: (state) => options.getStore().setSignalConnectionState(state),
-    onOpen: () => {
-      options.getStore().clearSignals();
-      refresh.flush();
-    },
-    onMessage: (raw) => dispatchSignalSocketMessage(raw, {
-      onSignal,
-      onResync: () => {
-        options.getStore().clearSignals();
-        refresh.flush();
-      },
-    }),
-  });
-
   function disconnect() {
     ticker.disconnect();
-    signals.disconnect();
     for (const entry of subscriptions.values()) entry.socket.disconnect();
-    refresh.cancel();
   }
 
   function denyAll() {
@@ -217,7 +165,6 @@ export function createRealtimeConnection(options: RealtimeConnectionOptions) {
     connect() {
       if (disposed) return;
       ticker.connect();
-      signals.connect();
       for (const entry of subscriptions.values()) entry.socket.connect();
     },
     disconnect,
@@ -264,7 +211,6 @@ export function createRealtimeConnection(options: RealtimeConnectionOptions) {
       disposed = true;
       disconnect();
       ticker.dispose();
-      signals.dispose();
       for (const entry of subscriptions.values()) entry.socket.dispose();
       subscriptions.clear();
     },

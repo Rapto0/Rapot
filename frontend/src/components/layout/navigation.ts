@@ -1,12 +1,11 @@
-import { Activity, AlarmClock, BarChart3, Bell, Brain, CalendarDays, Compass, History, Home, Search, Settings } from "lucide-react"
+import { Activity, AlarmClock, BarChart3, Brain, CalendarDays, Compass, History, Home, Search, Settings } from "lucide-react"
 
 export const navigation = [
   { name: "Ana Sayfa", shortName: "Ana", href: "/", icon: Home },
   { name: "Grafik", shortName: "Grafik", href: "/chart", icon: BarChart3 },
+  { name: "Alarmlar", shortName: "Alarmlar", href: "/alarms", icon: AlarmClock },
   { name: "Tarayıcı", shortName: "Tarayıcı", href: "/scanner", icon: Search },
   { name: "Araştırma Merkezi", shortName: "Araştırma", href: "/research", icon: Compass },
-  { name: "Sinyaller", shortName: "Sinyaller", href: "/signals", icon: Bell },
-  { name: "Alarmlar", shortName: "Alarmlar", href: "/alarms", icon: AlarmClock },
   { name: "İşlemler", shortName: "İşlemler", href: "/trades", icon: History },
   { name: "Sistem Sağlığı", shortName: "Sağlık", href: "/health", icon: Activity },
   { name: "AI Analizi", shortName: "AI", href: "/ai", icon: Brain },

@@ -109,18 +109,25 @@ def test_every_websocket_rejects_before_subscriptions(
 
 
 def test_admin_stream_sends_only_after_auth_and_revocation_stops_delivery(
-    personal_app, api_auth_users
+    personal_app, api_auth_users, monkeypatch
 ):
+    import websocket_manager
+
+    monkeypatch.setattr(websocket_manager.ws_manager, "subscribe_kline", AsyncMock())
+    monkeypatch.setattr(websocket_manager.ws_manager, "unsubscribe_kline", AsyncMock())
     app, _ = personal_app
     token = api_auth_users.create_access_token({"sub": "admin"})
-    with TestClient(app) as client, client.websocket_connect("/realtime/ws/signals") as socket:
+    with (
+        TestClient(app) as client,
+        client.websocket_connect("/realtime/ws/kline/BTCUSDT") as socket,
+    ):
         socket.send_json({"type": "auth", "token": token})
         assert socket.receive_json() == {"type": "authenticated"}
-        client.portal.call(realtime.broadcast_signal, {"id": 1})
-        assert socket.receive_json()["data"] == {"id": 1}
+        client.portal.call(realtime.broadcast_kline, "BTCUSDT", "1m", {"id": 1})
+        assert socket.receive_json()["data"]["id"] == 1
         # Revocation must block the next broadcast, not just the next client message.
         access.auth.USERS_DB["admin"]["disabled"] = True
-        client.portal.call(realtime.broadcast_signal, {"id": 2})
+        client.portal.call(realtime.broadcast_kline, "BTCUSDT", "1m", {"id": 2})
         with pytest.raises(WebSocketDisconnect) as closed:
             socket.receive_json()
         assert closed.value.code == 4403
@@ -157,13 +164,13 @@ async def test_sse_stops_without_delivering_data_after_access_expires(monkeypatc
     monkeypatch.setattr(realtime, "manager", manager)
     token = api_auth_users.create_access_token({"sub": "admin"})
     grant = access.admin_grant(token)
-    queue = manager.create_sse_queue("signals")
+    queue = manager.create_sse_queue("ticker")
     queue.put_nowait({"private": "data"})
     monkeypatch.setattr(access.time, "time", lambda: grant.expires_at + 1)
-    generator = realtime.event_generator(queue, "signals", grant)
+    generator = realtime.event_generator(queue, "ticker", grant)
     with pytest.raises(StopAsyncIteration):
         await anext(generator)
-    assert manager._sse_queues["signals"] == []
+    assert manager._sse_queues["ticker"] == []
 
 
 @pytest.mark.parametrize("suffix", ["ticker", "signals"])

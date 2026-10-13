@@ -1,17 +1,3 @@
-export interface ApiSignal {
-    id: number;
-    symbol: string;
-    market_type: string;
-    strategy: string;
-    signal_type: string;
-    timeframe: string;
-    score: string | null;
-    price: number;
-    created_at: string | null;
-    special_tag?: string | null;
-    details?: unknown;
-}
-
 export interface ApiTrade {
     id: number;
     symbol: string;
@@ -25,13 +11,11 @@ export interface ApiTrade {
 }
 
 export interface ApiStats {
-    total_signals: number;
     total_trades: number;
     open_trades: number;
     closed_trades?: number | null;
     total_pnl: number;
     win_rate: number;
-    scan_count: number;
 }
 
 export interface ApiAIAnalysis {
@@ -69,29 +53,6 @@ export interface ApiHealth {
     uptime_seconds: number;
     uptime_human: string;
     timestamp: string;
-}
-
-export interface ApiSpecialTagHealthRow {
-    tag: 'BELES' | 'COK_UCUZ' | 'PAHALI' | 'FAHIS_FIYAT';
-    strategy: 'COMBO' | 'HUNTER';
-    signal_type: 'AL' | 'SAT';
-    target_timeframe: string;
-    candidates: number;
-    tagged: number;
-    missing: number;
-}
-
-export interface ApiSpecialTagHealth {
-    status: 'ok' | 'alert';
-    stored_state: string | null;
-    market_type: 'BIST' | 'Kripto' | 'ALL' | null;
-    strategy: 'COMBO' | 'HUNTER' | null;
-    checked_window_hours: number;
-    checked_window_seconds: number;
-    missing_total: number;
-    last_checked_at: string | null;
-    summary: string | null;
-    rows: ApiSpecialTagHealthRow[];
 }
 
 export interface ApiStrategyInspectorTimeframe {
@@ -148,15 +109,6 @@ export interface ApiStructuredAnalysis {
     prompt_version?: string | null;
     error?: string | null;
     error_code?: string | null;
-}
-
-export interface SignalsParams {
-    symbol?: string;
-    strategy?: 'COMBO' | 'HUNTER';
-    signal_type?: 'AL' | 'SAT';
-    market_type?: 'BIST' | 'Kripto';
-    special_tag?: 'BELES' | 'COK_UCUZ' | 'PAHALI' | 'FAHIS_FIYAT';
-    limit?: number;
 }
 
 export interface TradesParams {
@@ -277,82 +229,16 @@ export interface EconomicCalendarResponse {
     };
 }
 
-export type ScanStatus = 'success' | 'partial' | 'failed' | 'cancelled' | 'unknown';
-
-export interface ScanHistory {
-    id: number;
-    scan_type: string;
-    mode: 'sync' | 'async' | 'unknown';
-    status: ScanStatus;
-    symbols_scanned: number;
-    signals_found: number;
-    errors_count: number | null;
-    duration_seconds: number;
-    created_at: string;
-}
-
 export interface LogEntry {
     timestamp: string;
     level: string;
     message: string;
 }
 
-export interface SpecialTagHealthParams {
-    market_type?: 'BIST' | 'Kripto' | 'ALL';
-    strategy?: 'COMBO' | 'HUNTER';
-    since_hours?: number;
-    window_seconds?: number;
-}
-
 export interface StrategyInspectorParams {
     symbol: string;
     strategy: 'COMBO' | 'HUNTER';
     market_type?: 'AUTO' | 'BIST' | 'Kripto';
-}
-
-export interface OpsOverviewReadModel {
-    total_signals: number;
-    total_trades: number;
-    open_trades: number;
-    total_scans: number;
-    total_pnl: number;
-    last_signal_at: string | null;
-    last_trade_at: string | null;
-    last_scan_at: string | null;
-    compatibility_wrappers?: OpsCompatibilityWrapperTelemetry | null;
-}
-
-export interface OpsCompatibilityWrapperItem {
-    wrapper_module: string;
-    canonical_module: string;
-    usage_count: number;
-    planned_removal: string;
-    first_seen_at: string | null;
-    last_seen_at: string | null;
-}
-
-export interface OpsCompatibilityWrapperTelemetry {
-    total_wrappers: number;
-    active_wrappers: number;
-    total_import_events: number;
-    planned_removal_buckets: Record<string, number>;
-    details_requested: boolean;
-    details_included: boolean;
-    details_hidden_reason?: string | null;
-    wrappers?: OpsCompatibilityWrapperItem[] | null;
-}
-
-export interface ScannerActivityItem {
-    item_type: string;
-    item_id: string;
-    symbol: string | null;
-    market_type: string | null;
-    strategy: string | null;
-    action: string | null;
-    timeframe: string | null;
-    status: string | null;
-    numeric_value: number | null;
-    created_at: string | null;
 }
 
 export interface AnalysesParams {

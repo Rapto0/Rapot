@@ -20,15 +20,7 @@ def test_archived_ai_analysis_remains_linked_to_only_its_exact_signal(authentica
     assert unlinked_id is not None and linked_id is not None
     for signal_id in (old_id, target_id, other_id, 99999):
         response = authenticated_api_client.get(f"/signals/{signal_id}/analysis")
-        assert response.status_code == 200
-        if signal_id == target_id:
-            analysis = response.json()
-            assert analysis["id"] == linked_id
-            assert analysis["signal_id"] == target_id
-            assert analysis["market_type"] == "Kripto"
-            assert "Momentum destekliyor" in analysis["analysis_text"]
-        else:
-            assert response.json() is None
+        assert response.status_code == 410
     analyses = authenticated_api_client.get("/analyses").json()
     assert {row["id"] for row in analyses} == {unlinked_id, linked_id}
 

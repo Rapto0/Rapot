@@ -1,10 +1,7 @@
-import type { ApiAIAnalysis, ApiSignal, ApiStats, ApiTrade } from './types';
-import type { OpsOverviewReadModel } from './types';
+import type { ApiAIAnalysis, ApiStats, ApiTrade } from './types';
 
 const VALID_MARKET_TYPES = new Set(['BIST', 'Kripto'] as const);
-const VALID_STRATEGIES = new Set(['COMBO', 'HUNTER'] as const);
 const VALID_SIGNAL_TYPES = new Set(['AL', 'SAT'] as const);
-const VALID_SPECIAL_TAGS = new Set(['BELES', 'COK_UCUZ', 'PAHALI', 'FAHIS_FIYAT'] as const);
 const VALID_DIRECTIONS = new Set(['BUY', 'SELL'] as const);
 const VALID_TRADE_STATUSES = new Set(['OPEN', 'CLOSED', 'CANCELLED'] as const);
 
@@ -12,26 +9,9 @@ export function toMarketType(value: string | null | undefined): 'BIST' | 'Kripto
     return VALID_MARKET_TYPES.has(value as 'BIST' | 'Kripto') ? (value as 'BIST' | 'Kripto') : 'BIST';
 }
 
-export function toStrategy(value: string | null | undefined): 'COMBO' | 'HUNTER' {
-    return VALID_STRATEGIES.has(value as 'COMBO' | 'HUNTER') ? (value as 'COMBO' | 'HUNTER') : 'COMBO';
-}
-
-export function toSignalType(value: string | null | undefined): 'AL' | 'SAT' {
-    return VALID_SIGNAL_TYPES.has(value as 'AL' | 'SAT') ? (value as 'AL' | 'SAT') : 'AL';
-}
-
 export function toNullableSignalType(value: string | null | undefined): 'AL' | 'SAT' | null {
     if (!value) return null;
     return VALID_SIGNAL_TYPES.has(value as 'AL' | 'SAT') ? (value as 'AL' | 'SAT') : null;
-}
-
-export function toSpecialTag(
-    value: string | null | undefined
-): 'BELES' | 'COK_UCUZ' | 'PAHALI' | 'FAHIS_FIYAT' | null {
-    if (!value) return null;
-    return VALID_SPECIAL_TAGS.has(value as 'BELES' | 'COK_UCUZ' | 'PAHALI' | 'FAHIS_FIYAT')
-        ? (value as 'BELES' | 'COK_UCUZ' | 'PAHALI' | 'FAHIS_FIYAT')
-        : null;
 }
 
 export function toTradeDirection(value: string | null | undefined): 'BUY' | 'SELL' | null {
@@ -54,21 +34,6 @@ export function safeParseTechnicalData(value: string | null): Record<string, unk
     } catch {
         return null;
     }
-}
-
-export function transformSignal(apiSignal: ApiSignal) {
-    return {
-        id: apiSignal.id,
-        symbol: apiSignal.symbol,
-        marketType: toMarketType(apiSignal.market_type),
-        strategy: toStrategy(apiSignal.strategy),
-        signalType: toSignalType(apiSignal.signal_type),
-        timeframe: apiSignal.timeframe,
-        score: apiSignal.score || '',
-        price: apiSignal.price,
-        createdAt: apiSignal.created_at || new Date().toISOString(),
-        specialTag: toSpecialTag(apiSignal.special_tag),
-    };
 }
 
 function finiteNumber(value: unknown): number | null {
@@ -120,23 +85,6 @@ export function transformStats(apiStats: ApiStats) {
         openPositions: count(apiStats.open_trades),
         closedPositions: count(apiStats.closed_trades),
         totalTrades: count(apiStats.total_trades),
-        lastScanTime: null,
-        totalSignals: count(apiStats.total_signals),
-        todaySignals: null,
-    };
-}
-
-export function transformOpsOverviewReadModel(overview: OpsOverviewReadModel) {
-    return {
-        totalPnL: finiteNumber(overview.total_pnl),
-        totalPnLPercent: null,
-        winRate: null,
-        openPositions: count(overview.open_trades),
-        closedPositions: null,
-        totalTrades: count(overview.total_trades),
-        lastScanTime: timestamp(overview.last_scan_at),
-        totalSignals: count(overview.total_signals),
-        todaySignals: null,
     };
 }
 

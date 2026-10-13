@@ -2,14 +2,13 @@
 
 import { useQuery } from "@tanstack/react-query"
 import Link from "next/link"
-import { fetchLogs, fetchScanHistory } from "@/lib/api/client"
+import { fetchLogs } from "@/lib/api/client"
 import { useApiHealth, useAlarmRuntimeHealth } from "@/lib/hooks/use-health"
 import { useSession } from "@/lib/hooks/use-session"
 import { cn } from "@/lib/utils"
 import { PageShell } from "@/components/ui/page-shell"
 import { KpiRibbon } from "@/components/ui/kpi-ribbon"
 import { Button } from "@/components/ui/button"
-import { ScanStatus } from "@/components/scanner/scan-status"
 
 export default function HealthPage() {
   const health = useApiHealth()
@@ -30,21 +29,6 @@ export default function HealthPage() {
     queryFn: () => fetchLogs(60),
     enabled: allowed,
     refetchInterval: 15_000,
-    refetchIntervalInBackground: false,
-  })
-
-  const {
-    data: recentScans,
-    isLoading: scansLoading,
-    isError: scansError,
-    error: scansErrorObj,
-    refetch: refetchScans,
-    isFetching: scansFetching,
-  } = useQuery({
-    queryKey: ["scanHistory", "health", ...identity],
-    queryFn: () => fetchScanHistory(10),
-    enabled: allowed,
-    refetchInterval: false,
     refetchIntervalInBackground: false,
   })
 
@@ -84,11 +68,11 @@ export default function HealthPage() {
           <div><dt className="text-muted-foreground">Bekleyen bildirim</dt><dd>{alarms.pendingDeliveries ?? "—"}</dd></div>
           <div><dt className="text-muted-foreground">Telegram bağlantısı</dt><dd>{alarms.telegramConfigured === null ? "Bilinmiyor" : alarms.telegramConfigured ? "Tanımlı" : "Tanımlı değil"}</dd></div>
         </dl>
-        <p className="text-xs text-muted-foreground">Telegram yalnız kendi alarmınızda bildirim seçeneğini açtığınızda kullanılır. Otomatik COMBO / HUNTER botu ve Telegram AI komutları kaldırıldı.</p>
+        <p className="text-xs text-muted-foreground">Telegram yalnız kendi alarmınızda bildirim seçeneğini açtığınızda kullanılır.</p>
         <Link href="/alarms" className="inline-flex min-h-11 items-center text-xs text-primary underline">Alarm merkezini aç</Link>
       </section>
 
-      <section className="grid min-h-0 flex-1 gap-3 lg:grid-cols-2">
+      <section className="grid min-h-0 flex-1 gap-3">
         <div className="min-h-[420px] border border-border bg-surface">
           <div className="border-b border-border px-3 py-2">
             <span className="label-uppercase">Loglar</span>
@@ -123,65 +107,6 @@ export default function HealthPage() {
           </div>
         </div>
 
-        <div className="min-h-[420px] border border-border bg-surface">
-          <div className="border-b border-border px-3 py-2">
-            <span className="label-uppercase">Tarama arşivi</span>
-            <p className="mt-1 text-xs text-muted-foreground">Önceki otomatik taramalar korunur. Yeni otomatik tarama çalıştırılmaz.</p>
-          </div>
-
-          {scansLoading ? (
-            <div className="px-3 py-8 text-center text-xs text-muted-foreground">Yükleniyor...</div>
-          ) : null}
-
-          {!scansLoading && scansError ? (
-            <div className="space-y-2 px-3 py-8 text-center">
-              <div className="text-xs text-loss">Taramalar yüklenemedi.</div>
-              {scansErrorObj instanceof Error ? (
-                <div className="text-[11px] text-muted-foreground">{scansErrorObj.message}</div>
-              ) : null}
-              <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={() => void refetchScans()} disabled={scansFetching}>
-                {scansFetching ? "Yenileniyor..." : "Tekrar dene"}
-              </Button>
-            </div>
-          ) : null}
-
-          {!scansLoading && !scansError && (!recentScans || recentScans.length === 0) ? (
-            <div className="px-3 py-8 text-center text-xs text-muted-foreground">Kayıt bulunamadı.</div>
-          ) : null}
-
-          {!scansLoading && !scansError && recentScans && recentScans.length > 0 ? (
-            <div className="divide-y divide-border">
-              {recentScans.map((scan) => (
-                <div key={scan.id} className="grid grid-cols-[48px_1fr_72px_48px] items-center gap-2 px-3 py-2">
-                  <div className="mono-numbers text-xs text-muted-foreground">#{scan.id}</div>
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-x-2 text-xs text-foreground">
-                      <span>{scan.scan_type}</span>
-                      <ScanStatus status={scan.status} />
-                    </div>
-                    <div className="text-[10px] text-muted-foreground">
-                      {scan.symbols_scanned} sembol • {scan.duration_seconds.toFixed(1)} sn
-                    </div>
-                    <div className="text-[10px] text-muted-foreground">
-                      {scan.errors_count == null ? "Hata sayısı bilinmiyor" : `${scan.errors_count} hata`}
-                      {scan.mode === "sync" || scan.mode === "async" ? ` • ${scan.mode}` : ""}
-                    </div>
-                  </div>
-                  <div className="text-right text-muted-foreground">
-                    <div className="mono-numbers text-xs">{scan.signals_found}</div>
-                    <div className="text-[10px]">{scan.status && scan.status !== "unknown" ? "yeni sinyal" : "sinyal"}</div>
-                  </div>
-                  <div className="mono-numbers text-right text-[10px] text-muted-foreground">
-                    {new Date(scan.created_at).toLocaleTimeString("tr-TR", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </div>
       </section>
     </PageShell>
   )

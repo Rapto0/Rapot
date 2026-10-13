@@ -9,9 +9,7 @@ import {
     fetchCryptoSymbols,
     fetchEconomicCalendar,
     fetchGlobalIndices,
-    fetchSignals,
     fetchTicker,
-    type ApiSignal,
     type EconomicCalendarEvent,
 } from "@/lib/api/client"
 import { useBinanceTicker } from "@/lib/hooks/use-binance-ticker"
@@ -63,7 +61,6 @@ import {
     Bell,
     MessageSquare,
     CalendarDays,
-    Newspaper,
     LayoutGrid,
     CircleHelp,
     Share2,
@@ -129,7 +126,7 @@ interface WatchlistModel {
     rows: WatchlistRow[]
 }
 
-type RightUtilityPanelId = "alerts" | "notes" | "calendar" | "news" | "layout" | "help"
+type RightUtilityPanelId = "alerts" | "notes" | "calendar" | "layout" | "help"
 
 interface UtilityPanelItem {
     id: RightUtilityPanelId
@@ -162,17 +159,6 @@ interface UtilityCalendarItem {
     orderKey: string
 }
 
-interface WatchlistSignalFeedItem {
-    id: number
-    symbol: string
-    marketType: string
-    strategy: string
-    signalType: string
-    timeframe: string
-    specialTag: string
-    createdAt: string
-}
-
 type WatchlistDialogState =
     | { type: "addSymbol"; value: string }
     | { type: "renameWatchlist"; watchlistId: string; value: string }
@@ -188,13 +174,11 @@ const WATCHLIST_STORAGE_KEY = "rapot.dashboard.watchlists.v1"
 const ACTIVE_WATCHLIST_STORAGE_KEY = "rapot.dashboard.watchlists.active.v1"
 const WATCHLIST_PANEL_STORAGE_KEY = "rapot.dashboard.watchlists.panel.v1"
 const WATCHLIST_UTILITY_CALENDAR_REFRESH_MS = 60_000
-const WATCHLIST_UTILITY_SIGNAL_REFRESH_MS = 60_000
 
 const WATCHLIST_UTILITY_ITEMS: UtilityPanelItem[] = [
     { id: "alerts", label: "Alarmlar", icon: Bell },
     { id: "notes", label: "Notlar", icon: MessageSquare },
     { id: "calendar", label: "Takvim", icon: CalendarDays },
-    { id: "news", label: "Haberler", icon: Newspaper },
     { id: "layout", label: "Yerleşim", icon: LayoutGrid },
     { id: "help", label: "Yardım", icon: CircleHelp },
 ]
@@ -606,51 +590,6 @@ const buildUtilityCalendarItems = (rawEvents: EconomicCalendarEvent[]): UtilityC
         .sort((a, b) => a.orderKey.localeCompare(b.orderKey))
 }
 
-const buildWatchlistSignalFeed = (
-    rawSignals: ApiSignal[],
-    activeSymbolRows: WatchlistSymbolRow[]
-): WatchlistSignalFeedItem[] => {
-    if (rawSignals.length === 0 || activeSymbolRows.length === 0) return []
-    const symbolSet = new Set(
-        activeSymbolRows.map((row) => `${row.marketType}:${row.rawSymbol.toUpperCase()}`)
-    )
-
-    return rawSignals
-        .filter((signal) => {
-            const marketType = signal.market_type === "BIST" ? "BIST" : "Kripto"
-            const symbol = signal.symbol?.toUpperCase?.() || ""
-            return symbolSet.has(`${marketType}:${symbol}`)
-        })
-        .sort((a, b) => {
-            const left = a.created_at ? Date.parse(a.created_at) : 0
-            const right = b.created_at ? Date.parse(b.created_at) : 0
-            return right - left
-        })
-        .slice(0, 12)
-        .map((signal) => ({
-            id: signal.id,
-            symbol: signal.symbol,
-            marketType: signal.market_type,
-            strategy: signal.strategy,
-            signalType: signal.signal_type,
-            timeframe: signal.timeframe,
-            specialTag: signal.special_tag || "-",
-            createdAt: signal.created_at || "",
-        }))
-}
-
-const formatSignalTimestamp = (isoValue: string): string => {
-    if (!isoValue) return "-"
-    const date = new Date(isoValue)
-    if (Number.isNaN(date.getTime())) return "-"
-    return date.toLocaleString("tr-TR", {
-        day: "2-digit",
-        month: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit",
-    })
-}
-
 interface ChartPageProps {
     initialSymbol?: string
     initialMarket?: MarketType
@@ -940,7 +879,6 @@ export function AdvancedChartPage({
                 storedPanel === "alerts" ||
                 storedPanel === "notes" ||
                 storedPanel === "calendar" ||
-                storedPanel === "news" ||
                 storedPanel === "layout" ||
                 storedPanel === "help"
             ) {
@@ -1165,18 +1103,6 @@ export function AdvancedChartPage({
         refetchInterval: WATCHLIST_UTILITY_CALENDAR_REFRESH_MS,
         staleTime: 30_000,
         enabled: canUseBorsapy,
-    })
-
-    const {
-        data: utilityWatchlistSignalsRaw = [],
-        isFetching: isUtilitySignalsFetching,
-        refetch: refetchUtilitySignals,
-    } = useQuery({
-        queryKey: ['chart-watchlist-signals-feed'],
-        queryFn: () => fetchSignals({ limit: 300 }),
-        refetchInterval: WATCHLIST_UTILITY_SIGNAL_REFRESH_MS,
-        staleTime: 30_000,
-        enabled: canUseBorsapy && showRightPanel && watchlistSource === "local" && activeUtilityPanel === "news",
     })
 
     const watchlistCryptoSymbols = useMemo(() => {
@@ -1950,41 +1876,6 @@ export function AdvancedChartPage({
         [watchlistAlarmRules, activeWatchlist]
     )
 
-    const activeWatchlistQuotes = useMemo(() => {
-        return activeWatchlistSymbolRows
-            .map((row) => {
-                const quote =
-                    row.marketType === "Kripto"
-                        ? cryptoQuoteMap.get(row.rawSymbol)
-                        : bistQuoteMap.get(row.rawSymbol)
-                return {
-                    ...row,
-                    priceText: quote?.priceText ?? "---",
-                    change: quote?.change ?? Number.NaN,
-                    hasQuote: !!quote && Number.isFinite(quote.change),
-                }
-            })
-            .filter((row) => row.hasQuote)
-    }, [activeWatchlistSymbolRows, cryptoQuoteMap, bistQuoteMap])
-
-    const watchlistChangeSnapshot = useMemo(() => {
-        if (activeWatchlistQuotes.length === 0) return null
-        let strongest = activeWatchlistQuotes[0]
-        let weakest = activeWatchlistQuotes[0]
-        let sum = 0
-        for (const row of activeWatchlistQuotes) {
-            sum += row.change
-            if (row.change > strongest.change) strongest = row
-            if (row.change < weakest.change) weakest = row
-        }
-        return {
-            average: sum / activeWatchlistQuotes.length,
-            strongest,
-            weakest,
-            quotedCount: activeWatchlistQuotes.length,
-        }
-    }, [activeWatchlistQuotes])
-
     const utilityCalendarItems = useMemo(
         () => buildUtilityCalendarItems(utilityCalendarResponse?.events ?? []),
         [utilityCalendarResponse]
@@ -1999,10 +1890,6 @@ export function AdvancedChartPage({
         return new Date(utilityCalendarUpdatedAt).toLocaleString("tr-TR")
     }, [utilityCalendarUpdatedAt])
 
-    const watchlistSignalFeed = useMemo(
-        () => buildWatchlistSignalFeed(utilityWatchlistSignalsRaw, activeWatchlistSymbolRows),
-        [utilityWatchlistSignalsRaw, activeWatchlistSymbolRows]
-    )
 
     const updateActiveWatchlist = useCallback(
         (updater: (watchlist: WatchlistModel) => WatchlistModel) => {
@@ -3130,57 +3017,6 @@ export function AdvancedChartPage({
                                         </Link>
                                     </div>
                                 )}
-                                {activeUtilityPanel === "news" && (
-                                    <div className="space-y-2 text-muted-foreground">
-                                        <div className="flex items-center justify-between">
-                                            <span>Canli akis</span>
-                                            <button
-                                                onClick={() => refetchUtilitySignals()}
-                                                className={cn(
-                                                    "rounded border border-border px-2 py-0.5 text-[10px] hover:bg-raised",
-                                                    isUtilitySignalsFetching && "opacity-70"
-                                                )}
-                                            >
-                                                {isUtilitySignalsFetching ? "Yenileniyor" : "Yenile"}
-                                            </button>
-                                        </div>
-                                        {watchlistChangeSnapshot ? (
-                                            <div className="rounded border border-border/40 bg-base p-2 text-[11px]">
-                                                <div>Ortalama degisim: {watchlistChangeSnapshot.average >= 0 ? "+" : ""}{watchlistChangeSnapshot.average.toFixed(2)}%</div>
-                                                <div>Pozitif lider: {watchlistChangeSnapshot.strongest.rawSymbol} ({watchlistChangeSnapshot.strongest.change >= 0 ? "+" : ""}{watchlistChangeSnapshot.strongest.change.toFixed(2)}%)</div>
-                                                <div>Negatif lider: {watchlistChangeSnapshot.weakest.rawSymbol} ({watchlistChangeSnapshot.weakest.change >= 0 ? "+" : ""}{watchlistChangeSnapshot.weakest.change.toFixed(2)}%)</div>
-                                                <div>Kotasyon gelen sembol: {watchlistChangeSnapshot.quotedCount}</div>
-                                            </div>
-                                        ) : (
-                                            <div className="text-[11px]">Canli quote bekleniyor.</div>
-                                        )}
-
-                                        <div className="max-h-52 space-y-1 overflow-y-auto rounded border border-border/40 bg-base p-2">
-                                            {watchlistSignalFeed.length === 0 && (
-                                                <div className="text-[11px] text-muted-foreground">
-                                                    Bu liste sembolleri icin yeni sinyal akisi yok.
-                                                </div>
-                                            )}
-                                            {watchlistSignalFeed.map((item) => (
-                                                <Link
-                                                    key={item.id}
-                                                    href={`/chart?symbol=${encodeURIComponent(item.symbol)}&market=${encodeURIComponent(item.marketType)}`}
-                                                    className="block rounded border border-border/50 px-2 py-1 hover:bg-raised"
-                                                >
-                                                    <div className="flex items-center justify-between">
-                                                        <span className="font-medium text-foreground">{item.symbol}</span>
-                                                        <span className={cn("rounded px-1.5 py-0.5 text-[10px]", item.signalType === "AL" ? "bg-profit/20 text-profit" : "bg-loss/20 text-loss")}>
-                                                            {item.signalType}
-                                                        </span>
-                                                    </div>
-                                                    <div className="mt-0.5 text-[10px] text-muted-foreground">
-                                                        {item.strategy} • {item.timeframe} • {item.specialTag} • {formatSignalTimestamp(item.createdAt)}
-                                                    </div>
-                                                </Link>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
                                 {activeUtilityPanel === "layout" && (
                                     <div className="space-y-2 text-muted-foreground">
                                         <div className="text-[11px]">Panel: {showRightPanel ? "Acik" : "Kapali"}</div>
@@ -3233,7 +3069,6 @@ export function AdvancedChartPage({
                                         <div className="rounded border border-border/40 bg-base p-2 text-[11px]">
                                             <div>Notlar: Izleme listesine ozel not tutar, panoya kopyalar.</div>
                                             <div>Takvim: Gercek ekonomik olay akisini 60 sn aralikla yeniler.</div>
-                                            <div>Haberler: Liste sembollerine ait son sinyal akislarini gosterir.</div>
                                             <div>Yerlesim: Panel ve grafik duzenini hizli sekilde degistirir.</div>
                                         </div>
                                         <div className="grid grid-cols-2 gap-1.5">
@@ -3243,8 +3078,8 @@ export function AdvancedChartPage({
                                             <Link href="/calendar" className="rounded border border-border px-2 py-1 text-center text-[11px] hover:bg-raised">
                                                 Takvim sayfasi
                                             </Link>
-                                            <Link href="/signals" className="rounded border border-border px-2 py-1 text-center text-[11px] hover:bg-raised">
-                                                Sinyal akisi
+                                            <Link href="/research" className="rounded border border-border px-2 py-1 text-center text-[11px] hover:bg-raised">
+                                                Araştırma
                                             </Link>
                                             <Link href="/trades" className="rounded border border-border px-2 py-1 text-center text-[11px] hover:bg-raised">
                                                 Islemler

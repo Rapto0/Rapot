@@ -1,6 +1,6 @@
 """
 Otonom Analiz - FastAPI REST API
-Sinyal, trade ve bot istatistiklerine erişim sağlar.
+Piyasa verisi, kullanıcı alarmları ve manuel analize erişim sağlar.
 
 Kullanım:
     uvicorn api.main:app --reload --port 8000
@@ -8,7 +8,6 @@ Kullanım:
 
 import asyncio
 import math
-import unicodedata
 from datetime import datetime, timedelta
 
 import yfinance as yf  # noqa: E402
@@ -30,6 +29,7 @@ from api.routes.borsapy_connection_routes import router as borsapy_connection_ro
 from api.routes.borsapy_market_routes import router as borsapy_market_router
 from api.routes.borsapy_routes import router as borsapy_router
 from api.routes.calendar_routes import router as calendar_router  # noqa: E402
+from api.routes.retired_history_routes import router as retired_history_router
 from api.routes.symbols_routes import router as symbols_router  # noqa: E402
 from api.routes.system_routes import router as system_router  # noqa: E402
 from api.runtime.advanced_alarms import start_advanced_alarms, stop_advanced_alarms
@@ -42,7 +42,6 @@ from api.runtime.realtime_bootstrap import (  # noqa: E402
 from api.runtime.server_alarms import start_server_alarms, stop_server_alarms
 from logger import get_logger  # noqa: E402
 from settings import settings  # noqa: E402
-from state_keys import SPECIAL_TAG_HEALTH_STATE_KEY, SPECIAL_TAG_HEALTH_SUMMARY_KEY  # noqa: E402
 from strategy_inspector import (  # noqa: E402
     StrategyInspectorError,
     build_strategy_ai_payload,
@@ -136,6 +135,7 @@ app.include_router(advanced_alarm_router)
 app.include_router(calendar_router)
 app.include_router(symbols_router)
 app.include_router(system_router)
+app.include_router(retired_history_router)
 app.include_router(alarm_router)
 app.include_router(borsapy_router)
 app.include_router(borsapy_market_router)
@@ -177,51 +177,6 @@ class HealthResponse(BaseModel):
     realtime: str
     version: str
     timestamp: str
-
-
-class SignalResponse(BaseModel):
-    """Sinyal yanıtı."""
-
-    id: int
-    symbol: str
-    market_type: str
-    strategy: str
-    signal_type: str
-    timeframe: str
-    score: str | None = None
-    price: float
-    created_at: str | None = None
-    special_tag: str | None = None
-    details: dict[str, float | int | str | bool | None] | str | None = None
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class SpecialTagHealthRuleResponse(BaseModel):
-    """Ozel etiket kapsama kural satiri."""
-
-    tag: str
-    strategy: str
-    signal_type: str
-    target_timeframe: str
-    candidates: int
-    tagged: int
-    missing: int
-
-
-class SpecialTagHealthResponse(BaseModel):
-    """Ozel etiket kapsama ozet durumu."""
-
-    status: str
-    stored_state: str | None = None
-    market_type: str | None = None
-    strategy: str | None = None
-    checked_window_hours: int
-    checked_window_seconds: int
-    missing_total: int
-    last_checked_at: str | None = None
-    summary: str | None = None
-    rows: list[SpecialTagHealthRuleResponse]
 
 
 class StrategyInspectorTimeframeResponse(BaseModel):
@@ -288,20 +243,11 @@ class TradeResponse(BaseModel):
 class StatsResponse(BaseModel):
     """İstatistik yanıtı."""
 
-    total_signals: int
     total_trades: int
     open_trades: int
     closed_trades: int
     total_pnl: float
     win_rate: float
-    scan_count: int
-
-
-class ScanRequest(BaseModel):
-    """Tarama isteği."""
-
-    market_type: str = "BIST"  # BIST veya Kripto
-    async_mode: bool = False
 
 
 class AIAnalysisResponse(BaseModel):
@@ -420,9 +366,6 @@ class CandlesResponse(BaseModel):
 
 # ==================== ENDPOINTS ====================
 
-_SPECIAL_TAG_CODES = {"BELES", "COK_UCUZ", "PAHALI", "FAHIS_FIYAT"}
-_SPECIAL_TAG_HEALTH_STATE_KEY = SPECIAL_TAG_HEALTH_STATE_KEY
-_SPECIAL_TAG_HEALTH_SUMMARY_KEY = SPECIAL_TAG_HEALTH_SUMMARY_KEY
 _MARKET_INDEX_CANONICAL = {
     # Yahoo tarafinda spot altin/gumus bazi hesaplarda 404 donebildigi icin
     # emtia futures sembollerine canonical map uyguluyoruz.
@@ -440,20 +383,6 @@ _market_overview_cache: tuple[datetime, dict[str, dict]] | None = None
 _MARKET_TICKER_CACHE_TTL = timedelta(seconds=10)
 _market_ticker_cache: tuple[datetime, list[dict[str, float | str]]] | None = None
 _market_data_provider = None
-
-
-def _normalize_special_tag(value: str | None) -> str | None:
-    if not value:
-        return None
-
-    normalized = unicodedata.normalize("NFKD", value.strip())
-    normalized = normalized.encode("ascii", "ignore").decode("ascii").upper().replace(" ", "_")
-
-    if normalized == "FAHIS":
-        return "FAHIS_FIYAT"
-    if normalized in _SPECIAL_TAG_CODES:
-        return normalized
-    return None
 
 
 def _build_ai_analysis_response(analysis) -> AIAnalysisResponse:
@@ -608,84 +537,6 @@ async def health_check(request: Request, response: Response):
     return HealthResponse(**payload)
 
 
-@app.get("/ops/special-tag-health", response_model=SpecialTagHealthResponse, tags=["Operations"])
-@limiter.limit("20/minute")
-async def get_special_tag_health(
-    request: Request,
-    market_type: str = Query("BIST", description="Piyasa tipi (BIST/Kripto/ALL)"),
-    strategy: str | None = Query(None, description="Strateji filtresi (COMBO/HUNTER)"),
-    since_hours: int = Query(24, ge=1, le=720, description="Geri bakis penceresi (saat)"),
-    window_seconds: int = Query(
-        900, ge=0, le=86400, description="Kural eslesme toleransi (saniye)"
-    ),
-):
-    """
-    Ozel sinyal etiketleme kapsama durumunu dondurur.
-
-    Ops kullanimi icindir. Scheduler tarafindaki health check ile ayni veri kaynagini kullanir.
-    """
-    from infrastructure.persistence.ops_repository import (
-        get_bot_stat,
-        get_bot_stats_last_updated,
-        get_special_tag_coverage,
-    )
-
-    normalized_market = market_type.strip().upper()
-    if normalized_market == "ALL":
-        effective_market_type = None
-        market_label = "ALL"
-    elif normalized_market == "BIST":
-        effective_market_type = "BIST"
-        market_label = "BIST"
-    elif normalized_market in {"KRIPTO", "KRPITO", "KRYPTO"}:
-        effective_market_type = "Kripto"
-        market_label = "Kripto"
-    else:
-        raise HTTPException(
-            status_code=400, detail="Gecersiz market_type. BIST, Kripto veya ALL kullanin."
-        )
-
-    normalized_strategy = strategy.strip().upper() if strategy else None
-    if normalized_strategy not in {None, "COMBO", "HUNTER"}:
-        raise HTTPException(
-            status_code=400, detail="Gecersiz strategy. COMBO veya HUNTER kullanin."
-        )
-
-    coverage_rows = get_special_tag_coverage(
-        since_hours=since_hours,
-        market_type=effective_market_type,
-        strategy=normalized_strategy,
-        window_seconds=window_seconds,
-    )
-    missing_total = sum(int(row.get("missing", 0)) for row in coverage_rows)
-
-    last_checked_raw = get_bot_stats_last_updated(
-        (_SPECIAL_TAG_HEALTH_STATE_KEY, _SPECIAL_TAG_HEALTH_SUMMARY_KEY)
-    )
-    if isinstance(last_checked_raw, datetime):
-        last_checked_at = last_checked_raw.isoformat()
-    elif last_checked_raw:
-        last_checked_at = str(last_checked_raw)
-    else:
-        last_checked_at = None
-
-    stored_state = get_bot_stat(_SPECIAL_TAG_HEALTH_STATE_KEY)
-    summary = get_bot_stat(_SPECIAL_TAG_HEALTH_SUMMARY_KEY)
-
-    return SpecialTagHealthResponse(
-        status="alert" if missing_total > 0 else "ok",
-        stored_state=stored_state,
-        market_type=market_label,
-        strategy=normalized_strategy,
-        checked_window_hours=since_hours,
-        checked_window_seconds=window_seconds,
-        missing_total=missing_total,
-        last_checked_at=last_checked_at,
-        summary=summary or None,
-        rows=[SpecialTagHealthRuleResponse(**row) for row in coverage_rows],
-    )
-
-
 @app.get(
     "/ops/strategy-inspector",
     response_model=StrategyInspectorResponse,
@@ -705,7 +556,7 @@ async def get_strategy_inspector(
     """
     Tek sembol icin strateji indikator dump'i dondurur.
 
-    Telegram inspector araci ve frontend denetim paneli bu endpoint'i kullanir.
+    Site gösterge denetim paneli bu endpoint'i kullanir.
     """
     try:
         report = inspect_strategy(symbol=symbol, strategy=strategy, market_type=market_type)
@@ -743,54 +594,6 @@ async def get_strategy_inspector(
     )
 
 
-@app.get("/signals", response_model=list[SignalResponse], tags=["Signals"])
-@limiter.limit("60/minute")
-async def get_signals(
-    request: Request,
-    symbol: str | None = Query(None, description="Sembol filtresi"),
-    strategy: str | None = Query(None, description="Strateji filtresi (COMBO/HUNTER)"),
-    signal_type: str | None = Query(None, description="Sinyal türü (AL/SAT)"),
-    market_type: str | None = Query(None, description="Piyasa türü (BIST/Kripto)"),
-    special_tag: str | None = Query(
-        None,
-        description="Ozel etiket filtresi (BELES/COK_UCUZ/PAHALI/FAHIS_FIYAT)",
-    ),
-    limit: int = Query(50, ge=1, le=1000, description="Maksimum kayıt sayısı"),
-):
-    """
-    Sinyal listesini döndürür.
-
-    Opsiyonel filtreler: symbol, strategy, signal_type, market_type, special_tag
-    """
-    from application.services.signal_trade_service import list_signals as list_signals_service
-
-    normalized_special_tag = _normalize_special_tag(special_tag)
-    if special_tag is not None and normalized_special_tag is None:
-        return []
-
-    signal_rows = await asyncio.to_thread(
-        list_signals_service,
-        symbol=symbol,
-        strategy=strategy,
-        signal_type=signal_type,
-        market_type=market_type,
-        special_tag=normalized_special_tag,
-        limit=limit,
-    )
-    return [SignalResponse(**row) for row in signal_rows]
-
-
-@app.get("/signals/{signal_id}", response_model=SignalResponse, tags=["Signals"])
-async def get_signal(signal_id: int):
-    """Belirli bir sinyali döndürür."""
-    from application.services.signal_trade_service import get_signal_by_id
-
-    signal = await asyncio.to_thread(get_signal_by_id, signal_id)
-    if not signal:
-        raise HTTPException(status_code=404, detail="Sinyal bulunamadı")
-    return SignalResponse(**signal)
-
-
 @app.get("/trades", response_model=list[TradeResponse], tags=["Trades"])
 @limiter.limit("60/minute")
 async def get_trades(
@@ -816,7 +619,7 @@ async def get_trades(
 @limiter.limit("60/minute")
 async def get_stats(request: Request):
     """
-    Bot ve trade istatistiklerini döndürür.
+    Saklanan trade kayıtlarının finansal özetini döndürür.
     """
     from application.services.signal_trade_service import get_trade_stats_summary
 
@@ -874,19 +677,6 @@ async def get_analysis(analysis_id: int):
     analysis = get_ai_analysis_by_id(analysis_id)
     if not analysis:
         raise HTTPException(status_code=404, detail="Analiz bulunamadı")
-    return _build_ai_analysis_response(analysis)
-
-
-@app.get(
-    "/signals/{signal_id}/analysis", response_model=AIAnalysisResponse | None, tags=["AI Analysis"]
-)
-async def get_signal_analysis(signal_id: int):
-    """Belirli bir sinyale ait AI analizini döndürür."""
-    from application.services.analysis_service import get_ai_analysis_by_signal_id
-
-    analysis = get_ai_analysis_by_signal_id(signal_id)
-    if not analysis:
-        return None
     return _build_ai_analysis_response(analysis)
 
 

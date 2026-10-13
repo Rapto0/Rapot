@@ -579,3 +579,23 @@ test('page hydration/storage events only read; user toggle/delete submit intents
   cleanup.forEach(callback => callback?.());
   assert.equal(listeners.size, 0);
 });
+
+test('retired scanner lists remain available for explicit import without writes or active alarms', () => {
+  const stored = JSON.stringify([{ id: 'mine', name: 'Karma listem', symbols: ['BIST:THYAO', 'Kripto:BTCUSDT', 'BIST:THYAO'] }]);
+  const storage = { getItem(key) { assert.equal(key, 'rapot.scanner.watchlists.v2'); return stored; },
+    setItem() { assert.fail('Import discovery must not write'); }, removeItem() { assert.fail('Legacy lists must be preserved'); } };
+  const loaded = loadSource('../src/lib/watchlist-alarms.ts', { '@/lib/indicators': indicators }, { window: { localStorage: storage } });
+  const rows = loaded.loadStoredScannerWatchlists();
+  assert.equal(rows.length, 1); assert.equal(rows[0].name, 'Karma listem'); assert.equal(rows[0].alarmsEnabled, false);
+  assert.deepEqual(JSON.parse(JSON.stringify(rows[0].rows)), [
+    { kind: 'symbol', marketType: 'BIST', rawSymbol: 'THYAO' }, { kind: 'symbol', marketType: 'Kripto', rawSymbol: 'BTCUSDT' },
+  ]);
+});
+
+test('unsupported or malformed scanner lists are not silently converted into a different asset scope', () => {
+  for (const stored of ['broken', '{}', JSON.stringify([{ id: 'x', name: 'X', symbols: ['US:APPLE'] }]),
+    JSON.stringify([{ id: 'x', name: 'X', symbols: ['BIST:THYAO', 'Kripto:BTCTRY'] }])]) {
+    const loaded = loadSource('../src/lib/watchlist-alarms.ts', { '@/lib/indicators': indicators }, { window: { localStorage: { getItem: () => stored } } });
+    assert.equal(loaded.loadStoredScannerWatchlists().length, 0);
+  }
+});

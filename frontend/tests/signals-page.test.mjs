@@ -1,283 +1,118 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
-import vm from 'node:vm';
 import * as React from 'react';
-import * as jsxRuntime from 'react/jsx-runtime';
-import { renderToStaticMarkup } from 'react-dom/server';
 import * as icons from 'lucide-react';
-import ts from 'typescript';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { load, hooks, nodes, text, primitives } from './view-harness.mjs';
+const admin = { user: { username: 'admin', is_admin: true, disabled: false }, expiresAt: 123 };
 
-function load(file, imports, globals = {}) {
-  const compiled = ts.transpileModule(readFileSync(new URL(file, import.meta.url), 'utf8'), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
-  }).outputText;
-  const context = vm.createContext({
-    exports: {}, ...globals,
-    require(name) { assert.ok(Object.hasOwn(imports, name), `Unexpected import: ${name}`); return imports[name]; },
-    fetch() { assert.fail('Signals page tests must never access an API or provider'); },
+test('retired signal route redirects without fetching history; navigation prioritizes alarms and retains trades', () => {
+  const calls = [];
+  const page = load('../src/app/signals/page.tsx', { 'next/navigation': { redirect: value => calls.push(value) } });
+  page.default(); assert.deepEqual(calls, ['/alarms']);
+  const { navigation } = load('../src/components/layout/navigation.ts', { 'lucide-react': icons });
+  assert.ok(!navigation.some(item => item.href === '/signals'));
+  for (const href of ['/chart', '/alarms', '/trades', '/scanner', '/ai', '/research']) assert.ok(navigation.some(item => item.href === href));
+});
+
+test('legacy signal REST and socket entry points are absent, while native indicator calculation remains', () => {
+  for (const file of ['lib/api/signals-api.ts', 'lib/hooks/use-signals.ts', 'lib/realtime/signals.ts', 'lib/signal-export.ts', 'components/scanner/scan-status.tsx']) {
+    assert.ok(!existsSync(new URL(`../src/${file}`, import.meta.url)), file);
+  }
+  const chart = readFileSync(new URL('../src/components/charts/advanced-chart.tsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(chart, /fetchSignals|chart-watchlist-signals-feed|href="\/signals"|WatchlistSignalFeed/);
+  assert.match(chart, /workerComputationState\.overlays\.combo/); assert.match(chart, /workerComputationState\.overlays\.hunter/);
+});
+
+function workspace(session, options = {}) {
+  const queries = [], calls = [];
+  const response = { data: { watchlists: [{ id: 'id / ? test', name: 'PRIVATE_LIST', symbols: [{ symbol: 'THYAO', market_type: 'BIST' }] }] }, ...options };
+  const href = load('../src/lib/server-watchlists.ts');
+  const component = load('../src/components/dashboard/alarm-workspace.tsx', { ...primitives,
+    '@tanstack/react-query': { useQuery: value => { queries.push(value); return { ...response, refetch: () => calls.push('refresh') }; } },
+    '@/lib/api/advanced-alarms-api': { fetchServerWatchlists: signal => calls.push(signal) },
+    '@/lib/hooks/use-health': { useAlarmRuntimeHealth: () => ({ label: 'Doğrulanamadı' }) },
+    '@/lib/hooks/use-session': { useSession: () => session }, '@/lib/server-watchlists': href,
   });
-  vm.runInContext(compiled, context);
-  return context.exports;
+  return { tree: component.AlarmWorkspace(), queries, calls };
 }
 
-const csv = load('../src/lib/signal-export.ts', {});
-const signal = {
-  id: 1, symbol: 'THYAO', marketType: 'BIST', strategy: 'COMBO', signalType: 'AL',
-  timeframe: '1D', score: '+4/-0', price: 300, createdAt: '2026-10-01T12:00:00Z', specialTag: null,
-};
-const second = { ...signal, id: 2, symbol: 'BTCUSDT', marketType: 'Kripto', strategy: 'HUNTER', signalType: 'SAT' };
-const text = child => React.Children.toArray(child).map(node =>
-  typeof node === 'string' || typeof node === 'number' ? String(node)
-    : React.isValidElement(node) ? text(node.props.children) : '').join('');
+test('dashboard lists link to the selected server list, never creating or enabling an alarm', async () => {
+  const h = workspace(admin); const links = nodes(h.tree).filter(node => node.type === 'a');
+  assert.ok(links.some(node => node.props.href === '/chart?serverList=id%20%2F%20%3F%20test'));
+  assert.ok(links.some(node => node.props.href === '/alarms?serverList=id%20%2F%20%3F%20test&action=new'));
+  assert.ok(links.some(node => node.props.href === '/alarms?serverList=id%20%2F%20%3F%20test'));
+  assert.deepEqual(h.calls, []); assert.equal(h.queries[0].enabled, true);
+  const signal = new AbortController().signal; await h.queries[0].queryFn({ signal });
+  assert.deepEqual(h.calls, [signal]); assert.equal(h.queries[0].refetchIntervalInBackground, false);
+});
 
-function harness(initialQuery = {}) {
-  const states = [], focused = [], blobs = [];
-  let cursor = 0, refreshes = 0, options, buttons = [], inputs = [], kpis = [], inspector;
-  let query = { data: [signal, second], isLoading: false, isFetching: false, isError: false, fetchStatus: 'idle', ...initialQuery };
-  const hooks = {
-    useState(initial) {
-      const index = cursor++;
-      if (!(index in states)) states[index] = initial;
-      return [states[index], value => { states[index] = typeof value === 'function' ? value(states[index]) : value; }];
-    },
-    useMemo: callback => callback(),
-  };
-  const { default: Page } = load('../src/app/signals/page.tsx', {
-    react: hooks, 'react/jsx-runtime': jsxRuntime, 'lucide-react': icons,
-    '@/lib/signal-export': csv,
-    '@/lib/hooks/use-signals': { useSignals(value) { options = value; return { ...query, refetch() { refreshes++; } }; } },
-    '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' '), formatDate: value => value },
-    '@/components/ui/button': { Button(props) {
-      buttons.push(props);
-      const dom = { ...props };
-      delete dom.variant;
-      delete dom.size;
-      return React.createElement('button', dom);
-    } },
-    '@/components/ui/input': { Input(props) { inputs.push(props); return React.createElement('input', props); } },
-    '@/components/ui/badge': { Badge: ({ children }) => React.createElement('span', null, children) },
-    '@/components/ui/page-shell': { PageShell: ({ title, description, actions, children }) => React.createElement('main', null,
-      React.createElement('h1', null, title), React.createElement('p', null, description), actions, children) },
-    '@/components/ui/kpi-ribbon': { KpiRibbon: ({ items }) => { kpis = items; return null; } },
-    '@/components/ui/table': Object.fromEntries([['Table', 'table'], ['TableBody', 'tbody'], ['TableCell', 'td'],
-      ['TableHead', 'th'], ['TableHeader', 'thead'], ['TableRow', 'tr']]),
-    '@/components/shared/error-boundary': { EmptyState: ({ title, description, action }) => React.createElement('div', null,
-      React.createElement('h3', null, title), React.createElement('p', null, description), action) },
-    '@/components/signals/strategy-inspector-panel': { StrategyInspectorPanel(props) {
-      inspector = props; return React.createElement('aside', { 'data-inspector': props.selectedSymbol });
-    } },
-  }, {
-    Blob,
-    URL: { createObjectURL(blob) { blobs.push(blob); return 'blob:synthetic'; }, revokeObjectURL() {} },
-    window: { setTimeout() { return 1; } },
-    document: {
-      getElementById: id => ({ focus() { focused.push(id); } }),
-      createElement: () => ({ click() {}, remove() {} }), body: { appendChild() {} },
-    },
-  });
-  const h = {
-    focused, blobs,
-    render() { cursor = 0; buttons = []; inputs = []; kpis = []; inspector = undefined; return renderToStaticMarkup(React.createElement(Page)); },
-    setQuery(next) { query = { ...query, ...next }; },
-    byId(id) { h.render(); const result = buttons.find(button => button.id === id); assert.ok(result, `Missing control: ${id}`); return result; },
-    button(label) { h.render(); const result = buttons.find(button => button['aria-label'] === label || text(button.children) === label); assert.ok(result, `Missing button: ${label}`); return result; },
-    search(value) { h.render(); inputs[0].onChange({ target: { value } }); },
-    get buttons() { return buttons; }, get input() { return inputs[0]; },
-    get options() { return options; }, get kpis() { return kpis; }, get inspector() { return inspector; },
-    get refreshes() { return refreshes; },
-  };
-  h.render();
-  return h;
+test('dashboard never exposes cached list names to guests, disabled accounts or non-admins', () => {
+  for (const session of [null, { ...admin, user: { ...admin.user, disabled: true } }, { ...admin, user: { ...admin.user, is_admin: false } }]) {
+    const h = workspace(session); assert.equal(h.queries[0].enabled, false);
+    assert.doesNotMatch(text(h.tree), /PRIVATE_LIST/); assert.match(text(h.tree), /yönetici girişi/); assert.deepEqual(h.calls, []);
+  }
+});
+
+test('dashboard keeps previous list rows on refresh failure but clearly marks the failure', () => {
+  const h = workspace(admin, { isError: true }); assert.match(text(h.tree), /PRIVATE_LIST/);
+  assert.match(text(h.tree), /Listeler yenilenemedi/);
+  nodes(h.tree).find(node => node.type === 'button').props.onClick(); assert.deepEqual(h.calls, ['refresh']);
+});
+
+function aiHarness() {
+  const state = hooks(), calls = [];
+  const component = load('../src/components/ai/ai-terminal.tsx', { ...primitives, react: state.react, 'lucide-react': icons,
+    '@/lib/api/client': { fetchAIAnalysis: async params => { calls.push(params); return { inspection: { timeframes: [] } }; } },
+    '@/lib/hooks/use-analyses': { useRecentAnalyses: () => ({ data: [], refetch() {} }) },
+    '@/components/indicators/strategy-inspector-panel': { StrategyInspectorPanel: 'indicator-inspector' },
+    '@/lib/hooks/use-private-market': { usePrivateMarket: () => ({ allowed: true, sessionKey: 'admin:123' }) },
+  }, '\nexport { ManualAITerminal };');
+  return { calls, render() { state.reset(); return component.ManualAITerminal(); } };
 }
 
-test('search has a visible associated label and help; all four filter groups expose native pressed buttons', () => {
-  const h = harness();
-  const html = h.render();
-  assert.match(html, /<label[^>]*for="signals-search"[^>]*>Sembol ara<\/label>/);
-  assert.equal(h.input.id, 'signals-search');
-  assert.equal(h.input.type, 'search');
-  assert.equal(h.input['aria-describedby'], 'signals-search-help');
-  assert.match(html, /Arama yalnız yüklenen kayıtlarda/);
-  for (const label of ['Piyasa', 'Strateji', 'Yön', 'Özel etiket']) {
-    assert.ok(html.includes(`>${label}</legend>`));
-  }
-  assert.equal((html.match(/<fieldset/g) ?? []).length, 4);
-  for (const group of ['market', 'strategy', 'direction', 'special']) {
-    assert.equal(h.byId(`signal-${group}-all`)['aria-pressed'], true);
-    assert.equal(h.byId(`signal-${group}-all`).type, 'button');
-  }
-  assert.match(html, /Etkin filtre veya sembol araması yok/);
+test('manual AI retains COMBO/HUNTER and timeframe inputs; only explicit analysis invokes paid work', async () => {
+  const h = aiHarness(); let tree = h.render();
+  assert.deepEqual(h.calls, []); assert.ok(nodes(tree).some(node => node.type === 'indicator-inspector'));
+  const change = (label, value) => { nodes(tree).find(node => node.props['aria-label'] === label).props.onChange({ target: { value } }); tree = h.render(); };
+  change('Analiz sembolü', 'garan'); change('Gösterge', 'COMBO'); change('Piyasa', 'BIST'); change('Periyot', '1W');
+  assert.deepEqual(h.calls, []);
+  await nodes(tree).find(node => node.type === 'button' && text(node).includes('AI Yorumla')).props.onClick();
+  assert.deepEqual(JSON.parse(JSON.stringify(h.calls)), [{ symbol: 'GARAN', strategy: 'COMBO', market_type: 'BIST', timeframe: '1W' }]);
 });
 
-test('each filter and local symbol query preserve the useSignals options and fixed 300-record limit', () => {
-  const h = harness();
-  h.byId('signal-market-Kripto').onClick();
-  h.byId('signal-strategy-HUNTER').onClick();
-  h.byId('signal-direction-SAT').onClick();
-  h.byId('signal-special-FAHIS_FIYAT').onClick();
-  h.search('btC');
-  const html = h.render();
-  assert.deepEqual({ ...h.options }, {
-    marketType: 'Kripto', strategy: 'HUNTER', direction: 'SAT', specialTag: 'FAHIS_FIYAT', searchQuery: 'btC', limit: 300,
+test('manual AI guest page does not mount private query or calculation components', () => {
+  const component = load('../src/components/ai/ai-terminal.tsx', { ...primitives, react: React, 'lucide-react': icons,
+    '@/lib/api/client': {}, '@/lib/hooks/use-analyses': { useRecentAnalyses() { throw Error('private query mounted'); } },
+    '@/components/indicators/strategy-inspector-panel': { StrategyInspectorPanel() { throw Error('calculator mounted'); } },
+    '@/lib/hooks/use-private-market': { usePrivateMarket: () => ({ allowed: false, sessionKey: 'guest' }) },
   });
-  assert.match(html, /Etkin seçimler: 5/);
-  assert.match(html, /Özel etiket: FAHİŞ FİYAT/);
-  assert.equal(h.byId('signal-market-Kripto')['aria-pressed'], true);
-  assert.equal(h.byId('signal-market-all')['aria-pressed'], false);
-  assert.match(html, /Seçili piyasada en fazla 300 kayıt/);
+  assert.match(renderToStaticMarkup(React.createElement(component.AITerminal)), /Giriş yap/);
 });
 
-test('single clear only removes its own filter and restores focus to a surviving control', () => {
-  const cases = [
-    ['signal-market-BIST', 'Piyasa: BIST seçimini temizle', 'marketType', 'signal-market-all'],
-    ['signal-strategy-HUNTER', 'Strateji: HUNTER seçimini temizle', 'strategy', 'signal-strategy-all'],
-    ['signal-direction-AL', 'Yön: AL seçimini temizle', 'direction', 'signal-direction-all'],
-    ['signal-special-COK_UCUZ', 'Özel etiket: ÇOK UCUZ seçimini temizle', 'specialTag', 'signal-special-all'],
-  ];
-  for (const [id, label, option, focus] of cases) {
-    const h = harness();
-    h.byId(id).onClick();
-    h.search('THY');
-    h.button(label).onClick();
-    h.render();
-    assert.equal(h.options[option], 'all');
-    assert.equal(h.options.searchQuery, 'THY');
-    assert.equal(h.focused.at(-1), focus);
-  }
-  const h = harness();
-  h.byId('signal-market-BIST').onClick();
-  h.search('THY');
-  h.button('Sembol: THY seçimini temizle').onClick();
-  h.render();
-  assert.equal(h.options.searchQuery, '');
-  assert.equal(h.options.marketType, 'BIST');
-  assert.equal(h.focused.at(-1), 'signals-search');
+test('manual analysis history is session scoped and excludes legacy linked signal rows', async () => {
+  let allowed = false, query;
+  const hook = load('../src/lib/hooks/use-analyses.ts', {
+    './use-private-market': { usePrivateMarket: () => ({ allowed, sessionKey: allowed ? 'admin:123' : 'guest' }) },
+    '@tanstack/react-query': { useQuery: options => { query = options; return {}; } },
+    '@/lib/api/client': { fetchAnalyses: async () => [{ id: 1, signal_id: null }, { id: 2, signal_id: 99 }], transformAnalysis: value => value },
+  });
+  hook.useRecentAnalyses(16); assert.equal(query.enabled, false);
+  allowed = true; hook.useRecentAnalyses(16); assert.equal(query.enabled, true);
+  assert.ok(query.queryKey.includes('admin:123')); assert.deepEqual((await query.queryFn()).map(row => row.id), [1]);
 });
 
-test('clear all resets every filter and search, including the empty-result recovery action', () => {
-  for (const label of ['Tümünü temizle', 'Filtreleri ve aramayı temizle']) {
-    const h = harness({ data: [] });
-    for (const id of ['signal-market-BIST', 'signal-strategy-HUNTER', 'signal-direction-AL', 'signal-special-BELES']) h.byId(id).onClick();
-    h.search('THY');
-    h.button(label).onClick();
-    const html = h.render();
-    assert.deepEqual({ ...h.options }, { marketType: 'all', strategy: 'all', direction: 'all', specialTag: 'all', searchQuery: '', limit: 300 });
-    assert.equal(h.focused.at(-1), 'signals-search');
-    assert.match(html, /Etkin filtre veya sembol araması yok/);
-    assert.doesNotMatch(html, /Seçimlere uygun sinyal bulunamadı/);
-  }
-});
-
-test('loading and paused initial queries never claim zero records or successful empty data', () => {
-  for (const query of [
-    { data: undefined, isLoading: true, isFetching: true },
-    { data: undefined, isLoading: false, isFetching: false, fetchStatus: 'paused' },
-  ]) {
-    const h = harness(query);
-    const html = h.render();
-    assert.match(html, /role="status"/);
-    assert.match(html, query.fetchStatus === 'paused' ? /Bağlantı bekleniyor/ : /Sinyaller yükleniyor/);
-    assert.doesNotMatch(html, /0 kayıt gösteriliyor|Gösterilecek sinyal kaydı yok|Seçimlere uygun sinyal bulunamadı|<table/);
-    assert.deepEqual(Array.from(h.kpis, item => item.value), ['—', '—', '—']);
-    assert.equal(h.inspector, undefined);
-    assert.equal(h.button('Dışa aktar').disabled, true);
-  }
-});
-
-test('initial error is distinct from empty results, provides retry and does not leak error details', () => {
-  const h = harness({ data: undefined, isError: true, error: new Error('private backend diagnostics') });
-  const html = h.render();
-  assert.match(html, /role="alert"/);
-  assert.match(html, /Sinyaller yüklenemedi/);
-  assert.match(html, /kayıt olmadığı anlamına gelmez/);
-  assert.doesNotMatch(html, /Gösterilecek sinyal kaydı yok|Seçimlere uygun sinyal bulunamadı|private backend/);
-  assert.deepEqual(Array.from(h.kpis, item => item.value), ['—', '—', '—']);
-  h.button('Tekrar dene').onClick();
-  assert.equal(h.refreshes, 1);
-});
-
-test('successful unfiltered emptiness differs from server-filtered or symbol-filtered emptiness', () => {
-  const h = harness({ data: [] });
-  assert.match(h.render(), /Gösterilecek sinyal kaydı yok/);
-  assert.match(h.render(), /BIST ve Kripto listeleri boş döndü/);
-  assert.deepEqual(Array.from(h.kpis, item => item.value), ['0', '0', '0']);
-  h.button('Yeniden kontrol et').onClick();
-  assert.equal(h.refreshes, 1);
-  h.byId('signal-market-BIST').onClick();
-  assert.match(h.render(), /Seçimlere uygun sinyal bulunamadı/);
-  assert.doesNotMatch(h.render(), /BIST ve Kripto listeleri boş döndü/);
-  h.button('Tümünü temizle').onClick();
-  h.search('NOT-FOUND');
-  assert.match(h.render(), /Seçimlere uygun sinyal bulunamadı/);
-  assert.match(h.render(), /yüklenen kayıtlarda/i);
-});
-
-test('background refresh retains rows and shows progress; a refresh error keeps them with a stale-data warning', () => {
-  const h = harness({ isFetching: true });
-  assert.match(h.render(), /2 kayıt gösteriliyor\. Liste yenileniyor/);
-  assert.match(h.render(), /<table/);
-  assert.equal(h.button('Yenileniyor').disabled, true);
-  assert.equal(h.button('Dışa aktar').disabled, true);
-  h.setQuery({ isFetching: false, isError: true });
-  const html = h.render();
-  assert.match(html, /2 önceki kayıt gösteriliyor/);
-  assert.match(html, /Sinyaller yenilenemedi/);
-  assert.match(html, /Son alınan kayıtlar gösteriliyor; güncel olmayabilir/);
-  assert.match(html, /<table/);
-  assert.deepEqual(Array.from(h.kpis, item => item.value), ['2', '1', '1']);
-  assert.equal(h.button('Dışa aktar').disabled, true);
-  h.button('Tekrar dene').onClick();
-  h.setQuery({ isError: false });
-  assert.doesNotMatch(h.render(), /güncel olmayabilir|role="alert"/);
-  assert.equal(h.button('Dışa aktar').disabled, false);
-});
-
-test('counts and CSV explicitly refer to the visible capped list, never the database total', async () => {
-  const h = harness({ data: [second] });
-  const html = h.render();
-  assert.match(html, /1 kayıt gösteriliyor/);
-  assert.equal(h.kpis[0].label, 'Gösterilen');
-  assert.match(html, /tüm kayıtların toplamı değildir/);
-  assert.match(html, /ayrı ayrı en fazla 150 kayıt/);
-  assert.match(html, /en fazla 300 kayıttan aramaya uyan ve ekranda görünen/);
-  assert.equal(h.button('Dışa aktar')['aria-describedby'], 'signal-export-scope');
-  h.button('Dışa aktar').onClick();
-  const output = await h.blobs[0].text();
-  assert.match(output, /BTCUSDT/);
-  assert.doesNotMatch(output, /THYAO/);
-});
-
-test('row selection uses native accessible buttons and retains the inspector fallback when rows change', () => {
-  const h = harness();
-  assert.equal(h.inspector.selectedSymbol, 'THYAO');
-  const action = h.button('BTCUSDT HUNTER SAT sinyalini incele');
-  assert.equal(action.type, 'button');
-  assert.equal(action.onKeyDown, undefined, 'Enter/Space activation uses native button behavior');
-  action.onClick();
-  h.render();
-  assert.equal(h.inspector.selectedSymbol, 'BTCUSDT');
-  assert.equal(h.inspector.selectedMarketType, 'Kripto');
-  assert.equal(h.button('BTCUSDT HUNTER SAT sinyalini incele')['aria-pressed'], true);
-  assert.equal(h.button('THYAO COMBO AL sinyalini incele')['aria-pressed'], false);
-  h.setQuery({ data: [signal] });
-  h.render();
-  assert.equal(h.inspector.selectedSymbol, 'THYAO');
-});
-
-test('all page controls allow 44px targets and long search text can wrap without a fixed minimum width', () => {
-  const h = harness();
-  h.search('VERY-LONG-QUERY-'.repeat(15));
-  const html = h.render();
-  assert.match(h.input.className, /h-\[44px\]/);
-  assert.match(h.input.className, /text-\[16px\]/);
-  assert.equal(h.input.style.fontSize, 16, 'Inline font size survives the global input font shorthand');
-  assert.ok(h.buttons.every(button => /min-h-\[44px\]/.test(button.className)));
-  assert.match(html, /flex-wrap/);
-  assert.match(html, /min-w-0 break-all/);
-  assert.doesNotMatch(html, /min-w-\[220px\]/);
-  assert.match(html, /tabloyu yana kaydırabilirsiniz/);
-  assert.match(html, /aria-label="Sinyal kayıtları"/);
-  assert.match(html, /role="region"[^>]*aria-label="Sinyal tablosu"[^>]*tabindex="0"/);
-  assert.match(html, /overflow-x-auto/);
+test('standalone COMBO/HUNTER inspection remains explicit and uses its current calculation endpoint', async () => {
+  const state = hooks(), calls = [];
+  const inspector = load('../src/components/indicators/strategy-inspector-panel.tsx', { ...primitives,
+    react: state.react, 'lucide-react': icons,
+    '@/lib/api/client': { fetchStrategyInspector: async params => { calls.push(params); return { timeframes: [], indicator_order: [], indicator_labels: {} }; } },
+  });
+  const render = () => { state.reset(); return inspector.StrategyInspectorPanel({ selectedSymbol: 'THYAO', selectedMarketType: 'BIST' }); };
+  let tree = render(); assert.deepEqual(calls, []);
+  const strategy = nodes(tree).find(node => node.type === 'select' && node.props.value === 'HUNTER');
+  strategy.props.onChange({ target: { value: 'COMBO' } }); tree = render(); assert.deepEqual(calls, []);
+  await nodes(tree).find(node => node.type === 'button' && text(node) === 'Hesapla').props.onClick();
+  assert.deepEqual(JSON.parse(JSON.stringify(calls)), [{ symbol: 'THYAO', strategy: 'COMBO', market_type: 'BIST' }]);
 });

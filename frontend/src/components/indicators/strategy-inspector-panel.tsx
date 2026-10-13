@@ -96,8 +96,7 @@ export function StrategyInspectorPanel({
       <div className="border-b border-border px-3 py-2">
         <div className="label-uppercase">Strateji Laboratuvari</div>
         <div className="mt-1 text-[10px] text-muted-foreground">
-          Telegram inspector aracinin frontend karsiligi. Tek sembol icin tum
-          strateji indikatorlerini 5 periyotta yanyana gorursun.
+          Seçtiğiniz sembolün göstergelerini beş periyotta karşılaştırın. Hesaplama yalnız isteğinizle başlar; alarm veya emir oluşturmaz.
         </div>
       </div>
 

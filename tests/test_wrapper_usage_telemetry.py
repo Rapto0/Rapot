@@ -45,7 +45,7 @@ def test_compatibility_wrappers_register_usage_on_import():
     reset_wrapper_usage_snapshot()
 
     _reload_module("api.services.analysis_service")
-    _reload_module("api.repositories.system_repository")
+    _reload_module("api.repositories.analysis_repository")
     _reload_module("signal_repository")
 
     snapshot = get_wrapper_usage_snapshot()
@@ -53,15 +53,15 @@ def test_compatibility_wrappers_register_usage_on_import():
     assert snapshot["api.services.analysis_service"]["canonical_module"] == (
         "application.services.analysis_service"
     )
-    assert snapshot["api.repositories.system_repository"]["canonical_module"] == (
-        "infrastructure.repositories.system_repository"
+    assert snapshot["api.repositories.analysis_repository"]["canonical_module"] == (
+        "infrastructure.repositories.analysis_repository"
     )
     assert snapshot["signal_repository"]["canonical_module"] == (
         "infrastructure.persistence.signal_repository"
     )
 
     assert snapshot["api.services.analysis_service"]["usage_count"] >= 1
-    assert snapshot["api.repositories.system_repository"]["usage_count"] >= 1
+    assert snapshot["api.repositories.analysis_repository"]["usage_count"] >= 1
     assert snapshot["signal_repository"]["usage_count"] >= 1
 
 

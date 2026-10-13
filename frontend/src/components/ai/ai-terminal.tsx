@@ -1,18 +1,16 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
-import { useQuery } from "@tanstack/react-query"
-import { Brain, Loader2, RefreshCw, Target } from "lucide-react"
+import Link from "next/link"
+import { useMemo, useState } from "react"
+import { Brain, Loader2, RefreshCw } from "lucide-react"
 
 import {
   fetchAIAnalysis,
-  fetchTicker,
   type ApiStrategyInspectorTimeframe,
   type StructuredAIAnalysisResponse,
-  type TickerData,
 } from "@/lib/api/client"
-import { useAnalyses, useRecentAnalyses, type AIAnalysis } from "@/lib/hooks/use-analyses"
-import { useSignals, type Signal } from "@/lib/hooks/use-signals"
+import { useRecentAnalyses, type AIAnalysis } from "@/lib/hooks/use-analyses"
+import { StrategyInspectorPanel } from "@/components/indicators/strategy-inspector-panel"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn, getTimeAgo } from "@/lib/utils"
@@ -22,25 +20,16 @@ type MarketType = "AUTO" | "BIST" | "Kripto"
 type StrategyType = "COMBO" | "HUNTER"
 type TimeframeType = "ALL" | "1D" | "1W" | "2W" | "3W" | "1M"
 
-type WatchRow = {
-  key: string
-  symbol: string
-  marketType: "BIST" | "Kripto"
-  price: number
-  changePercent: number | null
-  signalType: "AL" | "SAT"
-  strategy: "COMBO" | "HUNTER"
-  timeframe: string
-  score: string
-  specialTag: Signal["specialTag"]
-  createdAt: string
-}
-
 const EMPTY_RESULT: StructuredAIAnalysisResponse | null = null
 
 export function AITerminal() {
   const { allowed, sessionKey } = usePrivateMarket()
-  const [selectedKey, setSelectedKey] = useState<string>("")
+  if (!allowed) return <section className="m-4 space-y-3 border border-border bg-surface p-4"><h1 className="text-xl font-semibold text-foreground">Manuel AI analizi</h1><p className="text-sm text-muted-foreground">Bu ekran yönetici oturumu gerektirir.</p><Link href="/login?next=%2Fai" className="text-sm text-primary underline">Giriş yap</Link></section>
+  return <ManualAITerminal key={sessionKey} />
+}
+
+function ManualAITerminal() {
+  const { allowed } = usePrivateMarket()
   const [symbol, setSymbol] = useState("")
   const [marketType, setMarketType] = useState<MarketType>("AUTO")
   const [strategy, setStrategy] = useState<StrategyType>("HUNTER")
@@ -49,54 +38,7 @@ export function AITerminal() {
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
 
-  const tickerQuery = useQuery({
-    queryKey: ["ticker", "ai-terminal", sessionKey],
-    queryFn: fetchTicker,
-    enabled: allowed,
-    refetchInterval: 30_000,
-  })
-
-  const signalsQuery = useSignals({ limit: 240 })
   const recentAnalysesQuery = useRecentAnalyses(16)
-
-  const watchRows = useMemo(
-    () => buildWatchRows(signalsQuery.data ?? [], tickerQuery.data ?? []),
-    [signalsQuery.data, tickerQuery.data]
-  )
-
-  useEffect(() => {
-    if (!selectedKey && watchRows[0]) {
-      setSelectedKey(watchRows[0].key)
-    }
-  }, [selectedKey, watchRows])
-
-  const selectedRow = useMemo(
-    () => watchRows.find((row) => row.key === selectedKey) ?? watchRows[0] ?? null,
-    [selectedKey, watchRows]
-  )
-
-  useEffect(() => {
-    if (!selectedRow) return
-    setSymbol(selectedRow.symbol)
-    setMarketType(selectedRow.marketType)
-    setStrategy(selectedRow.strategy)
-  }, [selectedRow])
-
-  const symbolSignals = useMemo(() => {
-    if (!selectedRow) return []
-    return (signalsQuery.data ?? [])
-      .filter(
-        (signal) =>
-          signal.symbol === selectedRow.symbol && signal.marketType === selectedRow.marketType
-      )
-      .slice(0, 12)
-  }, [selectedRow, signalsQuery.data])
-
-  const symbolAnalysesQuery = useAnalyses({
-    symbol: selectedRow?.symbol,
-    marketType: selectedRow?.marketType,
-    limit: 12,
-  })
 
   const averageConfidence = useMemo(() => {
     const scores = (recentAnalysesQuery.data ?? [])
@@ -106,17 +48,11 @@ export function AITerminal() {
     return `${Math.round(scores.reduce((sum, value) => sum + value, 0) / scores.length)}`
   }, [recentAnalysesQuery.data])
 
-  const refreshPageData = async () => {
-    await Promise.all([
-      tickerQuery.refetch(),
-      signalsQuery.refetch(),
-      recentAnalysesQuery.refetch(),
-      symbolAnalysesQuery.refetch(),
-    ])
-  }
+  const refreshPageData = () => recentAnalysesQuery.refetch()
 
   const runAnalysis = async () => {
     const normalizedSymbol = symbol.trim().toUpperCase()
+    if (!allowed || isLoading) return
     if (!normalizedSymbol) {
       setError("Sembol girin.")
       return
@@ -142,14 +78,6 @@ export function AITerminal() {
     }
   }
 
-  const applySelectedRow = () => {
-    if (!selectedRow) return
-    setSymbol(selectedRow.symbol)
-    setMarketType(selectedRow.marketType)
-    setStrategy(selectedRow.strategy)
-    setTimeframe("ALL")
-  }
-
   const loadAnalysisContext = (analysis: AIAnalysis) => {
     setSymbol(analysis.symbol)
     setMarketType(analysis.marketType)
@@ -159,7 +87,7 @@ export function AITerminal() {
 
   const structured = result?.structured_analysis ?? null
   const inspectionRows = result?.inspection.timeframes ?? []
-  const isRefreshing = tickerQuery.isFetching || signalsQuery.isFetching || recentAnalysesQuery.isFetching
+  const isRefreshing = recentAnalysesQuery.isFetching
 
   return (
     <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-3 p-3">
@@ -171,7 +99,7 @@ export function AITerminal() {
               Manuel yorum motoru
             </h1>
             <p className="mt-1 text-xs text-muted-foreground">
-              Gercek teknik baglam, secilen strateji ve periyot setiyle tek bir calisma alani.
+              Bir sembol, gösterge ve periyot seçerek kendi analizinizi başlatın. Analiz alarm veya emir oluşturmaz.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -192,73 +120,24 @@ export function AITerminal() {
       </section>
 
       <section className="grid min-h-16 grid-cols-2 border border-border bg-surface md:grid-cols-4">
-        <RibbonStat label="Izlenen" value={`${watchRows.length}`} />
+        <RibbonStat label="Sembol" value={symbol || "—"} />
         <RibbonStat label="AI Kaydi" value={`${recentAnalysesQuery.data?.length ?? 0}`} />
         <RibbonStat label="Ort. Guven" value={averageConfidence} tone="profit" />
         <RibbonStat
           label="Secili"
-          value={selectedRow ? `${selectedRow.symbol} / ${selectedRow.strategy}` : "--"}
+          value={strategy}
         />
       </section>
 
-      <section className="grid gap-3 xl:grid-cols-[290px_minmax(0,1fr)_360px]">
-        <aside className="border border-border bg-surface">
-          <div className="flex h-10 items-center justify-between border-b border-border px-3">
-            <span className="label-uppercase">Sembol akisi</span>
-            <span className="text-[10px] text-muted-foreground">{watchRows.length} kayit</span>
-          </div>
-          <div className="max-h-[calc(100vh-220px)] overflow-auto">
-            {watchRows.length === 0 ? (
-              <div className="px-3 py-8 text-center text-xs text-muted-foreground">
-                Sembol akisi bulunamadi.
-              </div>
-            ) : (
-              watchRows.map((row) => {
-                const active = row.key === selectedRow?.key
-                return (
-                  <button
-                    key={row.key}
-                    type="button"
-                    onClick={() => setSelectedKey(row.key)}
-                    className={cn(
-                      "grid w-full grid-cols-[1fr_88px] gap-2 border-b border-[rgba(255,255,255,0.04)] px-3 py-2 text-left hover:bg-raised",
-                      active && "border-l-2 border-l-foreground bg-raised"
-                    )}
-                  >
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="truncate text-xs font-semibold text-foreground">{row.symbol}</span>
-                        <span className={cn("signal-badge", row.marketType === "BIST" ? "bg-[rgba(255,255,255,0.06)] text-foreground" : "bg-[rgba(59,130,246,0.12)] text-[var(--chart-1)]")}>
-                          {row.marketType}
-                        </span>
-                      </div>
-                      <div className="mt-1 flex items-center gap-2 text-[10px] text-muted-foreground">
-                        <span>{row.strategy}</span>
-                        <span>{row.timeframe}</span>
-                        {row.specialTag ? <span>{specialTagLabel(row.specialTag)}</span> : null}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="mono-numbers text-xs text-foreground">{formatInstrumentPrice(row)}</div>
-                      <div className={cn("mono-numbers mt-1 text-[10px]", row.changePercent !== null && row.changePercent >= 0 ? "text-profit" : row.changePercent !== null ? "text-loss" : "text-muted-foreground")}>
-                        {formatChange(row.changePercent)}
-                      </div>
-                      <div className="mt-1 text-[10px] text-muted-foreground">{getTimeAgo(row.createdAt)}</div>
-                    </div>
-                  </button>
-                )
-              })
-            )}
-          </div>
-        </aside>
-
+      <section className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_320px]">
         <main className="flex min-w-0 flex-col gap-3">
           <section className="border border-border bg-surface">
             <div className="border-b border-border px-3 py-2">
               <span className="label-uppercase">Komut satiri</span>
             </div>
-            <div className="grid gap-2 p-3 xl:grid-cols-[minmax(0,220px)_140px_150px_150px_auto_auto]">
+            <div className="grid gap-2 p-3 lg:grid-cols-[minmax(0,1fr)_120px_120px_140px_auto]">
               <Input
+                aria-label="Analiz sembolü"
                 value={symbol}
                 onChange={(event) => setSymbol(event.target.value.toUpperCase())}
                 placeholder="THYAO veya BTCUSDT"
@@ -272,6 +151,7 @@ export function AITerminal() {
               />
 
               <select
+                aria-label="Gösterge"
                 value={strategy}
                 onChange={(event) => setStrategy(event.target.value as StrategyType)}
                 className="h-9 border border-border bg-base px-2 text-xs text-foreground outline-none"
@@ -281,6 +161,7 @@ export function AITerminal() {
               </select>
 
               <select
+                aria-label="Piyasa"
                 value={marketType}
                 onChange={(event) => setMarketType(event.target.value as MarketType)}
                 className="h-9 border border-border bg-base px-2 text-xs text-foreground outline-none"
@@ -291,6 +172,7 @@ export function AITerminal() {
               </select>
 
               <select
+                aria-label="Periyot"
                 value={timeframe}
                 onChange={(event) => setTimeframe(event.target.value as TimeframeType)}
                 className="h-9 border border-border bg-base px-2 text-xs text-foreground outline-none"
@@ -308,17 +190,13 @@ export function AITerminal() {
                 variant="outline"
                 className="h-9 text-xs"
                 onClick={runAnalysis}
-                disabled={isLoading}
+                disabled={isLoading || !allowed}
                 aria-busy={isLoading}
               >
                 {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Brain className="mr-1.5 h-3.5 w-3.5" />}
                 {isLoading ? "Yorumlaniyor" : "AI Yorumla"}
               </Button>
 
-              <Button type="button" variant="outline" className="h-9 text-xs" onClick={applySelectedRow} disabled={!selectedRow}>
-                <Target className="mr-1.5 h-3.5 w-3.5" />
-                Secili satir
-              </Button>
             </div>
           </section>
 
@@ -332,8 +210,8 @@ export function AITerminal() {
             <section className="border border-dashed border-border bg-surface px-4 py-12">
               <div className="label-uppercase">Hazir</div>
               <div className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-                Sol akistan bir sembol sec, strateji ve periyot ayarla, sonra yorumu calistir.
-                Bu ekran sadece gercek teknik baglam ve haber birlesimiyle yorum uretir.
+                Sembolü girin, gösterge ve periyodu seçin, ardından AI Yorumla düğmesine basın.
+                Sonuçlar yalnız sizin isteğinizle oluşturulur; sağlayıcı verisi ve model erişimi gerekir.
               </div>
             </section>
           ) : null}
@@ -418,60 +296,19 @@ export function AITerminal() {
         </main>
 
         <aside className="flex min-h-0 flex-col gap-3">
-          <section className="border border-border bg-surface">
-            <div className="border-b border-border px-3 py-2">
-              <span className="label-uppercase">Secili sembol sinyalleri</span>
-            </div>
-            <div className="max-h-[300px] overflow-auto">
-              {symbolSignals.length === 0 ? (
-                <div className="px-3 py-6 text-center text-xs text-muted-foreground">
-                  Kayit bulunamadi.
-                </div>
-              ) : (
-                symbolSignals.map((signal) => (
-                  <button
-                    key={signal.id}
-                    type="button"
-                    onClick={() => {
-                      setSymbol(signal.symbol)
-                      setMarketType(signal.marketType)
-                      setStrategy(signal.strategy)
-                      setTimeframe(toCommandTimeframe(signal.timeframe))
-                    }}
-                    className="block w-full border-b border-[rgba(255,255,255,0.04)] px-3 py-2 text-left last:border-b-0 hover:bg-raised"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className={cn("signal-badge", signal.signalType === "AL" ? "signal-buy" : "signal-sell")}>
-                        {signal.signalType}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground">{signal.timeframe}</span>
-                    </div>
-                    <div className="mt-1 flex items-center gap-2 text-xs text-foreground">
-                      <span>{signal.strategy}</span>
-                      {signal.specialTag ? <span className="text-muted-foreground">{specialTagLabel(signal.specialTag)}</span> : null}
-                    </div>
-                    <div className="mt-1 mono-numbers text-[10px] text-muted-foreground">
-                      {signal.score || "--"} / {getTimeAgo(signal.createdAt)}
-                    </div>
-                  </button>
-                ))
-              )}
-            </div>
-          </section>
-
           <section className="min-h-0 flex-1 border border-border bg-surface">
             <div className="border-b border-border px-3 py-2">
-              <span className="label-uppercase">AI arsivi</span>
+              <span className="label-uppercase">Manuel analizler</span>
             </div>
             <div className="max-h-[420px] overflow-auto">
-              {symbolAnalysesQuery.isLoading ? (
+              {recentAnalysesQuery.isLoading ? (
                 <div className="px-3 py-6 text-center text-xs text-muted-foreground">Yukleniyor...</div>
-              ) : (symbolAnalysesQuery.data?.length ?? 0) === 0 ? (
+              ) : (recentAnalysesQuery.data?.length ?? 0) === 0 ? (
                 <div className="px-3 py-6 text-center text-xs text-muted-foreground">
-                  Secili sembol icin AI kaydi yok.
+                  Henüz manuel analiz kaydı yok.
                 </div>
               ) : (
-                (symbolAnalysesQuery.data ?? []).map((analysis) => (
+                (recentAnalysesQuery.data ?? []).filter(analysis => analysis.signalId === null).map((analysis) => (
                   <button
                     key={analysis.id}
                     type="button"
@@ -502,6 +339,7 @@ export function AITerminal() {
           </section>
         </aside>
       </section>
+      <details className="border border-border bg-surface p-3"><summary className="cursor-pointer text-sm font-medium text-foreground">Göstergeleri AI olmadan incele</summary><div className="mt-3"><StrategyInspectorPanel selectedSymbol={symbol} selectedMarketType={marketType === "AUTO" ? null : marketType} /></div></details>
     </div>
   )
 }
@@ -589,72 +427,6 @@ function MatrixRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-function buildWatchRows(signals: Signal[], tickers: TickerData[]): WatchRow[] {
-  const tickerMap = new Map(tickers.map((ticker) => [ticker.symbol, ticker]))
-  const rows: WatchRow[] = []
-  const seen = new Set<string>()
-
-  const orderedSignals = [...signals].sort(
-    (left, right) => new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime()
-  )
-
-  for (const signal of orderedSignals) {
-    const key = `${signal.marketType}:${signal.symbol}`
-    if (seen.has(key)) continue
-    seen.add(key)
-
-    const ticker = tickerMap.get(signal.symbol)
-    rows.push({
-      key,
-      symbol: signal.symbol,
-      marketType: signal.marketType,
-      price: ticker?.price ?? Number.NaN,
-      changePercent: typeof ticker?.changePercent === "number" ? ticker.changePercent : null,
-      signalType: signal.signalType,
-      strategy: signal.strategy,
-      timeframe: signal.timeframe,
-      score: signal.score,
-      specialTag: signal.specialTag,
-      createdAt: signal.createdAt,
-    })
-
-    if (rows.length >= 48) break
-  }
-
-  return rows
-}
-
-function formatInstrumentPrice(row: WatchRow): string {
-  if (!Number.isFinite(row.price)) return "—"
-  const symbol = row.marketType === "Kripto" ? "$" : "₺"
-  const maximumFractionDigits = row.marketType === "Kripto" ? 4 : 2
-  return `${symbol}${row.price.toLocaleString("tr-TR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits,
-  })}`
-}
-
-function formatChange(value: number | null): string {
-  if (value === null) return "--"
-  const prefix = value >= 0 ? "+" : ""
-  return `${prefix}${value.toFixed(2)}%`
-}
-
-function specialTagLabel(value: Signal["specialTag"]) {
-  switch (value) {
-    case "BELES":
-      return "BELES"
-    case "COK_UCUZ":
-      return "COK UCUZ"
-    case "PAHALI":
-      return "PAHALI"
-    case "FAHIS_FIYAT":
-      return "FAHIS"
-    default:
-      return "--"
-  }
-}
-
 function timeframeLabel(value: string) {
   switch (value) {
     case "ALL":
@@ -675,23 +447,6 @@ function timeframeLabel(value: string) {
       return "1 Aylik"
     default:
       return value
-  }
-}
-
-function toCommandTimeframe(value: string): TimeframeType {
-  switch (value) {
-    case "1D":
-      return "1D"
-    case "W-FRI":
-      return "1W"
-    case "2W-FRI":
-      return "2W"
-    case "3W-FRI":
-      return "3W"
-    case "ME":
-      return "1M"
-    default:
-      return "ALL"
   }
 }
 

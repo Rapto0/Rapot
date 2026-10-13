@@ -16,7 +16,7 @@ export default function HealthLoading() {
         <div className="min-h-[320px] border border-border bg-surface p-3">
           <div className="space-y-2">
             {Array.from({ length: 6 }).map((_, index) => (
-              <div key={`health-scans-loading-${index}`} className="h-7 animate-pulse border border-border bg-base" />
+              <div key={`health-alarms-loading-${index}`} className="h-7 animate-pulse border border-border bg-base" />
             ))}
           </div>
         </div>

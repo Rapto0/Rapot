@@ -194,11 +194,9 @@ def test_compatibility_wrappers_register_usage_telemetry():
     wrapper_files = [
         REPO_ROOT / "api" / "services" / "analysis_service.py",
         REPO_ROOT / "api" / "services" / "signal_trade_service.py",
-        REPO_ROOT / "api" / "services" / "system_service.py",
         REPO_ROOT / "api" / "services" / "market_data_service.py",
         REPO_ROOT / "api" / "repositories" / "analysis_repository.py",
         REPO_ROOT / "api" / "repositories" / "signal_trade_repository.py",
-        REPO_ROOT / "api" / "repositories" / "system_repository.py",
         REPO_ROOT / "signal_repository.py",
         REPO_ROOT / "trade_repository.py",
         REPO_ROOT / "ops_repository.py",

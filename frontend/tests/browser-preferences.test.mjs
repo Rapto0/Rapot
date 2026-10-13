@@ -141,7 +141,7 @@ function renderSettings(cleanupResult = null) {
 
 test('settings page is honest about server-managed configuration and links actual browser preferences', () => {
   const html = renderSettings({ status: 'complete', failedKeys: [] });
-  assert.ok(html.includes('Otomatik COMBO / HUNTER tarama botu ve Telegram AI komutları kaldırıldı'));
+  assert.ok(html.includes('Sunucu izleme listeleri'));
   assert.ok(html.includes('sunucu yapılandırmasından gelir'));
   assert.ok(html.includes('etkisiz geçmiş kayıtları'));
   assert.ok(html.includes('href="/scanner"'));

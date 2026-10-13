@@ -1,17 +1,13 @@
 """Compatibility wrapper for application signal/trade services."""
 
 from application.services.signal_trade_service import (
-    get_signal_by_id,
     get_trade_stats_summary,
-    list_signals,
     list_trades,
 )
 from infrastructure.compat import register_wrapper_usage
 
 __all__ = [
-    "get_signal_by_id",
     "get_trade_stats_summary",
-    "list_signals",
     "list_trades",
 ]
 

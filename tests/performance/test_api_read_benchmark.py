@@ -19,17 +19,12 @@ import httpx2
 import pytest
 from sqlalchemy import event
 
-SIGNALS = 1_750_000
 TRADES = 25_000
 ROUNDS = 20
 PATHS = (
     "/health",
-    "/signals?market_type=BIST&limit=150",
-    "/signals?market_type=Kripto&limit=150",
-    "/signals?special_tag=BELES&limit=50",
-    "/signals?special_tag=COK_UCUZ&limit=50",
-    "/signals/1750000",
     "/trades?limit=50",
+    "/trades?symbol=SYN0&status=CLOSED&limit=7",
     "/stats",
 )
 # Fixed before running this representative dashboard scenario; local acceptance,
@@ -55,16 +50,6 @@ def _seed(engine) -> None:
     # SQL generation keeps Python memory bounded; indexes match the actual schema.
     with engine.begin() as connection:
         connection.exec_driver_sql(
-            f"""WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<{SIGNALS})
-            INSERT INTO signals
-                (symbol,market_type,strategy,signal_type,timeframe,price,special_tag,created_at)
-            SELECT 'SYN'||(x%100), CASE WHEN x%2=0 THEN 'BIST' ELSE 'Kripto' END,
-                CASE WHEN x%3=0 THEN 'HUNTER' ELSE 'COMBO' END,
-                CASE WHEN x%5=0 THEN 'SAT' ELSE 'AL' END, '1D', 100.0+(x%50),
-                CASE WHEN x%7=0 THEN 'BELES' WHEN x%11=0 THEN 'COK_UCUZ' ELSE NULL END,
-                datetime('2026-01-01', '+'||x||' seconds') FROM n"""
-        )
-        connection.exec_driver_sql(
             f"""WITH RECURSIVE n(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM n WHERE x<{TRADES})
             INSERT INTO trades
                 (symbol,market_type,direction,price,quantity,pnl,status,created_at)
@@ -84,8 +69,8 @@ async def _socket(app):
                 "type": "websocket",
                 "asgi": {"version": "3.0"},
                 "scheme": "ws",
-                "path": "/realtime/ws/signals",
-                "raw_path": b"/realtime/ws/signals",
+                "path": "/realtime/ws/kline/BTCUSDT",
+                "raw_path": b"/realtime/ws/kline/BTCUSDT",
                 "query_string": b"",
                 "headers": [],
                 "subprotocols": [],
@@ -142,9 +127,11 @@ async def _workload(app, manager, client, *, sockets: bool, rounds: int) -> dict
             while manager.total_connections < 3:
                 await asyncio.sleep(0)
             while True:
-                await manager.broadcast({"type": "benchmark", "scheduled_at": scheduled}, "signals")
+                await manager.broadcast(
+                    {"type": "benchmark", "scheduled_at": scheduled}, "kline_BTCUSDT_1m"
+                )
                 if done.is_set():
-                    await manager.broadcast({"type": "benchmark_done"}, "signals")
+                    await manager.broadcast({"type": "benchmark_done"}, "kline_BTCUSDT_1m")
                     return
                 scheduled = time.perf_counter() + 0.020
                 await asyncio.sleep(0.020)
@@ -175,34 +162,16 @@ async def _workload(app, manager, client, *, sockets: bool, rounds: int) -> dict
 
 async def _validate(client) -> dict:
     checks = {}
-    for path in ("/signals?limit=0", "/signals?limit=1200", "/trades?limit=0", "/trades?limit=501"):
+    for path in ("/trades?limit=0", "/trades?limit=501"):
         assert (await client.get(path)).status_code == 422
-    checks["invalid_limits"] = 4
-    filters = {
-        "symbol": "SYN0",
-        "strategy": "HUNTER",
-        "signal_type": "AL",
-        "market_type": "BIST",
-        "special_tag": "BELES",
-    }
-    for name, value in filters.items():
-        response = await client.get("/signals", params={name: value, "limit": 7})
-        rows = response.json()
-        assert response.status_code == 200 and len(rows) == 7
-        assert all(row[name] == value for row in rows)
-    combined = (await client.get("/signals", params={**filters, "limit": 7})).json()
-    # SYN0 is always SAT in this synthetic data: all filters must actually apply.
-    assert combined == []
-    rows = (await client.get("/signals?special_tag=COK_UCUZ&limit=50")).json()
-    assert len(rows) == 50 and all(row["special_tag"] == "COK_UCUZ" for row in rows)
-    checks["signal_filters"] = len(filters) + 2
+    checks["invalid_limits"] = 2
     rows = (await client.get("/trades?symbol=SYN0&status=CLOSED&limit=7")).json()
     assert len(rows) == 7 and all(r["symbol"] == "SYN0" and r["status"] == "CLOSED" for r in rows)
-    assert (await client.get("/signals/1750001")).status_code == 404
     stats = (await client.get("/stats")).json()
-    assert stats["total_signals"] == SIGNALS and stats["total_trades"] == TRADES
+    assert stats["total_trades"] == TRADES
+    assert "total_signals" not in stats and "scan_count" not in stats
     assert stats["open_trades"] == 8333 and stats["closed_trades"] == 8334
-    checks.update(trade_filters=True, missing_signal_404=True, mixed_stats=True)
+    checks.update(trade_filters=True, mixed_stats=True)
     return checks
 
 
@@ -227,10 +196,13 @@ def _acceptance(report: dict) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_offline_api_read_benchmark(monkeypatch, tmp_path):
+async def test_offline_api_read_benchmark(monkeypatch, tmp_path, api_auth_users):
+    from unittest.mock import AsyncMock
+
     import api.main as api_main
     import api.realtime as realtime
     import db_session
+    import websocket_manager
     from infrastructure.repositories import signal_trade_repository as repository
 
     for name in ("_engine", "_SessionFactory", "_ScopedSession"):
@@ -238,6 +210,14 @@ async def test_offline_api_read_benchmark(monkeypatch, tmp_path):
     engine = db_session.get_engine(tmp_path / "benchmark.sqlite3")
     monkeypatch.setattr(api_main.limiter, "enabled", False)
     monkeypatch.setattr(api_main, "_RUNTIME_STATE", {"db_ready": True, "realtime_ready": True})
+    monkeypatch.setattr(websocket_manager.ws_manager, "subscribe_kline", AsyncMock())
+    monkeypatch.setattr(websocket_manager.ws_manager, "unsubscribe_kline", AsyncMock())
+
+    async def authenticate(socket):
+        await socket.accept()
+        return SimpleNamespace(check=lambda: None, remaining=lambda: 120.0)
+
+    monkeypatch.setattr(realtime, "authenticate_websocket", authenticate)
     manager = realtime.ConnectionManager()
     monkeypatch.setattr(realtime, "manager", manager)
     started = time.perf_counter()
@@ -248,7 +228,6 @@ async def test_offline_api_read_benchmark(monkeypatch, tmp_path):
             "scope": "isolated local ASGI, no lifespan/network/providers; not a VPS diagnosis",
             "python": platform.python_version(),
             "platform": platform.system(),
-            "signals": SIGNALS,
             "trades": TRADES,
             "rounds": ROUNDS,
             "seed_seconds": round(time.perf_counter() - started, 3),
@@ -270,15 +249,6 @@ async def test_offline_api_read_benchmark(monkeypatch, tmp_path):
             "sql_sentinel": "20ms sleep per statement; 5 rounds, artificial delay only",
         }
         calls = {
-            "signals": lambda: repository.list_signals(
-                symbol=None,
-                strategy=None,
-                signal_type=None,
-                market_type=None,
-                special_tag=None,
-                limit=50,
-            ),
-            "detail": lambda: repository.get_signal_by_id(SIGNALS),
             "trades": lambda: repository.list_trades(symbol=None, status=None, limit=50),
             "stats": repository.get_trade_stats_aggregate,
         }
@@ -299,7 +269,11 @@ async def test_offline_api_read_benchmark(monkeypatch, tmp_path):
             time.sleep(0.020)
 
         async with httpx2.AsyncClient(
-            transport=httpx2.ASGITransport(app=api_main.app), base_url="http://benchmark"
+            transport=httpx2.ASGITransport(app=api_main.app),
+            base_url="http://benchmark",
+            headers={
+                "Authorization": "Bearer " + api_auth_users.create_access_token({"sub": "admin"})
+            },
         ) as client:
             report["validation"] = await _validate(client)
             for mode in ("inline", "threaded"):

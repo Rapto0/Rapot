@@ -1,29 +1,23 @@
 'use client';
 
 import { useCallback, useEffect, useRef } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 
 import { createRealtimeConnection } from './connection';
 import { useRealtimeStore } from './store';
-import type { SignalData } from './types';
 import { resolveRealtimeWsBaseUrl } from './url';
 import { getSession, getAccessToken } from '../auth/session';
 
 interface UseRealtimeConnectionOptions {
   autoConnect?: boolean;
-  onSignal?: (signal: SignalData) => void;
 }
 
 export function useRealtimeConnection(options: UseRealtimeConnectionOptions = {}) {
-  const { autoConnect = true, onSignal } = options;
-  const queryClient = useQueryClient();
+  const { autoConnect = true } = options;
   const connectionRef = useRef<ReturnType<typeof createRealtimeConnection> | null>(null);
-  const onSignalRef = useRef(onSignal);
   const session = getSession();
   const allowed = Boolean(session?.user.is_admin && !session.user.disabled);
   const sessionKey = session ? `${session.user.username}:${session.expiresAt}` : 'guest';
 
-  useEffect(() => { onSignalRef.current = onSignal; }, [onSignal]);
 
   useEffect(() => {
     useRealtimeStore.getState().resetPrivateData();
@@ -37,15 +31,6 @@ export function useRealtimeConnection(options: UseRealtimeConnectionOptions = {}
         process.env.NEXT_PUBLIC_WS_URL,
       ),
       getStore: useRealtimeStore.getState,
-      onSignal: (signal) => onSignalRef.current?.(signal),
-      refreshSignals: () => {
-        // A continuous feed must not keep cancelling slower REST requests.
-        const options = { cancelRefetch: false };
-        void queryClient.invalidateQueries({ queryKey: ['signals'] }, options);
-        void queryClient.invalidateQueries({ queryKey: ['signal-analysis'] }, options);
-        void queryClient.invalidateQueries({ queryKey: ['analyses'] }, options);
-        void queryClient.invalidateQueries({ queryKey: ['scanner-v2', 'signals'] }, options);
-      },
     });
     connectionRef.current = connection;
     if (autoConnect) connection.connect();
@@ -54,7 +39,7 @@ export function useRealtimeConnection(options: UseRealtimeConnectionOptions = {}
       connection.dispose();
       useRealtimeStore.getState().resetPrivateData();
     };
-  }, [autoConnect, queryClient, allowed, sessionKey]);
+  }, [autoConnect, allowed, sessionKey]);
 
   const connect = useCallback(() => connectionRef.current?.connect(), []);
   const disconnect = useCallback(() => connectionRef.current?.disconnect(), []);

@@ -5,15 +5,10 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import vm from 'node:vm';
 import { create } from 'zustand';
-import { QueryClient, QueryObserver } from '@tanstack/react-query';
 import ts from 'typescript';
 
 const sourceRoot = fileURLToPath(new URL('../src/lib/realtime/', import.meta.url));
-const sample = {
-  id: 1, symbol: 'BTCUSDT', marketType: 'Kripto', strategy: 'COMBO',
-  signalType: 'AL', timeframe: '1D', score: '+4/-0', price: 100,
-  createdAt: '2026-09-10T10:00:00Z', specialTag: 'BELES',
-};
+const sample = { symbol: 'BTCUSDT', price: 100, priceChange: null, priceChangePercent: null };
 
 function harness(realQueryClient, { token, guest = false } = {}) {
   let now = 0;
@@ -111,77 +106,79 @@ function harness(realQueryClient, { token, guest = false } = {}) {
   };
 }
 
-test('signal feed connects without a ticker, and ticker failures never close it', () => {
-  const h = harness();
-  h.failures.set('wss://rapot.test/api/realtime/ws/ticker', 2);
-  h.connection.connect();
-  const signals = h.latest('/signals');
-  signals.open();
-  assert.equal(h.refreshes, 1);
-  h.advance(1000);
-  assert.equal(signals.closeCount, 0);
-  h.advance(2000);
-  h.latest('/ticker').open();
-  h.latest('/ticker').error();
-  signals.message({ type: 'signal', data: sample });
-  assert.equal(h.store.getState().realtimeSignals.length, 1);
-  assert.equal(h.store.getState().signalConnectionState, 'connected');
-  h.connection.dispose();
-  assert.equal(h.timers.size, 0);
+
+test('only the price stream connects; retired signal messages create no state or requests', () => {
+  const h = harness(); h.connection.connect();
+  assert.deepEqual(h.attempts, ['wss://rapot.test/api/realtime/ws/ticker']);
+  const socket = h.latest('/ticker'); socket.open();
+  socket.message({ type: 'signal', data: { id: 7, symbol: 'SECRET' } });
+  socket.message({ type: 'resync', reason: 'signal_feed_reset' });
+  assert.equal(h.refreshes, 0); assert.deepEqual(h.invalidations, []);
+  assert.equal(h.store.getState().tickers.size, 0);
+  assert.ok(!Object.hasOwn(h.store.getState(), 'realtimeSignals'));
+  h.connection.dispose(); assert.equal(h.timers.size, 0);
 });
 
-test('private websocket authenticates in the first frame and ignores all data before acknowledgement', () => {
-  const h = harness(undefined, { token: 'private-token' });
-  h.connection.connect();
-  const socket = h.latest('/signals');
-  socket.open(false);
+test('private ticker authenticates in first frame and ignores prices before acknowledgement', () => {
+  const h = harness(undefined, { token: 'private-token' }); h.connection.connect();
+  const socket = h.latest('/ticker'); socket.open(false);
   assert.deepEqual(socket.sent, [{ type: 'auth', token: 'private-token' }]);
   assert.doesNotMatch(socket.url, /private-token|token=/);
-  assert.equal(h.store.getState().signalConnectionState, 'connecting');
-  socket.message({ type: 'signal', data: sample });
-  assert.equal(h.store.getState().realtimeSignals.length, 0);
-  assert.equal(h.refreshes, 0);
-  socket.message({ type: 'authenticated' });
-  socket.message({ type: 'signal', data: sample });
-  assert.equal(h.store.getState().realtimeSignals.length, 1);
-  assert.equal(h.refreshes, 1);
-  h.connection.dispose();
+  assert.equal(h.store.getState().connectionState, 'connecting');
+  socket.message({ type: 'ticker', data: sample }); assert.equal(h.store.getState().tickers.size, 0);
+  socket.message({ type: 'authenticated' }); socket.message({ type: 'ticker', data: sample });
+  assert.equal(h.store.getState().tickers.get('BTCUSDT').price, 100);
+  assert.equal(h.store.getState().connectionState, 'connected'); h.connection.dispose();
 });
 
-test('auth rejection retires all private sockets and transient data without retrying', () => {
+test('auth rejection retires all price/kline sockets, clears data and never retries', () => {
   for (const code of [4401, 4403]) {
-    const h = harness(undefined, { token: 'private-token' });
-    h.connection.connect();
-    h.latest('/signals').open();
-    h.latest('/signals').message({ type: 'signal', data: sample });
-    h.connection.subscribe('kline', 'BTCUSDT');
-    h.latest('/ticker').open();
-    const count = h.sockets.length;
-    h.latest('/ticker').onclose({ code });
-    h.advance(120_000);
-    h.connection.connect();
-    h.connection.subscribe('trade', 'ETHUSDT');
-    assert.equal(h.sockets.length, count);
-    assert.equal(h.store.getState().realtimeSignals.length, 0);
-    assert.equal(h.store.getState().signalConnectionState, 'disconnected');
-    assert.ok(h.sockets.every(socket => socket.closeCount === 1));
-    assert.equal(h.timers.size, 0);
+    const h = harness(undefined, { token: 'private-token' }); h.connection.connect();
+    const socket = h.latest('/ticker'); socket.open(); socket.message({ type: 'ticker', data: sample });
+    h.connection.subscribe('kline', 'BTCUSDT'); const count = h.sockets.length;
+    socket.onclose({ code }); h.advance(120_000); h.connection.connect(); h.connection.subscribe('trade', 'ETHUSDT');
+    assert.equal(h.sockets.length, count); assert.equal(h.store.getState().tickers.size, 0);
+    assert.equal(h.store.getState().connectionState, 'disconnected');
+    assert.ok(h.sockets.every(socket => socket.closeCount === 1)); assert.equal(h.timers.size, 0);
   }
 });
 
-test('absent auth prevents socket construction and an unacknowledged session has a bounded timeout', () => {
-  const guest = harness(undefined, { token: null });
-  guest.connection.connect();
-  guest.connection.subscribe('kline', 'BTCUSDT');
+test('absent auth prevents construction and acknowledgement has a bounded timeout', () => {
+  const guest = harness(undefined, { token: null }); guest.connection.connect(); guest.connection.subscribe('kline', 'BTCUSDT');
   assert.equal(guest.sockets.length, 0);
-  const waiting = harness(undefined, { token: 'private-token' });
-  waiting.connection.connect();
-  waiting.latest('/signals').open(false);
-  waiting.advance(5000);
-  assert.ok(waiting.sockets.every(socket => socket.closeCount === 1));
-  assert.equal(waiting.timers.size, 0);
+  const h = harness(undefined, { token: 'private-token' }); h.connection.connect(); h.latest('/ticker').open(false);
+  h.advance(5000); assert.ok(h.sockets.every(socket => socket.closeCount === 1)); assert.equal(h.timers.size, 0);
 });
 
+test('ticker constructor errors and disconnects retry without polling retired REST data', () => {
+  const h = harness(); h.failures.set('wss://rapot.test/api/realtime/ws/ticker', 1);
+  h.connection.connect(); h.advance(1000); h.latest('/ticker').open(); h.latest('/ticker').close();
+  h.advance(1000); h.latest('/ticker').open(); assert.equal(h.refreshes, 0);
+  assert.equal(h.store.getState().connectionState, 'connected'); h.connection.dispose();
+});
+
+test('intentional disconnect cancels retries and callbacks from retired sockets cannot update data', () => {
+  const h = harness(); h.connection.connect(); const old = h.latest('/ticker');
+  const lateOpen = old.onopen, lateClose = old.onclose, lateMessage = old.onmessage;
+  old.error(); h.connection.disconnect(); const count = h.attempts.length;
+  lateOpen({}); lateClose({}); lateMessage({ data: JSON.stringify({ type: 'ticker', data: sample }) });
+  h.advance(120_000); assert.equal(h.attempts.length, count); assert.equal(h.store.getState().tickers.size, 0);
+  h.connection.connect(); h.latest('/ticker').open(); lateClose({});
+  assert.equal(h.store.getState().connectionState, 'connected'); h.connection.dispose(); h.connection.connect();
+  assert.equal(h.attempts.length, count + 1);
+});
+
+test('hook effect replay retires old socket ownership and clears private market data', () => {
+  const h = harness(); h.load('use-realtime-connection.ts').useRealtimeConnection();
+  const first = h.effects.map(effect => effect()); const old = h.latest('/ticker'); const late = old.onmessage;
+  first.forEach(cleanup => cleanup?.()); const second = h.effects.map(effect => effect());
+  assert.equal(h.sockets.filter(socket => socket.readyState !== 3).length, 1);
+  const current = h.latest('/ticker'); current.open();
+  late({ data: JSON.stringify({ type: 'ticker', data: sample }) }); assert.equal(h.store.getState().tickers.size, 0);
+  current.message({ type: 'ticker', data: sample }); assert.equal(h.store.getState().tickers.size, 1);
+  assert.deepEqual(h.invalidations, []); second.forEach(cleanup => cleanup?.()); h.advance(120_000);
+  assert.equal(h.store.getState().tickers.size, 0); assert.equal(h.timers.size, 0);
+});
 test('server crypto tickers retain valid prices and nullable daily changes across init and updates', () => {
   const h = harness();
   h.connection.connect();
@@ -200,82 +197,6 @@ test('server crypto tickers retain valid prices and nullable daily changes acros
   assert.equal(h.store.getState().tickers.get('BTCUSDT').price, 106);
   h.connection.dispose();
 });
-
-test('signal constructor errors and later disconnects retry independently and refresh REST on open', () => {
-  const h = harness();
-  h.failures.set('wss://rapot.test/api/realtime/ws/signals', 1);
-  h.connection.connect();
-  h.advance(1000);
-  h.latest('/signals').open();
-  assert.equal(h.refreshes, 1);
-  h.latest('/signals').message({ type: 'signal', data: sample });
-  h.latest('/signals').close();
-  h.advance(1000);
-  h.latest('/signals').open();
-  assert.equal(h.refreshes, 2);
-  assert.equal(h.store.getState().realtimeSignals.length, 0, 'Reconnect replaces old transient data from REST');
-  h.connection.dispose();
-});
-
-test('intentional disconnect cancels every retry and ignores callbacks from retired sockets', () => {
-  const h = harness();
-  h.connection.connect();
-  const old = h.latest('/signals');
-  const lateOpen = old.onopen;
-  const lateClose = old.onclose;
-  const lateMessage = old.onmessage;
-  h.latest('/ticker').error();
-  h.connection.disconnect();
-  const count = h.attempts.length;
-  lateOpen({});
-  lateClose({});
-  lateMessage({ data: JSON.stringify({ type: 'signal', data: sample }) });
-  h.advance(120_000);
-  assert.equal(h.attempts.length, count);
-  assert.equal(h.refreshes, 0);
-  assert.equal(h.store.getState().realtimeSignals.length, 0);
-  h.connection.connect();
-  h.latest('/signals').open();
-  lateClose({});
-  assert.equal(h.store.getState().signalConnectionState, 'connected');
-  h.connection.dispose();
-  h.connection.connect();
-  assert.equal(h.attempts.length, count + 2);
-});
-
-test('one minute of continuous events keeps REST refreshes bounded without starving, and resync clears stale signals', () => {
-  const h = harness();
-  h.connection.connect();
-  const signals = h.latest('/signals');
-  signals.open();
-  for (let index = 0; index < 600; index++) {
-    signals.message({ type: 'signal', data: { ...sample, specialTag: index ? 'COK_UCUZ' : 'BELES' } });
-    h.advance(100);
-  }
-  assert.equal(h.refreshes, 3, 'Two refreshes per minute plus the connection refresh');
-  assert.equal(h.store.getState().realtimeSignals.length, 1);
-  assert.equal(h.store.getState().realtimeSignals[0].specialTag, 'COK_UCUZ');
-  signals.message({ type: 'resync', reason: 'signal_feed_reset' });
-  assert.equal(h.store.getState().realtimeSignals.length, 0);
-  assert.equal(h.refreshes, 4);
-  signals.message({ type: 'signal', data: { id: 3 } });
-  signals.message('broken JSON');
-  assert.equal(h.store.getState().realtimeSignals.length, 0);
-  h.connection.dispose();
-});
-
-test('realtime store remains bounded and latest REST enrichment wins an ID collision', () => {
-  const h = harness();
-  for (let id = 1; id <= 70; id++) h.store.getState().addSignal({ ...sample, id });
-  assert.equal(h.store.getState().realtimeSignals.length, 50);
-  const { mergeSignals } = h.load('signals.ts');
-  const rest = { ...sample, specialTag: 'COK_UCUZ', score: '+5/-0' };
-  const merged = mergeSignals([rest], [sample, { ...sample, id: 2 }]);
-  assert.equal(merged.length, 2);
-  assert.equal(merged.find((signal) => signal.id === 1).specialTag, 'COK_UCUZ');
-  assert.equal(merged.find((signal) => signal.id === 1).score, '+5/-0');
-});
-
 test('kline and trade subscriptions use dedicated endpoints, share duplicates, and release retries', () => {
   const h = harness();
   const stopFirst = h.connection.subscribe('kline', 'btcusdt', '4h');
@@ -303,54 +224,4 @@ test('kline and trade subscriptions use dedicated endpoints, share duplicates, a
   assert.ok(!h.sockets.some((socket) => socket.url.endsWith('/ticker')));
   h.connection.dispose();
   assert.equal(h.timers.size, 0);
-});
-
-test('hook effect replay disposes old ownership and invalidates all signal query variants', () => {
-  const h = harness();
-  const { useRealtimeConnection } = h.load('use-realtime-connection.ts');
-  useRealtimeConnection();
-  const firstCleanups = h.effects.map((effect) => effect());
-  const oldSignal = h.latest('/signals');
-  const oldMessage = oldSignal.onmessage;
-  firstCleanups.forEach((cleanup) => cleanup?.());
-  const secondCleanups = h.effects.map((effect) => effect());
-  assert.equal(h.sockets.filter((socket) => socket.readyState !== 3).length, 2);
-  const newSignal = h.latest('/signals');
-  newSignal.open();
-  assert.deepEqual(h.invalidations, [
-    ['signals'], ['signal-analysis'], ['analyses'], ['scanner-v2', 'signals'],
-  ]);
-  oldMessage({ data: JSON.stringify({ type: 'signal', data: sample }) });
-  assert.equal(h.store.getState().realtimeSignals.length, 0);
-  newSignal.message({ type: 'signal', data: sample });
-  h.advance(30_000);
-  assert.equal(h.invalidations.length, 8);
-  newSignal.message({ type: 'signal', data: { ...sample, id: 2 } });
-  secondCleanups.forEach((cleanup) => cleanup?.());
-  h.advance(120_000);
-  assert.equal(h.invalidations.length, 8);
-  assert.equal(h.timers.size, 0);
-});
-
-test('opening signal socket preserves an active initial REST request instead of starting another', async () => {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
-  let requests = 0;
-  let resolveRequest;
-  const observer = new QueryObserver(queryClient, {
-    queryKey: ['signals', 'special-notifications', 100],
-    queryFn: () => { requests++; return new Promise((resolve) => { resolveRequest = resolve; }); },
-  });
-  const unsubscribe = observer.subscribe(() => {});
-  const h = harness(queryClient);
-  h.load('use-realtime-connection.ts').useRealtimeConnection();
-  const cleanups = h.effects.map((effect) => effect());
-  h.latest('/signals').open();
-  assert.equal(requests, 1);
-  resolveRequest([sample]);
-  await new Promise((resolve) => setImmediate(resolve));
-  assert.equal(queryClient.getQueryData(['signals', 'special-notifications', 100])[0].id, 1);
-  assert.equal(requests, 1);
-  cleanups.forEach((cleanup) => cleanup?.());
-  unsubscribe();
-  queryClient.clear();
 });

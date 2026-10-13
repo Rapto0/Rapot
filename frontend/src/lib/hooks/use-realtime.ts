@@ -7,44 +7,37 @@ import { useRealtimeStore } from '@/lib/realtime/store';
 import type {
   BISTStock,
   KlineData,
-  SignalData,
   TickerData,
   TradeData,
 } from '@/lib/realtime/types';
 
-export type { BISTStock, KlineData, SignalData, TickerData, TradeData };
+export type { BISTStock, KlineData, TickerData, TradeData };
 export { useRealtimeStore };
 
 interface UseRealtimeOptions {
   autoConnect?: boolean;
-  onSignal?: (signal: SignalData) => void;
 }
 
 export function useRealtime(options: UseRealtimeOptions = {}) {
-  const { autoConnect = true, onSignal } = options;
+  const { autoConnect = true } = options;
 
   const connectionState = useRealtimeStore((state) => state.connectionState);
-  const signalConnectionState = useRealtimeStore((state) => state.signalConnectionState);
   const tickers = useRealtimeStore((state) => state.tickers);
   const bistStocks = useRealtimeStore((state) => state.bistStocks);
   const priceChanges = useRealtimeStore((state) => state.priceChanges);
-  const realtimeSignals = useRealtimeStore((state) => state.realtimeSignals);
 
   const { connect, disconnect, subscribe } = useRealtimeConnection({
     autoConnect,
-    onSignal,
   });
 
   return {
     connectionState,
-    signalConnectionState,
     connect,
     disconnect,
     subscribe,
     tickers,
     bistStocks,
     priceChanges,
-    realtimeSignals,
   };
 }
 

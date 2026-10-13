@@ -62,43 +62,6 @@ def _build_session_factory(mapping: dict[Any, list[Any]]):
 
 
 @pytest.mark.asyncio
-async def test_signals_endpoint_contract_smoke(monkeypatch):
-    from models import Signal
-
-    signal_row = SimpleNamespace(
-        id=101,
-        symbol="THYAO",
-        market_type="BIST",
-        strategy="HUNTER",
-        signal_type="AL",
-        timeframe="1D",
-        score="8/10",
-        price=302.15,
-        created_at=datetime(2026, 3, 29, 10, 0, 0),
-        special_tag="COK_UCUZ",
-        details={"TopScore": "8/10"},
-    )
-
-    monkeypatch.setattr("db_session.get_session", _build_session_factory({Signal: [signal_row]}))
-
-    response = await api_main.get_signals(
-        _request_stub("/signals"),
-        symbol=None,
-        strategy=None,
-        signal_type=None,
-        market_type=None,
-        special_tag=None,
-        limit=10,
-    )
-
-    assert len(response) == 1
-    assert response[0].id == 101
-    assert response[0].symbol == "THYAO"
-    assert response[0].market_type == "BIST"
-    assert response[0].special_tag == "COK_UCUZ"
-
-
-@pytest.mark.asyncio
 async def test_trades_endpoint_contract_smoke(monkeypatch):
     from models import Trade
 

@@ -160,7 +160,7 @@ def test_personal_reads_deny_anonymous_and_regular_users_before_data_work(path, 
     assert regular.headers["cache-control"] == "private, no-store"
 
 
-@pytest.mark.parametrize("path", ["/signals", "/trades", "/stats", "/analyses"])
+@pytest.mark.parametrize("path", ["/trades", "/stats", "/analyses"])
 def test_admin_personal_reads_are_available_and_never_cacheable(path, authenticated_api_client):
     response = authenticated_api_client.get(path)
     assert response.status_code == 200

@@ -44,7 +44,7 @@ function mockService(name) {
 try {
   const api = mockService('api');
   api.on('upgrade', (req, socket) => {
-    assert.equal(req.url, '/realtime/ws/signals');
+    assert.equal(req.url, '/realtime/ws/ticker');
     const accept = createHash('sha1').update(req.headers['sec-websocket-key'] + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
     socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
   });
@@ -84,6 +84,15 @@ try {
   assert.deepEqual(await proxied.json(), { service: 'api', path: '/auth/me?smoke=1', authorization: 'Bearer local-smoke' });
   const health = await localFetch(origin + '/api/health');
   assert.deepEqual(await health.json(), { service: 'api', path: '/health' });
+  const retired = await localFetch(origin + '/signals', { redirect: 'manual' });
+  assert.equal(retired.status, 307);
+  assert.equal(retired.headers.get('location'), '/alarms');
+  await retired.body?.cancel();
+  for (const route of ['/scanner', '/health', '/ai', '/alarms']) {
+    const view = await localFetch(origin + route);
+    assert.equal(view.status, 200);
+    assert.doesNotMatch(await view.text(), /Tarama arşivi|Sinyal Geçmişi|Canlı sinyal akışı/);
+  }
   const research = await localFetch(origin + '/research');
   assert.equal(research.status, 200);
   assert.ok((await research.text()).includes('Araştırma'));
@@ -111,7 +120,7 @@ try {
     const socket = net.connect(frontendPort, '127.0.0.1');
     socket.setTimeout(5000, () => socket.destroy(new Error('WebSocket proxy timeout')));
     socket.once('error', reject);
-    socket.once('connect', () => socket.write('GET /api/realtime/ws/signals HTTP/1.1\r\nHost: localhost\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n'));
+    socket.once('connect', () => socket.write('GET /api/realtime/ws/ticker HTTP/1.1\r\nHost: localhost\r\nConnection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n'));
     socket.once('data', data => {
       try { assert.match(data.toString(), /^HTTP\/1\.1 101/); resolve(); } catch (error) { reject(error); }
       socket.destroy();

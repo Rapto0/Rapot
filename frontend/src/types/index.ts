@@ -1,25 +1,4 @@
 // ===== SIGNAL TYPES =====
-export interface Signal {
-    id: string;
-    symbol: string;
-    type: 'HUNTER' | 'COMBO';
-    direction: 'LONG' | 'SHORT';
-    entry: number;
-    target: number;
-    stopLoss: number;
-    confidence: number;
-    timestamp: Date;
-    status: 'ACTIVE' | 'HIT_TARGET' | 'HIT_STOP' | 'EXPIRED';
-    marketType: 'BIST' | 'Kripto';
-    timeframe: string;
-    score: string;
-    metadata?: {
-        timeframe: string;
-        indicators: string[];
-        notes?: string;
-    };
-}
-
 // ===== TRADE TYPES =====
 export interface Trade {
     id: string;
@@ -90,16 +69,6 @@ export interface SystemResources {
     disk: number;
 }
 
-export interface BotHealth {
-    cpuUsage: number;
-    memoryUsage: number;
-    uptime: string;
-    lastScan: string;
-    totalScans: number;
-    activeSymbols: number;
-    apiStatus: 'healthy' | 'degraded' | 'down';
-}
-
 // ===== KPI TYPES =====
 export interface KPI {
     totalPnL: number;
@@ -107,7 +76,6 @@ export interface KPI {
     winRate: number;
     totalTrades: number;
     openPositions: number;
-    activeSignals: number;
     avgRiskReward: number;
     maxDrawdown: number;
     sharpeRatio: number;
@@ -120,9 +88,6 @@ export interface DashboardStats {
     openPositions: number | null;
     closedPositions: number | null;
     totalTrades: number | null;
-    lastScanTime: string | null;
-    totalSignals: number | null;
-    todaySignals: number | null;
 }
 
 // ===== LOG TYPES =====
@@ -131,16 +96,6 @@ export interface LogEntry {
     timestamp: string;
     level: 'DEBUG' | 'INFO' | 'WARNING' | 'ERROR';
     message: string;
-}
-
-// ===== SCAN TYPES =====
-export interface ScanResult {
-    id: number;
-    scanType: 'BIST' | 'Kripto';
-    symbolsScanned: number;
-    signalsFound: number;
-    duration: number;
-    createdAt: string;
 }
 
 // ===== API RESPONSE TYPES =====
@@ -161,8 +116,6 @@ export interface PaginatedResponse<T> {
 
 // ===== WEBSOCKET MESSAGE TYPES =====
 export type WebSocketMessageType =
-    | 'SIGNAL_UPDATE'
-    | 'NEW_SIGNAL'
     | 'TRADE_UPDATE'
     | 'PRICE_UPDATE'
     | 'HEALTH_UPDATE';
@@ -180,14 +133,6 @@ export interface PriceUpdatePayload {
 }
 
 // ===== FILTER TYPES =====
-export interface SignalFilters {
-    marketType?: 'BIST' | 'Kripto' | 'all';
-    strategy?: 'COMBO' | 'HUNTER' | 'all';
-    direction?: 'LONG' | 'SHORT' | 'all';
-    status?: Signal['status'] | 'all';
-    searchQuery?: string;
-}
-
 export interface TradeFilters {
     marketType?: 'BIST' | 'Kripto' | 'all';
     status?: 'OPEN' | 'CLOSED' | 'all';

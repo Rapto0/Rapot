@@ -11,21 +11,15 @@ from .signal_trade_repository import (
     list_signals,
     list_trades,
 )
-from .system_repository import (
-    get_ops_overview_read_model,
-    list_scan_history,
-    list_scanner_activity_projection,
-)
+from .system_repository import list_scan_history
 
 __all__ = [
     "get_ai_analysis_by_id",
     "get_ai_analysis_by_signal_id",
-    "get_ops_overview_read_model",
     "get_signal_by_id",
     "get_trade_stats_aggregate",
     "list_ai_analyses",
     "list_scan_history",
-    "list_scanner_activity_projection",
     "list_signals",
     "list_trades",
 ]

@@ -1,9 +1,20 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-Kaynaklarla son karşılaştırma: **12 Ekim 2026 / Telegram botunun emekliliği**. İş sırası, kullanıcı
+Kaynaklarla son karşılaştırma: **12 Ekim 2026 / gösterge ve izleme listesi alarmları**. İş sırası, kullanıcı
 yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DEVAM_PLANI.md)
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 Teknik rehberler [docs dizininde](docs/README.md) listelenir.
+
+**Sonraki kullanıcı talimatı:** Eski COMBO/HUNTER sinyal/tarama geçmişini sil ve
+siteyi gösterge/izleme listesi alarmları etrafında düzenle. `/signals` alarm
+merkezine yönlenir; arşiv REST yolları kimlikli 410, signal WS 4410'dur. Eski
+SQLite sinyal feed/polling ve tarama/read-model sayaçları kaldırılır; `/stats`
+işlem metriklerini korur. Grafik COMBO/HUNTER hesaplayıcıları, diğer göstergeler,
+manuel `/ai`, Borsapy taraması, kullanıcı listeleri ve alarmlar korunur. Ayrı
+`scripts/retire_legacy_history.py` taze bağımsız yedek ve yazıcıların durdurulması
+kanıtıyla tek transaction temizlik yapar; startup/migration otomatik silmez.
+[Güncel kaynak ve üretim kabulü](docs/INDICATOR_ALARM_TRANSITION_2026-10-12.md).
+Alttaki önceki bot yayınının geçmişi koruma ifadeleri o tarihsel adımı anlatır.
 
 **Güncel kullanıcı kararı:** Otomatik COMBO/HUNTER Telegram taraması, Telegram
 komutları ve bu taramaların otomatik AI/haber zinciri kaldırıldı. Site Borsapy
@@ -129,7 +140,7 @@ gözlemleri, bulunan kilit/grafik/önbellek sorunlarını ve yayın durumunu ay�
 | Ana API | `api/main.py`, `api/routes/`, `api/auth.py`; port 8000 |
 | Servis/repository | `application/services/` → `infrastructure/repositories/`; tarihsel sinyal kalıcılığı `infrastructure/persistence/` |
 | Ana veri | `models.py`, `db_session.py`, `database.py`; SQLite ve ayrı fiyat önbelleği |
-| Realtime | `api/runtime/signal_feed.py` ortak SQLite kayıtlarını okur; `api/realtime.py` WS/SSE sunar |
+| Realtime | `api/runtime/realtime_bootstrap.py` provider yaşam döngüsü; `api/realtime.py` kimlikli piyasa WS/SSE; eski SQLite signal feed kaldırıldı |
 | Sağlık | Ana API `/health`; özel alarm durumu `/advanced-alarms/status` |
 | Middleware | `middleware/api/main.py` → `middleware/services/trading_service.py`; port 8001; ayrı PostgreSQL/Alembic |
 | Frontend | `frontend/src/app/`, `frontend/src/components/`, `frontend/src/lib/api/client.ts`, `frontend/src/lib/hooks/`; port 3000 |

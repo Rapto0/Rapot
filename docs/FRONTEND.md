@@ -107,16 +107,17 @@ platform paketi için ürettiği `npm ls` uyarısı
 
 | Sayfa | Açıklama |
 |-------|----------|
-| **Dashboard** | Piyasa özetleri, BIST/Kripto sembol araması ve ekranlara hızlı erişim |
-| **Piyasa Tarayıcı** | `/scanner` - BIST/Kripto COMBO-HUNTER geçmişi, Borsapy temel/teknik tarama |
-| **Sinyal Geçmişi** | `/signals` - Korunan HUNTER/COMBO kayıtlarında filtre/arama ve görünür satırların CSV çıktısı |
+| **Dashboard** | Sunucu listeleri/alarm durumu, piyasa özetleri ve BIST/Kripto sembol araması |
+| **Piyasa Tarayıcı** | `/scanner` - Borsapy temel/teknik tarama |
+| **Eski Sinyal adresi** | `/signals` - `/alarms` merkezine yönlenir |
 | **Grafik** | `/chart` - BIST Borsapy/TradingView, Kripto Binance, izleme listeleri ve sunucu alarmı taslağı |
 | **Araştırma** | `/research` - Borsapy katalog, sanal portföy, replay ve sunucu hesap bağlantıları |
 | **Ekonomik Takvim** | `/calendar` - Borsapy/Doviz.com olayları, ülke/önem/tarih filtreleri ve kaynak uyarıları |
 | **Sunucu Alarmları** | `/alarms` - Yöneticiye ait kalıcı kural oluşturma/düzenleme, duraklatma ve teslim geçmişi |
 | **Eski Yerel Alarmlar** | `/alarms/local` - Bu sayfa açıkken eski tarayıcı kurallarının kontrolü |
 | **İşlem Geçmişi** | `/trades` - Ana DB işlemleri; hesaplanabilir PnL, eksik veride bilinmeyen değer |
-| **Sistem Sağlığı** | `/health` - API/DB/realtime sağlığı, ayrı alarm motoru durumu, admin logları ve tarama arşivi |
+| **Sistem Sağlığı** | `/health` - API/DB/realtime sağlığı, alarm motoru durumu ve admin logları |
+| **AI Analizi** | `/ai` - İstek üzerine sembol analizi ve teknik gösterge incelemesi |
 | **Ayarlar** | `/settings` - Sunucuda yönetilen ayarların açıklaması ve tarayıcı tercihlerinin kapsamı |
 
 ## Ekran davranışları ve sınırlar
@@ -135,11 +136,11 @@ platform paketi için ürettiği `npm ls` uyarısı
   ekseni mevcut nesne üzerinde güncellenir; mumlar ve yakınlaştırma kaybolmaz.
   Bu düzeltme gerçek zamanlı veri kabulü değildir.
 
-- **CSV:** `/signals` üzerindeki Dışa aktar, filtre/arama sonrası görünen satırları
-  aynı sırayla indirir; veri kümesi en fazla yüklenen 300 sinyaldir. Tüm arşivi
-  çekmez. UTF-8 BOM, Türkçe başlıklar, noktalı virgül ayırıcı, CSV kaçışları ve
-  formül başlangıcı taşıyan metin hücreleri için koruma kullanılır. Boş, yüklenen,
-  yenilenen veya hatalı veri dışa aktarılmaz.
+- **Eski geçmişin emekliliği:** Sinyal CSV/arşiv ekranı, başlık sinyal bildirimleri,
+  eski tarama sekmesi ve grafikte bu kayıtları okuyan Haberler paneli kaldırılmıştır.
+  COMBO/HUNTER grafik hesaplayıcıları ve alarm koşulları korunur. Eski scanner
+  yerel listeleri alarm merkezindeki elle içe aktar seçicisinden okunabilir;
+  kaynak depolama kaydı silinmez, otomatik sunucu listesi/alarm oluşturulmaz.
 - **Grafik URL:** `/chart?symbol=BTCUSDT&market=Kripto` ve
   `/chart?symbol=THYAO&market=BIST` doğrudan açılabilir. Tekrarlı parametrede ilk
   değer kullanılır; piyasa `Kripto` değilse BIST, geçersiz/boş sembolde seçilen
@@ -278,7 +279,12 @@ kontrolü, iki grafik rotası ve 11 JS + 1 CSS geçti. Canlı tarayıcıda BIST/
 fiyatlarının görünmesi, durumlar, alım süreleri ve BIST **Yenile** düğmesi doğrulandı. Gerçek mum,
 alarm/emir veya tam erişilebilirlik kabulü değildir. Yayın kanıtları devam planındadır.
 
-## Sinyaller ve Tarayıcı — UI-3
+## Sinyaller ve Tarayıcı — tarihsel UI-3 kabulü
+
+Bu bölüm 2 Ekim'deki eski arşiv ekranlarının tarihsel kabulüdür. 12 Ekim kullanıcı
+talimatıyla arşiv ekranları ve ilgili API/WS tüketicileri emekli edilmiştir.
+Güncel ekran sözleşmesi yukarıdaki tabloda, yayın ve silme durumu
+[geçiş kaydındadır](INDICATOR_ALARM_TRANSITION_2026-10-12.md).
 
 2 Ekim 2026: iki ekranda etiketli, en az 44 px filtre kontrolleri; etkin
 seçimlerin tekli/tümü temizliği ve yükleme/hata/boş sonuç ayrımı eklendi.

@@ -96,15 +96,15 @@ def test_login_requires_json_object_before_authenticating(
     authenticate.assert_called_once_with("admin", "test-password")
 
 
-def test_invalid_signal_limit_reports_documented_context_before_repository_work(
+def test_invalid_trade_limit_reports_documented_context_before_repository_work(
     api_boundary, monkeypatch, api_auth_users
 ):
     from application.services import signal_trade_service
 
-    list_signals = Mock(side_effect=AssertionError("invalid pagination must not query records"))
-    monkeypatch.setattr(signal_trade_service, "list_signals", list_signals)
+    list_trades = Mock(side_effect=AssertionError("invalid pagination must not query records"))
+    monkeypatch.setattr(signal_trade_service, "list_trades", list_trades)
     token = api_auth_users.create_access_token({"sub": "admin"})
-    response = api_boundary.get("/signals?limit=0", headers={"Authorization": f"Bearer {token}"})
+    response = api_boundary.get("/trades?limit=0", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 422
     error = response.json()["detail"][0]
     assert error["loc"] == ["query", "limit"]
@@ -114,7 +114,7 @@ def test_invalid_signal_limit_reports_documented_context_before_repository_work(
     definition = api_main.app.openapi()["components"]["schemas"]["ValidationError"]
     assert set(error) <= set(definition["properties"])
     assert set(definition["required"]) == {"loc", "msg", "type"}
-    list_signals.assert_not_called()
+    list_trades.assert_not_called()
 
 
 @pytest.fixture

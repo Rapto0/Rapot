@@ -9,6 +9,15 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Kaldığımız nokta
 
+- **12 Ekim — gösterge/liste alarmı düzeni ve eski geçmiş temizliği:** Kullanıcı
+  COMBO/HUNTER motorunun sinyal/tarama geçmişinin silinmesini ve tüm sayfalardaki
+  arşiv tüketicilerinin kaldırılmasını istedi. Grafik hesaplayıcıları ve kullanıcı
+  listesi/alarmları korunur. Yeni kaynak dashboard'u liste/alarm odaklı yapar;
+  `/scanner` yalnız Borsapy, `/signals` alarm merkezine yönlendirmedir. Ayrı,
+  transaction kullanan temizlik aracı hazırlanır. Üretim silme/yayın sonucu
+  [güncel kabul kaydında](INDICATOR_ALARM_TRANSITION_2026-10-12.md) ayrıca izlenir;
+  önceki adımın bütün geçmişi koruma ifadesi bu yeni yetkiyi kısıtlamaz.
+
 - **12 Ekim — eski Telegram botunun emekliliği:** Kullanıcı otomatik COMBO/HUNTER
   Telegram taramasını ve Telegram AI zincirini kaldırdı; site indikatörleri,
   Borsapy tarayıcı, site AI ve isteğe bağlı sunucu alarmı Telegram teslimi korunur.

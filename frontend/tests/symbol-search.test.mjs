@@ -179,6 +179,7 @@ test('landing page uses the search component and clear heading hierarchy without
     },
     '@/components/dashboard/market-category': category,
     '@/lib/hooks/use-private-market': { usePrivateMarket: () => ({ allowed: true, sessionKey: 'admin:123' }) },
+    '@/components/dashboard/alarm-workspace': { AlarmWorkspace: () => null },
     '@/components/market-data-status': { MarketDataStatus: () => null },
     '@/lib/market-feed': model,
     '@/lib/hooks/use-binance-ticker': {
@@ -193,6 +194,6 @@ test('landing page uses the search component and clear heading hierarchy without
   assert.match(html, /data-symbol-search="true"/);
   assert.match(html, /<h2[^>]*>BIST<\/h2>/);
   assert.match(html, /<h3[^>]*>Apple \(AAPL\)<\/h3>/);
-  assert.match(html, /<h3[^>]*>İşlemler<\/h3>/);
+  assert.match(html, /<h3[^>]*>İzleme Listeleri<\/h3>/);
   assert.doesNotMatch(html, /AAPLE|Saniyelik/);
 });

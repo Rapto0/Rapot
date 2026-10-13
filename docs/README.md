@@ -12,6 +12,11 @@ isteğe bağlı Telegram teslimi korunur. `a099dbb` API/frontend yayını 12:05:
 yapıldı ve eski bot kaldırıldı; bağımsız kabulün güncel sonucu
 [sunucu geçiş kaydında](SERVER_ONLY_MIGRATION_2026-10-12.md) tutulur.
 
+Sonraki kullanıcı talimatı eski sinyal/tarama arşivinin temizlenmesini ve sitenin
+izleme listeleri/göstergeler/alarmlar etrafında düzenlenmesini ister.
+[Güncel geçiş ve veri temizliği kaydı](INDICATOR_ALARM_TRANSITION_2026-10-12.md)
+kaynak hazırlığını üretim kabulünden ayırır.
+
 ## Mimari ve geliştirme
 
 - [Mimari ve veri akışları](ARCHITECTURE.md) — güncel giriş noktaları, veri yolları ve korunan geçmiş kayıtlar.
@@ -47,6 +52,7 @@ middleware/emir kabulünü tamamlamaz.
 
 - [Doğrulanmış commit ile Docker Compose dağıtımı](DEPLOY.md)
 - [12 Ekim eski otomatik botun kaldırılması ve sunucu geçişi](SERVER_ONLY_MIGRATION_2026-10-12.md)
+- [12 Ekim eski tarama geçmişinin temizliği ve gösterge/liste alarmları](INDICATOR_ALARM_TRANSITION_2026-10-12.md)
 - [Frontend bağımlılık güvenliği ve üretim kabulü](FRONTEND_DEPENDENCY_SECURITY.md)
 - [21 Eylül Pine derleme/grafik kabulü](PINE_RUNTIME_ACCEPTANCE.md)
 - [7 Ekim canlı BIST, Telegram ve veri kalitesi kabulü](LIVE_MARKET_ACCEPTANCE_2026-10-07.md)

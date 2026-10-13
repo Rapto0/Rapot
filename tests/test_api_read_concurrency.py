@@ -42,18 +42,6 @@ def _request(path: str) -> Request:
 
 
 async def _read_endpoint(endpoint: str) -> Any:
-    if endpoint == "signals":
-        return await api_main.get_signals(
-            _request("/signals"),
-            symbol="btcusdt",
-            strategy="combo",
-            signal_type="al",
-            market_type="Kripto",
-            special_tag="BELES",
-            limit=1,
-        )
-    if endpoint == "signal":
-        return await api_main.get_signal(1)
     if endpoint == "trades":
         return await api_main.get_trades(
             _request("/trades"), symbol="btcusdt", status="closed", limit=1
@@ -107,7 +95,7 @@ def persisted_records() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("endpoint", ["signals", "signal", "trades", "stats"])
+@pytest.mark.parametrize("endpoint", ["trades", "stats"])
 @pytest.mark.parametrize("outcome", ["success", "error", "cancel"])
 async def test_slow_rest_read_keeps_health_and_websocket_live_and_releases_session(
     persisted_records, monkeypatch, endpoint: str, outcome: str
@@ -157,9 +145,9 @@ async def test_slow_rest_read_keeps_health_and_websocket_live_and_releases_sessi
         assert not read_task.done()
         assert engine.pool.checkedout() == 1
 
-        await asyncio.wait_for(manager.connect(socket, "signals"), timeout=2)
+        await asyncio.wait_for(manager.connect(socket, "ticker"), timeout=2)
         await asyncio.wait_for(
-            manager.broadcast({"type": "heartbeat", "source": "offline-test"}, "signals"),
+            manager.broadcast({"type": "heartbeat", "source": "offline-test"}, "ticker"),
             timeout=2,
         )
         health_response = Response()
@@ -187,13 +175,10 @@ async def test_slow_rest_read_keeps_health_and_websocket_live_and_releases_sessi
                     await asyncio.wait_for(read_task, timeout=2)
             else:
                 result = await asyncio.wait_for(read_task, timeout=2)
-                if endpoint in {"signals", "trades"}:
+                if endpoint == "trades":
                     assert len(result) == 1
                     assert result[0].symbol == "BTCUSDT"
-                elif endpoint == "signal":
-                    assert result.id == 1 and result.special_tag == "BELES"
                 else:
-                    assert result.total_signals == 1
                     assert result.closed_trades == 1
                     assert result.total_pnl == 7
 
@@ -209,7 +194,7 @@ async def test_slow_rest_read_keeps_health_and_websocket_live_and_releases_sessi
                 await asyncio.wait_for(finished.wait(), timeout=6)
         finally:
             event.remove(engine, "before_cursor_execute", slow_first_query)
-            manager.disconnect(socket, "signals")
+            manager.disconnect(socket, "ticker")
 
     assert manager.total_connections == 0
     assert manager._send_locks == {}

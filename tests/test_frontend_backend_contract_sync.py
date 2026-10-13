@@ -7,8 +7,6 @@ def test_frontend_http_contracts_exist_in_openapi():
     expected_contracts = {
         ("post", "/auth/token"),
         ("get", "/auth/me"),
-        ("get", "/signals"),
-        ("get", "/signals/{signal_id}"),
         ("get", "/trades"),
         ("get", "/stats"),
         ("get", "/symbols/bist"),
@@ -19,16 +17,11 @@ def test_frontend_http_contracts_exist_in_openapi():
         ("get", "/market/indices"),
         ("get", "/market/metrics"),
         ("get", "/calendar"),
-        ("get", "/scans"),
         ("get", "/logs"),
-        ("get", "/ops/special-tag-health"),
         ("get", "/ops/strategy-inspector"),
-        ("get", "/ops/read-model/overview"),
-        ("get", "/ops/read-model/scanner-feed"),
         ("post", "/analyze/{symbol}"),
         ("get", "/analyses"),
         ("get", "/analyses/{analysis_id}"),
-        ("get", "/signals/{signal_id}/analysis"),
         ("get", "/market/analysis"),
     }
 

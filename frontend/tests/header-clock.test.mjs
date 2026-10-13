@@ -19,7 +19,6 @@ function loadHeader(hooks, globals) {
     react: hooks, 'react/jsx-runtime': jsxRuntime, 'lucide-react': icons,
     'next/link': { default: ({ children, ...props }) => React.createElement('a', props, children) },
     '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') },
-    '@/lib/hooks/use-signals': { useSpecialNotificationSignals: () => ({ data: undefined }) },
     '@/lib/hooks/use-health': { useApiHealth: () => ({ apiState: 'loading' }) },
     '@/components/auth/session-controls': { SessionControls: () => null },
   };

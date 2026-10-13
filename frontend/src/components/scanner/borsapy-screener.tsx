@@ -16,7 +16,7 @@ export function BorsapyScreener() {
     const operations = catalog.data?.operations.filter(operation => operation.id.startsWith("screener.")) ?? []
     const operation = operations.find(item => item.id === selected)
     return <section className="space-y-3">
-        <div className="flex flex-wrap items-center gap-3"><label className="space-y-1 text-sm"><span>Tarama türü</span><Select className="min-h-11" value={selected} onChange={event => setSelected(event.target.value)}>{operations.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</Select></label><p className="text-xs text-muted-foreground">Piyasa koşullarını belirleyip taramayı başlatın. Sonuçlar geçmiş COMBO/HUNTER sinyallerinden ayrıdır.</p></div>
+        <div className="flex flex-wrap items-center gap-3"><label className="space-y-1 text-sm"><span>Tarama türü</span><Select className="min-h-11" value={selected} onChange={event => setSelected(event.target.value)}>{operations.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</Select></label><p className="text-xs text-muted-foreground">Piyasa koşullarını belirleyip taramayı başlatın. Sonuçlar seçtiğiniz kaynağın veri kapsamıyla sınırlıdır.</p></div>
         {catalog.isPending && <p role="status" className="text-sm text-muted-foreground">Tarama seçenekleri yükleniyor…</p>}
         {catalog.isError && <p role="alert" className="text-sm text-loss">Tarama seçenekleri alınamadı.</p>}
         {operation && <OperationPanel key={`${sessionKey}:${operation.id}`} operation={operation} onSaved={() => {}} onConnection={() => router.push("/research?tab=connection")} />}

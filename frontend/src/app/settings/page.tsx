@@ -23,7 +23,7 @@ export default function SettingsPage() {
         <h2 className="text-sm font-semibold text-foreground">Veri bağlantıları ve site AI</h2>
         <p className="mt-2 text-xs leading-5 text-muted-foreground">
           Piyasa veri bağlantıları Araştırma Merkezi üzerinden yönetilir. Site AI analizi /ai ekranından kullanılabilir.
-          Otomatik COMBO / HUNTER tarama botu ve Telegram AI komutları kaldırıldı; grafik göstergeleri ve kendi sunucu alarmlarınız korunur.
+          Grafiklerde göstergeleri inceleyin; kendi sunucu ve izleme listesi alarmlarınızı koşullarınıza göre yönetin.
         </p>
         <p className="mt-2 text-xs leading-5 text-muted-foreground">
           Önceki sürümde bu sayfaya girilen strateji değerleri ve bildirim seçimi yalnız tarayıcıya kaydediliyordu;

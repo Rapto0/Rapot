@@ -60,19 +60,14 @@ def list_trades(*, symbol: str | None, status: str | None, limit: int) -> list[A
 def get_trade_stats_aggregate() -> dict[str, int | float]:
     from db_session import get_session
 
-    # NULL/non-NULL partition the same snapshot exactly and let SQLite count the
-    # narrower covering tag index instead of scanning the larger timestamp index.
+    # Trade statistics share one snapshot; retired signal/scan history is not read.
     with get_session() as session:
         row = (
             session.execute(
                 text(
                     """
                     SELECT
-                        (SELECT COUNT(*) FROM signals WHERE special_tag IS NULL)
-                        + (SELECT COUNT(*) FROM signals WHERE special_tag IS NOT NULL)
-                            AS total_signals,
                         (SELECT COUNT(*) FROM trades) AS total_trades,
-                        (SELECT COUNT(*) FROM scan_history) AS scan_count,
                         (SELECT COUNT(*) FROM trades WHERE status = 'OPEN') AS open_trades,
                         (SELECT COALESCE(SUM(pnl), 0) FROM trades WHERE status = 'CLOSED') AS total_pnl,
                         (SELECT COUNT(*) FROM trades WHERE status = 'CLOSED') AS closed_trades,
@@ -86,9 +81,7 @@ def get_trade_stats_aggregate() -> dict[str, int | float]:
         )
 
     return {
-        "total_signals": int(row.get("total_signals") or 0),
         "total_trades": int(row.get("total_trades") or 0),
-        "scan_count": int(row.get("scan_count") or 0),
         "open_trades": int(row.get("open_trades") or 0),
         "total_pnl": float(row.get("total_pnl") or 0.0),
         "closed_trades": int(row.get("closed_trades") or 0),

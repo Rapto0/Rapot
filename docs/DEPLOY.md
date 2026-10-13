@@ -40,8 +40,10 @@ API and main-init share the **directory** `RAPOT_DATA_DIR` (default `./runtime-d
 including `trading_bot.db`, caches, encrypted provider credentials and SQLite WAL/SHM
 files. Code comes from images, without a source bind mount. The API's two alarm
 engines retain their separate database-adjacent process locks; do not delete live
-lock files. Removing the old bot does not remove stored signals, analyses, trades,
-scan history or user alarm rules. `scan_count` is now the stored scan-history row count.
+lock files. The earlier bot removal preserved all stored data. The subsequent,
+explicitly requested legacy-history cleanup uses a separate reviewed maintenance
+transaction; deployment itself must not silently delete records. See the
+[history retirement contract](INDICATOR_ALARM_TRANSITION_2026-10-12.md).
 
 Middleware never mounts the main SQLite directory. Its optional profile pins DRY_RUN,
 trading disabled and live adapter disabled. Deployment does not enable or send broker orders.

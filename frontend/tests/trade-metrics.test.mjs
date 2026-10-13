@@ -146,11 +146,8 @@ test('stats use the explicit CLOSED count and preserve legacy unknown counts and
   assert.equal(result.closedPnL, 0);
   const legacy = normalizers.transformStats({ ...stats, closed_trades: undefined });
   assert.equal(legacy.closedPositions, null);
-  for (const key of ['totalPnLPercent', 'lastScanTime', 'todaySignals']) assert.equal(legacy[key], null);
-  const overview = normalizers.transformOpsOverviewReadModel({ ...stats, last_scan_at: null });
-  for (const key of ['closedPositions', 'totalPnLPercent', 'winRate', 'lastScanTime', 'todaySignals']) {
-    assert.equal(overview[key], null);
-  }
+  assert.equal(legacy.totalPnLPercent, null);
+  for (const key of ['totalSignals', 'lastScanTime', 'todaySignals']) assert.ok(!Object.hasOwn(legacy, key));
 });
 
 test('invalid aggregate fields and dates stay unknown while source zero counts remain zero', () => {
@@ -161,8 +158,8 @@ test('invalid aggregate fields and dates stay unknown while source zero counts r
   for (const key of ['totalPnL', 'winRate', 'totalTrades', 'openPositions', 'closedPositions']) {
     assert.equal(result[key], null);
   }
-  assert.equal(result.totalSignals, 0);
-  assert.equal(normalizers.transformOpsOverviewReadModel({ ...stats, last_scan_at: 'invalid' }).lastScanTime, null);
+  assert.ok(!Object.hasOwn(result, 'totalSignals'));
+  assert.equal(normalizers.transformStats({ ...stats, total_trades: 0 }).totalTrades, 0);
 });
 
 test('metric renderers give unknown values a neutral dash and measured zero remains visible', () => {
@@ -225,27 +222,6 @@ test('portfolio and mini portfolio show unknown aggregates and no fabricated ope
     if (['AL', 'SAT'].includes(label) || button[1].includes('Pozisyonu Kapat')) {
       assert.ok(button[1].includes('disabled'), label || 'close');
     }
-  }
-});
-
-test('actual dashboard KPI consumers show unavailable overview metrics and errors as dashes', () => {
-  for (const response of [
-    { data: normalizers.transformOpsOverviewReadModel({ ...stats, last_scan_at: null }), isLoading: false, isError: false },
-    { data: undefined, isLoading: false, isError: true },
-  ]) {
-    const loaded = loadSource('../src/components/dashboard/kpi-cards.tsx', {
-      ...sharedImports,
-      '@/lib/hooks/use-dashboard': { useDashboardKPIs: () => response },
-      '@/components/ui/skeleton': { SkeletonKPICard: () => React.createElement('b', null, 'Loading') },
-    });
-    const html = renderToStaticMarkup(React.createElement(loaded.KPICards));
-    assert.ok(html.includes('—'));
-    assert.ok(!html.includes('Loading'));
-    assert.ok(!html.includes('NaN'));
-    assert.ok(!html.includes('0.00%'));
-    assert.ok(!html.includes('₺'));
-    const mini = renderToStaticMarkup(React.createElement(loaded.MiniStats));
-    assert.ok(mini.includes('—'));
   }
 });
 

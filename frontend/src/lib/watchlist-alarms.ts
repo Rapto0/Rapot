@@ -266,6 +266,35 @@ export const loadStoredWatchlists = (): StoredWatchlistModel[] => {
     }
 }
 
+/** Read the retired scanner's lists only for explicit, reviewed server import. */
+export const loadStoredScannerWatchlists = (): StoredWatchlistModel[] => {
+    if (typeof window === "undefined") return []
+    try {
+        const raw = window.localStorage.getItem("rapot.scanner.watchlists.v2")
+        if (!raw || raw.length > 1_000_000) return []
+        const lists: unknown = JSON.parse(raw)
+        if (!Array.isArray(lists) || lists.length > 100) return []
+        return lists.flatMap((list, index): StoredWatchlistModel[] => {
+            if (!list || typeof list !== "object" || typeof list.id !== "string" ||
+                typeof list.name !== "string" || !list.name.trim() || !Array.isArray(list.symbols) ||
+                list.symbols.length > 2000) return []
+            const rows: WatchlistSymbolRow[] = []
+            const seen = new Set<string>()
+            for (const symbol of list.symbols) {
+                if (typeof symbol !== "string") return []
+                const match = /^(BIST|Kripto):([A-Z0-9]{1,30})$/.exec(symbol)
+                if (!match || (match[1] === "Kripto" && !match[2].endsWith("USDT"))) return []
+                if (seen.has(symbol)) continue
+                seen.add(symbol)
+                rows.push({ kind: "symbol", marketType: match[1] as "BIST" | "Kripto", rawSymbol: match[2] })
+            }
+            return [{ id: `scanner:${index}:${list.id}`, name: list.name, alarmsEnabled: false, notes: "", rows }]
+        })
+    } catch {
+        return []
+    }
+}
+
 const getLatestFiniteValue = (values: number[]): number | null => {
     const value = values.at(-1)
     return typeof value === "number" && Number.isFinite(value) ? value : null

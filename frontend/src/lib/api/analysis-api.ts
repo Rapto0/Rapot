@@ -22,14 +22,6 @@ export async function fetchAnalysis(id: number): Promise<ApiAIAnalysis> {
     return fetchApi<ApiAIAnalysis>(`${API_BASE_URL}/analyses/${id}`);
 }
 
-export async function fetchSignalAnalysis(signalId: number): Promise<ApiAIAnalysis | null> {
-    try {
-        return await fetchApi<ApiAIAnalysis>(`${API_BASE_URL}/signals/${signalId}/analysis`);
-    } catch {
-        return null;
-    }
-}
-
 export async function fetchAIAnalysis(params: AIAnalysisParams): Promise<StructuredAIAnalysisResponse> {
     const searchParams = new URLSearchParams();
     searchParams.set('symbol', params.symbol);

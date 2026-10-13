@@ -6,10 +6,8 @@ Provides real-time market data streams to frontend clients.
 import asyncio
 import json
 from collections import defaultdict
-from collections.abc import Coroutine
 from contextlib import suppress
 from datetime import datetime
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
@@ -107,17 +105,6 @@ class ConnectionManager:
         # SSE broadcast
         for queue in tuple(self._sse_queues[channel]):
             if queue.full():
-                if channel == "signals":
-                    while not queue.empty():
-                        queue.get_nowait()
-                    queue.put_nowait(
-                        {
-                            "type": "resync",
-                            "reason": "signal_feed_overflow",
-                            "timestamp": datetime.now().isoformat(),
-                        }
-                    )
-                    continue
                 queue.get_nowait()
             queue.put_nowait(message)
 
@@ -140,54 +127,6 @@ class ConnectionManager:
 
 # Global connection manager
 manager = ConnectionManager()
-_broadcast_loop: asyncio.AbstractEventLoop | None = None
-
-
-def register_broadcast_loop(loop: asyncio.AbstractEventLoop | None = None) -> None:
-    """
-    Registers the event loop used by API realtime services.
-    Allows non-async threads (scanner/bot) to publish realtime events safely.
-    """
-    global _broadcast_loop
-    if loop is None:
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            loop = None
-    _broadcast_loop = loop
-
-
-def clear_broadcast_loop() -> None:
-    global _broadcast_loop
-    _broadcast_loop = None
-
-
-def _schedule_coro(coro: Coroutine[Any, Any, Any]) -> bool:
-    """Schedules a coroutine on the current or registered broadcast loop."""
-
-    def completed(future: Any) -> None:
-        if not future.cancelled() and future.exception() is not None:
-            logger.warning("Scheduled realtime broadcast failed: %s", future.exception())
-
-    try:
-        try:
-            running_loop = asyncio.get_running_loop()
-        except RuntimeError:
-            running_loop = None
-        target_loop = _broadcast_loop or running_loop
-        if target_loop is None or not target_loop.is_running():
-            coro.close()
-            return False
-        if target_loop is running_loop:
-            future = target_loop.create_task(coro)
-        else:
-            future = asyncio.run_coroutine_threadsafe(coro, target_loop)
-        future.add_done_callback(completed)
-        return True
-    except Exception:
-        coro.close()
-        logger.exception("Unable to schedule realtime broadcast.")
-        return False
 
 
 # ==================== WebSocket Endpoints ====================
@@ -349,27 +288,10 @@ async def websocket_trades(websocket: WebSocket, symbol: str):
 
 @router.websocket("/ws/signals")
 async def websocket_signals(websocket: WebSocket):
-    """
-    WebSocket endpoint for real-time trading signals.
-    """
+    """Authenticate the retired address, then close without subscribing."""
     grant = await authenticate_websocket(websocket)
-    if grant is None:
-        return
-    await manager.connect(websocket, "signals", grant=grant)
-
-    try:
-        while True:
-            try:
-                await receive_private(websocket, grant)
-            except TimeoutError:
-                await manager.send_json(websocket, {"type": "heartbeat"})
-
-    except WebSocketDisconnect:
-        pass
-    except Exception:
-        logger.exception("Signals WebSocket error on /realtime/ws/signals.")
-    finally:
-        manager.disconnect(websocket, "signals")
+    if grant is not None:
+        await websocket.close(code=4410, reason="Eski sinyal akışı kaldırıldı.")
 
 
 # ==================== SSE Endpoints ====================
@@ -417,21 +339,10 @@ async def sse_ticker(grant: AccessGrant = Depends(require_admin_request)):
     )
 
 
-@router.get("/sse/signals")
+@router.get("/sse/signals", include_in_schema=False)
 async def sse_signals(grant: AccessGrant = Depends(require_admin_request)):
-    """
-    SSE endpoint for trading signals.
-    """
-    queue = manager.create_sse_queue("signals")
-
-    return StreamingResponse(
-        event_generator(queue, "signals", grant),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": PRIVATE_CACHE,
-            "Connection": "keep-alive",
-        },
-    )
+    """The retired stream never allocates a queue or queries historical data."""
+    raise HTTPException(status_code=410, detail="Eski sinyal akışı kaldırıldı.")
 
 
 # ==================== Data Broadcasting Functions ====================
@@ -475,35 +386,6 @@ async def broadcast_trade(symbol: str, data: dict):
         },
         channel,
     )
-
-
-async def broadcast_signal(signal: dict):
-    """Broadcast new trading signal."""
-    await manager.broadcast(
-        {
-            "type": "signal",
-            "data": signal,
-            "timestamp": datetime.now().isoformat(),
-        },
-        "signals",
-    )
-
-
-async def broadcast_signal_resync() -> None:
-    await manager.broadcast(
-        {"type": "resync", "reason": "signal_feed_reset", "timestamp": datetime.now().isoformat()},
-        "signals",
-    )
-
-
-def publish_signal(signal: dict) -> bool:
-    """
-    Publish a signal update from any context (sync or async).
-
-    Returns:
-        True if event was scheduled, False if no realtime loop is active.
-    """
-    return _schedule_coro(broadcast_signal(signal))
 
 
 async def broadcast_bist_update(stocks: list[dict]):

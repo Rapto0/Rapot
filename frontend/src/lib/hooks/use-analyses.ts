@@ -1,7 +1,8 @@
 "use client"
 
+import { usePrivateMarket } from './use-private-market';
 import { useQuery } from '@tanstack/react-query';
-import { fetchAnalyses, fetchAnalysis, fetchSignalAnalysis, transformAnalysis, type AnalysesParams } from '@/lib/api/client';
+import { fetchAnalyses, fetchAnalysis, transformAnalysis, type AnalysesParams } from '@/lib/api/client';
 
 export interface AIAnalysis {
     id: number;
@@ -41,16 +42,18 @@ interface UseAnalysesOptions {
  */
 export function useAnalyses(options: UseAnalysesOptions = {}) {
     const { symbol, marketType, limit = 50 } = options;
+    const { allowed, sessionKey } = usePrivateMarket();
 
     return useQuery({
-        queryKey: ['analyses', symbol, marketType, limit],
+        queryKey: ['analyses', sessionKey, symbol, marketType, limit],
+        enabled: allowed,
         queryFn: async () => {
             const params: AnalysesParams = { limit };
             if (symbol) params.symbol = symbol;
             if (marketType) params.market_type = marketType;
 
             const apiAnalyses = await fetchAnalyses(params);
-            return apiAnalyses.map(transformAnalysis);
+            return apiAnalyses.filter(item => item.signal_id === null).map(transformAnalysis);
         },
         staleTime: 60000, // Cache for 1 minute
     });
@@ -60,27 +63,14 @@ export function useAnalyses(options: UseAnalysesOptions = {}) {
  * Hook to fetch a single AI analysis by ID
  */
 export function useAnalysis(id: number) {
+    const { allowed, sessionKey } = usePrivateMarket();
     return useQuery({
-        queryKey: ['analysis', id],
+        queryKey: ['analysis', sessionKey, id],
         queryFn: async () => {
             const apiAnalysis = await fetchAnalysis(id);
             return transformAnalysis(apiAnalysis);
         },
-        enabled: id > 0,
-    });
-}
-
-/**
- * Hook to fetch AI analysis for a specific signal
- */
-export function useSignalAnalysis(signalId: number) {
-    return useQuery({
-        queryKey: ['signal-analysis', signalId],
-        queryFn: async () => {
-            const apiAnalysis = await fetchSignalAnalysis(signalId);
-            return apiAnalysis ? transformAnalysis(apiAnalysis) : null;
-        },
-        enabled: signalId > 0,
+        enabled: allowed && id > 0,
     });
 }
 
@@ -88,11 +78,13 @@ export function useSignalAnalysis(signalId: number) {
  * Hook to fetch recent AI analyses (last N)
  */
 export function useRecentAnalyses(limit: number = 5) {
+    const { allowed, sessionKey } = usePrivateMarket();
     return useQuery({
-        queryKey: ['analyses', 'recent', limit],
+        queryKey: ['analyses', 'recent', sessionKey, limit],
+        enabled: allowed,
         queryFn: async () => {
             const apiAnalyses = await fetchAnalyses({ limit });
-            return apiAnalyses.map(transformAnalysis);
+            return apiAnalyses.filter(item => item.signal_id === null).map(transformAnalysis);
         },
         staleTime: 30000,
     });

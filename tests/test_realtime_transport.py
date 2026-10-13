@@ -1,5 +1,4 @@
 import asyncio
-import inspect
 import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -51,31 +50,30 @@ class Socket:
 async def test_slow_socket_is_evicted_without_delaying_other_clients():
     manager = realtime.ConnectionManager(send_timeout=0.02)
     slow, fast = Socket(block_send=True), Socket()
-    await manager.connect(slow, "signals")
-    await manager.connect(fast, "signals")
-    broadcasting = asyncio.create_task(manager.broadcast({"type": "signal"}, "signals"))
+    await manager.connect(slow, "ticker")
+    await manager.connect(fast, "ticker")
+    broadcasting = asyncio.create_task(manager.broadcast({"type": "ticker"}, "ticker"))
     await asyncio.wait_for(fast.sent.wait(), 1)
     assert not broadcasting.done()
     await asyncio.wait_for(broadcasting, 1)
     assert slow.closed and slow.code == 1013
-    assert manager._active_connections["signals"] == [fast]
+    assert manager._active_connections["ticker"] == [fast]
     assert slow not in manager._send_locks
 
 
 @pytest.mark.asyncio
-async def test_sse_overflow_requests_rest_resync_and_generator_removes_queue(monkeypatch):
+async def test_sse_overflow_retains_latest_market_update_and_generator_removes_queue(monkeypatch):
     manager = realtime.ConnectionManager(sse_queue_size=1)
     monkeypatch.setattr(realtime, "manager", manager)
-    queue = manager.create_sse_queue("signals")
-    await manager.broadcast({"type": "signal", "data": {"id": 1}}, "signals")
-    await manager.broadcast({"type": "signal", "data": {"id": 2}}, "signals")
+    queue = manager.create_sse_queue("ticker")
+    await manager.broadcast({"type": "ticker", "data": {"id": 1}}, "ticker")
+    await manager.broadcast({"type": "ticker", "data": {"id": 2}}, "ticker")
     assert queue.qsize() == 1
-    generator = realtime.event_generator(queue, "signals")
+    generator = realtime.event_generator(queue, "ticker")
     event = await anext(generator)
-    assert "signal_feed_overflow" in event
-    # Overflow is a resync hint, not a promise to replay either dropped event.
+    assert json.loads(event.removeprefix("data: "))["data"]["id"] == 2
     await generator.aclose()
-    assert manager._sse_queues["signals"] == []
+    assert manager._sse_queues["ticker"] == []
 
 
 @pytest.mark.asyncio
@@ -155,28 +153,3 @@ async def test_ticker_route_repeated_subscription_has_one_matching_release(monke
     await realtime.websocket_ticker(socket)
     subscribe.assert_awaited_once_with("BTCUSDT")
     unsubscribe.assert_awaited_once_with("BTCUSDT")
-
-
-def test_schedule_without_a_loop_closes_unawaited_coroutine(monkeypatch):
-    monkeypatch.setattr(realtime, "_broadcast_loop", None)
-
-    async def send():
-        return None
-
-    coroutine = send()
-    assert not realtime._schedule_coro(coroutine)
-    assert inspect.getcoroutinestate(coroutine) == inspect.CORO_CLOSED
-
-
-@pytest.mark.asyncio
-async def test_signal_disconnect_cleanup_and_reset_message_contract(monkeypatch):
-    manager = realtime.ConnectionManager()
-    monkeypatch.setattr(realtime, "manager", manager)
-    socket = Socket()
-    await manager.connect(socket, "signals")
-    await realtime.broadcast_signal_resync()
-    assert socket.messages[0]["type"] == "resync"
-    assert socket.messages[0]["reason"] == "signal_feed_reset"
-    manager.disconnect(socket, "signals")
-    await realtime.websocket_signals(socket)
-    assert manager.total_connections == 0

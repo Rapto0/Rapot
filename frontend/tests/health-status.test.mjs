@@ -113,7 +113,7 @@ function renderHealth(health, alarms, session = admin, onQuery = () => {}) {
     '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') },
     '@/components/ui/page-shell': { PageShell: ({ children, actions, title }) => React.createElement('main', null, title, actions, children) },
     '@/components/ui/kpi-ribbon': { KpiRibbon: ({ items }) => React.createElement('section', null, ...items.map(item => React.createElement('span', { key: item.label }, item.label + ':' + item.value))) },
-    '@/components/ui/button': { Button: 'button' }, '@/components/scanner/scan-status': { ScanStatus: () => null },
+    '@/components/ui/button': { Button: 'button' },
   });
   return renderToStaticMarkup(React.createElement(page.default));
 }
@@ -124,15 +124,15 @@ test('health page keeps API connected while the alarm worker is stopped and pres
   assert.ok(html.includes('Durduruldu'));
   assert.ok(html.includes('Telegram yalnız kendi alarmınızda'));
   assert.ok(html.includes('href="/alarms"'));
-  assert.ok(html.includes('Tarama arşivi'));
-  assert.ok(html.includes('Yeni otomatik tarama çalıştırılmaz'));
+  assert.ok(!html.includes('Tarama arşivi'));
+  assert.ok(!html.includes('Yeni otomatik tarama'));
   assert.ok(!html.includes('Bot durum ekranı'));
 });
 
-test('anonymous health page hides cached private content and disables both private queries', () => {
+test('anonymous health page hides cached private content and disables its private log query', () => {
   const queries = [];
   const html = renderHealth(deriveApiHealth(query), deriveAlarmRuntime({ ...query, data: runtime }, now), null, value => queries.push(value));
-  assert.equal(queries.length, 2);
+  assert.equal(queries.length, 1);
   assert.ok(queries.every(value => value.enabled === false));
   assert.ok(html.includes('/login?next=%2Fhealth'));
   assert.ok(!html.includes('Telegram bağlantısı'));
@@ -145,7 +145,6 @@ test('header SSR cannot mark failed or unconfirmed health green', () => {
       react: React, 'react/jsx-runtime': jsxRuntime, 'next/link': { default: 'a' },
       'lucide-react': { Bell: () => null, Check: () => null, X: () => null },
       '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') },
-      '@/lib/hooks/use-signals': { useSpecialNotificationSignals: () => ({ data: [] }) },
       '@/lib/hooks/use-health': { useApiHealth: () => deriveApiHealth({ ...query, ...flags }) },
       '@/components/auth/session-controls': { SessionControls: () => null },
     });
@@ -153,26 +152,4 @@ test('header SSR cannot mark failed or unconfirmed health green', () => {
     assert.ok(!html.includes('API Bağlı'));
     assert.ok(!html.includes('bg-profit'));
   }
-});
-
-test('scanner history renders API status without implying an automatic scanning process', () => {
-  const primitive = ({ children }) => React.createElement('div', null, children);
-  const page = load('../src/app/scanner/page.tsx', {
-    react: React, 'react/jsx-runtime': jsxRuntime,
-    'lucide-react': Object.fromEntries(['AlertTriangle', 'Check', 'ListPlus', 'RefreshCw', 'Search', 'Settings2', 'Star', 'StarOff'].map(name => [name, () => null])),
-    '@tanstack/react-query': { useQuery: () => ({ data: undefined, isLoading: false, isError: false }) },
-    '@/lib/api/client': {}, '@/lib/hooks/use-health': { useApiHealth: () => deriveApiHealth(query) },
-    '@/lib/hooks/use-private-market': { usePrivateMarket: () => ({ allowed: true, sessionKey: 'admin:123' }) },
-    '@/components/market-data-status': { MarketDataStatus: () => null },
-    '@/components/scanner/borsapy-screener': { BorsapyScreener: () => null },
-    '@/components/ui/button': { Button: primitive }, '@/components/ui/input': { Input: () => null },
-    '@/components/ui/select': { Select: primitive }, '@/components/ui/action-dialog': { ActionDialog: () => null },
-    '@/components/ui/toast': { useToast: () => ({ addToast: () => {} }) },
-    '@/components/scanner/scan-status': { ScanStatus: () => null },
-    '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' '), getTimeAgo: () => '--' },
-  }, '\nexport { SignalHistoryScanner };');
-  const html = renderToStaticMarkup(React.createElement(page.SignalHistoryScanner));
-  assert.match(html, /API<\/span><span[^>]*>Bağlı<\/span>/);
-  assert.ok(html.includes('Otomatik tarama kaldırıldı'));
-  assert.ok(!html.includes('Bot Durumu'));
 });

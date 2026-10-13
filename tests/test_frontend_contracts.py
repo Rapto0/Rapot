@@ -47,7 +47,7 @@ def test_api_client_normalizes_public_base_urls():
     assert "const API_BASE_URL = normalizeBaseUrl" in source
 
 
-def test_realtime_hook_delegates_to_dedicated_signal_transport():
+def test_realtime_hook_delegates_to_dedicated_market_transport():
     source = REALTIME_CONNECTION_FILE.read_text(encoding="utf-8", errors="ignore")
     transport = REALTIME_TRANSPORT_FILE.read_text(encoding="utf-8", errors="ignore")
 
@@ -55,13 +55,14 @@ def test_realtime_hook_delegates_to_dedicated_signal_transport():
     # Keep the architectural guard attached to the transport used by the hook.
     assert "import { createRealtimeConnection } from './connection';" in source
     assert "createRealtimeConnection({" in source
-    assert "/realtime/ws/signals" in transport or "/signals" in transport
+    assert "/ticker" in transport
+    assert "/signals" not in transport
 
 
 def test_api_client_file_is_thin_facade():
     source = API_CLIENT_FACADE_FILE.read_text(encoding="utf-8", errors="ignore")
 
-    assert "export * from './signals-api';" in source
+    assert "export * from './trades-api';" in source
     assert "export * from './market-api';" in source
     assert "export * from './ops-api';" in source
     assert "export * from './analysis-api';" in source

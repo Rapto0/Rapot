@@ -109,7 +109,7 @@ function harness({ allowed = true, ruleRows = [], listRows = [], localLists = []
     '@/lib/api/client': Object.fromEntries(['fetchBistSymbols', 'fetchCryptoSymbols'].map(name => [name, async () => { requests.push({ name, args: [] }); return symbolLoader(name); }])),
     '@/lib/api/advanced-alarms-api': api, '@/lib/advanced-alarm-form': form,
     '@/lib/server-watchlists': listHelpers,
-    '@/lib/watchlist-alarms': { loadStoredWatchlists: () => localLists },
+    '@/lib/watchlist-alarms': { loadStoredWatchlists: () => localLists, loadStoredScannerWatchlists: () => [] },
   }, { window: { location: { search: searchParams } } });
   function render() { let rounds = 0; do { assert.ok(++rounds < 10, 'Effects must settle'); cursor = 0; effectCursor = 0; effects = []; dirty = false; tree = componentModule.AdvancedAlarmCenter(); effects.forEach(effect => effect()); } while (dirty); return tree; }
   render();

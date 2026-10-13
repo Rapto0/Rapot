@@ -8,13 +8,15 @@ order accounting.
 
 Current priorities, production evidence and deferred acceptance:
 [Rapot continuation plan](docs/RAPOT_DEVAM_PLANI.md). Documentation was compared with
-the source on **12 October 2026 (legacy Telegram bot removal)**. Old backlog
+the source on **12 October 2026 (indicator and watchlist alarm transition)**. Old backlog
 IDs and unchecked boxes are historical planning information; use the continuation plan for current work.
 The [documentation index](docs/README.md) groups the current technical guides and acceptance records.
 
 The old scheduled COMBO/HUNTER scanner, Telegram commands and scanner-triggered
 news/Gemini messages have been removed from the source. Website indicators,
-backtests, `/ai`, historical records and opt-in alarm delivery remain supported.
+backtests, `/ai` and opt-in alarm delivery remain supported. The subsequent
+[history retirement](docs/INDICATOR_ALARM_TRANSITION_2026-10-12.md) removes the old
+scanner archive and its UI/API consumers while preserving indicator calculations.
 Source **`a099dbb` was deployed at 12:05:39 UTC on 12 October**; independent
 acceptance passed at **12:15:02 UTC**. API/frontend and Compose now use the botless
 release. All four persistent services are healthy; stored data and account
@@ -30,15 +32,15 @@ separates release checks from live-market and full-session capacity acceptance.
 | Historical signal compatibility | `application/scanner/`, `domain/events/`, `infrastructure/persistence/`; preserved without an automatic bot entry point |
 | Main API | `api/main.py`, `api/routes/` → `application/services/` → `infrastructure/repositories/` |
 | Main storage | SQLite via `models.py` / `db_session.py`; legacy `database.py` access remains; separate price cache |
-| Signal delivery | API `api/runtime/signal_feed.py` reads committed SQLite rows and broadcasts WS/SSE; clients refresh REST on reconnect |
+| Market delivery | Provider lifecycle in `api/runtime/realtime_bootstrap.py` and authenticated market WS/SSE in `api/realtime.py`; no legacy SQLite signal polling |
 | Dashboard | `frontend/src/app/`, `frontend/src/lib/api/client.ts`, hooks and components |
 | Order middleware | `middleware/api/main.py` → `middleware/services/trading_service.py`; separate PostgreSQL/Alembic schema |
 
 Main dashboard trades/stats and middleware orders/positions are separate datasets.
-Stored signals, trades, AI analyses and scan history remain readable. The `scan_count`
-field now counts stored scan-history rows, not the former bot's lifetime counter.
-Removing the old scheduler stops its automatic signal/archive production; it does
-not disable interactive Borsapy screening or user-created COMBO/HUNTER alarms.
+The dashboard prioritizes server watchlists and alarms. `/signals` redirects to
+`/alarms`; legacy signal/scan REST endpoints return authenticated `410` and are
+excluded from OpenAPI. Trades remain readable; `/stats` contains trade metrics.
+Interactive Borsapy screening and user-created COMBO/HUNTER alarms remain available.
 The `/alarms` page manages 1,000 each of price, technical and watchlist alarms,
 including compound conditions and intrabar or confirmed-candle triggers. The API
 owns bounded market tracking and evaluation even when the browser is closed;
@@ -46,8 +48,7 @@ one-second cycles do not guarantee full-universe latency. Previous daily server
 rules remain at `/alarms/legacy`. Legacy `/alarms/local` rules still
 run only while that page is open. See the [alarm contract](docs/SERVER_ALARMS.md)
 for supported indicators, timeframes and delivery limits. The settings page explains configuration scope; browser preferences
-are edited in their respective screens. Signal CSV exports include the
-currently loaded, filtered rows. See the [frontend guide](docs/FRONTEND.md).
+are edited in their respective screens. See the [frontend guide](docs/FRONTEND.md).
 
 Canonical imports and compatibility decisions are in the
 [packaging map](docs/PACKAGING_REFACTOR_MAP.md) and

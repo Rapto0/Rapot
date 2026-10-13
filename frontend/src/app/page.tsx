@@ -2,13 +2,14 @@
 
 import { useEffect, useState, type ComponentType } from "react"
 import Link from "next/link"
-import { CalendarDays, LineChart, Activity, History, Bell, Brain } from "lucide-react"
+import { CalendarDays, LineChart, Activity, List, Bell, Brain } from "lucide-react"
 import { SymbolSearch } from "@/components/dashboard/symbol-search"
 import { MarketCategoryPanel } from "@/components/dashboard/market-category"
 import { useBinanceTickerFeed } from "@/lib/hooks/use-binance-ticker"
 import { useMarketSnapshot } from "@/lib/hooks/use-market-snapshot"
 import { describeMarketRequest, describeTickerFeed } from "@/lib/market-feed"
 import { usePrivateMarket } from "@/lib/hooks/use-private-market"
+import { AlarmWorkspace } from "@/components/dashboard/alarm-workspace"
 import { MarketDataStatus } from "@/components/market-data-status"
 
 type MarketFeedSource = "binance" | "indices"
@@ -148,6 +149,7 @@ export default function LandingPage() {
         </div>
       </section>
 
+      <AlarmWorkspace />
       <MarketDataStatus />
       <section className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         {categorizedMarketRows.map((category) => (
@@ -165,15 +167,15 @@ export default function LandingPage() {
       <section aria-labelledby="quick-links-heading" className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <h2 id="quick-links-heading" className="sr-only">Hızlı erişim</h2>
         <QuickLinkCard
-          href="/trades"
-          title="İşlemler"
-          description="Açık ve kapalı pozisyon kayıtları"
-          icon={History}
+          href="/chart"
+          title="İzleme Listeleri"
+          description="Listelerinizdeki sembolleri grafikte takip edin"
+          icon={List}
         />
         <QuickLinkCard
-          href="/signals"
-          title="Sinyaller"
-          description="Canlı sinyal akışı ve filtreler"
+          href="/alarms"
+          title="Alarmlarım"
+          description="Fiyat, gösterge ve liste koşullarınız"
           icon={Bell}
         />
         <QuickLinkCard
@@ -191,7 +193,7 @@ export default function LandingPage() {
         <QuickLinkCard
           href="/scanner"
           title="Piyasa Tarayıcı"
-          description="BIST ve Kripto tarama sonuçları"
+          description="Temel ve teknik piyasa taraması"
           icon={Activity}
         />
         <QuickLinkCard
