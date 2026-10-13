@@ -84,11 +84,13 @@ try {
   assert.deepEqual(await proxied.json(), { service: 'api', path: '/auth/me?smoke=1', authorization: 'Bearer local-smoke' });
   const health = await localFetch(origin + '/api/health');
   assert.deepEqual(await health.json(), { service: 'api', path: '/health' });
-  const retired = await localFetch(origin + '/signals', { redirect: 'manual' });
-  assert.equal(retired.status, 307);
-  assert.equal(retired.headers.get('location'), '/alarms');
-  await retired.body?.cancel();
-  for (const route of ['/scanner', '/health', '/ai', '/alarms']) {
+  for (const [route, destination] of [['/signals', '/alarms'], ['/tradingview', '/ai']]) {
+    const retired = await localFetch(origin + route, { redirect: 'manual' });
+    assert.equal(retired.status, 307);
+    assert.equal(retired.headers.get('location'), destination);
+    await retired.body?.cancel();
+  }
+  for (const route of ['/', '/scanner', '/health', '/ai', '/alarms', '/alarms/legacy', '/alarms/local', '/research', '/chart', '/trades', '/settings', '/calendar', '/login']) {
     const view = await localFetch(origin + route);
     assert.equal(view.status, 200);
     assert.doesNotMatch(await view.text(), /Tarama arşivi|Sinyal Geçmişi|Canlı sinyal akışı/);

@@ -47,3 +47,24 @@ Kaynak, yerel test ve yayın/üretim temizliği kanıtları bu bölümde ayrı k
 Üretimde silme henüz yapılmadı; hazırlanmış araç tamamlanmış silme kanıtı değildir.
 Önceki bot kaldırma yayını `a099dbb` ve önceki veri koruma kabulü
 [ayrı tarihsel kayıttadır](SERVER_ONLY_MIGRATION_2026-10-12.md).
+
+13 Ekim devamında 1.751 Python testi/bir atlama, son yedek sözleşmesi düzeltmesinin
+51 ilgili testi ve 269 kaynak dosyasının lint/format kontrolü geçti. Frontend'in
+273 testi, lint ve TypeScript kontrolü geçti. Yerel Windows derlemesi PostCSS
+alt süreç/IPC ve `.next` yazma hatalarıyla tamamlanamadı; normal Linux CI build ve
+standalone kontrolü yayın şartıdır.
+
+Gerçek boyutlu **özel kopya** provası 13 Ekim 14:24:13 UTC'de geçti. 2.017.235
+sinyal, 184 tarama, 26.393 eski otomatik analiz, beş eski sayaç ve 161.866 kanıtlı
+kurtarma kalıntısı silindi; 290 sınıflandırılamayan kurtarma satırı korundu.
+İlk 491 tahmini, tekrarlanan orijinal ID'leri tek kayda indirgeyen inceleme
+hesabındandı; tüm kanıtlı eski sürümler sayılınca ek 201 indeks eşleşti.
+Tek transaction uygulaması 83,58 saniye; tepe working set 33.878.016 bayttı.
+Integrity/FK, 15 tablo şeması ve korunan kayıt parmak izleri geçti. Bu yerel
+ölçüm Docker cgroup veya üretim kapasitesi garantisi değildir.
+
+Prova, yedek kanıtının snapshot aşamasında henüz binary hash üretmediğini ortaya
+çıkardı ve silmeden önce durdu. Araç artık gerçek snapshot→transfer receipt hash
+bağını doğrular; değiştirilmiş kanıtı reddeden testler eklendi. Eski yedek zamanı
+yalnız açıkça LOCAL/SIMULATED provanın enjekte edilen saatinde sabitlendi;
+üretimin altı saatlik yedek ve beş dakikalık yazıcı durdurma sınırları değişmedi.

@@ -90,6 +90,15 @@ def evidence(plan):
     ).hexdigest()
     snapshot_hash = "a" * 64
     artifact = {"snapshot_sha256": snapshot_hash, "snapshot_bytes": 32768}
+    snapshot_receipt = {
+        "stage": "binary_snapshot_completed",
+        "run_id": "synthetic",
+        "snapshot_bytes": artifact["snapshot_bytes"],
+        "source_path": plan["database"]["path"],
+    }
+    receipt_hash = hashlib.sha256(
+        json.dumps(snapshot_receipt, separators=(",", ":")).encode()
+    ).hexdigest()
     backup = {
         "schema": "rapot-sqlite-binary-backup-v1",
         "stage": "binary_snapshot_independent_restore_verified",
@@ -106,8 +115,14 @@ def evidence(plan):
         "local_artifact_sha256": snapshot_hash,
         "api_source_sha": "1" * 40,
         "source_image": "sha256:" + "2" * 64,
-        "remote_snapshot_receipt": {**artifact, "source_path": plan["database"]["path"]},
-        "remote_transfer_receipt": dict(artifact),
+        "remote_snapshot_receipt": snapshot_receipt,
+        "remote_transfer_receipt": {
+            **artifact,
+            "stage": "binary_transfer_completed",
+            "run_id": "synthetic",
+            "snapshot_receipt_sha256": receipt_hash,
+        },
+        "remote_receipt_sha256": receipt_hash,
         **artifact,
     }
     retirement = {
@@ -150,6 +165,25 @@ def test_plan_is_read_only_and_secret_free(database):
     assert plan["targets"]["bot_stats"]["count"] == 12
     assert len(plan["before"]["tables"]) == 15
     assert cleanup.create_plan(database)["plan_sha256"] == plan["plan_sha256"]
+
+
+@pytest.mark.parametrize("field", ["source_path", "snapshot_bytes", "run_id"])
+def test_transfer_receipt_binds_unhashed_snapshot_stage(database, field):
+    plan = cleanup.create_plan(database)
+    backup, retirement = evidence(plan)
+    assert "snapshot_sha256" not in backup["remote_snapshot_receipt"]
+    cleanup.verify_evidence(plan, backup, retirement, NOW)
+    backup["remote_snapshot_receipt"][field] = "changed"
+    with pytest.raises(cleanup.CleanupError, match="backup_artifact_binding_failed"):
+        cleanup.apply_plan(
+            database,
+            plan,
+            expected_plan_sha256=plan["plan_sha256"],
+            backup=backup,
+            retirement=retirement,
+            now=lambda: NOW,
+        )
+    assert cleanup.create_plan(database)["before"] == plan["before"]
 
 
 @pytest.mark.parametrize("wal", [False, True])

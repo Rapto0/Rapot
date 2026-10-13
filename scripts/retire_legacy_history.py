@@ -498,10 +498,19 @@ def verify_evidence(plan: dict, backup: dict, retirement: dict, now: datetime) -
     snapshot = backup.get("remote_snapshot_receipt", {})
     transfer = backup.get("remote_transfer_receipt", {})
     snapshot_hash = backup.get("snapshot_sha256", "")
+    # The snapshot stage has not streamed/hashed the binary yet. Its compact JSON
+    # receipt is pinned by the transfer stage, which supplies the binary hash.
+    receipt_hash = hashlib.sha256(json.dumps(snapshot, separators=(",", ":")).encode()).hexdigest()
     require(
         isinstance(snapshot_hash, str)
         and re.fullmatch(r"[a-f0-9]{64}", snapshot_hash)
-        and snapshot.get("snapshot_sha256") == snapshot_hash
+        and snapshot.get("stage") == "binary_snapshot_completed"
+        and transfer.get("stage") == "binary_transfer_completed"
+        and snapshot.get("run_id") == transfer.get("run_id")
+        and isinstance(snapshot.get("run_id"), str)
+        and bool(snapshot["run_id"])
+        and transfer.get("snapshot_receipt_sha256") == receipt_hash
+        and backup.get("remote_receipt_sha256") == receipt_hash
         and transfer.get("snapshot_sha256") == snapshot_hash
         and backup.get("local_artifact_sha256") == snapshot_hash
         and snapshot.get("source_path") == plan["database"]["path"]

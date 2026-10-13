@@ -8,8 +8,8 @@ import { Providers } from "@/components/providers";
 
 export const metadata: Metadata = {
   title: "Rapot Terminal | Finansal Analiz Platformu",
-  description: "BIST ve Kripto piyasa tarama, sinyal ve trade takip platformu",
-  keywords: ["BIST", "Kripto", "Trading", "Sinyal", "Analiz", "Dashboard"],
+  description: "BIST ve kripto grafikleri, izleme listeleri, gösterge ve fiyat alarmları",
+  keywords: ["BIST", "Kripto", "Grafik", "İzleme Listesi", "Alarm", "Analiz"],
 };
 
 export default function RootLayout({
