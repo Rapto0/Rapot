@@ -157,6 +157,13 @@ kapalıyken de sunucu çalışır. Sağlayıcı gecikmesi, ağ ve gerçek yük a
 işleme süresi yine vardır; borsadaki her işlemin sıfır gecikmeyle gelmesi
 garanti edilmez.
 
+Kalan 30 saniyelik sınırlar, eski fiyatı reddetme ve başarısız geçmiş isteğini
+yeniden deneme içindir; canlı fiyatlar arasında bekleme koymaz. Sağlıklı canlı
+hesap, periyodik geçmiş HTTP hatasında korunur; geçmiş hatası ayrı tanılanır.
+Kesintisiz native akışta altı saatlik uzlaştırma yalnız özetin yaşından dolayı
+başlangıcı sıfırlamaz. Gerçek geçmiş düzeltmesi ve bağlantı boşluğu yine
+karşılaştırma durumunu geçersiz kılar.
+
 Bağlantı sayısı, native seri, derlenmiş satırlar ve sıralı olay kuyruğu yerel
 üst sınırlarla korunur. Bunlar TradingView hesabının kabul edeceği abonelik
 kapasitesi iddiası değildir. Eksik/reddedilen TF, eski fiyat, bağlantı kopması,
@@ -196,7 +203,76 @@ sınırları, kuyruk/cache sınırları ve frontend etkileşimlerini kapsar.
 TradingView derleyicisinde beş scripti yeniden çalıştırma, anlık aynı mum/aynı
 ayar karşılaştırması ve gerçek Telegram alarmı sonraki canlı kabul kapsamıdır.
 
-## 13 Ekim 2026 yayını ve bağımsız kabul
+## 13 Ekim 2026 canlı fiyat yayını ve bağımsız kabul
+
+**Tamamlandı:** `4b739835d3cd12485b50422028a3cb1134dd8ac7` kaynağı
+**19:56:39 UTC / 22:56:39 TSİ**'de API/frontend/Compose/current'e yayımlandı.
+Bağımsız kabul **19:56:55–19:57:15 UTC**'de geçti. Önceki `b3200ed9` kaynağı
+ve imajları geri dönüş için korunur. Middleware/PostgreSQL aynı container ve
+runtime kimliklerinde kaldı; DRY_RUN ve trading/live kapalı durumu değişmedi.
+
+| Kanıt | Kimlik |
+|---|---|
+| API imajı | `ghcr.io/rapto0/rapot/backend@sha256:23c65e711ead2528bd0c7a089dd60846b527027d14408b865b1a292eb463b771` |
+| Arayüz imajı | `ghcr.io/rapto0/rapot/frontend@sha256:f4ce5d8494379e2db425f555972739bb78138e15f70453345cd7bf1bbe5ee059` |
+| Beş CI işi | [38457171430](https://github.com/Rapto0/Rapot/actions/runs/38457171430), tamamı başarılı |
+| Temiz imaj yayını | [38457206678](https://github.com/Rapto0/Rapot/actions/runs/38457206678), başarılı; additive/delta yolları kapalı |
+| Yayın receipt SHA-256 | `2fa7e53322fb0739cb6864b85db921e8a885151cd6fc4e6f6a273f2d16ec8f0f` |
+| Bağımsız kabul SHA-256 | `1b007a4619cfc4f67d16b15ba48e5e8fc59f0a860c164769ad92122af2147fae` |
+| Taze SQLite yedeği | 1.342.660.608 bayt; `250e34a04a2ed08affefad1133cd5fd7b545350a85b2b512a46cd890b9aff167` |
+| Bağımsız restore kanıtı SHA-256 | `6939856aa19481bb9fbe4efab781ce02a1dbb1e5c768aa17504399cb53714633` |
+
+Yerelde **1.983 Python başarılı / bir atlama**, **307 frontend testi**, tüm
+290 Python kaynağında Ruff, frontend lint/typecheck, webpack production ve
+standalone HTTP/WS kabulü geçti. Aynı kaynağın Linux CI'sinde standart
+Turbopack ve Docker kabulü geçti. 111 Linux runtime paketi ve 295 kaynak/
+bağımlılık dosyasının imaj hash'leri kaynakla eşleşti. Üç mevcut Binance/
+websockets deprecation uyarısı yeni hesaplama hatası değildir. İlk commit
+kancası OpenAPI dosyasının son satırını düzeltti; kanonik sözleşme değişmedi.
+
+Saf testler aynı anda tüm TF'lerin güncel fiyatını, Wilder ilk geçerli seed'ini,
+uzun RMI momentumunu, tick rollback'ini, SMI yüksek/düşük zaman sırasını ve
+normal native geçişte tek commit'i doğrular. Kapalı piyasa başlangıcında son
+onaylı mum canlı değer diye sunulmaz; yeni native çift geldiğinde ilerler.
+Geçmiş/fiyat/rollover yarışları, eski seed kurulumu, kopukluk sonrası ilk gözlem,
+kuyruk taşması, HTTP hatası ve kaynak sınırları ayrı regresyonlarla kapsanır.
+
+Yerel geçici SQLite ölçümünde aynı özel koşulu paylaşan 3.000 kural için tek
+snapshot okundu; değişmeyen beş tur 15,7–16,9 ms ve sıfır DB yazısıyla tamamlandı.
+Aynı anda üretilen 3.000 olayın kalıcı yazımı 128'lik gruplarla yaklaşık 1,22
+saniyeydi. Bu ölçüm API kategori kotası, Telegram teslimi veya gerçek sunucu
+kapasitesi testi değildir. Beş gösterge × 631 sembolün varsayılan ve tüm on TF
+açık ayarları yerel kabul bütçesine sığdı. Bellek ölçümünün saf kaynak SHA-256'sı
+`38461bdbf7cac6798f9970c521f28ef4314408a0c78ab00b305a1b67bf1bf75c`'dir.
+
+Taze yedek sunucu dışında bağımsız restore ile doğrulandı. İlk binary aktarımın
+süre sınırı kaydı korundu; aynı dosya doğrulanmış önekten sürdürülerek tamamlandı.
+Yalnız bu işin geçici sunucu snapshot'ı doğrulama sonrası kaldırıldı. Yayın
+araçlarının yedi offline kontrolü, kabulün 10 DB ve 41 API negatif senaryosu
+bağımsız geçti; üretimde DB restore/migration/silme yapılmadı.
+
+Üretim kabulü 13 SSR sayfası, 33 statik dosya, iki yönlendirme ve 18 anonim
+401 yanıtını doğruladı. Yönetici kataloğu v2 / 5 gösterge / 289 input ve iş
+oluşturmayan 422 önizleme doğrulandı. 15 tablonun tüm satırları/şeması, özel
+dosyalar, tek izleme listesi, üç eski olay ve üç silinmiş kural korundu.
+Dört servis healthy/restart0; alarm motoru hatasız ve Telegram yapılandırılmış.
+Sıfır etkin alarmda normal mum işi/kuyruk 0/0; özel işçiler talep olmadığı için
+başlatılmadı. 805 normal abonelik ve seans dışında sıfır taze sembol, canlı
+fiyat/kapsam kabulü değildir.
+
+19:57:05–15 UTC kısa örnekleri **279,30–298,22 MiB kullanılabilir RAM**,
+**%19,361 / %8,032 CPU** ve **5.057.884.160 bayt boş alan** gösterdi. Sabit
+528 MiB rezerv korundu. Bu kısa, etkin alarmsız örnek tam seans veya 3.000
+canlı teknik alarm yükünü kanıtlamaz. Yeni etkin kural, Telegram mesajı, AI,
+emir veya otomatik takip oluşturulmadı; eski gözlem timer'ı disabled/inactive.
+Canlı TradingView sayısal karşılaştırması, gerçek gecikme ve kapsam sonraki
+piyasa açık kabulünde ölçülmelidir.
+
+Yerel kanıtlar `runtime-data/20261013-live-indicators/` altında, özel taze
+yedek `C:/Users/memet/RapotBackups/20261013-live-indicators-binary-aa0ed6063230482b/`
+altında saklanır; Git'e alınmaz.
+
+## 13 Ekim 2026 önceki gösterge yayını ve bağımsız kabul
 
 **Tamamlandı:** `b3200ed9ced081807f0471b4c82f33d9653ba7bc` kaynağı
 **17:45:35 UTC / 20:45:35 TSİ**'de API/frontend/Compose/current'e yayımlandı.

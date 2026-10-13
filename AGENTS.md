@@ -10,11 +10,25 @@ sorgusu yerine beş göstergenin aynı canlı fiyat anındaki bütün etkin zama
 dilimleriyle, en küçük periyot kapanışını beklemeden değerlendirilmesini istedi.
 Kaynakta katalog v2, native mum/quote WebSocket, sabit kapalı Wilder/EMA
 başlangıcından canlı hesap, sıralı fiyat değerlendirmesi ve sembole hedefli
-alarm çağrısı hazırlanır. Orijinal Pine dosyaları/geçmiş replay politikası
+alarm çağrısı uygulanır. Orijinal Pine dosyaları/geçmiş replay politikası
 korunur; canlı sinyal politikası bilinçli olarak değişir. 2–6D/2–3W sınırları
 TradingView native mumlarından gelir. Ayrıntılar [gösterge sözleşmesinde](docs/CUSTOM_PINE_INDICATORS.md).
-Yeni kaynağın doğrulama/yayın sonucu devam planında ayrıca kaydedilir;
-alttaki `b3200ed9` kabulü önceki 30 saniye/kapanış politikasına aittir.
+**`4b739835`, 19:56:39 UTC API/frontend/Compose/current yayını ve 19:57:15 UTC
+bağımsız kabul geçti.** 1.983 Python/bir atlama, 307 frontend, 290 Python
+kaynağında Ruff, beş CI ve temiz imaj yayını geçti. Native rollover artımlıdır;
+geçmiş yenilemesi canlı fiyat/range/koşul durumunu ezmez. Aynı ayarlar paylaşılır,
+değişmeyen durum DB yazmaz. Yerel sınırlar 4 WS, 8.192 native seri/olay,
+4.096 hesap, 2M seed hücresidir; fazla iş görünür kapasite durumuna geçer.
+Beş gösterge × 631 sembolün tüm on TF model belleği 66,7 MiB; süreç RSS veya
+üretim kapasitesi değildir. Dört servis sağlıklı/restart0, 15 tablonun bütün
+satırları/şema, özel dosyalar ve middleware/PG korundu. 13 SSR/33 statik/18
+anonim401, v2 / 5 / 289 katalog ve iş oluşturmayan 422 kabulü geçti. Taze
+1.342.660.608 bayt yedek bağımsız restore edildi. Etkin kural yokken normal
+mum işi/kuyruk 0/0; özel akış talep olmadığı için başlamadı. Kısa örnekler
+279,30–298,22 MiB RAM, %19,361/%8,032 CPU'dur; tam seans/3.000 canlı yük kanıtı
+değildir. Yeni alarm/Telegram/AI/emir veya otomatik takip yok. Canlı sayısal
+TradingView karşılaştırması ve gecikme piyasa açık kabulüne bırakıldı.
+Alttaki `b3200ed9` kabulü önceki 30 saniye/kapanış politikasına aittir.
 
 **13 Ekim önceki gösterge yayını tamamlandı:** Kullanıcının beş Pine göstergesi (HTF RSI Score, RSI
 Snapshot, RSI/SMI/RMI N OY) tüm 289 inputuyla sunucu hesaplayıcısı, grafik

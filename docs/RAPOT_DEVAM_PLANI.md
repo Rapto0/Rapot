@@ -16,9 +16,19 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
   kapalı durum, sıralı native fiyat akışı ve hedefli alarm değerlendirmesini
   getirir. Aynı koşul/ayarlar paylaşılır; değişmeyen durum DB yazmaz. Yeni canlı
   politika özgün Pine kapanış sinyallerinden ayrıdır. Bağlantı/taşma/eksik native
-  sınırları ve yerel kapasite açıkça raporlanır. Yayın kabulü bu işin sonunda
-  güncellenecek; üretimde etkin test kuralı, Telegram gönderimi veya yeni takip
-  zamanlayıcısı açılmaz. [Güncel sözleşme](CUSTOM_PINE_INDICATORS.md).
+  sınırları ve yerel kapasite açıkça raporlanır. **`4b739835`, 19:56:39 UTC
+  API/frontend/Compose/current yayını; 19:57:15 UTC bağımsız kabul geçti.**
+  1.983 Python/bir atlama, 307 frontend, 290 Python kaynağında Ruff, beş CI
+  ve temiz imaj yayını geçti. 13 SSR/33 statik/18 anonim401, v2 / 5 / 289
+  katalog ve iş oluşturmayan 422 doğrulandı. 15 tablonun tüm satırları/şema,
+  özel dosyalar, tek liste/üç olay ve middleware/PG korundu. Taze
+  1.342.660.608 bayt yedek bağımsız restore edildi. Dört servis healthy/restart0;
+  sıfır etkin kuralda normal mum işi/kuyruk 0/0, özel stream talep edilmedi.
+  3.000 kural yerel ölçümü ve 631 × beş gösterge model belleği üretim yük
+  kanıtı değildir. Kısa kabul 279,30–298,22 MiB RAM, %19,361/%8,032 CPU;
+  tam seans/gerçek gecikme/sayısal TradingView karşılaştırması açık. Etkin test
+  kuralı, Telegram, AI, emir veya otomatik takip oluşturulmadı.
+  [Güncel sözleşme ve kanıtlar](CUSTOM_PINE_INDICATORS.md).
 
 - **13 Ekim — beş kişisel Pine göstergesi yayımlandı:** Kullanıcının yeni talebi bütün
   panel ayarlarıyla aynı göstergeleri sunucuda, grafikte ve liste alarmlarında
@@ -801,15 +811,15 @@ repodan kaldırıldı. Dağıtım ve geri dönüş adımları [DEPLOY.md](DEPLOY
 | Alan | Son kayıt |
 |---|---|
 | Sunucu / erişim | `root@138.68.71.27`, IP üzerinden HTTPS |
-| API / frontend / Compose / current kaynak | `8b4e1bab46a2fd149cdb80ad85ada340692961ad` |
-| API imaj referansı | `ghcr.io/rapto0/rapot/backend@sha256:d888e5286f37ca780b31a3c3d64b7012fc20fb0b61c12ecf699a0a10c519860f` |
-| Frontend imaj referansı | `ghcr.io/rapto0/rapot/frontend@sha256:2b482449ce7e06340e831511cc4475a48dd754a2f4dee45f913880cbdf609945` |
+| API / frontend / Compose / current kaynak | `4b739835d3cd12485b50422028a3cb1134dd8ac7` |
+| API imaj referansı | `ghcr.io/rapto0/rapot/backend@sha256:23c65e711ead2528bd0c7a089dd60846b527027d14408b865b1a292eb463b771` |
+| Frontend imaj referansı | `ghcr.io/rapto0/rapot/frontend@sha256:f4ce5d8494379e2db425f555972739bb78138e15f70453345cd7bf1bbe5ee059` |
 | Bot | 12 Ekim kaldırıldı; Compose servisi/5000 dinleyicisi yok |
 | Middleware kaynak | `279aa9fea99b520e661b43f104a2bf4791893ac3`; container kimliği korunuyor |
 | Middleware imajı | `sha256:9be0fdb6097f52bf97730f44c86d28c24e2c0cea1fe181e7e8fd668177fdb034` |
 | Veri / kaynak pointer | `/var/lib/rapot/main` ve `/opt/rapot/current`; operator kaynak kopyası bunlardan ayrıdır |
 | Çalışma modu | `MW_EXECUTION_MODE=DRY_RUN`, `MW_TRADING_ENABLED=false`, `MW_BINANCE_LIVE_ENABLED=false`; otomatik Telegram AI kaldırıldı, site AI korunur; API `BORSAPY_USE_FOR_BIST=true` |
-| Son uzak kabul | 13 Ekim 15:11:48 UTC: dört servis healthy/restart0/OOMfalse; eski kayıtlar temizlendi, 15 tablo şeması ve korunan veriler aynı. 13 SSR/32 statik/iki yönlendirme/17 anonim 401, özel alarm durumu ve emekli 410/4410 yolları geçti. Boş alan 5.315.047.424 bayt. [Geçiş kanıtı](INDICATOR_ALARM_TRANSITION_2026-10-12.md). |
+| Son uzak kabul | 13 Ekim 19:57:15 UTC: dört servis healthy/restart0; 15 tablonun bütün satırları/şema ve özel dosyalar aynı. 13 SSR/33 statik/iki yönlendirme/18 anonim401, v2 / 5 / 289 katalog, iş oluşturmayan 422 ve emekli 410/4410 yolları geçti. Boş alan 5.057.884.160 bayt. [Canlı gösterge yayını](CUSTOM_PINE_INDICATORS.md). |
 | TradingView bağlantısı | Şifreli kimlik korundu; 7 Ekim dar canlı kabulü mevcut. Tam evren/hacim/bölünme/tam seans kabulü açık, `realtime_verified=false` |
 
 Son kayıtlar:
