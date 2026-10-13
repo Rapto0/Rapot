@@ -44,6 +44,8 @@ export interface CustomPreview {
     reason?: string | null
     source: string
     received_at?: string | number | null
+    source_timestamp?: string | number | null
+    observation_id?: string | null
     points: CustomPoint[]
     latest: CustomPoint | null
     requirements: unknown[]

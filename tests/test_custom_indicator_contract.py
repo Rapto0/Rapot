@@ -144,7 +144,7 @@ def test_smi_disabled_timeframes_do_not_increase_primary_history():
     )
 
 
-def test_alarm_write_normalizes_native_alias_and_requires_source_signal_close():
+def test_alarm_write_normalizes_native_alias_and_supports_intrabar_signals():
     payload = {
         "name": "Liste göstergesi",
         "category": "watchlist",
@@ -156,8 +156,15 @@ def test_alarm_write_normalizes_native_alias_and_requires_source_signal_close():
     }
     saved = routes.AlarmWrite(**payload)
     assert saved.timeframe == "1d" and len(saved.condition["left"]["inputs"]) == 54
-    with pytest.raises(ValueError, match="Yalnız kapanmış"):
-        routes.AlarmWrite(**{**payload, "trigger": "intrabar"})
+    for indicator in [spec["id"] for spec in catalog()["indicators"]]:
+        for output in ("buy_signal", "sell_signal", "any_signal"):
+            routes.AlarmWrite(
+                **{
+                    **payload,
+                    "trigger": "intrabar",
+                    "condition": condition(indicator, output=output),
+                }
+            )
     routes.AlarmWrite(
         **{**payload, "trigger": "intrabar", "condition": condition(output="buy_votes")}
     )
@@ -244,16 +251,17 @@ def test_preview_validation_returns_only_safe_bounded_messages(custom_client, ch
     assert not calls
 
 
-def test_alarm_close_validation_reaches_the_form_without_payload_echo(custom_client):
+def test_intrabar_indicator_signal_is_saved_without_scheduling_preview(custom_client):
     from tests.test_advanced_alarm_backend import payload
 
-    client, _ = custom_client
+    client, calls = custom_client
     result = client.post(
         "/advanced-alarms",
         json=payload(category="technical", timeframe="1d", condition=condition()),
     )
-    assert result.status_code == 422
-    assert "Yalnız kapanmış mum" in result.json()["detail"][0]["msg"]
+    assert result.status_code == 201
+    assert result.json()["trigger"] == "intrabar"
+    assert not calls
     assert result.headers["cache-control"] == "private, no-store"
 
 

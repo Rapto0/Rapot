@@ -62,6 +62,7 @@ export interface AdvancedAlarmStatus {
     last_cycle_at: string | null
     last_error: string | null
     evaluation: { total: number; checked: number; ready: number; backlog: number; cursor?: number[]; cycle_ms: number }
+    live_evaluation?: { updates: number; checked: number; last_update_at: string | null; last_duration_ms: number | null; last_error: string | null; indexed_symbols: number; membership_groups: number }
     market: Record<string, unknown>
     delivery: { pending: number; failed: number; sent: number }
     limits: Record<string, number>

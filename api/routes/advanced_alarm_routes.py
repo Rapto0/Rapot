@@ -88,16 +88,7 @@ class AlarmWrite(WatchlistWrite):
         base = canonical_timeframe(self.timeframe)
         self.timeframe = next((alias for alias, native in ALIASES.items() if native == base), base)
         self.condition = validate_condition(self.condition)
-        prepared = prepare_condition(self.condition, self.timeframe)
-        if self.trigger != "bar_close" and any(
-            ref["field"] == "custom"
-            and ref["indicator"] != "htf_rsi_score"
-            and ref["output"] in {"buy_signal", "sell_signal", "any_signal"}
-            for ref in prepared.fields
-        ):
-            raise ValueError(
-                "Snapshot ve N OY sinyalleri için 'Yalnız kapanmış mum' seçin; mum içinde skor veya oy çıktısını kullanabilirsiniz."
-            )
+        prepare_condition(self.condition, self.timeframe)
         if self.category == "watchlist":
             if self.scope not in {"watchlist", "all_bist"} or self.symbols:
                 raise ValueError("İzleme listesi alarmında kalıcı liste veya bütün BIST seçin.")
@@ -151,7 +142,7 @@ def indicator_catalog(request: Request, user: User = Depends(get_current_admin_u
 
 
 @router.post("/indicators/preview")
-@limiter.limit("30/minute")
+@limiter.limit("120/minute")
 def indicator_preview(
     request: Request, payload: IndicatorPreview, user: User = Depends(get_current_admin_user)
 ) -> dict:

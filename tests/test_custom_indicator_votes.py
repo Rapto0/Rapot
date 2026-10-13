@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from application.services.custom_indicators.core import Bar
+from application.services.custom_indicators.live import compile_live
 from application.services.custom_indicators.votes import SPECS, evaluate_votes
 
 
@@ -38,6 +39,132 @@ def single(**overrides):
 
 def smi_single(**overrides):
     return single(len1=1, smoothA1=1, smoothB1=1, **overrides)
+
+
+def live_bars(closes=(10, 8, 9, 9), *, span=10, end_known=True):
+    result = list(bars(closes, span=span))
+    result[-1] = replace(result[-1], confirmed=False, end=result[-1].end if end_known else None)
+    return tuple(result)
+
+
+def test_live_rsi_all_native_frames_use_the_same_tick_without_waiting_for_close():
+    daily = live_bars()
+    three_day = live_bars((20, 18, 19, 19), span=8)
+    compiler = compile_live("rsi_votes", {"len1": 2, "len3": 2}, {"1D": daily, "3D": three_day})
+    point = compiler.evaluate(price=8, as_of=31, buckets={"1D": daily[-1], "3D": three_day[-1]})
+    assert point["ready"]
+    assert point["outputs"]["buy_votes"] == 2
+    assert point["outputs"]["buy_signal"] == 1
+    assert point["rows"][0]["rsi"] == pytest.approx(20)
+    assert point["rows"][2]["rsi"] == pytest.approx(4)
+    assert {row["observed_at"] for row in point["rows"] if row["enabled"]} == {31}
+    assert not daily[-1].confirmed and not three_day[-1].confirmed
+
+
+def test_live_rsi_each_tick_rolls_back_to_closed_seed_and_duplicate_is_idempotent():
+    native = live_bars()
+    compiler = compile_live("rsi_votes", single(), {"1D": native})
+    first = compiler.evaluate(price=8, as_of=31)
+    second = compiler.evaluate(price=10, as_of=32)
+    third = compiler.evaluate(price=8, as_of=33)
+    assert first["rows"][0]["value"] == pytest.approx(20)
+    assert second["rows"][0]["value"] == pytest.approx(60)
+    assert third["rows"][0]["value"] == first["rows"][0]["value"]
+    assert compiler.evaluate(price=8, as_of=33) is third
+
+
+def test_live_only_first_is_a_tick_edge_and_gap_reentry_is_baselined():
+    native = live_bars()
+    compiler = compile_live("rsi_votes", single(onlyFirst=True), {"1D": native})
+    assert compiler.evaluate(price=8, as_of=31)["outputs"]["buy_signal"] == 0
+    assert compiler.evaluate(price=10, as_of=32)["outputs"]["buy_signal"] == 0
+    entry = compiler.evaluate(price=8, as_of=33)
+    assert entry["outputs"]["buy_signal"] == 1
+    assert compiler.evaluate(price=8, as_of=33) is entry
+    assert compiler.evaluate(price=8, as_of=34)["outputs"]["buy_signal"] == 0
+    assert not compiler.evaluate(price=8, as_of=35, buckets={})["ready"]
+    assert compiler.evaluate(price=8, as_of=36)["outputs"]["buy_signal"] == 0
+    compiler.reset()
+    assert compiler.evaluate(price=8, as_of=37)["outputs"]["buy_signal"] == 0
+
+
+def test_live_native_boundary_identity_and_unknown_end_are_not_calendar_guesses():
+    native = live_bars(end_known=False)
+    compiler = compile_live("rsi_votes", single(tf1="3D"), {"3D": native}, "3D")
+    assert not compiler.evaluate(price=8, as_of=31)["ready"]
+    assert compiler.evaluate(price=8, as_of=31, buckets={"3D": native[-1]})["ready"]
+    next_bucket = replace(native[-1], time=31, end=51)
+    result = compiler.evaluate(price=8, as_of=32, buckets={"3D": next_bucket})
+    assert not result["ready"]
+    assert result["rows"][0]["reason"] == "native_seed_recompile_required"
+    assert not compiler.evaluate(price=8, as_of=29, buckets={"3D": native[-1]})["ready"]
+
+
+def test_live_missing_enabled_frame_blocks_consensus_instead_of_lowering_votes():
+    compiler = compile_live("rsi_votes", {"len1": 2, "len3": 2}, {"1D": live_bars()})
+    point = compiler.evaluate(price=8, as_of=31)
+    assert not point["ready"]
+    assert point["outputs"]["buy_signal"] is None
+    assert point["rows"][0]["ready"]
+    assert not point["rows"][2]["ready"]
+
+
+def test_live_rmi_rolls_back_momentum_native_rma_and_uses_current_price():
+    native = live_bars((10, 9, 8, 10, 9, 9))
+    compiler = compile_live("rmi_votes", single(mom1=2), {"1D": native})
+    # Momentum changes -2,+1,+1 seed to gain .75/loss .5; current reference=10.
+    assert compiler.evaluate(price=8, as_of=51)["rows"][0]["rmi"] == pytest.approx(23.0769230769)
+    assert compiler.evaluate(price=12, as_of=52)["rows"][0]["rmi"] == pytest.approx(84.6153846154)
+    assert compiler.evaluate(price=8, as_of=53)["rows"][0]["rmi"] == pytest.approx(23.0769230769)
+
+
+def test_live_smi_uses_native_running_extremes_but_never_compounds_tick_ema():
+    native = live_bars((10, 10))
+    current = replace(native[-1], high=12, low=8)
+    compiler = compile_live(
+        "smi_votes", single(len1=1, smoothA1=3, smoothB1=3), {"1D": (*native[:-1], current)}
+    )
+    assert compiler.evaluate(price=11, as_of=11)["rows"][0]["smi"] == pytest.approx(20)
+    assert compiler.evaluate(price=9, as_of=12)["rows"][0]["smi"] == pytest.approx(-20)
+    assert compiler.evaluate(price=11, as_of=13)["rows"][0]["smi"] == pytest.approx(20)
+    compiler.evaluate(price=15, as_of=14)
+    assert compiler.evaluate(price=11, as_of=15)["rows"][0]["smi"] == pytest.approx(-100 / 13)
+
+
+def test_live_smi_native_bucket_does_not_need_primary_range_reconstruction():
+    native = live_bars((10, 8, 9, 9), span=8)
+    compiler = compile_live("smi_votes", smi_single(tf1="3D"), {"3D": native}, "3D")
+    point = compiler.evaluate(price=9.5, as_of=25)
+    assert point["ready"] and point["outputs"]["sell_signal"] == 1
+    assert point["rows"][0]["smi"] == pytest.approx(50)
+
+
+def test_live_recompile_retains_only_verified_continuity_and_rejects_bad_native_seed():
+    native = live_bars()
+    first = compile_live("rsi_votes", single(onlyFirst=True), {"1D": native})
+    first.evaluate(price=10, as_of=31)
+    continued = compile_live(
+        "rsi_votes", single(onlyFirst=True), {"1D": native}, previous=first, continuity=True
+    )
+    assert continued.evaluate(price=8, as_of=32)["outputs"]["buy_signal"] == 1
+    reset = compile_live("rsi_votes", single(onlyFirst=True), {"1D": native}, previous=first)
+    assert reset.evaluate(price=8, as_of=32)["outputs"]["buy_signal"] == 0
+    corrupted = (*native[:1], replace(native[1], confirmed=False), *native[2:])
+    invalid = compile_live("rsi_votes", single(), {"1D": corrupted})
+    assert not invalid.evaluate(price=8, as_of=32)["ready"]
+
+
+def test_live_pause_preserves_observed_native_extremes_and_timestamp_order():
+    native = live_bars((10, 10))
+    evaluator = compile_live("smi_votes", smi_single(onlyFirst=True), {"1D": native})
+    assert evaluator.current_range("1D") == (11, 9)
+    assert evaluator.current_range("3D") is None
+    evaluator.evaluate(price=15, as_of=11)
+    assert evaluator.current_range("1D") == (15, 9)
+    evaluator.pause_signal_baseline()
+    assert evaluator.current_range("1D") == (15, 9)
+    assert evaluator.evaluate(price=15, as_of=12)["outputs"]["sell_signal"] == 0
+    assert evaluator.evaluate(price=10, as_of=11)["reason"] == "out_of_order_observation"
 
 
 @pytest.mark.parametrize(

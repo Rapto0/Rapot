@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "indicators": [
     {
       "id": "htf_rsi_score",
@@ -2759,5 +2759,11 @@
       "base_policy": "minimum"
     }
   ],
-  "max_history_bars": 10000
+  "max_history_bars": 10000,
+  "live_policy": {
+    "evaluation": "native_bucket_quote_update",
+    "requires_primary_close": false,
+    "signal_edges": "previous_continuous_live_observation",
+    "history": "original_pine_replay"
+  }
 }

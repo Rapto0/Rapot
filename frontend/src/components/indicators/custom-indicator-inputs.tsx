@@ -49,7 +49,7 @@ export function CustomIndicatorInputs({ spec, value, onChange, prefix = "Göster
     </div>
 }
 
-export const customPolicyLabel = (policy: CustomIndicatorSpec["base_policy"]) => policy === "daily" ? "Bu gösterge 1D grafikte çalışır; sinyali günlük kapanışta kesinleşir." : policy === "minimum" ? "Grafik periyodu, açık satırların en küçük periyoduyla aynı olmalıdır; sinyal kapanışta kesinleşir." : "Açık mumdaki skor değişebilir; geçmiş üst periyot değerleri kapanışa göre gösterilir."
+export const customPolicyLabel = (policy: CustomIndicatorSpec["base_policy"]) => policy === "daily" ? "Ana periyot 1D'dir. Bütün etkin periyotların gelişen değerleri aynı canlı fiyatla hesaplanır; günlük kapanış beklenmez." : policy === "minimum" ? "Ana periyot açık satırların en küçük periyoduyla aynı olmalıdır. Bu periyodun kapanışı beklenmez; bütün satırlar aynı canlı fiyatı kullanır." : "Bütün etkin periyotların gelişen değerleri aynı canlı fiyatla hesaplanır. Açık mumdaki skor ve sinyal fiyat geldikçe değişebilir."
 
 export function customReceivedTime(value: string | number | null | undefined): number | null {
     const time = typeof value === "number" ? value : typeof value === "string" ? Date.parse(value) / 1000 : NaN

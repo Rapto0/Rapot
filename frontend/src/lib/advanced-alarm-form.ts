@@ -8,6 +8,16 @@ export const OUTPUT_LABELS: Record<string, string> = { score: "Skor", dip_score:
 export const OP_LABELS: Record<CompareOp, string> = { gt: "Büyüktür", gte: "Büyük veya eşit", lt: "Küçüktür", lte: "Küçük veya eşit", eq: "Eşittir", crossed_above: "Yukarı keser", crossed_below: "Aşağı keser" }
 export const PERIOD_FIELDS = new Set<AlarmField>(["rsi", "ema", "sma", "atr", "wr"])
 export const isGroup = (node: Condition): node is ConditionGroup => node.op === "and" || node.op === "or"
+export function hasMixedCustomTechnical(condition: Condition): boolean {
+    const fields = new Set<AlarmField>()
+    const visit = (node: Condition) => {
+        if (isGroup(node)) { node.children.forEach(visit); return }
+        fields.add(node.left.field)
+        if (typeof node.right === "object") fields.add(node.right.field)
+    }
+    visit(condition)
+    return fields.has("custom") && [...fields].some(field => field !== "custom" && field !== "price")
+}
 export const makeRef = (field: AlarmField): FieldRef => ({ field, ...(PERIOD_FIELDS.has(field) ? { period: field === "ema" || field === "sma" ? 20 : 14 } : {}), ...(field === "combo" || field === "hunter" ? { side: "buy" as const } : {}), ...(field === "custom" ? { indicator: "htf_rsi_score", output: "buy_signal", inputs: {} } : {}) })
 export function isCustomTimeframe(value: string): boolean {
     if (Object.hasOwn(TIMEFRAME_LABELS, value)) return true
@@ -18,7 +28,7 @@ export function isCustomTimeframe(value: string): boolean {
 }
 export function withIndicatorPreset(draft: AdvancedDraft, indicator: string): AdvancedDraft {
     if (!Object.hasOwn(CUSTOM_INDICATOR_LABELS, indicator)) throw new Error("Gösterge desteklenmiyor.")
-    return { ...draft, timeframe: "1d", trigger: indicator === "htf_rsi_score" ? "intrabar" : "bar_close", mode: "once_per_bar", condition: { op: "eq", left: { field: "custom", indicator, output: "buy_signal", inputs: {} }, right: 1 } }
+    return { ...draft, timeframe: "1d", trigger: "intrabar", mode: "on_enter", condition: { op: "eq", left: { field: "custom", indicator, output: "buy_signal", inputs: {} }, right: 1 } }
 }
 export const defaultLeaf = (category: AlarmCategory = "technical"): ConditionLeaf => ({ op: "crossed_above", left: makeRef(category === "price" ? "price" : "rsi"), right: category === "price" ? 100 : 30 })
 

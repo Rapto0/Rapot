@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from application.services.custom_indicators.core import Bar
+from application.services.custom_indicators.live import compile_live
 from application.services.custom_indicators.score import SPECS, evaluate_score
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -49,6 +50,65 @@ def snapshot_inputs(**changes):
 
 def calculate(kind, inputs, primary, frames, **kwargs):
     return evaluate_score(kind, inputs, tuple(primary), frames, **kwargs)
+
+
+def live_native(closes=(10, 8, 9, 9), duration=10):
+    history = native(closes[:-1], duration)
+    current = bar(len(history) * duration, closes[-1], end=len(closes) * duration, confirmed=False)
+    return (*history, current)
+
+
+def test_live_weighted_uses_same_instant_native_rsi_and_tick_zone_entry():
+    daily, two_day = live_native(), live_native((20, 18, 19, 19), 8)
+    inputs = weighted_inputs(en_2d=True, w_1d=50.0, w_2d=50.0)
+    evaluator = compile_live("htf_rsi_score", inputs, {"1D": daily, "2D": two_day})
+    first = evaluator.evaluate(price=10, as_of=31)
+    assert first["ready"] and first["outputs"]["buy_signal"] == 0
+    second = evaluator.evaluate(price=8, as_of=31.5)
+    assert second["outputs"]["score"] == pytest.approx(12)
+    assert second["outputs"]["buy_signal"] == 1
+    assert second["rows"][0]["rsi"] == pytest.approx(20)
+    assert second["rows"][1]["rsi"] == pytest.approx(4)
+    assert evaluator.evaluate(price=8, as_of=31.75)["outputs"]["buy_signal"] == 0
+
+
+def test_live_weighted_missing_active_native_frame_is_unknown_not_partial_renormalization():
+    evaluator = compile_live("htf_rsi_score", weighted_inputs(en_2d=True), {"1D": live_native()})
+    point = evaluator.evaluate(price=8, as_of=31)
+    assert not point["ready"]
+    assert point["outputs"]["score"] is None
+    assert point["outputs"]["buy_signal"] is None
+
+
+def test_live_snapshot_streak_is_native_candle_count_not_tick_count_and_no_close_gate():
+    inputs = snapshot_inputs(dipThr1=40.0)
+    evaluator = compile_live("rsi_snapshot", inputs, {"1D": live_native((10, 8, 9, 7))})
+    first = evaluator.evaluate(price=7, as_of=31)
+    assert first["ready"]
+    assert first["rows"][0]["rsi"] == pytest.approx(100 / 6)
+    assert first["rows"][0]["dip_streak"] == 2
+    assert first["outputs"]["dip_score"] == 5.5
+    assert first["outputs"]["buy_signal"] == 1
+    for observed in (32, 33, 34):
+        point = evaluator.evaluate(price=7, as_of=observed)
+        assert point["rows"][0]["dip_streak"] == 2
+        assert point["outputs"]["dip_score"] == 5.5
+    assert evaluator.evaluate(price=10, as_of=35)["outputs"]["dip_score"] == 0
+    assert evaluator.evaluate(price=7, as_of=36)["outputs"]["dip_score"] == 5.5
+
+
+def test_live_snapshot_missing_native_history_blocks_all_signal_outputs():
+    evaluator = compile_live("rsi_snapshot", snapshot_inputs(en2=True), {"1D": live_native()})
+    point = evaluator.evaluate(price=7, as_of=31)
+    assert not point["ready"]
+    assert point["outputs"]["buy_signal"] is None
+
+
+def test_live_evaluator_rejects_out_of_order_price_and_requires_new_edge_baseline():
+    evaluator = compile_live("htf_rsi_score", weighted_inputs(), {"1D": live_native()})
+    assert evaluator.evaluate(price=10, as_of=32)["ready"]
+    assert evaluator.evaluate(price=8, as_of=31)["reason"] == "out_of_order_observation"
+    assert evaluator.evaluate(price=8, as_of=33)["outputs"]["buy_signal"] == 0
 
 
 def _pine_inputs(source):

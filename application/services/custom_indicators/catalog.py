@@ -6,12 +6,13 @@ import math
 import re
 from copy import deepcopy
 
+from .live import compile_live  # noqa: F401
 from .score import SPECS as SCORE_SPECS
 from .score import evaluate_score
 from .votes import SPECS as VOTE_SPECS
 from .votes import evaluate_votes
 
-VERSION = 1
+VERSION = 2
 MAX_HISTORY = 10000
 ALIASES = {
     "1m": "1",
@@ -58,6 +59,12 @@ def catalog() -> dict:
         "version": VERSION,
         "indicators": deepcopy(list(SPECS.values())),
         "max_history_bars": MAX_HISTORY,
+        "live_policy": {
+            "evaluation": "native_bucket_quote_update",
+            "requires_primary_close": False,
+            "signal_edges": "previous_continuous_live_observation",
+            "history": "original_pine_replay",
+        },
     }
 
 

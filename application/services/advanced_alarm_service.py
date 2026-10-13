@@ -10,9 +10,11 @@ import time
 import uuid
 from collections import OrderedDict
 from collections.abc import Callable
+from contextlib import suppress
 from datetime import UTC, datetime
 from itertools import islice
 from pathlib import Path
+from threading import RLock
 
 import aiohttp
 
@@ -44,6 +46,18 @@ def _finite(value):
 class AdvancedAlarmEngine:
     def __init__(self, hub=None, *, clock=None, wall_clock=None):
         self._hub = hub
+        self._evaluation_lock = RLock()
+        self._live_index_signature = None
+        self._live_index = {}
+        self._live_custom_ids = set()
+        self._live_plan_keys = {}
+        self._live_bound = False
+        self._custom_cursor = (0, 0)
+        self._custom_remaining = 0
+        self._custom_maintenance_at = -math.inf
+        self._pending_live_states: OrderedDict = OrderedDict()
+        self._last_live_flush = -math.inf
+        self._delivery_listener = None
         self._clock = clock or time.monotonic
         self._wall_clock = wall_clock or (lambda: datetime.now(UTC))
         self._rules = []
@@ -66,6 +80,15 @@ class AdvancedAlarmEngine:
             "running": False,
             "last_cycle_at": None,
             "last_error": None,
+            "live_evaluation": {
+                "updates": 0,
+                "checked": 0,
+                "last_update_at": None,
+                "last_duration_ms": None,
+                "last_error": None,
+                "indexed_symbols": 0,
+                "membership_groups": 0,
+            },
             "evaluation": {
                 "total": 0,
                 "checked": 0,
@@ -87,6 +110,183 @@ class AdvancedAlarmEngine:
     def set_running(self, value):
         self._runtime["running"] = bool(value)
 
+    def bind_live_updates(self):
+        """The data worker blocks here until this observation has been consumed."""
+        listener = getattr(self.hub, "set_update_listener", None)
+        if listener:
+            listener(self.market_updated)
+            self._live_bound = True
+
+    def set_delivery_listener(self, callback):
+        self._delivery_listener = callback
+
+    def _wake_delivery(self):
+        callback = self._delivery_listener
+        if callback:
+            # Shutdown may close the asyncio loop after the durable commit.
+            # The outbox remains pending for the next delivery worker.
+            with suppress(RuntimeError):
+                callback()
+
+    @staticmethod
+    def _has_custom(condition):
+        if condition["op"] in {"and", "or"}:
+            return any(AdvancedAlarmEngine._has_custom(row) for row in condition["children"])
+        return any(
+            isinstance(condition.get(side), dict) and condition[side].get("field") == "custom"
+            for side in ("left", "right")
+        )
+
+    def _index_live_rules(self):
+        # A symbol's rule membership is one Python integer bitmap, not thousands
+        # of (rule, symbol) objects. Shared watchlists are expanded only once.
+        memberships = [self.hub.symbols(rule["id"]) for rule in self._rules]
+        signature = tuple(
+            (rule["id"], rule["revision"], id(members))
+            for rule, members in zip(self._rules, memberships, strict=True)
+        )
+        if signature == self._live_index_signature:
+            return
+        groups, custom_ids, plan_keys, interned = {}, set(), {}, {}
+        for position, (rule, members) in enumerate(zip(self._rules, memberships, strict=True)):
+            if not self._has_custom(rule["condition"]):
+                continue
+            custom_ids.add(rule["id"])
+            signature_key = (
+                rule.get("timeframe"),
+                rule.get("trigger"),
+                rule.get("mode"),
+                json.dumps(rule["condition"], sort_keys=True),
+            )
+            plan_keys[rule["id"]] = interned.setdefault(signature_key, len(interned))
+            group = groups.setdefault(id(members), [members, 0])
+            group[1] |= 1 << position
+        index = {}
+        for members, mask in groups.values():
+            for member in members:
+                key = member["market_type"], member["symbol"]
+                index[key] = index.get(key, 0) | mask
+        self._live_index, self._live_index_signature = index, signature
+        self._live_custom_ids = custom_ids
+        self._live_plan_keys = plan_keys
+        self._custom_cursor, self._custom_remaining = (0, 0), 0
+        self._custom_maintenance_at = -math.inf
+        self._runtime["live_evaluation"].update(
+            indexed_symbols=len(index), membership_groups=len(groups), maintenance_seconds=5
+        )
+
+    def _flush_live_states(self, *, force=False):
+        if not self._pending_live_states:
+            return
+        if not force and self._clock() - self._last_live_flush < 0.1:
+            return
+        while self._pending_live_states:
+            batch = list(islice(self._pending_live_states.values(), MAX_CHANGES_PER_TICK))
+            repository.apply_batch(batch)
+            for change in batch:
+                self._pending_live_states.pop(change["key"], None)
+        self._last_live_flush = self._clock()
+
+    def market_updated(self, market, symbol):
+        """Consume every published symbol snapshot before the next one replaces it.
+
+        Called synchronously, outside provider/data locks. Incoming events have a
+        separate bounded queue with explicit continuity reset on loss. Events are
+        committed immediately; non-event state transitions share bounded batches.
+        """
+        with self._evaluation_lock:
+            mask = self._live_index.get((market, symbol), 0)
+            if not mask or self._generation != repository.generation():
+                return
+            started = self._clock()
+            status = self._runtime["live_evaluation"]
+            checked = 0
+            keys = []
+            now = self._wall_clock()
+            try:
+                rules = []
+                snapshots = {}
+                while mask:
+                    bit = mask & -mask
+                    rules.append(self._rules[bit.bit_length() - 1])
+                    mask ^= bit
+                # Diagnostic TEST leases can expire between maintenance passes;
+                # ordinary user rules do not depend on a lease.
+                rules = self._lease_gate.filter_rules(rules)
+                member = {"market_type": market, "symbol": symbol}
+                for offset in range(0, len(rules), STATE_LOAD_BATCH):
+                    chunk = rules[offset : offset + STATE_LOAD_BATCH]
+                    keys = [(r["id"], r["revision"], symbol, market) for r in chunk]
+                    missing = [key for key in keys if key not in self._states]
+                    if missing:
+                        restored = repository.load_states(missing)
+                        for key in missing:
+                            self._states[key] = restored.get(key)
+                    events = []
+                    for rule, key in zip(chunk, keys, strict=True):
+                        previous = self._states.get(key)
+                        plan_key = self._live_plan_keys[rule["id"]]
+                        if plan_key not in snapshots:
+                            snapshots[plan_key] = self.hub.snapshot(rule, member, now=now)
+                        observation = snapshots[plan_key]
+                        state, event = self._evaluate(rule, observation, previous, now)
+                        checked += 1
+                        self._observe_rule(rule, observation, state.get("ready"), now.isoformat())
+                        self._diagnostic_totals["checked"] += 1
+                        self._diagnostic_totals["ready"] += int(bool(state.get("ready")))
+                        meaningful = (
+                            event
+                            or (previous is None and state.get("ready"))
+                            or (
+                                previous is not None
+                                and any(
+                                    state.get(k) != previous.get(k)
+                                    for k in (
+                                        "ready",
+                                        "matched",
+                                        "continuity_id",
+                                        "last_bar",
+                                        "last_triggered_at",
+                                    )
+                                )
+                            )
+                        )
+                        if meaningful:
+                            change = {"key": key, "state": state, "event": event}
+                            if event:
+                                events.append(change)
+                                self._pending_live_states.pop(key, None)
+                            else:
+                                self._pending_live_states[key] = change
+                        self._states[key] = state
+                        self._states.move_to_end(key)
+                    if events:
+                        accepted = repository.apply_batch(events)
+                        if any(change["key"] in accepted for change in events):
+                            self._wake_delivery()
+                    self._flush_live_states(
+                        force=len(self._pending_live_states) >= MAX_CHANGES_PER_TICK
+                    )
+                while len(self._states) > STATE_CACHE_LIMIT:
+                    self._states.popitem(last=False)
+                status["last_error"] = None
+            except Exception:
+                # Never invent a crossing after an uncommitted event or a write
+                # failure. The caller also resets source continuity before retry.
+                for key in list(self._states):
+                    if key[2:] == (symbol, market):
+                        self._states[key] = None
+                        self._pending_live_states.pop(key, None)
+                status["last_error"] = (
+                    "Canlı alarm değerlendirmesi kesildi; devamlılık yeniden hazırlanıyor."
+                )
+                raise
+            finally:
+                status["updates"] += 1
+                status["checked"] += checked
+                status["last_update_at"] = now.isoformat()
+                status["last_duration_ms"] = round((self._clock() - started) * 1000, 3)
+
     def heartbeat(self, owner, *, test_run_id=None):
         """Constant-size, provider/DB-free counters; global cycles are labelled explicitly."""
         selected = PREFIX + test_run_id if test_run_id is not None else owner
@@ -99,6 +299,7 @@ class AdvancedAlarmEngine:
             "last_cycle_failed": self._runtime["last_error"] is not None,
             "evaluation_scope": "global_engine",
             "evaluation": dict(self._runtime["evaluation"]),
+            "live_evaluation": dict(self._runtime["live_evaluation"]),
             "cumulative": dict(self._published_totals),
             "counters_as_of": self._diagnostics_at,
             "selected_scope": "acceptance_run" if test_run_id is not None else "current_owner",
@@ -229,18 +430,23 @@ class AdvancedAlarmEngine:
         self._source_rules = rules
         self._rules_at, self._generation = self._clock(), generation
 
-    def _jobs(self):
+    def _jobs(self, mode="all", cursor=None):
         """Store only membership lists, not the potentially six-million-rule cross product."""
         # The provider may replace its universe during this tick. Retain the
         # existing immutable tuples so the count and iterator see one snapshot;
         # otherwise an emptied universe can spin forever without yielding work.
-        memberships = [tuple(self.hub.symbols(rule["id"])) for rule in self._rules]
+        memberships = [
+            tuple(self.hub.symbols(rule["id"]))
+            if mode == "all" or (rule["id"] in self._live_custom_ids) == (mode == "custom")
+            else ()
+            for rule in self._rules
+        ]
         total = sum(len(symbols) for symbols in memberships)
         if not total:
             return iter(()), 0
 
         def jobs():
-            ri, si = self._cursor
+            ri, si = self._cursor if cursor is None else cursor
             ri %= len(self._rules)
             visited = 0
             while visited < min(total, MAX_EVALUATIONS_PER_TICK):
@@ -254,6 +460,35 @@ class AdvancedAlarmEngine:
                 yield rule, symbol, (ri, si)
 
         return jobs(), total
+
+    def _maintenance_jobs(self):
+        if not self._live_bound:
+            return self._jobs()
+        ordinary, ordinary_total = self._jobs("ordinary")
+        custom, custom_total = self._jobs("custom", self._custom_cursor)
+        if not self._custom_remaining and self._clock() - self._custom_maintenance_at >= 5:
+            self._custom_remaining = custom_total
+            self._custom_maintenance_at = self._clock()
+        custom_limit = min(custom_total, self._custom_remaining)
+        custom = islice(custom, custom_limit)
+
+        def interleaved():
+            lanes = [(ordinary, "ordinary"), (custom, "custom")]
+            count = 0
+            while lanes and count < MAX_EVALUATIONS_PER_TICK:
+                for lane in lanes.copy():
+                    iterator, name = lane
+                    job = next(iterator, None)
+                    if job is None:
+                        lanes.remove(lane)
+                        continue
+                    rule, symbol, cursor = job
+                    yield rule, symbol, (*cursor, name)
+                    count += 1
+                    if count >= MAX_EVALUATIONS_PER_TICK:
+                        break
+
+        return interleaved(), ordinary_total + custom_limit
 
     @staticmethod
     def _evaluate(rule, snapshot, previous, now):
@@ -321,11 +556,17 @@ class AdvancedAlarmEngine:
         return state, event
 
     def tick(self):
+        with self._evaluation_lock:
+            self._tick()
+
+    def _tick(self):
         started = self._clock()
         original_cursor = self._cursor
+        original_custom = (self._custom_cursor, self._custom_remaining, self._custom_maintenance_at)
         self._runtime["last_error"] = None
         self._runtime["backpressure"] = None
         try:
+            self._flush_live_states(force=True)
             self._refresh()
             eligible = self._lease_gate.filter_rules(self._source_rules)
             if [(row["id"], row["revision"]) for row in eligible] != [
@@ -334,7 +575,8 @@ class AdvancedAlarmEngine:
                 self._cursor = (0, 0)
                 self.hub.configure(eligible)
             self._rules = eligible
-            jobs, total = self._jobs()
+            self._index_live_rules()
+            jobs, total = self._maintenance_jobs()
             changes, ephemeral = [], []
             health = {}
             checked = ready_count = 0
@@ -413,8 +655,14 @@ class AdvancedAlarmEngine:
                     if meaningful:
                         changes.append({"key": key, "state": state, "event": event})
                     ephemeral.append((key, state))
-                    self._cursor = cursor
+                    if len(cursor) == 3 and cursor[2] == "custom":
+                        self._custom_cursor = cursor[:2]
+                        self._custom_remaining = max(0, self._custom_remaining - 1)
+                    else:
+                        self._cursor = cursor[:2]
             accepted = repository.apply_batch(changes)
+            if any(change.get("event") and change["key"] in accepted for change in changes):
+                self._wake_delivery()
             for key, result in health.items():
                 result["state"] = (
                     "error"
@@ -446,12 +694,18 @@ class AdvancedAlarmEngine:
             }
         except repository.CapacityPressure:
             self._cursor = original_cursor
+            self._custom_cursor, self._custom_remaining, self._custom_maintenance_at = (
+                original_custom
+            )
             self._runtime["last_error"] = (
                 "Disk rezervi korunuyor; değerlendirme kaydı ve teslim bekletiliyor."
             )
             self._runtime["backpressure"] = "disk_reserve"
         except Exception:
             self._cursor = original_cursor
+            self._custom_cursor, self._custom_remaining, self._custom_maintenance_at = (
+                original_custom
+            )
             self._runtime["last_error"] = (
                 "Değerlendirme tamamlanamadı; kaydedilen sıra sonraki turda yeniden denenecek."
             )

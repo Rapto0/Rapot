@@ -14,7 +14,7 @@ import re
 import threading
 import time
 import uuid
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -25,13 +25,13 @@ MAX_NATIVE_SERIES = 64
 MAX_NATIVE_ROWS = 60000
 MAX_RESULTS = 4096
 MAX_RESULT_POINTS = 128
-MAX_RESULT_CELLS = 120000
+MAX_RESULT_CELLS = 262144
 MAX_PREVIEW_CELLS = 32768
 MAX_PREVIEWS = 32
 MAX_CONFIGS = 256
 MAX_HISTORY_SUMMARIES = 8192
 PREVIEW_SECONDS = 120
-REFRESH_SECONDS = 30
+REFRESH_SECONDS = 21600  # History reconciliation only; live prices are event driven.
 STALE_SECONDS = 180
 
 
@@ -264,6 +264,7 @@ class CustomIndicatorData:
         self._provider = provider
         self._clock = clock or time.time
         self._lock = threading.RLock()
+        self._publication_lock = threading.RLock()
         self._wake = threading.Event()
         self._stop = threading.Event()
         self._thread = None
@@ -288,6 +289,72 @@ class CustomIndicatorData:
         self._turn = 0
         self._last_completed_at = None
         self._last_cycle_seconds = None
+        from application.services.custom_indicator_live import LiveIndicatorData
+
+        self.live = LiveIndicatorData(self)
+        self._seed_due = set()
+        self._live_signature = None
+        self._publication_epoch = 0
+        self._publication_members = {}
+        self._live_cells = 0
+        self._job_order = ()
+        self._job_cursor = 0
+        self._seed_queue = deque()
+        self._seed_queued = set()
+        self._closed_configs = set()
+        self._history_last_error = None
+
+    def _sync_live(self):
+        with self._lock:
+            active_previews = tuple(
+                key for key, (expires, _) in self._previews.items() if expires > self._clock()
+            )
+            signature = self._generation, id(self._universe), active_previews
+            if signature == self._live_signature:
+                return
+            self._live_signature = signature
+            jobs = {}
+            from application.services.custom_indicator_live import MAX_LIVE_JOBS
+
+            for identity, symbols, all_bist in self._memberships:
+                for member in sorted(set(symbols) | (set(self._universe) if all_bist else set())):
+                    jobs[(*member, identity)] = self._configs[identity]
+                    if len(jobs) >= MAX_LIVE_JOBS:
+                        break
+                if len(jobs) >= MAX_LIVE_JOBS:
+                    break
+            rule_job_keys = frozenset(jobs)
+            for key, (expires, config) in self._previews.items():
+                if expires > self._clock() and len(jobs) < MAX_LIVE_JOBS:
+                    jobs[key] = config
+        self.live.configure(jobs.items(), rule_job_keys=rule_job_keys)
+        with self._lock:
+            self._job_order = tuple(sorted(key for key in jobs if self.live.admitted(key)))
+            retained_jobs = set(self._job_order)
+            self._seed_due.intersection_update(retained_jobs)
+            self._seed_queue = deque(key for key in self._seed_queue if key in retained_jobs)
+            self._seed_queued = set(self._seed_queue)
+            members = {key[:2] for key in retained_jobs}
+            self._publication_members = {
+                key: value for key, value in self._publication_members.items() if key in members
+            }
+            self._job_cursor = 0
+            for key in self._job_order:
+                if key not in self._results:
+                    self._queue_seed(key)
+
+    def _queue_seed(self, key):
+        if self.live.admitted(key) and key not in self._seed_queued:
+            self._seed_queue.append(key)
+            self._seed_queued.add(key)
+
+    def _remove_result(self, key):
+        result = self._results.pop(key, None)
+        if result and result.get("live"):
+            self._live_cells -= self._result_cells(result)
+
+    def publication_token(self, member):
+        return self._publication_epoch, self._publication_members.get(member, 0)
 
     @property
     def provider(self):
@@ -316,7 +383,7 @@ class CustomIndicatorData:
     def configure(self, rules, *, universe=()):
         from application.services.advanced_alarm_conditions import condition_fields
 
-        configs, memberships, blocked = {}, {}, set()
+        configs, memberships, blocked, closed_configs = {}, {}, set(), set()
         for rule in rules:
             if not rule.get("enabled", True):
                 continue
@@ -328,6 +395,8 @@ class CustomIndicatorData:
                     blocked.add(identity)
                     continue
                 configs[identity] = config
+                if rule.get("trigger") == "bar_close":
+                    closed_configs.add(identity)
                 target = memberships.setdefault(identity, {"symbols": set(), "all_bist": False})
                 target["all_bist"] |= rule.get("scope") == "all_bist"
                 target["symbols"].update(
@@ -335,6 +404,7 @@ class CustomIndicatorData:
                 )
         with self._lock:
             self._configs = configs
+            self._closed_configs = closed_configs
             self._blocked_configurations = len(blocked)
             self._memberships = [
                 (identity, tuple(sorted(value["symbols"])), value["all_bist"])
@@ -347,17 +417,19 @@ class CustomIndicatorData:
             retained = set(configs) | {key[2] for key in self._previews}
             for key in list(self._results):
                 if key[2] not in retained:
-                    self._results.pop(key)
+                    self._remove_result(key)
             if not self._memberships and not self._previews:
                 self._native.clear()
                 self._errors.clear()
                 self._preview_results.clear()
         self._wake.set()
+        self._sync_live()
 
     def set_universe(self, universe):
         with self._lock:
             self._universe = tuple(("BIST", item["symbol"]) for item in universe)
             self._refresh_count()
+        self._sync_live()
 
     def _refresh_count(self):
         self._jobs_requested = sum(
@@ -375,10 +447,12 @@ class CustomIndicatorData:
                 target=self._loop, name="custom-indicator-data", daemon=True
             )
             self._thread.start()
+        self.live.start()
 
     def stop(self):
         self._stop.set()
         self._wake.set()
+        self.live.stop()
         if self._thread:
             self._thread.join()
         with self._lock:
@@ -386,10 +460,12 @@ class CustomIndicatorData:
             self._running = False
             self._native.clear()
             self._results.clear()
+            self._live_cells = 0
             self._preview_results.clear()
 
     def invalidate(self):
         with self._lock:
+            self._publication_epoch += 1
             self._generation += 1
             self._process_epoch = uuid.uuid4().hex
             self._native.clear()
@@ -398,6 +474,8 @@ class CustomIndicatorData:
             self._errors.clear()
             self._symbol_epochs.clear()
             self._history_summaries.clear()
+            self._live_cells = 0
+        self.live.invalidate()
         self._wake.set()
 
     def _next_job(self):
@@ -412,42 +490,55 @@ class CustomIndicatorData:
             if not self._memberships and not self._previews:
                 self._native.clear()
                 self._results.clear()
+                self._live_cells = 0
                 self._history_summaries.clear()
                 self._symbol_epochs.clear()
                 return None
             self._turn += 1
+            while self._seed_queue:
+                key = self._seed_queue.popleft()
+                self._seed_queued.discard(key)
+                if self.live.admitted(key):
+                    return key, self.live._configs[key], self._generation
             preview_job = None
             for key, (_, config) in self._previews.items():
                 cached = self._preview_results.get(key)
-                if not cached or now - cached["received"] >= REFRESH_SECONDS:
+                if not self.live.admitted(key):
+                    continue
+                if cached and now < cached.get("history_retry_at", 0):
+                    continue
+                if (
+                    key in self._seed_due
+                    or not cached
+                    or bool(cached.get("history_retry_at"))
+                    or cached.get("error")
+                    and now - cached["received"] >= 30
+                    or now - cached.get("seed_received", cached["received"]) >= REFRESH_SECONDS
+                ):
                     preview_job = key, config, self._generation
                     break
             if preview_job and (not self._memberships or self._turn % 4 == 0):
                 return preview_job
             if not self._memberships:
                 return preview_job
-            ri, si = self._cursor
-            for _ in range(len(self._memberships)):
-                ri %= len(self._memberships)
-                identity, symbols, all_bist = self._memberships[ri]
-                selected = tuple(
-                    sorted(set(symbols) | (set(self._universe) if all_bist else set()))
-                )
-                if selected:
-                    si %= len(selected)
-                    market, symbol = selected[si]
-                    self._cursor = (
-                        (ri, si + 1)
-                        if si + 1 < len(selected)
-                        else ((ri + 1) % len(self._memberships), 0)
-                    )
-                    key = (market, symbol, identity)
-                    cached = self._results.get(key)
-                    if not cached or now - cached["received"] >= REFRESH_SECONDS:
-                        return key, self._configs[identity], self._generation
-                    # A worker turn remains bounded even for thousands of symbols.
-                    return preview_job
-                ri, si = ri + 1, 0
+            for _ in range(min(64, len(self._job_order))):
+                self._job_cursor %= len(self._job_order)
+                key = self._job_order[self._job_cursor]
+                self._job_cursor += 1
+                if not self.live.admitted(key):
+                    continue
+                cached = self._results.get(key)
+                if cached and now < cached.get("history_retry_at", 0):
+                    continue
+                if (
+                    key in self._seed_due
+                    or not cached
+                    or bool(cached.get("history_retry_at"))
+                    or cached.get("error")
+                    and now - cached["received"] >= 30
+                    or now - cached.get("seed_received", cached["received"]) >= REFRESH_SECONDS
+                ):
+                    return key, self.live._configs[key], self._generation
             return preview_job
 
     def _loop(self):
@@ -462,6 +553,7 @@ class CustomIndicatorData:
 
     def _native_frame(self, market, symbol, timeframe, bars, epoch):
         key, now = (market, symbol, timeframe), self._clock()
+        publication_epoch = self.publication_token(key[:2])
         with self._lock:
             if self._stop.is_set():
                 raise ValueError("Özel gösterge veri servisi durduruldu.")
@@ -485,11 +577,18 @@ class CustomIndicatorData:
             [[bar.time, bar.end, bar.open, bar.high, bar.low, bar.close] for bar in points]
         )
         entry = Native(points, self._clock(), bars, digest, epoch)
-        with self._lock:
+        with self._publication_lock, self._lock:
             if self._stop.is_set() or self.provider.memory_epoch() != epoch:
                 raise ValueError("Hesap değişti; yeni native geçmiş bekleniyor.")
+            if publication_epoch != self.publication_token(key[:2]):
+                raise ValueError("Geçmiş isteği sırasında native kaynak değişti.")
             summary = self._history_summaries.get(key)
-            revision = bool(summary and not summary.continues(points, entry.received))
+            comparison_time = (
+                summary.received
+                if summary and self.live.native_continuity(key, epoch)
+                else entry.received
+            )
+            revision = bool(summary and not summary.continues(points, comparison_time))
             if summary and market == "BIST" and not timeframe.endswith(("D", "W", "M")):
                 revision |= any(
                     right.time > summary.last
@@ -500,23 +599,20 @@ class CustomIndicatorData:
                 )
             if revision:
                 member = (market, symbol)
-                self._symbol_epochs[member] = self._symbol_epochs.get(member, 0) + 1
-                for result_key in list(self._results):
-                    if result_key[:2] == member:
-                        self._results.pop(result_key)
+                self.live_gap(
+                    "Native geçmiş düzeltildi; canlı gösterge yeniden hazırlanıyor.", member
+                )
             self._native[key] = entry
             self._history_summaries[key] = HistorySummary.build(points, entry.received)
             self._history_summaries.move_to_end(key)
             while len(self._history_summaries) > MAX_HISTORY_SUMMARIES:
                 forgotten, _ = self._history_summaries.popitem(last=False)
-                self._symbol_epochs[forgotten[:2]] = self._symbol_epochs.get(forgotten[:2], 0) + 1
-                for result_key in list(self._results):
-                    if result_key[:2] == forgotten[:2]:
-                        self._results.pop(result_key)
+                self.live_gap("Native geçmiş karşılaştırma belleği yenileniyor.", forgotten[:2])
             if len(self._symbol_epochs) > MAX_HISTORY_SUMMARIES:
                 self._symbol_epochs.clear()
                 self._process_epoch = uuid.uuid4().hex
                 self._results.clear()
+                self._live_cells = 0
                 self._preview_results.clear()
             self._native.move_to_end(key)
             while (
@@ -532,6 +628,7 @@ class CustomIndicatorData:
 
         market, symbol, _ = key
         now = self._clock()
+        publication_epoch = self.publication_token(key[:2])
         try:
             with self._lock:
                 if self._stop.is_set() or generation != self._generation:
@@ -567,6 +664,7 @@ class CustomIndicatorData:
                 chart_timeframe=primary_tf,
                 as_of=self._clock(),
             )
+            prepared_seed = self.live.prepare_seed(config, frames, epoch)
             if len(values) != len(primary):
                 raise ValueError("Gösterge sonucu native mumlarla eşleşmiyor.")
             points = [
@@ -576,6 +674,7 @@ class CustomIndicatorData:
             result = {
                 "points": points,
                 "received": self._clock(),
+                "seed_received": self._clock(),
                 "source_time": primary[-1].time,
                 "freshness_time": daily[-1].time if market == "BIST" else primary[-1].time,
                 "freshness_duration": 86400 if market == "BIST" else _duration(primary_tf),
@@ -601,8 +700,61 @@ class CustomIndicatorData:
                 "config": config,
                 "error": "Native gösterge geçmişi alınamadı veya gerekli seans/kapanış bilgisi doğrulanamadı.",
             }
-        with self._lock:
-            if generation != self._generation or self._stop.is_set():
+        with self._publication_lock, self._lock:
+            if (
+                generation != self._generation
+                or self._stop.is_set()
+                or publication_epoch != self.publication_token(key[:2])
+            ):
+                return
+            self._seed_due.discard(key)
+            live_result = self._results.get(key)
+            if (
+                result["error"]
+                and live_result
+                and live_result.get("live")
+                and self.live.has_seed(key, self.provider.memory_epoch())
+            ):
+                # A history HTTP failure is not a live transport gap. Retain
+                # current quote/range/edge state and retry history at a bound.
+                self._history_last_error = result["error"]
+                live_result["history_retry_at"] = self._clock() + 30
+                if key in self._preview_results:
+                    self._preview_results[key]["history_retry_at"] = live_result["history_retry_at"]
+                return
+            self._history_last_error = result["error"]
+            if (
+                not result["error"]
+                and live_result
+                and live_result.get("live")
+                and self.live.retains_seed(key, prepared_seed)
+            ):
+                # Periodic history and explicit closed-bar replay must not roll
+                # back a newer live price, SMI range or signal-edge baseline.
+                # Native rollover already advances the compact closed seeds;
+                # genuine revisions clear them before reaching this branch.
+                before = self._result_cells(live_result)
+                live_result["closed_points"] = [
+                    {**point, "rows": []} for point in result["points"] if point["confirmed"]
+                ][-4:]
+                live_result["seed_received"] = result["received"]
+                live_result.pop("history_retry_at", None)
+                live_result.pop("native_wait", None)
+                self._live_cells += self._result_cells(live_result) - before
+                if key in self._previews:
+                    current = self._preview_results.get(key, live_result)["points"][-1:]
+                    history = [
+                        point
+                        for point in result["points"]
+                        if current and point["time"] < current[0]["time"]
+                    ]
+                    self._preview_results[key] = {
+                        **live_result,
+                        "points": [*history[-MAX_RESULT_POINTS + 1 :], *current],
+                    }
+                self._last_error = None
+                self._last_completed_at = result["received"]
+                self._last_cycle_seconds = max(0, result["received"] - now)
                 return
             if key in self._previews:
                 self._preview_results[key] = {
@@ -634,6 +786,7 @@ class CustomIndicatorData:
                     name: value for name, value in result["previous"].items() if name != "previous"
                 }
             result["continuity"] = f"{self._process_epoch}:{self._symbol_epochs.get(key[:2], 0)}"
+            self._remove_result(key)
             self._results[key] = result
             self._results.move_to_end(key)
             self._last_error = result["error"]
@@ -644,14 +797,169 @@ class CustomIndicatorData:
                 or sum(self._result_cells(item) for item in self._results.values())
                 > MAX_RESULT_CELLS
             ):
-                self._results.popitem(last=False)
+                self._remove_result(next(iter(self._results)))
+            if not result["error"]:
+                self.live.install_seed(key, prepared_seed, generation=generation)
 
     @staticmethod
     def _result_cells(result):
-        return sum(
-            len(point.get("outputs", {})) + sum(len(row) for row in point.get("rows", []))
-            for point in result["points"]
-        ) * (2 if result.get("previous") else 1)
+        def count(points):
+            return sum(
+                len(point.get("outputs", {})) + sum(len(row) for row in point.get("rows", []))
+                for point in points
+            )
+
+        previous = result.get("previous") or {}
+        return (
+            count(result["points"])
+            + count(result.get("closed_points", ()))
+            + count(previous.get("points", ()))
+            + count(previous.get("closed_points", ()))
+        )
+
+    def live_gap(self, reason, member=None, native_key=None):
+        """Invalidate comparison state after a provider gap; never invent a crossing."""
+        with self._publication_lock, self._lock:
+            self.live.clear_comparisons(member)
+            if member is None:
+                self._publication_epoch += 1
+            else:
+                self._publication_members[member] = self._publication_members.get(member, 0) + 1
+            for key, result in list(self._results.items()):
+                if member is None or key[:2] == member:
+                    before = self._result_cells(result) if result.get("live") else 0
+                    result["error"] = reason
+                    result.pop("previous", None)
+                    if result.get("live"):
+                        self._live_cells += self._result_cells(result) - before
+                    self._seed_due.add(key)
+                    self._queue_seed(key)
+            for key in list(self._native):
+                if (
+                    native_key == key
+                    or native_key is None
+                    and (member is None or key[:2] == member)
+                ):
+                    self._native.pop(key)
+            if member is None:
+                self._process_epoch = uuid.uuid4().hex
+            else:
+                self._symbol_epochs[member] = self._symbol_epochs.get(member, 0) + 1
+            self._last_error = reason
+        self._wake.set()
+
+    def native_refresh(self, native_key, *, jobs=None, invalidate_native=True):
+        """A witnessed next native bar refreshes seeds without fabricating a data gap."""
+        with self._publication_lock, self._lock:
+            member = native_key[:2]
+            self._publication_members[member] = self._publication_members.get(member, 0) + 1
+            if invalidate_native:
+                self._native.pop(native_key, None)
+            for key, result in self._results.items():
+                if key[:2] == native_key[:2] and (jobs is None or key in jobs):
+                    self._seed_due.add(key)
+                    self._queue_seed(key)
+                    result["native_wait"] = True
+        self._wake.set()
+
+    def native_advanced(self, native_key, closed, current):
+        """Retain a witnessed rollover in the bounded shared bootstrap cache."""
+        with self._publication_lock, self._lock:
+            member = native_key[:2]
+            self._publication_members[member] = self._publication_members.get(member, 0) + 1
+            old = self._native.get(native_key)
+            if old is not None and old.bars[-1].time == closed.time:
+                points = (*old.bars[:-1], closed, current)[-len(old.bars) :]
+                digest = _digest(
+                    [
+                        old.digest,
+                        closed.time,
+                        closed.high,
+                        closed.low,
+                        closed.close,
+                        current.time,
+                        current.open,
+                    ]
+                )
+                self._native[native_key] = replace(old, bars=points, digest=digest)
+                self._history_summaries[native_key] = HistorySummary.build(points, self._clock())
+
+    def publish_live(
+        self,
+        updates,
+        *,
+        source,
+        received,
+        serial,
+        price,
+        publication_epoch,
+        live_generation,
+        expected_epoch,
+    ):
+        """Publish every configured operand for one price as an atomic observation."""
+        now = self._clock()
+        with self._lock:
+            if (
+                publication_epoch != self.publication_token(updates[0][0][:2])
+                or live_generation != self.live._generation
+                or self._stop.is_set()
+                or expected_epoch != self.provider.memory_epoch()
+            ):
+                return False
+            epoch = self.provider.memory_epoch()
+            for key, config, point in updates:
+                prior = self._results.get(key)
+                continuity = f"{self._process_epoch}:{self._symbol_epochs.get(key[:2], 0)}"
+                result = {
+                    "points": [{**point, "rows": []}],
+                    "received": now,
+                    "seed_received": (prior or {}).get("seed_received", now),
+                    "source_time": source,
+                    "freshness_time": source,
+                    "freshness_duration": 30,
+                    "native_received": received,
+                    "digest": f"live:{continuity}:{serial}",
+                    "epoch": epoch,
+                    "config": config,
+                    "error": None,
+                    "changed": now,
+                    "continuity": continuity,
+                    "live": True,
+                    "live_price": price,
+                    "history_retry_at": (prior or {}).get("history_retry_at", 0),
+                    "previous": {name: value for name, value in prior.items() if name != "previous"}
+                    if prior and prior.get("live") and prior.get("continuity") == continuity
+                    else None,
+                }
+                result["closed_points"] = (prior or {}).get(
+                    "closed_points", [p for p in (prior or {}).get("points", ()) if p["confirmed"]]
+                )
+                if prior and prior.get("live"):
+                    self._live_cells -= self._result_cells(prior)
+                self._live_cells += self._result_cells(result)
+                self._results[key] = result
+                self._results.move_to_end(key)
+                if key in self._previews:
+                    old_preview = self._preview_results.get(key)
+                    history = [
+                        item
+                        for item in (old_preview or {}).get("points", ())
+                        if item["time"] is not None
+                        and point["time"] is not None
+                        and item["time"] < point["time"]
+                    ]
+                    self._preview_results[key] = {
+                        **result,
+                        "points": [*history[-MAX_RESULT_POINTS + 1 :], point],
+                    }
+                    self._preview_results.move_to_end(key)
+            while len(self._results) > MAX_RESULTS or self._live_cells > MAX_RESULT_CELLS:
+                _, forgotten = self._results.popitem(last=False)
+                if forgotten.get("live"):
+                    self._live_cells -= self._result_cells(forgotten)
+            while len(self._preview_results) > MAX_PREVIEWS:
+                self._preview_results.popitem(last=False)
+            return True
 
     def _read(self, key, now, *, require_latest=True):
         result = self._results.get(key)
@@ -662,8 +970,24 @@ class CustomIndicatorData:
             return result, "unknown", "TradingView bağlantısı değişti; yeni veri bekleniyor."
         if result["error"]:
             return result, "unknown", result["error"]
+        if require_latest and self.live._enabled and not result.get("live"):
+            return (
+                result,
+                "waiting",
+                "Native geçmiş hazır; canlı fiyat akışının ilk gözlemi bekleniyor.",
+            )
+        if (
+            result.get("live")
+            and max(now - result["source_time"], now - result["native_received"]) > 30
+        ):
+            return (
+                result,
+                "stale",
+                "Canlı gösterge fiyatı eski; yeni fiyat güncellemesi bekleniyor.",
+            )
         if (
             require_latest
+            and not result.get("live")
             and key[0] == "BIST"
             and result["points"]
             and result["points"][-1]["end"] is None
@@ -722,6 +1046,7 @@ class CustomIndicatorData:
                 "limits": self.status()["limits"],
             }
         self._wake.set()
+        self._sync_live()
         return response
 
     def observation(self, ref, symbol, trigger, now):
@@ -739,11 +1064,30 @@ class CustomIndicatorData:
                     "current": None,
                     "previous": None,
                 }
+            if identity in self._configs and not self.live.admitted(key):
+                return {
+                    "ready": False,
+                    "reason": "Canlı gösterge sembol/ayar veya native seri kapasitesi doldu; bu hesap kabul edilmedi.",
+                    "current": None,
+                    "previous": None,
+                }
             result, state, reason = self._read(key, now, require_latest=False)
+            if trigger != "bar_close" and result and result.get("native_wait"):
+                state, reason = "waiting", "Yeni native mum başlangıcı hazırlanıyor."
+            if self.live._enabled and trigger != "bar_close" and result and not result.get("live"):
+                state, reason = "waiting", "İlk canlı fiyat gözlemi bekleniyor."
             if state != "ready":
                 return {"ready": False, "reason": reason, "current": None, "previous": None}
             closed = trigger == "bar_close"
-            points = [point for point in result["points"] if point["confirmed"] or not closed]
+            points = (
+                [
+                    point
+                    for point in result.get("closed_points", result["points"])
+                    if point["confirmed"]
+                ]
+                if closed
+                else result["points"]
+            )
             point = points[-1] if points else None
             previous = points[-2] if closed and len(points) > 1 else None
             if not closed and result.get("previous"):
@@ -782,6 +1126,8 @@ class CustomIndicatorData:
                 "previous_bar_end": previous["end"] if previous else None,
                 "observed_at": result["received"] if closed else result["changed"],
                 "source_timestamp": result["source_time"],
+                "live_price": result.get("live_price"),
+                "previous_live_price": (result.get("previous") or {}).get("live_price"),
             }
 
     def status(self):
@@ -818,13 +1164,18 @@ class CustomIndicatorData:
                     (self._clock() - result["received"] for result in self._results.values()),
                     default=None,
                 ),
-                "refresh_target_seconds": REFRESH_SECONDS,
+                "refresh_target_seconds": None,
+                **self.live.status(),
                 "pending_or_stale_rule_symbols": max(
                     0,
                     self._jobs_requested - fresh_configured,
                 ),
                 "last_error": self._last_error,
-                "worker_count": 1,
+                "history_last_error": self._history_last_error,
+                "worker_count": 3,
+                "history_worker_count": 1,
+                "calculation_worker_count": 1,
+                "connection_worker_count": 1,
                 "source": "borsapy_tradingview native BIST/BINANCE",
                 "limits": {
                     "native_series": MAX_NATIVE_SERIES,

@@ -4,7 +4,10 @@
 Rapot'ta düzenlemek, aynı hesapla grafik önizlemesi ve kalıcı izleme listesi
 alarmları kurmak. Canlı piyasa ve TradingView ekran karşılaştırmasını kullanıcı
 bir sonraki piyasa gününde yapacak. Bu belge kaynak sözleşmesidir; yayın kabulü
-aşağıda ayrıca kaydedilir.
+aşağıda ayrıca kaydedilir. Sonraki kullanıcı talimatı, beş göstergenin canlı
+fiyat güncellemelerinde çalışmasını ve en küçük periyot kapanışını beklememesini
+istedi. Aşağıdaki canlı sözleşme bu yeni davranışı anlatır; eski yayının kabulü
+kendi tarih/sürümü altında korunur.
 
 ## Kaynak ve ayarlar
 
@@ -22,7 +25,11 @@ Whitespace/EOF commit kancaları da yalnız bu özgün Pine dizinini dönüştü
 
 Toplam **289 input**; ad, tür, varsayılan, alt/üst sınır ve adım kaynaklardan
 ayrı testlerle karşılaştırılır. Görsel `showTable` ayarı hesaplamayı değiştirmez.
-N OY `onlyFirst` ayarı önceki mumun uzlaşmasına bakar; önceki HTTP isteğine bakmaz.
+Tablodaki sinyal zamanı özgün Pine kaynaklarının davranışıdır. **Canlı sunucu
+politikası v2** bu kapanış kapılarını kaldırır. N OY `onlyFirst` canlı akışta
+önceki geçerli fiyat gözleminin uzlaşmasına bakar; HTTP önizleme isteğine bakmaz.
+HTF RSI Score da canlı eşik bölgesine girişte sinyal üretir. İlk hazır gözlem
+başlangıç durumunu kurar; bağlantı boşluğunun arkasından sahte giriş üretilmez.
 İki yönde gereken oy sayısı bağımsızdır; eksik satır için gerekli N düşürülmez.
 Aynı periyodu kullanan iki satır ayrı oy/puan sayılır, veri isteğini paylaşır.
 Snapshot'ın yedinci satırı **7D**, diğer göstergelerin ilgili satırı **1W**'dir.
@@ -55,24 +62,26 @@ düzeltmelerinden belirlenir. Tanınmayan seans biçimi için saat tahmin edilme
 Sonraki native mumun varlığı geçmiş mumun kapanmışlığına tanıktır. Son açık
 HTF'nin gelecekteki kapanışı bilinmese bile önceki kapanmış durumdan gözlem
 anına kadar gelişen RSI/RMI hesaplanabilir; sahte bir kapanış saati atanmaz.
-SMI ayrıca üst periyot başlangıcından itibaren yüksek/düşük aralığının tam
-gözlenmesini ister. Sınırı kesen veya eksik ana mum hazır sayılmaz.
+Canlı SMI, sağlayıcının ilgili native mumunun yüksek/düşük aralığını ve bundan
+sonra gözlenen fiyat uçlarını kullanır; ana periyottan HTF aralığı türetmez.
+Geçmiş önizlemesinin özgün politika hesabında sınırı kesen veya eksik ana mum
+hazır sayılmaz.
 
-BIST'te çok günlük/haftalık bir periyot ana periyot seçilmişse son açık mumun
-kapanış sınırı henüz bilinmeyebilir. Gelişen önizleme bu durumu açıkça gösterir.
-Kapanış alarmı bilinen, onaylanmış önceki native mumu kullanır; yeni sınırın
-sonraki native mumla doğrulandığı durumda değerlendirme gecikebilir. Bu sınır
-1D ana periyotta çok günlük HTF satırları kullanmakla aynı durum değildir.
+BIST'te çok günlük/haftalık son açık mumun gelecekteki kapanış sınırı bilinmese
+bile canlı akış aynı native mum başlangıcını doğruluyorsa güncel fiyatla hesap
+yapılır. 2–6D veya 2–3W mumları takvim günü aritmetiğiyle üretilmez. Kullanıcı
+özellikle kapanış tetiklemesini seçerse onaylanmış kapanış tanığı gerekir;
+bu seçenek varsayılan canlı fiyat politikası değildir.
 
 Pine biçiminde dakika, saniye, gün, hafta ve ay ayarları doğrulanır; gerçek
 erişim TradingView hesabı ve sağlayıcıya bağlıdır. Eksik veya reddedilen aralık
 başka periyoda çevrilmez. Kaynağın geçerli input sınırları korunur; bir seri
 için en fazla 10.000 geçmiş mum istenir. En az gereken uzunluk/momentum bu
 sınırı aşarsa açıklı hata verilir. Ek başlangıç geçmişi sınır içinde istenir.
-SMI'nın gelişen yüksek/düşük aralığı için ana periyot geçmişi en geniş etkin
-satıra göre artırılır. Aylık satırlardaki 31 günlük üst sınır yalnız istek
-bütçesidir; mum kapanışı üretmez. 10.000 mum yine de aralığın başlangıcını
-kapsamıyorsa eksik SMI aralığı hazır sayılmaz.
+Geçmiş önizlemesinde SMI aralığı için kullanılan ana periyot geçmişi bütçesi
+canlı sinyalin bekleme süresi değildir. Native canlı mum aralığı ayrıca gelir.
+Geçmişteki aylık satırların 31 günlük üst sınırı yalnız istek bütçesidir;
+mum kapanışı üretmez.
 Sonlu geçmişten başlatılan özyinelemeli ortalamaların TradingView'nin tüm
 geçmişiyle sayısal eşitliği henüz ölçülmemiştir.
 
@@ -91,13 +100,28 @@ kalıcı koşul JSON'unda saklar. Aynı alarm içindeki özel göstergelerin ana
 periyodu alarmın ana periyoduyla aynı olmalıdır; HTF satırları ayrı ayarlanır.
 
 N OY için ana periyot en küçük etkin satırla **aynı native kimlikte** olmalıdır.
-Varsayılanları 1D olduğundan sinyal varsayılan olarak günlük kapanıştadır;
-gün içinde fiyat hareketi tek başına kapanış sinyali üretmez. Snapshot 1D ile
-sınırlıdır. Başlangıç düğmeleri bu göstergelerde kapanış ve mum başına bir kez
-seçer; HTF RSI Score için mum içi değerlendirme seçer. Kullanıcı tekrar
-politikasını ve isteğe bağlı Telegram teslimini ayrıca düzenler.
-Snapshot/N OY sinyal çıktısı mum içi tetikle seçilirse kayıt açıklı hatayla
-reddedilir; mum içi inceleme için skor, oy veya bölge çıktısı kullanılabilir.
+Bu yalnız ana mum kimliği kuralıdır, kapanışı bekleme kuralı değildir. Snapshot
+1D kimliğiyle çalışır. **Beş başlangıç düğmesi de mum içi / koşula girişte**
+tetikleme seçer. 10:02'de gelen geçerli fiyat, bütün etkin satırların 10:02'deki
+gelişen RSI/SMI/RMI değerine uygulanır. Her satır kendi son kapanmış native
+durumundan başlar; önceki mumun gösterge değeri sinyal değeri olarak kullanılmaz.
+Kapanmış geçmiş hesaplamanın matematiksel başlangıcı olarak yine gereklidir.
+Kullanıcı tekrar politikasını, kapanış seçeneğini ve isteğe bağlı Telegram
+teslimini ayrıca düzenler. Önceden kaydedilmiş kapanış kuralları değiştirilmez.
+
+Beş özel göstergenin birlikte kullanıldığı koşullar ortak canlı gözlem kimliği
+ister. Özel göstergeye eklenen fiyat operandı da aynı quote fiyatıdır. Normal
+RSI/EMA/COMBO gibi diğer teknik alanlarla karma koşullar önceki son-taze-mum
+sözleşmesini korur; bu alanların kaynak zamanları ayrıca taşınır ve form bu
+ayrımı açıklar. Bu çalışma normal teknik alanların tümünü yeni canlı hesaplayıcıya
+dönüştürdüğü iddiasında bulunmaz.
+
+Wilder/EMA durumu her fiyatı yeni bir mum gibi biriktirmez. Açık mum her
+gözlemde aynı kapanmış başlangıçtan yeniden hesaplanır; Snapshot seri puanı
+fiyat güncellemesi sayısıyla artmaz. Canlı `onlyFirst` ilk geçerli koşul girişini
+izler. Bu kullanıcı tarafından istenen canlı politika, özgün Pine dosyalarının
+geçmiş kapanış sinyallerini değiştirmez; eski geçmiş çizgisi canlı tick arşivi
+olarak sunulmaz.
 
 Mevcut motorun ilk hazır gözlemde başlangıç durumunu kurma, revizyon/kopuklukta
 devamlılığı sıfırlama, eski veriden alarm üretmeme, kalıcı olay kuyruğu ve
@@ -107,21 +131,64 @@ Bu çalışma otomatik etkin test alarmı veya Telegram mesajı oluşturmaz.
 
 ## Kaynak sınırları ve kabul
 
-Özel hesaplama ve sağlayıcı erişimi ayrı, tek bir işçide çalışır. API istekleri
-ve alarm turu bellek sonucunu okur; hesaplama ağ beklerken ana alarm kilidini
-tutmaz. Aynı hesap/gösterge/ayar/sembol sonuçları ve aynı native veri isteği
-paylaşılır. Alarm sonuçları kısa tutulur; ayrıntılı önizleme sınırlı ayrı önbellek
-kullanır. Talep, bekleyen iş, tazelik ve kapasite durumu raporlanır.
+Native geçmiş başlangıcı, canlı bağlantı yönetimi ve sıralı fiyat değerlendirmesi
+ayrı, sabit sayıda işçide çalışır. Aynı hesap/gösterge/ayar/sembol sonuçları ve
+aynı native veri isteği paylaşılır. Geçmiş yalnız başlangıç, gerekli yenileme
+ve uzlaştırma işinde hazırlanır; her fiyat güncellemesinde bütün geçmiş tekrar
+hesaplanmaz. Canlı hesaplayıcı en fazla on satırlık kapalı durum özeti tutar.
+Önizleme/alarm okuması bellek sonucunu kullanır.
+
+Bir sembolün bütün ayarları aynı fiyat ve kaynak zamanıyla yayımlandıktan sonra
+ilgili alarmlar eşzamanlı çağrıyla değerlendirilir; bu işlem bitmeden sonraki
+fiyat gözlemi onun yerini alamaz. Kısa eşik aşımı/geri dönüş böyle korunur.
+Sembol-kural ilişkisi bitset ile indekslenir; her tick bütün evreni taramaz.
+Değişmeyen gözlem durumları SQLite yazısı üretmez. Olaylar hemen kalıcılaştırılır;
+olay üretmeyen durum değişimleri sınırlı gruplarla birleştirilir. Telegram
+teslim işçisi yeni olayda uyandırılır.
 En fazla 256 farklı etkin özel hesap ayarı paylaşılır; aynı ayarla çok sayıda
 alarm bu sayıyı artırmaz. Sınırı aşan kayıt açık hata alır. Önceden veya ayrı
 bir yoldan oluşturulmuş fazla ayarlar da çalışıyormuş gibi gösterilmez;
 engellenen yapılandırmalar durum ekranında ayrıca sayılır.
 
-Önizlemenin 5 saniyede sorgulanması, yeni piyasa verisinin 5 saniyede geldiği
-veya tüm liste üyelerinin aynı anda kontrol edildiği anlamına gelmez. Native
-geçmiş yenileme hedefi 30 saniyedir; sağlayıcı ve kuyruk gecikmesi buna eklenir.
-Bu ekleme tam BIST evreni veya 3.000 karma gösterge alarmı için kapasite kabulü
-değildir. Aktif alarm ve önizleme talebi yokken özel veri işi başlatılmaz.
+**30 saniyelik geçmiş sorgusu canlı alarm tetikleme yolu değildir.** Native
+mumlar ve fiyat güncellemeleri kalıcı WebSocket üzerinden gelir. Önizlemenin
+bir saniyelik bellek sorgusu alarmın çalışma zamanını belirlemez; tarayıcı
+kapalıyken de sunucu çalışır. Sağlayıcı gecikmesi, ağ ve gerçek yük altında
+işleme süresi yine vardır; borsadaki her işlemin sıfır gecikmeyle gelmesi
+garanti edilmez.
+
+Bağlantı sayısı, native seri, derlenmiş satırlar ve sıralı olay kuyruğu yerel
+üst sınırlarla korunur. Bunlar TradingView hesabının kabul edeceği abonelik
+kapasitesi iddiası değildir. Eksik/reddedilen TF, eski fiyat, bağlantı kopması,
+geçmiş revizyonu ve kuyruk taşması görünür `unknown`/devamlılık sıfırlaması
+üretir; aşırı yük sessizce güncel veri gibi gösterilmez. Kaynak zamanı, işleme
+gecikmesi, bekleyen olay ve kapasite sayaçları durum ekranında izlenir.
+Aktif alarm ve önizleme talebi yokken özel veri işi başlatılmaz. Tam BIST,
+3.000 karma canlı kural ve tam seans kapasitesi ayrı canlı kabul gerektirir.
+
+Canlı yolun yerel üst sınırları: 256 farklı etkin ayar, 4.096 sembol/ayar
+hesabı, 40.960 derlenmiş satır, 2.000.000 başlangıç durumu hücresi, dört native
+bağlantı, 8.192 native seri ve 8.192 sıralı olay. Native geçmiş LRU'su en fazla
+64 seri / 60.000 mum, kısa alarm sonuçları 262.144 hücre tutar. Bunlar ayrı
+bütçelerdir; uzun momentum/pencere ayarları daha erken kapasite sınırına
+ulaşabilir. Kabul sırası kararlıdır; fazla işlerin derlenip sonra sürekli
+önbellekten atıldığı bir yeniden hazırlama döngüsü kurulmaz.
+
+Normal, ardışık native mum geçişinde kapanan mum Wilder/EMA durumuna **bir kez**
+işlenir. RMI için gerekli momentum kuyruğu, SMI için gerekli yüksek/düşük
+penceresi sınırlı tutulur. Düzeltme, atlanan native kimlik veya bağlantı
+boşluğunda geçmiş yeniden hazırlanır. BIST günlük başlangıcı değiştiğinde
+kapanış saati bilinmeyen HTF kimliği yeni native paketle doğrulanır.
+SMI'da fiyat akışının göstermediği fakat native mumun bildirdiği uç değerler
+zaman tanığıyla birleştirilir; daha eski fiyat gözlemine gelecekteki yüksek/
+düşük değer uygulanmaz. Zaman uyumu henüz doğrulanamıyorsa sonuç hazır sayılmaz.
+
+Yerel yapısal test beş varsayılan ayar × 631 sembolün 3.155 hesap ve paylaşılan
+6.941 native seri talebine dönüştüğünü doğrular; gerçek abonelik açmaz. Bütün
+on satır açıkken hesaplayıcıların model belleği yaklaşık **66,7 MiB**, varsayılan
+etkin satırlarda **53,4 MiB** ölçüldü. Bu konservatif nesne erişim hesabı ortak
+değişmez değerleri tekrar sayar; process RSS, allocator, geçmiş, kuyruk, API,
+veritabanı ve Telegram dahil değildir. Üretim RAM veya tam evren kabulü sayılmaz.
 
 Yerel kabul; elle hesaplanmış OHLC fixture'ları, her inputun Pine kaynağıyla
 karşılaştırılması, zaman sınırları, eksik veri, ayar kalıcılığı, API erişim

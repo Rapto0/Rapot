@@ -156,6 +156,28 @@ kuyruk/429, kota, disk koruması ve çizimleri kapsar. Gerçek piyasa kapsamı,
 gecikme, bölünme uyumu ve Telegram teslimi piyasa açıkken kabul edilir.
 Yayın ve kanıtların güncel durumu [devam planındadır](RAPOT_DEVAM_PLANI.md).
 
+## Beş kişisel gösterge için canlı fiyat yolu
+
+HTF RSI Score, RSI Snapshot ve RSI/SMI/RMI N OY; toplam 289 ayarıyla teknik
+ve izleme listesi koşullarında kullanılabilir. Varsayılan tetikleme mum içidir.
+Bir canlı fiyat gözlemi bütün etkin native zaman dilimlerine uygulanır; en küçük
+periyodun kapanışı beklenmez. Aynı ayarlar ve native abonelikler paylaşılır;
+kapanmış hesap durumu her quote için bütün geçmişi yeniden okumayı önler.
+2–6D ve 2–3W kimlikleri sağlayıcıdan gelir, günlük mumları takvim aritmetiğiyle
+birleştirerek üretilmez.
+
+Bir sembolün canlı çıktıları atomik yayımlandıktan sonra o sembolün kuralları
+değerlendirilir. Kalıcı olay yazımı yeni bildirim işçisini uyandırır. Normal
+bakım turu veya önizleme ekranının yenilenmesi bu çağrının tetikleyicisi değildir.
+İlk hazır gözlem ve kopukluk sonrası başlangıç sahte koşul girişi üretmez.
+Kapasite, veri tazeliği ve native kimlik uyuşmazlıkları durum ekranında görünür.
+
+Bu beş göstergenin canlı sinyal politikası özgün Pine kapanış kapılarını
+kullanıcının talebiyle kaldırır; tarihsel replay aynı şey değildir. Diğer
+standart teknik alanların veri politikası korunur. Formüller, çok periyotlu
+sınırlar, karma koşullar ve canlı kabul sınırları
+[gösterge sözleşmesinde](CUSTOM_PINE_INDICATORS.md) açıklanır.
+
 ## Önceki günlük motor
 
 `/alarms/legacy`, yönetici oturumuyla kalıcı alarm kuralları oluşturur, düzenler,

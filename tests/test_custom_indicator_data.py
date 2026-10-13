@@ -195,6 +195,10 @@ def test_historical_revision_resets_result_continuity():
     before = service.preview("rsi_votes", inputs(), "THYAO")["continuity_id"]
     clock[0] += 31
     provider.data.iloc[5, provider.data.columns.get_loc("Close")] += 0.1
+    service.native_refresh(("BIST", "THYAO", "1D"))
+    service.process(*service._next_job())
+    # A confirmed history revision invalidates every compact seed first;
+    # the next bounded worker job installs the corrected native baseline.
     service.process(*service._next_job())
     after = service.preview("rsi_votes", inputs(), "THYAO")["continuity_id"]
     assert after != before

@@ -123,6 +123,12 @@ class AdvancedMarketData:
         self._cache_bytes = 0
         self._state, self._message = "warming", "Sunucu piyasa verisi hazırlanıyor."
         self._custom = None
+        self._update_listener = None
+
+    def set_update_listener(self, callback):
+        self._update_listener = callback
+        if self._custom is not None:
+            self._custom.live.set_listener(callback)
 
     @property
     def custom(self):
@@ -131,6 +137,7 @@ class AdvancedMarketData:
                 from application.services.custom_indicator_data import CustomIndicatorData
 
                 self._custom = CustomIndicatorData(clock=self._clock)
+                self._custom.live.set_listener(self._update_listener)
                 if self._running:
                     self._custom.start()
             return self._custom
@@ -829,8 +836,18 @@ class AdvancedMarketData:
                     return result
                 custom_data[field_key(ref, timeframe)] = custom
         ordinary_refs = [ref for ref in refs if ref["field"] != "custom"]
-        if custom_data and not ordinary_refs:
+        if custom_data and (
+            not ordinary_refs
+            or not closed
+            and all(ref["field"] == "price" for ref in ordinary_refs)
+        ):
             observations = list(custom_data.values())
+            if (
+                not closed
+                and any(row.get("live_price") is not None for row in observations)
+                and len({row["observation_id"] for row in observations}) != 1
+            ):
+                return self._unknown(market, name, "warming")
             if len({(row["bar_time"], row["bar_end"]) for row in observations}) != 1:
                 return self._unknown(market, name, "warming")
             if (
@@ -845,6 +862,11 @@ class AdvancedMarketData:
             result = evaluate_prepared_condition(
                 prepared,
                 lambda ref: (
+                    observations[0].get("live_price"),
+                    observations[0].get("previous_live_price"),
+                )
+                if ref["field"] == "price"
+                else (
                     custom_data[field_key(ref, timeframe)]["current"],
                     custom_data[field_key(ref, timeframe)]["previous"]
                     if closed
@@ -886,6 +908,25 @@ class AdvancedMarketData:
             if now - series.received > 180 or now - series.source_time > duration + 120:
                 return self._unknown(market, name, "stale")
         quote_pair = self._quotes.get((market, name))
+        if custom_data and not closed:
+            custom_quote = next(iter(custom_data.values()))
+            if custom_quote.get("live_price") is not None:
+                quote_pair = (
+                    Quote(
+                        custom_quote["live_price"],
+                        custom_quote["source_timestamp"],
+                        custom_quote["observed_at"],
+                        custom_quote["observation_id"],
+                    ),
+                    Quote(
+                        custom_quote["previous_live_price"],
+                        custom_quote["source_timestamp"],
+                        custom_quote["observed_at"],
+                        0,
+                    )
+                    if custom_quote.get("previous_live_price") is not None
+                    else None,
+                )
         needs_quote = any(ref["field"] == "price" for ref in refs) and not closed
         if needs_quote:
             if not quote_pair:
@@ -1016,6 +1057,16 @@ class AdvancedMarketData:
             "observed_at": utc(observed),
             "bar_time": utc(bar_time),
             "source_timestamp": utc(min(sources)) if sources else None,
+            "input_policy": "live_custom_with_last_fresh_native_technical"
+            if custom_data and not closed
+            else "native",
+            "input_source_timestamps": {
+                **{f"native:{tf}": utc(series.source_time) for tf, (series, _) in data.items()},
+                **{
+                    f"custom:{key}": utc(value["source_timestamp"])
+                    for key, value in custom_data.items()
+                },
+            },
         }
 
     def history(self, symbol: str, market_type="BIST", timeframe="1m", limit=1000) -> dict:

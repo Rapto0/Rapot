@@ -5,7 +5,18 @@ yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DE
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 Teknik rehberler [docs dizininde](docs/README.md) listelenir.
 
-**13 Ekim gösterge yayını tamamlandı:** Kullanıcının beş Pine göstergesi (HTF RSI Score, RSI
+**13 Ekim son talimat — canlı fiyat politikası:** Kullanıcı 30 saniyelik geçmiş
+sorgusu yerine beş göstergenin aynı canlı fiyat anındaki bütün etkin zaman
+dilimleriyle, en küçük periyot kapanışını beklemeden değerlendirilmesini istedi.
+Kaynakta katalog v2, native mum/quote WebSocket, sabit kapalı Wilder/EMA
+başlangıcından canlı hesap, sıralı fiyat değerlendirmesi ve sembole hedefli
+alarm çağrısı hazırlanır. Orijinal Pine dosyaları/geçmiş replay politikası
+korunur; canlı sinyal politikası bilinçli olarak değişir. 2–6D/2–3W sınırları
+TradingView native mumlarından gelir. Ayrıntılar [gösterge sözleşmesinde](docs/CUSTOM_PINE_INDICATORS.md).
+Yeni kaynağın doğrulama/yayın sonucu devam planında ayrıca kaydedilir;
+alttaki `b3200ed9` kabulü önceki 30 saniye/kapanış politikasına aittir.
+
+**13 Ekim önceki gösterge yayını tamamlandı:** Kullanıcının beş Pine göstergesi (HTF RSI Score, RSI
 Snapshot, RSI/SMI/RMI N OY) tüm 289 inputuyla sunucu hesaplayıcısı, grafik
 önizlemesi ve kalıcı liste alarmlarına taşındı. Orijinal kaynaklar
 `indicators/pine/` altında korunur. [Gösterge sözleşmesi](docs/CUSTOM_PINE_INDICATORS.md)

@@ -9,6 +9,17 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Kaldığımız nokta
 
+- **13 Ekim — fiyat güncellemesiyle canlı özel göstergeler:** Kullanıcı 30 saniyeyi
+  kaldırmayı, beş göstergede bütün etkin TF'lerin aynı güncel fiyat anında
+  hesaplanmasını, minimum TF kapanışının beklenmemesini ve native çok günlük/
+  haftalık sınırların korunmasını istedi. Kaynak değişikliği katalog v2, compact
+  kapalı durum, sıralı native fiyat akışı ve hedefli alarm değerlendirmesini
+  getirir. Aynı koşul/ayarlar paylaşılır; değişmeyen durum DB yazmaz. Yeni canlı
+  politika özgün Pine kapanış sinyallerinden ayrıdır. Bağlantı/taşma/eksik native
+  sınırları ve yerel kapasite açıkça raporlanır. Yayın kabulü bu işin sonunda
+  güncellenecek; üretimde etkin test kuralı, Telegram gönderimi veya yeni takip
+  zamanlayıcısı açılmaz. [Güncel sözleşme](CUSTOM_PINE_INDICATORS.md).
+
 - **13 Ekim — beş kişisel Pine göstergesi yayımlandı:** Kullanıcının yeni talebi bütün
   panel ayarlarıyla aynı göstergeleri sunucuda, grafikte ve liste alarmlarında
   kullanmak. 289 input için metadata, beş saf hesaplayıcı, native geçmiş

@@ -143,6 +143,7 @@ class BorsapyGateway:
         self._streams: dict[tuple, dict] = {}
         self._quotes: dict | None = None
         self._alarm_quotes: list[AlarmQuoteConnection] = []
+        self._custom_streams = []
         self._alarm_history_slots = threading.BoundedSemaphore(2)
         self._quote_retry_after = 0.0
         self._data_epoch = 0
@@ -585,6 +586,27 @@ class BorsapyGateway:
                     provider.close()
             self._alarm_history_slots.release()
 
+    def create_custom_indicator_stream(self, callback):
+        """Authenticated server-owned native charts; no account token leaves this boundary."""
+        from infrastructure.providers.custom_indicator_stream import NativeStreamPool
+
+        with self._account_lock():
+            bp = self._prepare(require_auth=True)
+            if not self._token or self._token == "unauthorized_user_token":
+                raise BorsapyGatewayError("TradingView hesabı doğrulanmalı.", 409)
+            self._custom_streams = [pool for pool in self._custom_streams if not pool.closed]
+            if self._custom_streams:
+                raise BorsapyGatewayError("Özel gösterge bağlantısı zaten açık.", 429)
+            epoch = self._data_epoch
+
+            def observed(event):
+                if epoch == self._data_epoch:
+                    callback(event)
+
+            pool = NativeStreamPool(bp.TradingViewStream, self._token, epoch, observed)
+            self._custom_streams.append(pool)
+            return pool
+
     @staticmethod
     def _validated_custom_history(frame):
         """The five custom ports consume OHLC only; absent volume is not zero."""
@@ -666,6 +688,9 @@ class BorsapyGateway:
 
     def _close_streams(self) -> None:
         self._data_epoch += 1
+        for pool in self._custom_streams:
+            pool.close()
+        self._custom_streams.clear()
         self._close_quotes()
         for connection in self._alarm_quotes:
             connection.close()

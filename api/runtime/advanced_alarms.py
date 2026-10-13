@@ -30,16 +30,36 @@ async def _evaluate(stop, engine):
 
 async def _deliver(stop):
     last_pruned = 0.0
-    while not stop.is_set():
-        try:
-            if asyncio.get_running_loop().time() - last_pruned >= 3600:
-                await asyncio.to_thread(repository.prune_history)
-                last_pruned = asyncio.get_running_loop().time()
-            await deliver_one()
-        except Exception:
-            # Outbox claims have a durable lease. Do not print exception bodies.
-            pass
-        await _wait(stop, 1.1)
+    loop = asyncio.get_running_loop()
+    wake = asyncio.Event()
+    engine = get_advanced_alarm_engine()
+    engine.set_delivery_listener(lambda: loop.call_soon_threadsafe(wake.set))
+    try:
+        while not stop.is_set():
+            wake.clear()
+            sent = False
+            try:
+                if loop.time() - last_pruned >= 3600:
+                    await asyncio.to_thread(repository.prune_history)
+                    last_pruned = loop.time()
+                sent = await deliver_one()
+            except Exception:
+                # Outbox claims have a durable lease. Do not print exception bodies.
+                pass
+            if sent:
+                # Drain the durable outbox promptly, retaining Telegram's retry
+                # guards and a bounded dispatch rate rather than a 1.1s/message wait.
+                await _wait(stop, 0.05)
+                continue
+            waiting = [asyncio.create_task(stop.wait()), asyncio.create_task(wake.wait())]
+            try:
+                await asyncio.wait(waiting, timeout=1.1, return_when=asyncio.FIRST_COMPLETED)
+            finally:
+                for task in waiting:
+                    task.cancel()
+                await asyncio.gather(*waiting, return_exceptions=True)
+    finally:
+        engine.set_delivery_listener(None)
 
 
 async def _run(stop):
@@ -48,6 +68,7 @@ async def _run(stop):
         try:
             with bot_instance_lock(alarm_lock_path().with_name("advanced-alarms.lock")):
                 try:
+                    engine.bind_live_updates()
                     await engine.hub.start()
                     engine.set_running(True)
                     await _workers(stop, engine)

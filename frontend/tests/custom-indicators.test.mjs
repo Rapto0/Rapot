@@ -158,7 +158,7 @@ test('preview starts only on Apply, follows current market/symbol and stops expl
     nodes(tree).find(node => node.type === 'button' && text(node) === 'Ayarları uygula ve izle').props.onClick();
     tree = view.render();
     assert.equal(view.queries.at(-1).enabled, true);
-    assert.equal(view.queries.at(-1).refetchInterval, 5000);
+    assert.equal(view.queries.at(-1).refetchInterval, 1000);
     assert.equal(view.queries.at(-1).refetchIntervalInBackground, false);
     assert.equal(view.queries.at(-1).gcTime, 0);
     const oldKey = plain(view.queries.at(-1).queryKey);
@@ -346,4 +346,18 @@ test('expired, forged or malformed transfers cannot create a draft', () => {
     assert.throws(() => api.storeCustomIndicatorPreset({ ...preset, indicator: 'other' }, 'one:1'));
     assert.throws(() => api.storeCustomIndicatorPreset({ ...preset, inputs: { len1: NaN } }, 'one:1'));
     assert.throws(() => api.storeCustomIndicatorPreset({ ...preset, inputs: { text: 'x'.repeat(6000) } }, 'one:1'));
+});
+
+
+test('preview separates native bar time from the shared current price observation time', () => {
+    const latest = { time: 1791853200, confirmed: false, ready: true, outputs: { score: 20 }, rows: [] };
+    const view = panelHarness({ data: { state: 'ready', source_timestamp: '2026-10-13T07:02:03Z', received_at: '2026-10-13T07:02:04Z', source: 'TradingView/BIST', points: [latest], latest } });
+    let tree = view.render();
+    nodes(tree).find(node => node.type === 'button' && text(node) === 'Ayarları uygula ve izle').props.onClick();
+    tree = view.render();
+    assert.match(text(tree), /Bütün etkin periyotların ortak fiyat zamanı:/);
+    assert.match(text(tree), /10:02:03/);
+    assert.match(text(tree), /alarm bu ekranı beklemeden/);
+    assert.equal(view.queries.at(-1).refetchInterval, 1000);
+    assert.equal(view.queries.at(-1).refetchIntervalInBackground, false);
 });

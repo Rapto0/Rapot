@@ -134,7 +134,7 @@ test('custom worker status separates pending results from standard chart history
   assert.match(text(card), /Önbellekteki hesap kaydı: 50/);
   assert.match(text(card), /Son hesaplama süresi: 0 sn/);
   assert.match(text(card), /En eski sonuç yaşı: 85 sn/);
-  assert.match(text(card), /aynı anda değerlendirilmesi garanti edilmez/);
+  assert.match(text(card), /gelen canlı fiyatlarla değerlendirilir/);
   assert.doesNotMatch(text(card), /99/);
   assert.match(view.text(), /Hazır standart mum serisi: 99/);
   assert.ok(allElements(card).some(element => element.props.role === 'alert' && element.props.children === 'Kaynak verisi bekleniyor'));
@@ -146,7 +146,7 @@ test('unreported custom worker counters remain unknown rather than appearing hea
   assert.match(text(card), /Durum bekleniyor/);
   assert.match(text(card), /Bekleyen veya bayat hesap: —/);
   assert.match(text(card), /Kapasiteye takılan ayar kümesi: —/);
-  assert.match(text(card), /varsayılan 30 saniyedir/);
+  assert.match(text(card), /Canlı fiyat kuyruğu: — \/ —/);
   assert.doesNotMatch(text(card), /Çalışıyor/);
   assert.doesNotMatch(text(card), /bu çıktıları kullanan alarmlar çalışmaz/);
 });
@@ -359,8 +359,8 @@ test('custom presets preserve watchlist, notification choice and complete settin
   const preset = form.withIndicatorPreset(draft, 'rsi_votes');
   assert.equal(preset.watchlist_id, 'saved');
   assert.equal(preset.notify_telegram, true);
-  assert.equal(preset.trigger, 'bar_close');
-  assert.equal(preset.mode, 'once_per_bar');
+  assert.equal(preset.trigger, 'intrabar');
+  assert.equal(preset.mode, 'on_enter');
   preset.condition.left.inputs = {len1:21,tf1:'3D',en3:false,requiredBuyVotes:1,showTable:false};
   preset.timeframe='3D';
   const saved = form.writeFromAdvancedDraft(preset);
@@ -378,4 +378,33 @@ test('native custom periods never confuse Pine months with minute aliases', () =
   for(const value of ['0D','7S','500D','10000','1s']) assert.equal(form.isCustomTimeframe(value),false);
   assert.equal(form.withIndicatorPreset(form.emptyAdvancedDraft('technical'),'htf_rsi_score').trigger,'intrabar');
   assert.throws(()=>form.withIndicatorPreset(form.emptyAdvancedDraft('technical'),'untrusted'), /desteklenmiyor/);
+});
+
+
+test('live custom queue loss is visible instead of reporting uninterrupted processing', () => {
+  const view = harness({ marketStatus: { custom_indicators: {
+    update_mode: 'live_price_events', live_queue_pending: 12, live_queue_limit: 256,
+    live_overflow_count: 2, live_processed: 50, last_live_lag_seconds: 0.03,
+    blocked_rule_symbols: 4, refused_native_series: 1,
+  } } });
+  const card = view.elements().find(element => element.props['aria-label'] === 'Özel gösterge hesapları');
+  assert.match(text(card), /Canlı fiyat kuyruğu: 12 \/ 256/);
+  assert.match(text(card), /İşlenen canlı güncelleme: 50/);
+  assert.match(text(card), /Akış taşması: 2/);
+  assert.match(text(card), /Canlı kapasiteyi aşan hesap: 4/);
+  assert.match(text(card), /Sağlayıcının reddettiği seri: 1/);
+  assert.match(text(card), /canlı kapasiteye sığmadı/);
+  assert.match(text(card), /diğer hesaplar izlenmeye devam eder/);
+  assert.ok(allElements(card).some(element => element.props.role === 'alert' && /veri kaybı/.test(text(element))));
+});
+
+
+test('mixed source notice distinguishes ordinary technical operands on either side from live custom and price', () => {
+  const custom = { field: 'custom', indicator: 'rsi_votes', output: 'buy_votes', inputs: {} };
+  const pair = right => ({ op: 'gte', left: custom, right });
+  assert.equal(form.hasMixedCustomTechnical(pair(1)), false);
+  assert.equal(form.hasMixedCustomTechnical(pair({ field: 'price' })), false);
+  assert.equal(form.hasMixedCustomTechnical(pair({ ...custom, indicator: 'smi_votes' })), false);
+  assert.equal(form.hasMixedCustomTechnical(pair({ field: 'rsi' })), true);
+  assert.equal(form.hasMixedCustomTechnical({ op: 'and', children: [pair(1), { op: 'gte', left: { field: 'close' }, right: 100 }] }), true);
 });

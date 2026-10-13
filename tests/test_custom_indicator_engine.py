@@ -162,6 +162,9 @@ def test_custom_watchlist_native_bar_close_records_once_and_survives_reload(tmp_
     assert repository.events("admin")["events"] == []
     provider.advanced = True
     clock[0] += 31
+    # Native stream boundary, not the removed 30-second full-history poll.
+    for member in SYMBOLS:
+        hub.custom.native_refresh((member["market_type"], member["symbol"], "1"))
     run_custom_worker_turns(hub)
     engine.tick()
     events = repository.events("admin")["events"]

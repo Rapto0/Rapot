@@ -15,13 +15,13 @@ import { CustomIndicatorInputs, customDefaults, customPolicyLabel, customReceive
 
 type Props = { symbol: string; market: "BIST" | "Kripto"; timeframe: string }
 const numberLabel = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? value.toLocaleString("tr-TR", { maximumFractionDigits: 4 }) : typeof value === "boolean" ? value ? "Evet" : "Hayır" : value === null || value === undefined ? "—" : String(value)
-const rowLabels: Record<string, string> = { slot: "Satır", timeframe: "Periyot", enabled: "Etkin", value: "Gösterge değeri", rsi: "RSI", smi: "SMI", rmi: "RMI", weight: "Ağırlık", dip_streak: "DİP serisi", top_streak: "TEPE serisi", dip_score: "DİP puanı", top_score: "TEPE puanı", buy_vote: "AL oyu", sell_vote: "SAT oyu", buy_threshold: "DİP eşiği", sell_threshold: "TEPE eşiği", ready: "Veri hazır", reason: "Açıklama" }
+const rowLabels: Record<string, string> = { slot: "Satır", timeframe: "Periyot", enabled: "Etkin", value: "Gösterge değeri", rsi: "RSI", smi: "SMI", rmi: "RMI", weight: "Ağırlık", dip_streak: "DİP serisi", top_streak: "TEPE serisi", dip_score: "DİP puanı", top_score: "TEPE puanı", buy_vote: "AL oyu", sell_vote: "SAT oyu", buy_threshold: "DİP eşiği", sell_threshold: "TEPE eşiği", ready: "Veri hazır", reason: "Açıklama", native_time: "Native mum başlangıcı", native_end: "Native mum kapanışı", observed_at: "Fiyat zamanı" }
 const timeLabel = (time: number, market: Props["market"]) => new Date(time * 1000).toLocaleString("tr-TR", { timeZone: market === "BIST" ? "Europe/Istanbul" : "UTC", dateStyle: "short", timeStyle: "short" })
 
-function ResultRows({ latest }: { latest: CustomPoint }) {
+function ResultRows({ latest, market }: { latest: CustomPoint; market: Props["market"] }) {
     const namedValue = ["rsi", "smi", "rmi"].some(key => latest.rows.some(row => Object.hasOwn(row, key)))
     const columns = Object.keys(rowLabels).filter(key => !(key === "value" && namedValue) && latest.rows.some(row => Object.hasOwn(row, key)))
-    return <div className="max-h-72 overflow-auto rounded border border-border"><table className="w-full text-left text-xs"><caption className="p-2 text-left text-muted-foreground">Zaman dilimlerinin ayrı değerleri</caption><thead><tr>{columns.map(key => <th key={key} className="whitespace-nowrap border-b border-border p-2">{rowLabels[key]}</th>)}</tr></thead><tbody>{latest.rows.map((row, index) => <tr key={index} className={row.enabled === false ? "text-muted-foreground" : ""}>{columns.map(key => <td key={key} className="whitespace-nowrap border-b border-border/30 p-2">{numberLabel(row[key])}</td>)}</tr>)}</tbody></table></div>
+    return <div className="max-h-72 overflow-auto rounded border border-border"><table className="w-full text-left text-xs"><caption className="p-2 text-left text-muted-foreground">Zaman dilimlerinin ayrı değerleri</caption><thead><tr>{columns.map(key => <th key={key} className="whitespace-nowrap border-b border-border p-2">{rowLabels[key]}</th>)}</tr></thead><tbody>{latest.rows.map((row, index) => <tr key={index} className={row.enabled === false ? "text-muted-foreground" : ""}>{columns.map(key => <td key={key} className="whitespace-nowrap border-b border-border/30 p-2">{["native_time", "native_end", "observed_at"].includes(key) && typeof row[key] === "number" ? new Date(Number(row[key]) * 1000).toLocaleString("tr-TR", { timeZone: market === "BIST" ? "Europe/Istanbul" : "UTC", dateStyle: "short", timeStyle: "medium" }) : numberLabel(row[key])}</td>)}</tr>)}</tbody></table></div>
 }
 
 function IndicatorWorkspace({ symbol, market, timeframe, identity }: Props & { identity: string }) {
@@ -39,13 +39,14 @@ function IndicatorWorkspace({ symbol, market, timeframe, identity }: Props & { i
         queryKey: ["custom-indicator-preview", identity, payload],
         queryFn: ({ signal }) => previewCustomIndicator(payload!, signal),
         enabled: payload !== null,
-        refetchInterval: payload ? 5000 : false,
+        refetchInterval: payload ? 1000 : false,
         refetchIntervalInBackground: false,
         gcTime: 0,
         retry: false,
     })
     const latest = preview.data?.latest
     const receivedTime = customReceivedTime(preview.data?.received_at)
+    const sourceTime = customReceivedTime(preview.data?.source_timestamp)
     const receivedAge = receivedTime === null || receivedTime > Date.now() / 1000 + 5 ? null : Math.max(0, Math.floor(Date.now() / 1000 - receivedTime))
     const resultReady = !preview.isError && preview.data?.state === "ready" && latest?.ready
     const numeric = spec?.outputs.filter(item => item.kind === "number") ?? []
@@ -79,7 +80,7 @@ function IndicatorWorkspace({ symbol, market, timeframe, identity }: Props & { i
             {applied && <Button type="button" variant="outline" onClick={() => setApplied(null)}>Önizlemeyi durdur</Button>}
             {applied && <Button type="button" variant="outline" onClick={transfer} disabled={dirty}>Bu ayarlarla alarm oluştur</Button>}
         </div>
-        <p className="text-xs text-muted-foreground">{symbol} · {market} · Grafik: {timeframe} · Gösterge: {payload?.chart_timeframe ?? (baseTimeframe || timeframe)} · Sunucu önizlemesi 5 saniyede yenilenir. Ana periyot için 60 = saat, 3D = üç gün, 2W = iki hafta. Kalıcı alarmı <Link href={`/alarms?symbol=${encodeURIComponent(symbol)}&market=${market}`} className="text-primary underline">Alarm Merkezi&apos;nden</Link> bir izleme listesine veya sembole kurabilirsiniz.</p>
+        <p className="text-xs text-muted-foreground">{symbol} · {market} · Grafik: {timeframe} · Gösterge: {payload?.chart_timeframe ?? (baseTimeframe || timeframe)} · Ekran önizlemesi saniyede bir yenilenir; sunucudaki alarm bu ekranı beklemeden her canlı fiyat olayında değerlendirilir. Ana periyot için 60 = saat, 3D = üç gün, 2W = iki hafta. Kalıcı alarmı <Link href={`/alarms?symbol=${encodeURIComponent(symbol)}&market=${market}`} className="text-primary underline">Alarm Merkezi&apos;nden</Link> bir izleme listesine veya sembole kurabilirsiniz.</p>
         {catalog.isError && <p role="alert" className="text-xs text-loss">Gösterge kataloğu alınamadı. <button type="button" onClick={() => void catalog.refetch()} className="underline">Yenile</button></p>}
         {!catalog.data && !catalog.isError && <p role="status" className="text-xs text-muted-foreground">Ayarlar yükleniyor…</p>}
         {spec && <>
@@ -93,6 +94,7 @@ function IndicatorWorkspace({ symbol, market, timeframe, identity }: Props & { i
         {preview.data && <div className="space-y-3">
             <p role="status" className="text-xs">Kaynak: {preview.data.source || "Doğrulanmadı"} · {resultReady ? "Hesap hazır" : "Güncel sonuç hazır değil"}{latest ? ` · ${latest.confirmed ? "Kapanmış mum" : "Gelişen mum"} · ${timeLabel(latest.time, market)}` : ""}{preview.data.reason || latest?.reason ? ` · ${preview.data.reason || latest?.reason}` : ""}</p>
             <p className="text-xs text-muted-foreground">{receivedTime !== null && receivedAge !== null ? `Veri yaşı: ${receivedAge} saniye · Alınma: ${timeLabel(receivedTime, market)}` : "Verinin alınma zamanı doğrulanmadı."}{!resultReady && latest ? " Aşağıdaki değerler son hesaplamadır; güncel alarm koşulu olarak değerlendirilmemelidir." : ""}</p>
+            <p className="text-xs text-muted-foreground">{sourceTime === null ? "Ortak fiyat gözlem zamanı doğrulanmadı." : `Bütün etkin periyotların ortak fiyat zamanı: ${new Date(sourceTime * 1000).toLocaleString("tr-TR", { timeZone: market === "BIST" ? "Europe/Istanbul" : "UTC", dateStyle: "short", timeStyle: "medium" })} · ${market === "BIST" ? "TSİ" : "UTC"}`}</p>
             {latest && spec && <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">{spec.outputs.map(item => <div key={item.key} className="rounded border border-border p-2"><dt className="text-[10px] text-muted-foreground">{item.label}</dt><dd className="mt-1 font-mono text-sm">{numberLabel(latest.outputs[item.key])}</dd></div>)}</dl>}
             {series && <div className="rounded border border-border p-2">
                 <label className="flex items-center gap-2 text-xs"><span>Çizgi</span><Select aria-label="Özel gösterge çizgisi" className="max-w-72" value={selectedOutput} onChange={event => setOutput(event.target.value)}>{numeric.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}</Select><span className="text-muted-foreground">{series.count} mum</span></label>
@@ -104,7 +106,7 @@ function IndicatorWorkspace({ symbol, market, timeframe, identity }: Props & { i
                 <p className="text-muted-foreground">Bu işaretler hesaplanan gösterge geçmişidir; gönderilmiş alarm bildirimi değildir. Mum içindeki sinyal kapanışa kadar değişebilir. Saatler {market === "BIST" ? "TSİ" : "UTC"}.</p>
                 {signalHistory.length ? <ul className="flex max-h-44 flex-wrap gap-2 overflow-auto">{signalHistory.map(point => <li key={point.time} className="flex items-center gap-2 rounded border border-border px-2 py-1"><time dateTime={new Date(point.time * 1000).toISOString()}>{timeLabel(point.time, market)}</time>{point.outputs.buy_signal === 1 && <strong className="text-profit">AL</strong>}{point.outputs.sell_signal === 1 && <strong className="text-loss">SAT</strong>}<span className="text-muted-foreground">{point.confirmed ? "Kapanmış" : "Mum içi"}</span></li>)}</ul> : <p className="text-muted-foreground">Alınan geçmişte doğrulanabilir AL/SAT işareti yok.</p>}
             </section>
-            {latest && showTable && <ResultRows latest={latest} />}
+            {latest && showTable && <ResultRows latest={latest} market={market} />}
         </div>}
     </div>
 }
