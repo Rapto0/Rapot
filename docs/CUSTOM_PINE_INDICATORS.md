@@ -10,6 +10,7 @@ aşağıda ayrıca kaydedilir.
 
 Orijinal ekler `indicators/pine/` altında baytları ve lisans açıklamalarıyla
 korunur. `.gitattributes` bu dosyaların satır sonlarını dönüştürmez.
+Whitespace/EOF commit kancaları da yalnız bu özgün Pine dizinini dönüştürmez.
 
 | Gösterge | Ayar | Ana çıktı | Kaynağın sinyal zamanı |
 |---|---:|---|---|
@@ -128,5 +129,70 @@ sınırları, kuyruk/cache sınırları ve frontend etkileşimlerini kapsar.
 TradingView derleyicisinde beş scripti yeniden çalıştırma, anlık aynı mum/aynı
 ayar karşılaştırması ve gerçek Telegram alarmı sonraki canlı kabul kapsamıdır.
 
-**Yayın kaydı:** uygulama ve doğrulama sürüyor; kaynak/imaj ve bağımsız üretim
-kabul kimlikleri bu iş tamamlandığında eklenecek.
+## 13 Ekim 2026 yayını ve bağımsız kabul
+
+**Tamamlandı:** `b3200ed9ced081807f0471b4c82f33d9653ba7bc` kaynağı
+**17:45:35 UTC / 20:45:35 TSİ**'de API/frontend/Compose/current'e yayımlandı.
+Bağımsız kabul **17:46:39–17:46:58 UTC**'de geçti. Önceki kaynak `8b4e1bab`
+geri dönüş için korunur. Middleware/PostgreSQL aynı container ve runtime
+kimliklerindedir; DRY_RUN ve trading/live kapalı durumu korunur.
+
+| Kanıt | Kimlik |
+|---|---|
+| API imajı | `ghcr.io/rapto0/rapot/backend@sha256:53c4b58f15159a3bb55a7ffdb136c547011d4bd10fb369702f6fb845ae0fd3fb` |
+| Arayüz imajı | `ghcr.io/rapto0/rapot/frontend@sha256:740560459028be8dbbf7206d01e85e79948bf6ac4273ad604f09e9d416ab1bd5` |
+| Beş CI işi | [38439878283](https://github.com/Rapto0/Rapot/actions/runs/38439878283), tamamı başarılı |
+| Temiz imaj yayını | [38439913974](https://github.com/Rapto0/Rapot/actions/runs/38439913974), başarılı; additive/delta yolları kullanılmadı |
+| Yayın receipt SHA-256 | `7e093b4113fe573a335b7671bc75835440e85845007bde82dd7717e93d22fe04` |
+| Bağımsız kabul SHA-256 | `a5d78c878a6cadc06e07e04a23d4b6cf41f86c30d54d335960c21a729084924f` |
+| Taze SQLite yedeği | 1.342.660.608 bayt; `250e34a04a2ed08affefad1133cd5fd7b545350a85b2b512a46cd890b9aff167` |
+| Bağımsız restore kanıtı SHA-256 | `b5746bcea531a3d5ff0f19429dee17d7c090a0e810b7b9f93a7855937a172ad8` |
+
+Yerelde son tam Python paketi **1.895 başarılı / bir atlama**, frontend
+**304 başarılı**, tüm 281 Python kaynağında Ruff, frontend lint/typecheck,
+125 kurulu paketin bağımlılık tutarlılığı geçti. Sentetik gerçek motor testi
+karma BIST/kripto listesinde iki kuraldan dört kalıcı olay üretti; yeniden
+gözlem, motor yükleme ve hesap değişiminde eski sinyal tekrarlanmadı.
+Eksik zorunlu HTF olay üretmedi. Kapasite kontrolü aynı SQLite yazma
+transaction'ındadır; aynı ayarın paylaşımı, güncellemede eski ayarın çıkarılması,
+duraklatma ve başarısız kaydın veriyi değiştirmemesi doğrulandı.
+
+Windows'ta standart Turbopack derlemesi subprocess IPC hatası verdi; başarısız
+log korundu. Yerel webpack production ve taze standalone kabulü geçti;
+**aynı kaynağın Linux CI'sinde standart Turbopack ve container kabulü de geçti**.
+Bir ara Python turunda eski kapsam testinin `123` fiyatını rastgele kimlik
+alt dizisiyle karıştırması ve tur sürerken değişen OpenAPI snapshot'ı iki hata
+verdi. Kapsam testi alan sözleşmesini denetleyecek biçimde düzeltildi; ayrıca
+normal geçmiş yolunun özel periyotları 500 yerine 422 ile reddetmesi korundu.
+Son sabit kaynak tam paketi ve Linux CI temizdir. İlk hata kayıtları silinmedi.
+Commit kancasının özgün Pine EOF'larını değiştirmesi geri alındı; beş ekin
+bayt hashleri yeniden eşleşti ve dar kanca istisnası eklendi.
+
+Üretim kabulü 13 SSR sayfası, 33 statik dosya, iki yönlendirme ve 18 anonim
+401'i doğruladı. Yönetici kataloğu beş gösterge/289 input döndürdü; geçersiz
+önizleme 422 aldı ve özel işçiyi veya veri talebini başlatmadı. Sekiz emekli
+GET yolu 410, eski sinyal WS 4410 kalır. 111 runtime dağıtımı ve 286 Python/
+bağımlılık kaynak dosyası imajda hashleriyle doğrulandı.
+
+Taze yedek sunucu dışında bağımsız restore edildi. 15 tablonun **bütün satırları
+ve şeması** typed fingerprint ile yayın öncesi/sonrası aynıydı: tek kişisel
+liste, üç önceki olay, üç soft-delete kural, sıfır eski sinyal/tarama ve 290
+tanımsız kurtarma satırı korundu. Özel ortam/şifreli kimlik dosyaları değişmedi;
+migration, restore veya ikinci geçmiş temizliği yapılmadı. Yalnız doğrulanan
+bu işe ait geçici sunucu yedek dosyası exact hash kontrolüyle kaldırıldı;
+sunucu dışındaki özgün yedek, restore ve kanıt korunur.
+
+Dört servis healthy/restart0; alarm motoru hatasız, etkin kural sıfır,
+normal mum işleri/kuyruk/seri/değer sıfır, özel işçi henüz talep edilmemiştir.
+Üç kısa RAM örneği **317,270 / 319,602 / 320,855 MiB** kullanılabilir bellek;
+iki CPU aralığı **%9,438 / %13,972**; son boş alan **5.196.759.040 bayt**.
+Sabit 528 MiB disk rezervi korundu. 805 abonelik ve piyasa kapalıyken sıfır
+taze fiyat bu anın örneğidir; tam seans veya tüm evren kabulü değildir.
+
+Yerel çalışma kanıtları `runtime-data/20261013-custom-indicators/` altında
+Git dışında korunur. Bu kabul için sağlayıcı sorgusu, AI üretimi, Telegram
+mesajı, etkin test alarmı, emir veya yeni otomatik takip oluşturulmadı.
+**Açık kalan dış kabul:** aynı sembol/periyot/ayarlarla TradingView sayısal
+karşılaştırması, BIST/kripto canlı sinyal zamanı, gerçek Telegram teslimi ve
+istenen liste boyutunda tazelik/kuyruk davranışı. Kullanıcı bunları sonraki
+piyasa gününde elle test edecek; bu yayın onları tamamlanmış saymaz.

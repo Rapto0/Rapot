@@ -5,14 +5,22 @@ yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DE
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 Teknik rehberler [docs dizininde](docs/README.md) listelenir.
 
-**13 Ekim yeni iş:** Kullanıcının beş Pine göstergesi (HTF RSI Score, RSI
+**13 Ekim gösterge yayını tamamlandı:** Kullanıcının beş Pine göstergesi (HTF RSI Score, RSI
 Snapshot, RSI/SMI/RMI N OY) tüm 289 inputuyla sunucu hesaplayıcısı, grafik
-önizlemesi ve kalıcı liste alarmlarına taşınıyor. Orijinal kaynaklar
+önizlemesi ve kalıcı liste alarmlarına taşındı. Orijinal kaynaklar
 `indicators/pine/` altında korunur. [Gösterge sözleşmesi](docs/CUSTOM_PINE_INDICATORS.md)
 native periyot/seans, eksik veri, kaynak sinyali ve kapasite sınırlarını açıklar.
+**`b3200ed9`, 17:45:35 UTC API/frontend/Compose/current yayını; 17:46:58 UTC
+bağımsız kabul geçti.** 1.895 Python/bir atlama, 304 frontend, beş kaynak CI
+işi ve temiz imaj yayını geçti. Dört servis sağlıklı; 15 tablonun bütün satırları,
+şema, özel dosyalar ve middleware/PG korundu. Taze 1.342.660.608 bayt yedek
+sunucu dışında bağımsız restore edildi. 13 SSR/33 statik/18 anonim401, yönetici
+5/289 katalog ve iş oluşturmayan 422 önizleme doğrulandı. Etkin kural yokken
+özel işçi talep edilmez; normal mum işi/kuyruk 0/0. 256 farklı etkin özel ayar
+sınırı aynı kayıt transaction'ında korunur; aynı ayarlar paylaşılır. Native
+geçmiş yenileme hedefi 30 saniyedir, tüm evrende saniyelik kabul değildir.
 Canlı TradingView/piyasa ve yeni Telegram alarm kabulü kullanıcı tarafından
 sonraki piyasa gününe bırakılmıştır; test için üretimde etkin kural kurulmaz.
-Kaynak doğrulaması ve yayın tamamlanmadan bu paragraf üretim kabulü sayılmaz.
 
 **13 Ekim tamamlandı:** Eski COMBO/HUNTER sinyal/tarama geçmişi silindi ve
 site gösterge/izleme listesi alarmları etrafında düzenlendi. `/signals` alarm

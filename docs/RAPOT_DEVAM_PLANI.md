@@ -9,13 +9,24 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Kaldığımız nokta
 
-- **13 Ekim — beş kişisel Pine göstergesi:** Kullanıcının yeni talebi bütün
+- **13 Ekim — beş kişisel Pine göstergesi yayımlandı:** Kullanıcının yeni talebi bütün
   panel ayarlarıyla aynı göstergeleri sunucuda, grafikte ve liste alarmlarında
   kullanmak. 289 input için metadata, beş saf hesaplayıcı, native geçmiş
-  adaptörü ve ortak önizleme/alarm yolu geliştiriliyor. [Sözleşme](CUSTOM_PINE_INDICATORS.md)
-  kaynak davranışını ve kapasite sınırlarını ayırır. Canlı piyasa karşılaştırması
+  adaptörü ve ortak önizleme/alarm yolu tamamlandı. **`b3200ed9` API/frontend/
+  Compose/current yayını 17:45:35 UTC, bağımsız kabul 17:46:58 UTC geçti.**
+  1.895 Python/bir atlama, 304 frontend, beş CI işi ve temiz imaj yayını geçti.
+  13 SSR/33 statik/18 anonim401, yönetici 5/289 katalog, iş oluşturmayan 422
+  doğrulandı. Taze 1.342.660.608 bayt yedek bağımsız restore edildi; 15 tablonun
+  bütün satırları/şema, özel dosyalar, tek liste/üç olay ve middleware/PG korundu.
+  Dört servis healthy/restart0; normal mum işi/kuyruk 0/0, özel işçi talep yokken
+  başlamıyor. 256 farklı etkin özel ayar transaction içinde sınırlandırılır;
+  aynı ayarlar paylaşılır. [Sözleşme ve kanıtlar](CUSTOM_PINE_INDICATORS.md)
+  kaynak davranışını, 30 saniyelik yenileme hedefini ve kapasite sınırlarını ayırır.
+  Windows Turbopack hatasına karşı yerel webpack/standalone; Linux'ta standart
+  Turbopack/container kabulü geçti. Canlı piyasa karşılaştırması
   kullanıcının sonraki piyasa günü testine bırakılır; otomatik takip, yeni etkin
-  test alarmı, Telegram gönderimi veya emir açılmaz. Yayın kabulü henüz bekliyor.
+  test alarmı, Telegram gönderimi veya emir açılmaz. Sonraki canlı kabulde aynı
+  ayar/periyot sayısal karşılaştırması ve liste boyutuna göre tazelik izlenecek.
 
 - **13 Ekim — gösterge/liste alarmı düzeni ve eski geçmiş temizliği tamamlandı:** Kullanıcı
   COMBO/HUNTER motorunun sinyal/tarama geçmişinin silinmesini ve tüm sayfalardaki
