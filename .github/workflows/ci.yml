@@ -218,12 +218,6 @@ jobs:
         run: |
           docker image inspect otonom-analiz:${{ github.sha }} --format '{"size_bytes":{{.Size}},"layers":{{json .RootFS.Layers}}}'
 
-      - name: Verify signal feed across processes without a network
-        timeout-minutes: 2
-        run: |
-          docker run --rm --network none \
-            otonom-analiz:${{ github.sha }} python -m scripts.smoke_signal_feed
-
       - name: Verify fresh PostgreSQL migration and middleware startup
         shell: bash
         run: |

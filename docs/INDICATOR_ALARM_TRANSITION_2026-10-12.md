@@ -68,3 +68,9 @@ Prova, yedek kanıtının snapshot aşamasında henüz binary hash üretmediğin
 bağını doğrular; değiştirilmiş kanıtı reddeden testler eklendi. Eski yedek zamanı
 yalnız açıkça LOCAL/SIMULATED provanın enjekte edilen saatinde sabitlendi;
 üretimin altı saatlik yedek ve beş dakikalık yazıcı durdurma sınırları değişmedi.
+
+İlk kaynak CI'sinde Python/lint/security/frontend işleri geçti; Docker işi
+silinmiş `scripts.smoke_signal_feed` aracını çağıran eski adımda durdu.
+Emekli özelliğe ait bu adım kaldırıldı. Ana DB hazırlama, ayrı PostgreSQL
+migration/startup, frontend container ve mevcut piyasa/alarm testleri korunur;
+son kaynak için beş CI işinin tamamı yeniden doğrulanır.
