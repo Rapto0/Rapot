@@ -1,6 +1,6 @@
 # Rapot Devam Planı
 
-**Güncel özet: 12 Ekim 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
+**Güncel özet: 13 Ekim 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
 Çalışma kuralı: **incele → düzelt → doğrula → belgeyi güncelle**.
 Teknik ayrıntılar [belge indeksinde](README.md), çalışma kuralları
 [AGENTS.md](../AGENTS.md), önceki planın eksiksiz metni
@@ -9,14 +9,30 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Kaldığımız nokta
 
-- **12 Ekim — gösterge/liste alarmı düzeni ve eski geçmiş temizliği:** Kullanıcı
+- **13 Ekim — gösterge/liste alarmı düzeni ve eski geçmiş temizliği tamamlandı:** Kullanıcı
   COMBO/HUNTER motorunun sinyal/tarama geçmişinin silinmesini ve tüm sayfalardaki
   arşiv tüketicilerinin kaldırılmasını istedi. Grafik hesaplayıcıları ve kullanıcı
   listesi/alarmları korunur. Yeni kaynak dashboard'u liste/alarm odaklı yapar;
-  `/scanner` yalnız Borsapy, `/signals` alarm merkezine yönlendirmedir. Ayrı,
-  transaction kullanan temizlik aracı hazırlanır. Üretim silme/yayın sonucu
-  [güncel kabul kaydında](INDICATOR_ALARM_TRANSITION_2026-10-12.md) ayrıca izlenir;
-  önceki adımın bütün geçmişi koruma ifadesi bu yeni yetkiyi kısıtlamaz.
+  `/scanner` yalnız Borsapy, `/signals` alarm merkezine yönlendirmedir.
+  **`8b4e1bab` API/frontend/Compose/current yayını 14:46:08 UTC'de**, ayrı tek
+  transaction temizliği **15:01:12 UTC'de**, aynı API'nin sağlıklı yeniden
+  açılması **15:01:29 UTC'de**, bağımsız kabul **15:11:48 UTC'de** tamamlandı.
+  2.017.235 sinyal, 184 tarama, 26.393 otomatik analiz, beş sayaç ve 161.866
+  kanıtlı kurtarma kalıntısı silindi; 290 tanımsız satır korundu. 15 tablo şeması,
+  tek liste, üç alarm olayı, yedi alarm tablosu ve özel dosyalar korundu.
+  Middleware/PG aynı kimliklerde; dört servis healthy/restart0. 13 SSR/32 statik,
+  iki yönlendirme/17 anonim 401 ve kimlikli 410/WS4410 kabulü geçti.
+  1.751 Python/bir atlama, son düzeltmenin 51 ilgili testi, 273 frontend testi,
+  beş kaynak CI işi ve temiz imaj yayını geçti. 1.342.660.608 bayt taze yedek
+  sunucu dışında bağımsız restore ile doğrulandı. İlk sonuç SSH taşıması
+  takılınca sunucudaki committed/healthy receipt'leri yeni salt okunur bağlantıyla
+  alındı ve hash bağları doğrulandı; silme tekrarlanmadı. Alarm motoru hatasız,
+  sıfır etkin kuralda mum işi/kuyruk 0/0. Son kısa örnekler 318,52–321,49 MiB RAM,
+  %21,912/%2,405 CPU, 5.315.047.424 bayt boş alan gösterdi; tam seans/3.000 yük
+  veya tam BIST kabulü değildir. Yeni alarm, AI üretimi, Telegram mesajı, emir
+  veya otomatik takip oluşturulmadı. [Güncel kabul kaydı](INDICATOR_ALARM_TRANSITION_2026-10-12.md)
+  ve aşağıdaki mevcut üretim tablosu geçerlidir; önceki bütün geçmişi koruma
+  ifadeleri o tarihsel adımı anlatır.
 
 - **12 Ekim — eski Telegram botunun emekliliği:** Kullanıcı otomatik COMBO/HUNTER
   Telegram taramasını ve Telegram AI zincirini kaldırdı; site indikatörleri,
@@ -34,9 +50,9 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
   %10,98/%22,33 CPU gösterdi; tam seans/3.000 yük kabulü değildir. Eski takip timer'ı
   kapalı, yeni mesaj/AI üretimi/emir yok. Kabul aracındaki satır sonu ve GET/POST
   varsayımları düzeltilip başarısız kanıtlar korundu; servisler tekrar değiştirilmedi.
-  DB/geçmiş/kimlikler korunur; yeni otomatik takip açılmaz. Aktif mimari için
-  [göç kaydı](SERVER_ONLY_MIGRATION_2026-10-12.md) önce okunur; alttaki beş servis
-  kayıtları tarihseldir.
+  Bu tarihsel adım DB/geçmiş/kimlikleri korudu; 13 Ekim ayrı kullanıcı talimatı
+  eski arşivi temizledi. [Göç kaydı](SERVER_ONLY_MIGRATION_2026-10-12.md) önceki
+  bot kaldırma adımıdır; alttaki beş servis kayıtları da tarihseldir.
 
 - **12 Ekim — izleme listesi odaklı kaynak düzeltmesi üretimde:** Kullanıcı
   mevcut sunucuda RAM/CPU ve mum kuyruğunun düzeltilmesini istedi; 3.000 kuralı
@@ -755,15 +771,15 @@ repodan kaldırıldı. Dağıtım ve geri dönüş adımları [DEPLOY.md](DEPLOY
 | Alan | Son kayıt |
 |---|---|
 | Sunucu / erişim | `root@138.68.71.27`, IP üzerinden HTTPS |
-| API / frontend / Compose / current kaynak | `a099dbb9353bc7965cb03755fe6f166df16c4f6a` |
-| API imaj referansı | `ghcr.io/rapto0/rapot/backend@sha256:9893c31713ba18eb878f8e899d5f33e11922cda5d6e022bc767ed388f75cd0dc` |
-| Frontend imaj referansı | `ghcr.io/rapto0/rapot/frontend@sha256:c52866cae8b0e990c9196ac9ee984e852b5afabb4ec6980d40376ac8afc6c32a` |
+| API / frontend / Compose / current kaynak | `8b4e1bab46a2fd149cdb80ad85ada340692961ad` |
+| API imaj referansı | `ghcr.io/rapto0/rapot/backend@sha256:d888e5286f37ca780b31a3c3d64b7012fc20fb0b61c12ecf699a0a10c519860f` |
+| Frontend imaj referansı | `ghcr.io/rapto0/rapot/frontend@sha256:2b482449ce7e06340e831511cc4475a48dd754a2f4dee45f913880cbdf609945` |
 | Bot | 12 Ekim kaldırıldı; Compose servisi/5000 dinleyicisi yok |
 | Middleware kaynak | `279aa9fea99b520e661b43f104a2bf4791893ac3`; container kimliği korunuyor |
 | Middleware imajı | `sha256:9be0fdb6097f52bf97730f44c86d28c24e2c0cea1fe181e7e8fd668177fdb034` |
 | Veri / kaynak pointer | `/var/lib/rapot/main` ve `/opt/rapot/current`; operator kaynak kopyası bunlardan ayrıdır |
 | Çalışma modu | `MW_EXECUTION_MODE=DRY_RUN`, `MW_TRADING_ENABLED=false`, `MW_BINANCE_LIVE_ENABLED=false`; otomatik Telegram AI kaldırıldı, site AI korunur; API `BORSAPY_USE_FOR_BIST=true` |
-| Son uzak kabul | 12 Ekim 12:15:02 UTC: dört servis healthy/restart0/OOMfalse; 15 tablo, yedi SSR/26 statik/altı anonim 401 ve özel alarm durumu geçti. Boş alan 5.486.444.544 bayt. [Göç kanıtı](SERVER_ONLY_MIGRATION_2026-10-12.md). |
+| Son uzak kabul | 13 Ekim 15:11:48 UTC: dört servis healthy/restart0/OOMfalse; eski kayıtlar temizlendi, 15 tablo şeması ve korunan veriler aynı. 13 SSR/32 statik/iki yönlendirme/17 anonim 401, özel alarm durumu ve emekli 410/4410 yolları geçti. Boş alan 5.315.047.424 bayt. [Geçiş kanıtı](INDICATOR_ALARM_TRANSITION_2026-10-12.md). |
 | TradingView bağlantısı | Şifreli kimlik korundu; 7 Ekim dar canlı kabulü mevcut. Tam evren/hacim/bölünme/tam seans kabulü açık, `realtime_verified=false` |
 
 Son kayıtlar:

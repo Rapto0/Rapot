@@ -8,7 +8,7 @@ order accounting.
 
 Current priorities, production evidence and deferred acceptance:
 [Rapot continuation plan](docs/RAPOT_DEVAM_PLANI.md). Documentation was compared with
-the source on **12 October 2026 (indicator and watchlist alarm transition)**. Old backlog
+the source on **13 October 2026 (indicator and watchlist alarm transition)**. Old backlog
 IDs and unchecked boxes are historical planning information; use the continuation plan for current work.
 The [documentation index](docs/README.md) groups the current technical guides and acceptance records.
 
@@ -17,11 +17,14 @@ news/Gemini messages have been removed from the source. Website indicators,
 backtests, `/ai` and opt-in alarm delivery remain supported. The subsequent
 [history retirement](docs/INDICATOR_ALARM_TRANSITION_2026-10-12.md) removes the old
 scanner archive and its UI/API consumers while preserving indicator calculations.
-Source **`a099dbb` was deployed at 12:05:39 UTC on 12 October**; independent
-acceptance passed at **12:15:02 UTC**. API/frontend and Compose now use the botless
-release. All four persistent services are healthy; stored data and account
-connections were preserved. The [migration record](docs/SERVER_ONLY_MIGRATION_2026-10-12.md)
-separates release checks from live-market and full-session capacity acceptance.
+Source **`8b4e1bab` was deployed at 14:46:08 UTC on 13 October**. The separately
+authorized history cleanup committed at **15:01:12 UTC**, and independent acceptance
+passed at **15:11:48 UTC**. It removed 2,017,235 old signals, 184 scans and their
+automatic analysis/counter remnants. Watchlists, alarm records, financial records
+and account connections were preserved against a freshly restored backup. All four
+persistent services are healthy. The [history retirement record](docs/INDICATOR_ALARM_TRANSITION_2026-10-12.md)
+separates this acceptance from live-market and full-session capacity claims; the
+[earlier bot migration](docs/SERVER_ONLY_MIGRATION_2026-10-12.md) is historical.
 
 ## Architecture
 

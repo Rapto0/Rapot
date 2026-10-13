@@ -5,7 +5,18 @@ constrained by `requirements-dev.lock`, Node 20.20.2/npm 10.9.9 and Next.js stan
 Unused legacy PM2/API launcher files were removed in the 21 September repository cleanup.
 Docker Compose is the supported production path; historical cutover evidence remains below.
 
-**12 October transition deployed and accepted:** the legacy scheduled scanner,
+**13 October history retirement deployed and accepted:** source `8b4e1bab` reached
+API/frontend and Compose/current at 14:46:08 UTC. A separate, backup-bound cleanup
+committed at 15:01:12 UTC; the same API container returned healthy at 15:01:29 UTC.
+Independent acceptance passed at 15:11:48 UTC: all four services healthy, 13 pages,
+32 static assets, two redirects, protected records and retired endpoints verified.
+Middleware/PostgreSQL identities and all private files stayed unchanged. Cleanup
+did not run as a migration or application startup. See the
+[history retirement record](INDICATOR_ALARM_TRANSITION_2026-10-12.md), including the
+recovered SSH receipt, verified backup and exact deletion scope. Code rollback
+does not restore deleted history; any data restore requires separate review.
+
+**Earlier 12 October transition:** the legacy scheduled scanner,
 Telegram command bot, automatic scanner AI and Flask health process are removed.
 Source `a099dbb` reached API/frontend and Compose/current at 12:05:39 UTC;
 independent acceptance passed at 12:15:02 UTC. The old bot container is absent,
@@ -247,9 +258,11 @@ and bot shared the verified source-only backend digest, with explicit
 `BORSAPY_USE_FOR_BIST=true` overrides. That historical transition preserved
 middleware, PostgreSQL, the older backend anchor, initializer/migration services
 and private env files, with an eleven-table backup. It does not prescribe the
-current topology: the 12 October clean release removes the bot, preserves all
-15 SQLite tables, and removes exactly two obsolete bot lines from `main.env`.
-Use the current [migration record](SERVER_ONLY_MIGRATION_2026-10-12.md).
+current topology: the 12 October clean release removed the bot, preserved all
+15 SQLite tables, and removed exactly two obsolete bot lines from `main.env`.
+The subsequent 13 October release retired legacy history while preserving the
+schema and alarm records. Use the current
+[history retirement record](INDICATOR_ALARM_TRANSITION_2026-10-12.md).
 
 The 4 October 2026 release deployed API/frontend source `4b15335` using this
 extension. Exact-source CI `37159767810` and publication `37159767909` passed.

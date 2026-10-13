@@ -1,22 +1,36 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-Kaynaklarla son karşılaştırma: **12 Ekim 2026 / gösterge ve izleme listesi alarmları**. İş sırası, kullanıcı
+Kaynaklarla son karşılaştırma: **13 Ekim 2026 / gösterge ve izleme listesi alarmları**. İş sırası, kullanıcı
 yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DEVAM_PLANI.md)
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 Teknik rehberler [docs dizininde](docs/README.md) listelenir.
 
-**Sonraki kullanıcı talimatı:** Eski COMBO/HUNTER sinyal/tarama geçmişini sil ve
-siteyi gösterge/izleme listesi alarmları etrafında düzenle. `/signals` alarm
+**13 Ekim tamamlandı:** Eski COMBO/HUNTER sinyal/tarama geçmişi silindi ve
+site gösterge/izleme listesi alarmları etrafında düzenlendi. `/signals` alarm
 merkezine yönlenir; arşiv REST yolları kimlikli 410, signal WS 4410'dur. Eski
 SQLite sinyal feed/polling ve tarama/read-model sayaçları kaldırılır; `/stats`
 işlem metriklerini korur. Grafik COMBO/HUNTER hesaplayıcıları, diğer göstergeler,
 manuel `/ai`, Borsapy taraması, kullanıcı listeleri ve alarmlar korunur. Ayrı
 `scripts/retire_legacy_history.py` taze bağımsız yedek ve yazıcıların durdurulması
 kanıtıyla tek transaction temizlik yapar; startup/migration otomatik silmez.
-[Güncel kaynak ve üretim kabulü](docs/INDICATOR_ALARM_TRANSITION_2026-10-12.md).
+[Güncel kaynak ve üretim kabulü](docs/INDICATOR_ALARM_TRANSITION_2026-10-12.md):
+`8b4e1bab` API/frontend/Compose/current yayını **14:46:08 UTC**, tek transaction
+silme **15:01:12 UTC**, API sağlıklı yeniden açılma **15:01:29 UTC**, bağımsız
+kabul **15:11:48 UTC**. 2.017.235 sinyal, 184 tarama, 26.393 otomatik analiz,
+beş eski sayaç ve 161.866 kanıtlı kurtarma kalıntısı silindi; 290 tanımsız satır
+korundu. 15 tablo şeması, yedi alarm tablosu, tek liste, üç olay ve özel dosyalar
+korundu; middleware/PG aynı container'lardır. Dört servis healthy/restart0;
+alarm motoru hatasız, sıfır etkin kuralda mum işi/kuyruk 0/0. 13 SSR/32 statik/
+iki yönlendirme/17 anonim 401 ve yönetici 410/WS4410 kabulü geçti. 1.751 Python/
+bir atlama, 273 frontend testi, son 51 temizlik testi, beş kaynak CI işi ve temiz
+imaj yayını geçti. Taze 1.342.660.608 bayt yedek bağımsız restore ile doğrulandı.
+İlk SSH sonuç taşıması takıldı; sunucudaki committed/healthy receipt'leri yeni
+salt okunur bağlantıyla doğrulandı, işlem tekrarlanmadı. Ayrı kabul geçti.
+Üç kısa örnek 318,52–321,49 MiB RAM ve %21,912/%2,405 CPU gösterdi;
+tam seans/3.000 yük veya tam BIST kabulü değildir. Otomatik takip kapalı kalır.
 Alttaki önceki bot yayınının geçmişi koruma ifadeleri o tarihsel adımı anlatır.
 
-**Güncel kullanıcı kararı:** Otomatik COMBO/HUNTER Telegram taraması, Telegram
+**Önceki 12 Ekim bot kaldırma adımı:** Otomatik COMBO/HUNTER Telegram taraması, Telegram
 komutları ve bu taramaların otomatik AI/haber zinciri kaldırıldı. Site Borsapy
 taraması, COMBO/HUNTER hesaplayıcıları, backtest, `/ai` ve sunucu alarmlarının
 isteğe bağlı Telegram teslimi korunur. Eski bot **11:25:39 UTC'de durduruldu**;

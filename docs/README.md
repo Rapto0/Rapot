@@ -4,18 +4,18 @@ Güncel iş sırası, kullanıcı yetkileri ve tarihli kabul kanıtları
 [devam planında](RAPOT_DEVAM_PLANI.md) tutulur. Kod tabanıyla çalışma kuralları
 [AGENTS.md](../AGENTS.md), ilk kurulum ise [kök README](../README.md) içindedir.
 
-12 Ekim güncel kaynak düzeni: API, frontend, middleware ve PostgreSQL sürekli
+13 Ekim güncel kaynak düzeni: API, frontend, middleware ve PostgreSQL sürekli
 servislerdir; init/migrate işleri tek seferliktir. Eski otomatik COMBO/HUNTER
 Telegram tarayıcısı, Telegram komutları ve tarayıcıya bağlı AI kaldırılmıştır.
 Site Borsapy taraması, indikatörler, backtest, `/ai` ve kullanıcı alarmlarının
-isteğe bağlı Telegram teslimi korunur. `a099dbb` API/frontend yayını 12:05:39 UTC'de
-yapıldı ve eski bot kaldırıldı; bağımsız kabulün güncel sonucu
+isteğe bağlı Telegram teslimi korunur. Önceki bot kaldırma adımı
 [sunucu geçiş kaydında](SERVER_ONLY_MIGRATION_2026-10-12.md) tutulur.
 
-Sonraki kullanıcı talimatı eski sinyal/tarama arşivinin temizlenmesini ve sitenin
-izleme listeleri/göstergeler/alarmlar etrafında düzenlenmesini ister.
+Eski sinyal/tarama arşivi temizlendi ve site izleme listeleri/göstergeler/alarmlar
+etrafında düzenlendi. `8b4e1bab` 14:46:08 UTC'de yayımlandı; üretim temizliği
+15:01:12 UTC'de, bağımsız kabul 15:11:48 UTC'de tamamlandı.
 [Güncel geçiş ve veri temizliği kaydı](INDICATOR_ALARM_TRANSITION_2026-10-12.md)
-kaynak hazırlığını üretim kabulünden ayırır.
+kaynak, üretim kabulü ve açık kalan piyasa testlerini ayırır.
 
 ## Mimari ve geliştirme
 
