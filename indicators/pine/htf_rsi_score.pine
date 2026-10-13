@@ -1,0 +1,278 @@
+//@version=6
+indicator("HTF RSI Score", overlay=true, max_labels_count=500, max_bars_back=500)
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 📐 GENEL AYARLAR
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+grpGeneral  = "⚙️ Genel Ayarlar"
+rsiLength   = input.int(14, "RSI Periyodu", minval=2, maxval=50, group=grpGeneral)
+dipThresh   = input.float(30.0, "Dip Eşiği (Alış)", minval=0, maxval=100, step=1, group=grpGeneral)
+tepeThresh  = input.float(70.0, "Tepe Eşiği (Satış)", minval=0, maxval=100, step=1, group=grpGeneral)
+showTable   = input.bool(true, "Tabloyu Göster", group=grpGeneral)
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 📊 GÜNLÜK ZAMAN DİLİMLERİ
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+grpDaily = "📅 Günlük Zaman Dilimleri"
+
+en_1d = input.bool(true,  "1 Günlük", inline="d1", group=grpDaily)
+w_1d  = input.float(3.0,  "Ağırlık %", inline="d1", group=grpDaily, minval=0, maxval=100, step=0.5)
+
+en_2d = input.bool(true,  "2 Günlük", inline="d2", group=grpDaily)
+w_2d  = input.float(6.0,  "Ağırlık %", inline="d2", group=grpDaily, minval=0, maxval=100, step=0.5)
+
+en_3d = input.bool(true,  "3 Günlük", inline="d3", group=grpDaily)
+w_3d  = input.float(7.0,  "Ağırlık %", inline="d3", group=grpDaily, minval=0, maxval=100, step=0.5)
+
+en_4d = input.bool(true,  "4 Günlük", inline="d4", group=grpDaily)
+w_4d  = input.float(7.0,  "Ağırlık %", inline="d4", group=grpDaily, minval=0, maxval=100, step=0.5)
+
+en_5d = input.bool(true,  "5 Günlük", inline="d5", group=grpDaily)
+w_5d  = input.float(8.0,  "Ağırlık %", inline="d5", group=grpDaily, minval=0, maxval=100, step=0.5)
+
+en_6d = input.bool(true,  "6 Günlük", inline="d6", group=grpDaily)
+w_6d  = input.float(9.0,  "Ağırlık %", inline="d6", group=grpDaily, minval=0, maxval=100, step=0.5)
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 📊 HAFTALIK & AYLIK ZAMAN DİLİMLERİ
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+grpHigher = "📆 Haftalık & Aylık Zaman Dilimleri"
+
+en_1w = input.bool(true,  "1 Haftalık", inline="w1", group=grpHigher)
+w_1w  = input.float(10.0, "Ağırlık %",  inline="w1", group=grpHigher, minval=0, maxval=100, step=0.5)
+
+en_2w = input.bool(true,  "2 Haftalık", inline="w2", group=grpHigher)
+w_2w  = input.float(14.0, "Ağırlık %",  inline="w2", group=grpHigher, minval=0, maxval=100, step=0.5)
+
+en_3w = input.bool(true,  "3 Haftalık", inline="w3", group=grpHigher)
+w_3w  = input.float(16.0, "Ağırlık %",  inline="w3", group=grpHigher, minval=0, maxval=100, step=0.5)
+
+en_1m = input.bool(true,  "1 Aylık",    inline="m1", group=grpHigher)
+w_1m  = input.float(20.0, "Ağırlık %",  inline="m1", group=grpHigher, minval=0, maxval=100, step=0.5)
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 🔢 ÇOK ZAMANLI RSI HESAPLAMALARI
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+calcRsi() => ta.rsi(close, rsiLength)
+
+rsi_1d = request.security(syminfo.tickerid, "1D",  calcRsi(), lookahead=barmerge.lookahead_off)
+rsi_2d = request.security(syminfo.tickerid, "2D",  calcRsi(), lookahead=barmerge.lookahead_off)
+rsi_3d = request.security(syminfo.tickerid, "3D",  calcRsi(), lookahead=barmerge.lookahead_off)
+rsi_4d = request.security(syminfo.tickerid, "4D",  calcRsi(), lookahead=barmerge.lookahead_off)
+rsi_5d = request.security(syminfo.tickerid, "5D",  calcRsi(), lookahead=barmerge.lookahead_off)
+rsi_6d = request.security(syminfo.tickerid, "6D",  calcRsi(), lookahead=barmerge.lookahead_off)
+rsi_1w = request.security(syminfo.tickerid, "1W",  calcRsi(), lookahead=barmerge.lookahead_off)
+rsi_2w = request.security(syminfo.tickerid, "2W",  calcRsi(), lookahead=barmerge.lookahead_off)
+rsi_3w = request.security(syminfo.tickerid, "3W",  calcRsi(), lookahead=barmerge.lookahead_off)
+rsi_1m = request.security(syminfo.tickerid, "1M",  calcRsi(), lookahead=barmerge.lookahead_off)
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 📈 AĞIRLIKLI ORTALAMA RSI SKORU
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Aktif ağırlıkların toplamı (normalizasyon için)
+totalWeight = 0.0
+totalWeight += en_1d and not na(rsi_1d) ? w_1d : 0.0
+totalWeight += en_2d and not na(rsi_2d) ? w_2d : 0.0
+totalWeight += en_3d and not na(rsi_3d) ? w_3d : 0.0
+totalWeight += en_4d and not na(rsi_4d) ? w_4d : 0.0
+totalWeight += en_5d and not na(rsi_5d) ? w_5d : 0.0
+totalWeight += en_6d and not na(rsi_6d) ? w_6d : 0.0
+totalWeight += en_1w and not na(rsi_1w) ? w_1w : 0.0
+totalWeight += en_2w and not na(rsi_2w) ? w_2w : 0.0
+totalWeight += en_3w and not na(rsi_3w) ? w_3w : 0.0
+totalWeight += en_1m and not na(rsi_1m) ? w_1m : 0.0
+
+// Ağırlıklı toplam
+weightedSum = 0.0
+weightedSum += en_1d and not na(rsi_1d) ? rsi_1d * w_1d : 0.0
+weightedSum += en_2d and not na(rsi_2d) ? rsi_2d * w_2d : 0.0
+weightedSum += en_3d and not na(rsi_3d) ? rsi_3d * w_3d : 0.0
+weightedSum += en_4d and not na(rsi_4d) ? rsi_4d * w_4d : 0.0
+weightedSum += en_5d and not na(rsi_5d) ? rsi_5d * w_5d : 0.0
+weightedSum += en_6d and not na(rsi_6d) ? rsi_6d * w_6d : 0.0
+weightedSum += en_1w and not na(rsi_1w) ? rsi_1w * w_1w : 0.0
+weightedSum += en_2w and not na(rsi_2w) ? rsi_2w * w_2w : 0.0
+weightedSum += en_3w and not na(rsi_3w) ? rsi_3w * w_3w : 0.0
+weightedSum += en_1m and not na(rsi_1m) ? rsi_1m * w_1m : 0.0
+
+// Normalize edilmiş HTF RSI Skoru
+htfScore = totalWeight > 0 ? weightedSum / totalWeight : na
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 🎯 SİNYAL TESPİTİ
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+isDip     = not na(htfScore) and htfScore <= dipThresh
+isTepe    = not na(htfScore) and htfScore >= tepeThresh
+
+// Sadece yeni sinyallerde işaretle (ardışık tekrarları önle)
+dipSignal  = isDip  and not isDip[1]
+tepeSignal = isTepe and not isTepe[1]
+
+// Devam eden bölgeler
+dipZone  = isDip
+tepeZone = isTepe
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 🎨 GRAFİK İŞARETLERİ
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// Dip sinyali — yeşil yukarı ok (mumun altında)
+plotshape(dipSignal, title="🟢 Dip Sinyali", style=shape.labelup, location=location.belowbar,
+     color=color.new(#00E676, 0), textcolor=color.white, text="DİP", size=size.small)
+
+// Tepe sinyali — kırmızı aşağı ok (mumun üstünde)
+plotshape(tepeSignal, title="🔴 Tepe Sinyali", style=shape.labeldown, location=location.abovebar,
+     color=color.new(#FF1744, 0), textcolor=color.white, text="TEPE", size=size.small)
+
+// Devam eden dip/tepe bölgelerinde küçük nokta göster
+plotshape(dipZone and not dipSignal, title="Dip Bölgesi", style=shape.circle,
+     location=location.belowbar, color=color.new(#00E676, 60), size=size.tiny)
+plotshape(tepeZone and not tepeSignal, title="Tepe Bölgesi", style=shape.circle,
+     location=location.abovebar, color=color.new(#FF1744, 60), size=size.tiny)
+
+// Arka plan renklendirme (isteğe bağlı hafif görsellik)
+bgcolor(dipZone ? color.new(#00E676, 92) : tepeZone ? color.new(#FF1744, 92) : na, title="Bölge Arka Planı")
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 🔔 ALERT KOŞULLARI
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+alertcondition(dipSignal, title="🟢 HTF RSI Dip Sinyali",
+     message="🟢 HTF RSI DİP SİNYALİ\n📊 {{ticker}} | {{interval}}\n💰 Fiyat: {{close}}\n📉 HTF RSI Skoru dip eşiğinin altına düştü!\n⏰ {{time}}")
+
+alertcondition(tepeSignal, title="🔴 HTF RSI Tepe Sinyali",
+     message="🔴 HTF RSI TEPE SİNYALİ\n📊 {{ticker}} | {{interval}}\n💰 Fiyat: {{close}}\n📈 HTF RSI Skoru tepe eşiğinin üstüne çıktı!\n⏰ {{time}}")
+
+alertcondition(dipSignal or tepeSignal, title="⚡ Tüm HTF RSI Sinyalleri",
+     message="⚡ HTF RSI SİNYALİ\n📊 {{ticker}} | {{interval}}\n💰 Fiyat: {{close}}\n⏰ {{time}}")
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 📋 BİLGİ TABLOSU (Sağ Üst Köşe)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+// 🎨 TABLO RENK & YARDIMCI FONKSİYONLAR (global scope)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+colBg       = color.new(#1a1a2e, 15)
+colBgHeader = color.new(#0f3460, 10)
+colBgScore  = color.new(#16213e, 10)
+colBorder   = color.new(#e94560, 50)
+colText     = color.new(#eaeaea, 0)
+colTextDim  = color.new(#8a8a9a, 0)
+colGreen    = color.new(#00E676, 0)
+colRed      = color.new(#FF1744, 0)
+colYellow   = color.new(#FFD600, 0)
+colCyan     = color.new(#00E5FF, 0)
+
+rsiColor(float val) =>
+    na(val)    ? colTextDim :
+     val <= 30 ? colGreen   :
+     val <= 40 ? color.new(#69F0AE, 0) :
+     val >= 70 ? colRed     :
+     val >= 60 ? color.new(#FF8A80, 0) :
+     colText
+
+statusIcon(float val, bool enabled) =>
+    not enabled ? "⛔" : na(val) ? "—" : val <= 30 ? "🟢" : val >= 70 ? "🔴" : "⚪"
+
+if showTable and barstate.islast
+    // Tablo oluşturma: 4 sütun x 14 satır
+    var table tbl = table.new(position.top_right, 4, 14,
+         bgcolor=colBg, border_color=colBorder, border_width=1, frame_color=colBorder, frame_width=2)
+
+    // ── BAŞLIK SATIRI ──
+    table.cell(tbl, 0, 0, "HTF RSI SCORE", text_color=colCyan, text_size=size.normal,
+         bgcolor=colBgHeader, text_halign=text.align_center)
+    table.merge_cells(tbl, 0, 0, 3, 0)
+
+    // ── SÜTUN BAŞLIKLARI ──
+    table.cell(tbl, 0, 1, "Zaman",   text_color=colTextDim, text_size=size.small, bgcolor=colBgHeader)
+    table.cell(tbl, 1, 1, "RSI",     text_color=colTextDim, text_size=size.small, bgcolor=colBgHeader)
+    table.cell(tbl, 2, 1, "Ağırlık", text_color=colTextDim, text_size=size.small, bgcolor=colBgHeader)
+    table.cell(tbl, 3, 1, "Durum",   text_color=colTextDim, text_size=size.small, bgcolor=colBgHeader)
+
+    // ── VERİ SATIRLARI ──
+    row = 2
+
+    // 1D
+    table.cell(tbl, 0, row, "1 Gün",  text_color=en_1d ? colText : colTextDim, text_size=size.small, bgcolor=colBg)
+    table.cell(tbl, 1, row, en_1d and not na(rsi_1d) ? str.tostring(rsi_1d, "#.#") : "—", text_color=en_1d ? rsiColor(rsi_1d) : colTextDim, text_size=size.small, bgcolor=colBg)
+    table.cell(tbl, 2, row, str.tostring(w_1d, "#.#") + "%", text_color=colTextDim, text_size=size.small, bgcolor=colBg)
+    table.cell(tbl, 3, row, statusIcon(rsi_1d, en_1d), text_size=size.small, bgcolor=colBg)
+    row += 1
+
+    // 2D
+    table.cell(tbl, 0, row, "2 Gün",  text_color=en_2d ? colText : colTextDim, text_size=size.small, bgcolor=colBg)
+    table.cell(tbl, 1, row, en_2d and not na(rsi_2d) ? str.tostring(rsi_2d, "#.#") : "—", text_color=en_2d ? rsiColor(rsi_2d) : colTextDim, text_size=size.small, bgcolor=colBg)
+    table.cell(tbl, 2, row, str.tostring(w_2d, "#.#") + "%", text_color=colTextDim, text_size=size.small, bgcolor=colBg)
+    table.cell(tbl, 3, row, statusIcon(rsi_2d, en_2d), text_size=size.small, bgcolor=colBg)
+    row += 1
+
+    // 3D
+    table.cell(tbl, 0, row, "3 Gün",  text_color=en_3d ? colText : colTextDim, text_size=size.small, bgcolor=colBg)
+    table.cell(tbl, 1, row, en_3d and not na(rsi_3d) ? str.tostring(rsi_3d, "#.#") : "—", text_color=en_3d ? rsiColor(rsi_3d) : colTextDim, text_size=size.small, bgcolor=colBg)
+    table.cell(tbl, 2, row, str.tostring(w_3d, "#.#") + "%", text_color=colTextDim, text_size=size.small, bgcolor=colBg)
+    table.cell(tbl, 3, row, statusIcon(rsi_3d, en_3d), text_size=size.small, bgcolor=colBg)
+    row += 1
+
+    // 4D
+    table.cell(tbl, 0, row, "4 Gün",  text_color=en_4d ? colText : colTextDim, text_size=size.small, bgcolor=colBg)
+    table.cell(tbl, 1, row, en_4d and not na(rsi_4d) ? str.tostring(rsi_4d, "#.#") : "—", text_color=en_4d ? rsiColor(rsi_4d) : colTextDim, text_size=size.small, bgcolor=colBg)
+    table.cell(tbl, 2, row, str.tostring(w_4d, "#.#") + "%", text_color=colTextDim, text_size=size.small, bgcolor=colBg)
+    table.cell(tbl, 3, row, statusIcon(rsi_4d, en_4d), text_size=size.small, bgcolor=colBg)
+    row += 1
+
+    // 5D
+    table.cell(tbl, 0, row, "5 Gün",  text_color=en_5d ? colText : colTextDim, text_size=size.small, bgcolor=colBg)
+    table.cell(tbl, 1, row, en_5d and not na(rsi_5d) ? str.tostring(rsi_5d, "#.#") : "—", text_color=en_5d ? rsiColor(rsi_5d) : colTextDim, text_size=size.small, bgcolor=colBg)
+    table.cell(tbl, 2, row, str.tostring(w_5d, "#.#") + "%", text_color=colTextDim, text_size=size.small, bgcolor=colBg)
+    table.cell(tbl, 3, row, statusIcon(rsi_5d, en_5d), text_size=size.small, bgcolor=colBg)
+    row += 1
+
+    // 6D
+    table.cell(tbl, 0, row, "6 Gün",  text_color=en_6d ? colText : colTextDim, text_size=size.small, bgcolor=colBg)
+    table.cell(tbl, 1, row, en_6d and not na(rsi_6d) ? str.tostring(rsi_6d, "#.#") : "—", text_color=en_6d ? rsiColor(rsi_6d) : colTextDim, text_size=size.small, bgcolor=colBg)
+    table.cell(tbl, 2, row, str.tostring(w_6d, "#.#") + "%", text_color=colTextDim, text_size=size.small, bgcolor=colBg)
+    table.cell(tbl, 3, row, statusIcon(rsi_6d, en_6d), text_size=size.small, bgcolor=colBg)
+    row += 1
+
+    // 1W
+    table.cell(tbl, 0, row, "1 Hafta", text_color=en_1w ? colText : colTextDim, text_size=size.small, bgcolor=colBgScore)
+    table.cell(tbl, 1, row, en_1w and not na(rsi_1w) ? str.tostring(rsi_1w, "#.#") : "—", text_color=en_1w ? rsiColor(rsi_1w) : colTextDim, text_size=size.small, bgcolor=colBgScore)
+    table.cell(tbl, 2, row, str.tostring(w_1w, "#.#") + "%", text_color=colTextDim, text_size=size.small, bgcolor=colBgScore)
+    table.cell(tbl, 3, row, statusIcon(rsi_1w, en_1w), text_size=size.small, bgcolor=colBgScore)
+    row += 1
+
+    // 2W
+    table.cell(tbl, 0, row, "2 Hafta", text_color=en_2w ? colText : colTextDim, text_size=size.small, bgcolor=colBgScore)
+    table.cell(tbl, 1, row, en_2w and not na(rsi_2w) ? str.tostring(rsi_2w, "#.#") : "—", text_color=en_2w ? rsiColor(rsi_2w) : colTextDim, text_size=size.small, bgcolor=colBgScore)
+    table.cell(tbl, 2, row, str.tostring(w_2w, "#.#") + "%", text_color=colTextDim, text_size=size.small, bgcolor=colBgScore)
+    table.cell(tbl, 3, row, statusIcon(rsi_2w, en_2w), text_size=size.small, bgcolor=colBgScore)
+    row += 1
+
+    // 3W
+    table.cell(tbl, 0, row, "3 Hafta", text_color=en_3w ? colText : colTextDim, text_size=size.small, bgcolor=colBgScore)
+    table.cell(tbl, 1, row, en_3w and not na(rsi_3w) ? str.tostring(rsi_3w, "#.#") : "—", text_color=en_3w ? rsiColor(rsi_3w) : colTextDim, text_size=size.small, bgcolor=colBgScore)
+    table.cell(tbl, 2, row, str.tostring(w_3w, "#.#") + "%", text_color=colTextDim, text_size=size.small, bgcolor=colBgScore)
+    table.cell(tbl, 3, row, statusIcon(rsi_3w, en_3w), text_size=size.small, bgcolor=colBgScore)
+    row += 1
+
+    // 1M
+    table.cell(tbl, 0, row, "1 Ay",    text_color=en_1m ? colText : colTextDim, text_size=size.small, bgcolor=colBgScore)
+    table.cell(tbl, 1, row, en_1m and not na(rsi_1m) ? str.tostring(rsi_1m, "#.#") : "—", text_color=en_1m ? rsiColor(rsi_1m) : colTextDim, text_size=size.small, bgcolor=colBgScore)
+    table.cell(tbl, 2, row, str.tostring(w_1m, "#.#") + "%", text_color=colTextDim, text_size=size.small, bgcolor=colBgScore)
+    table.cell(tbl, 3, row, statusIcon(rsi_1m, en_1m), text_size=size.small, bgcolor=colBgScore)
+    row += 1
+
+    // ── AYIRICI ──
+    table.cell(tbl, 0, row, "", bgcolor=colBorder)
+    table.cell(tbl, 1, row, "", bgcolor=colBorder)
+    table.cell(tbl, 2, row, "", bgcolor=colBorder)
+    table.cell(tbl, 3, row, "", bgcolor=colBorder)
+    row += 1
+
+    // ── TOPLAM SKOR SATIRI ──
+    scoreColor = na(htfScore) ? colTextDim : htfScore <= dipThresh ? colGreen : htfScore >= tepeThresh ? colRed : colYellow
+    scoreStatus = na(htfScore) ? "—" : htfScore <= dipThresh ? "🟢 DİP" : htfScore >= tepeThresh ? "🔴 TEPE" : "⚪ NÖTR"
+
+    table.cell(tbl, 0, row, "SKOR",  text_color=colCyan, text_size=size.normal, bgcolor=colBgHeader, text_font_family=font.family_monospace)
+    table.cell(tbl, 1, row, not na(htfScore) ? str.tostring(htfScore, "#.##") : "—", text_color=scoreColor, text_size=size.normal, bgcolor=colBgHeader, text_font_family=font.family_monospace)
+    table.cell(tbl, 2, row, str.tostring(totalWeight, "#.#") + "%", text_color=colTextDim, text_size=size.small, bgcolor=colBgHeader)
+    table.cell(tbl, 3, row, scoreStatus, text_size=size.small, bgcolor=colBgHeader)

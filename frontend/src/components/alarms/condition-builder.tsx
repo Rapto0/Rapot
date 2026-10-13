@@ -4,15 +4,17 @@ import { Plus, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select } from "@/components/ui/select"
+import { CustomIndicatorField } from "@/components/indicators/custom-indicator-field"
 import type { AlarmCategory, AlarmField, AlarmTimeframe, CompareOp, Condition, FieldRef } from "@/lib/api/advanced-alarms-api"
 import { defaultLeaf, FIELD_LABELS, isGroup, makeRef, OP_LABELS, PERIOD_FIELDS, TIMEFRAME_LABELS } from "@/lib/advanced-alarm-form"
 
 function ReferenceEditor({ value, onChange, label, priceOnly }: { value: FieldRef; onChange: (ref: FieldRef) => void; label: string; priceOnly: boolean }) {
     return <fieldset className="grid min-w-0 gap-2 sm:grid-cols-3"><legend className="mb-1 text-xs text-muted-foreground">{label}</legend>
         <label className="space-y-1 text-xs"><span>Alan</span><Select aria-label={`${label}: alan`} value={value.field} onChange={e => onChange({ ...makeRef(e.target.value as AlarmField), ...(value.timeframe ? { timeframe: value.timeframe } : {}) })}>{Object.entries(FIELD_LABELS).filter(([field]) => !priceOnly || field === "price").map(([field, name]) => <option key={field} value={field}>{name}</option>)}</Select></label>
-        {value.field !== "price" && <label className="space-y-1 text-xs"><span>Periyot</span><Select aria-label={`${label}: periyot`} value={value.timeframe ?? ""} onChange={e => { const { timeframe: _old, ...rest } = value; void _old; onChange({ ...rest, ...(e.target.value ? { timeframe: e.target.value as AlarmTimeframe } : {}) }) }}><option value="">Alarm periyodu</option>{Object.entries(TIMEFRAME_LABELS).map(([tf, name]) => <option key={tf} value={tf}>{name}</option>)}</Select></label>}
+        {value.field !== "price" && <label className="space-y-1 text-xs"><span>Periyot</span>{value.field === "custom" ? <Input aria-label={`${label}: periyot`} value={value.timeframe ?? ""} placeholder="Alarm periyodu · örn. 1D" onChange={e => { const { timeframe: _old, ...rest } = value; void _old; onChange({ ...rest, ...(e.target.value ? { timeframe: e.target.value as AlarmTimeframe } : {}) }) }} /> : <Select aria-label={`${label}: periyot`} value={value.timeframe ?? ""} onChange={e => { const { timeframe: _old, ...rest } = value; void _old; onChange({ ...rest, ...(e.target.value ? { timeframe: e.target.value as AlarmTimeframe } : {}) }) }}><option value="">Alarm periyodu</option>{Object.entries(TIMEFRAME_LABELS).map(([tf, name]) => <option key={tf} value={tf}>{name}</option>)}</Select>}</label>}
         {PERIOD_FIELDS.has(value.field) && <label className="space-y-1 text-xs"><span>Uzunluk</span><Input aria-label={`${label}: uzunluk`} type="number" min={2} max={200} value={Number.isFinite(value.period) ? value.period : ""} onChange={e => onChange({ ...value, period: e.target.valueAsNumber })} /></label>}
         {(value.field === "combo" || value.field === "hunter") && <label className="space-y-1 text-xs"><span>Skor</span><Select aria-label={`${label}: skor`} value={value.side} onChange={e => onChange({ ...value, side: e.target.value as "buy" | "sell" })}><option value="buy">Alış / dip</option><option value="sell">Satış / tepe</option></Select></label>}
+        {value.field === "custom" && <div className="sm:col-span-3"><CustomIndicatorField value={value} onChange={onChange} label={label} /></div>}
     </fieldset>
 }
 

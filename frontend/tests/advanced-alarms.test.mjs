@@ -17,6 +17,7 @@ function load(path, imports = {}, globals = {}) {
 const plain = value => JSON.parse(JSON.stringify(value));
 const form = load('../src/lib/advanced-alarm-form.ts');
 const listHelpers = load('../src/lib/server-watchlists.ts');
+const customPresets = load('../src/lib/custom-indicator-presets.ts');
 
 test('advanced transport retains auth core, cancellation, revisions and escaped identifiers', async () => {
   const calls = [];
@@ -83,11 +84,11 @@ test('large watchlist parsing never silently truncates or changes symbol identit
 const allElements = node => React.isValidElement(node) ? [node, ...React.Children.toArray(node.props.children).flatMap(allElements)] : [];
 const text = node => Array.isArray(node) ? node.map(text).join('') : React.isValidElement(node) ? text(node.props.children) : typeof node === 'string' || typeof node === 'number' ? String(node) : '';
 
-function harness({ allowed = true, ruleRows = [], listRows = [], localLists = [], searchParams = '', symbolLoader = async () => ({ symbols: [] }) } = {}) {
+function harness({ allowed = true, ruleRows = [], listRows = [], localLists = [], searchParams = '', marketStatus = {}, symbolLoader = async () => ({ symbols: [] }) } = {}) {
   const states = [], requests = [], queries = [];
   const effectDeps = [];
   let cursor = 0, effectCursor = 0, effects = [], dirty = false, tree;
-  const runtime = { running: true, last_cycle_at: new Date().toISOString(), last_error: null, evaluation: { total: 3000, checked: 2500, ready: 2100, backlog: 500 }, market: { tracked_symbols: 600, fresh_symbols: 580, state: 'connected' }, delivery: { pending: 4, sent: 10, failed: 0 }, telegram_configured: true };
+  const runtime = { running: true, last_cycle_at: new Date().toISOString(), last_error: null, evaluation: { total: 3000, checked: 2500, ready: 2100, backlog: 500 }, market: { tracked_symbols: 600, fresh_symbols: 580, state: 'connected', ...marketStatus }, delivery: { pending: 4, sent: 10, failed: 0 }, telegram_configured: true };
   const queryData = {
     'advanced-alarms': { rules: ruleRows, usage: { price: 1000, technical: 1000, watchlist: 1000 }, runtime },
     'advanced-alarm-status': runtime, 'advanced-alarm-events': { events: [] }, 'advanced-alarm-watchlists': { watchlists: listRows },
@@ -109,12 +110,53 @@ function harness({ allowed = true, ruleRows = [], listRows = [], localLists = []
     '@/lib/api/client': Object.fromEntries(['fetchBistSymbols', 'fetchCryptoSymbols'].map(name => [name, async () => { requests.push({ name, args: [] }); return symbolLoader(name); }])),
     '@/lib/api/advanced-alarms-api': api, '@/lib/advanced-alarm-form': form,
     '@/lib/server-watchlists': listHelpers,
+    '@/lib/custom-indicator-presets': customPresets,
     '@/lib/watchlist-alarms': { loadStoredWatchlists: () => localLists, loadStoredScannerWatchlists: () => [] },
   }, { window: { location: { search: searchParams } } });
   function render() { let rounds = 0; do { assert.ok(++rounds < 10, 'Effects must settle'); cursor = 0; effectCursor = 0; effects = []; dirty = false; tree = componentModule.AdvancedAlarmCenter(); effects.forEach(effect => effect()); } while (dirty); return tree; }
   render();
   return { render, requests, queries, elements: () => allElements(tree), text: () => text(tree) };
 }
+
+test('custom worker status separates pending results from standard chart history and cache totals', () => {
+  const view = harness({ marketStatus: { history_ready: 99, custom_indicators: {
+    running: true, configured: 3, blocked_configurations: 2, requested_rule_symbols: 20, pending_or_stale_rule_symbols: 7,
+    results: 50, oldest_result_age_seconds: 85, last_cycle_seconds: 0, refresh_target_seconds: 30,
+    last_completed_at: '2026-10-13T10:00:00Z', last_error: 'Kaynak verisi bekleniyor',
+  } } });
+  const card = view.elements().find(element => element.props['aria-label'] === 'Özel gösterge hesapları');
+  assert.match(text(card), /Çalışıyor/);
+  assert.match(text(card), /İstenen kural \/ sembol hesabı: 20/);
+  assert.match(text(card), /Bekleyen veya bayat hesap: 7/);
+  assert.match(text(card), /Kapasiteye takılan ayar kümesi: 2/);
+  assert.match(text(card), /bu çıktıları kullanan alarmlar çalışmaz/);
+  assert.match(text(card), /En fazla 256 farklı etkin hesap ayarı/);
+  assert.match(text(card), /Önbellekteki hesap kaydı: 50/);
+  assert.match(text(card), /Son hesaplama süresi: 0 sn/);
+  assert.match(text(card), /En eski sonuç yaşı: 85 sn/);
+  assert.match(text(card), /aynı anda değerlendirilmesi garanti edilmez/);
+  assert.doesNotMatch(text(card), /99/);
+  assert.match(view.text(), /Hazır standart mum serisi: 99/);
+  assert.ok(allElements(card).some(element => element.props.role === 'alert' && element.props.children === 'Kaynak verisi bekleniyor'));
+});
+
+test('unreported custom worker counters remain unknown rather than appearing healthy and empty', () => {
+  const view = harness();
+  const card = view.elements().find(element => element.props['aria-label'] === 'Özel gösterge hesapları');
+  assert.match(text(card), /Durum bekleniyor/);
+  assert.match(text(card), /Bekleyen veya bayat hesap: —/);
+  assert.match(text(card), /Kapasiteye takılan ayar kümesi: —/);
+  assert.match(text(card), /varsayılan 30 saniyedir/);
+  assert.doesNotMatch(text(card), /Çalışıyor/);
+  assert.doesNotMatch(text(card), /bu çıktıları kullanan alarmlar çalışmaz/);
+});
+
+test('reported zero blocked configurations is visible without an inactive-alarm warning', () => {
+  const view = harness({ marketStatus: { custom_indicators: { blocked_configurations: 0 } } });
+  const card = view.elements().find(element => element.props['aria-label'] === 'Özel gösterge hesapları');
+  assert.match(text(card), /Kapasiteye takılan ayar kümesi: 0/);
+  assert.doesNotMatch(text(card), /bu çıktıları kullanan alarmlar çalışmaz/);
+});
 
 test('logged-out alarm center does not request private feeds or create rules', () => {
   const view = harness({ allowed: false });
@@ -309,4 +351,31 @@ test('adding a fetched universe is explicit and draft-only; empty or failed resp
     assert.doesNotMatch(failed.text(), /private provider message/);
     assert.equal(failed.requests.length, 1);
   }
+});
+
+
+test('custom presets preserve watchlist, notification choice and complete settings on round trip', () => {
+  const draft = { ...form.draftForWatchlist({id:'saved',name:'BIST + Kripto'}), name:'RSI oy', notify_telegram:true };
+  const preset = form.withIndicatorPreset(draft, 'rsi_votes');
+  assert.equal(preset.watchlist_id, 'saved');
+  assert.equal(preset.notify_telegram, true);
+  assert.equal(preset.trigger, 'bar_close');
+  assert.equal(preset.mode, 'once_per_bar');
+  preset.condition.left.inputs = {len1:21,tf1:'3D',en3:false,requiredBuyVotes:1,showTable:false};
+  preset.timeframe='3D';
+  const saved = form.writeFromAdvancedDraft(preset);
+  const restored = form.draftFromAdvancedRule({...saved,id:'rule',revision:1});
+  assert.deepEqual(plain(restored.condition), plain(saved.condition));
+  restored.condition.left.inputs.len1=7;
+  assert.equal(saved.condition.left.inputs.len1,21);
+  assert.match(form.conditionLabel(saved.condition), /RSI N OY.*AL sinyali/);
+  saved.condition.left.inputs.len1=NaN;
+  assert.throws(()=>form.validateTree(saved.condition), /ayarları/);
+});
+
+test('native custom periods never confuse Pine months with minute aliases', () => {
+  for(const value of ['1m','1M','3D','7D','2W','15S','120']) assert.equal(form.isCustomTimeframe(value),true);
+  for(const value of ['0D','7S','500D','10000','1s']) assert.equal(form.isCustomTimeframe(value),false);
+  assert.equal(form.withIndicatorPreset(form.emptyAdvancedDraft('technical'),'htf_rsi_score').trigger,'intrabar');
+  assert.throws(()=>form.withIndicatorPreset(form.emptyAdvancedDraft('technical'),'untrusted'), /desteklenmiyor/);
 });

@@ -1,0 +1,2763 @@
+{
+  "version": 1,
+  "indicators": [
+    {
+      "id": "htf_rsi_score",
+      "name": "HTF RSI Score",
+      "inputs": [
+        {
+          "key": "rsiLength",
+          "label": "RSI Periyodu",
+          "type": "int",
+          "default": 14,
+          "group": "⚙️ Genel Ayarlar",
+          "min": 2,
+          "max": 50
+        },
+        {
+          "key": "dipThresh",
+          "label": "Dip Eşiği (Alış)",
+          "type": "float",
+          "default": 30.0,
+          "group": "⚙️ Genel Ayarlar",
+          "min": 0,
+          "max": 100,
+          "step": 1
+        },
+        {
+          "key": "tepeThresh",
+          "label": "Tepe Eşiği (Satış)",
+          "type": "float",
+          "default": 70.0,
+          "group": "⚙️ Genel Ayarlar",
+          "min": 0,
+          "max": 100,
+          "step": 1
+        },
+        {
+          "key": "showTable",
+          "label": "Tabloyu Göster",
+          "type": "bool",
+          "default": true,
+          "group": "⚙️ Genel Ayarlar",
+          "visual": true
+        },
+        {
+          "key": "en_1d",
+          "label": "1 Günlük",
+          "type": "bool",
+          "default": true,
+          "group": "📅 Günlük Zaman Dilimleri"
+        },
+        {
+          "key": "w_1d",
+          "label": "Ağırlık %",
+          "type": "float",
+          "default": 3.0,
+          "group": "📅 Günlük Zaman Dilimleri",
+          "min": 0,
+          "max": 100,
+          "step": 0.5
+        },
+        {
+          "key": "en_2d",
+          "label": "2 Günlük",
+          "type": "bool",
+          "default": true,
+          "group": "📅 Günlük Zaman Dilimleri"
+        },
+        {
+          "key": "w_2d",
+          "label": "Ağırlık %",
+          "type": "float",
+          "default": 6.0,
+          "group": "📅 Günlük Zaman Dilimleri",
+          "min": 0,
+          "max": 100,
+          "step": 0.5
+        },
+        {
+          "key": "en_3d",
+          "label": "3 Günlük",
+          "type": "bool",
+          "default": true,
+          "group": "📅 Günlük Zaman Dilimleri"
+        },
+        {
+          "key": "w_3d",
+          "label": "Ağırlık %",
+          "type": "float",
+          "default": 7.0,
+          "group": "📅 Günlük Zaman Dilimleri",
+          "min": 0,
+          "max": 100,
+          "step": 0.5
+        },
+        {
+          "key": "en_4d",
+          "label": "4 Günlük",
+          "type": "bool",
+          "default": true,
+          "group": "📅 Günlük Zaman Dilimleri"
+        },
+        {
+          "key": "w_4d",
+          "label": "Ağırlık %",
+          "type": "float",
+          "default": 7.0,
+          "group": "📅 Günlük Zaman Dilimleri",
+          "min": 0,
+          "max": 100,
+          "step": 0.5
+        },
+        {
+          "key": "en_5d",
+          "label": "5 Günlük",
+          "type": "bool",
+          "default": true,
+          "group": "📅 Günlük Zaman Dilimleri"
+        },
+        {
+          "key": "w_5d",
+          "label": "Ağırlık %",
+          "type": "float",
+          "default": 8.0,
+          "group": "📅 Günlük Zaman Dilimleri",
+          "min": 0,
+          "max": 100,
+          "step": 0.5
+        },
+        {
+          "key": "en_6d",
+          "label": "6 Günlük",
+          "type": "bool",
+          "default": true,
+          "group": "📅 Günlük Zaman Dilimleri"
+        },
+        {
+          "key": "w_6d",
+          "label": "Ağırlık %",
+          "type": "float",
+          "default": 9.0,
+          "group": "📅 Günlük Zaman Dilimleri",
+          "min": 0,
+          "max": 100,
+          "step": 0.5
+        },
+        {
+          "key": "en_1w",
+          "label": "1 Haftalık",
+          "type": "bool",
+          "default": true,
+          "group": "📆 Haftalık & Aylık Zaman Dilimleri"
+        },
+        {
+          "key": "w_1w",
+          "label": "Ağırlık %",
+          "type": "float",
+          "default": 10.0,
+          "group": "📆 Haftalık & Aylık Zaman Dilimleri",
+          "min": 0,
+          "max": 100,
+          "step": 0.5
+        },
+        {
+          "key": "en_2w",
+          "label": "2 Haftalık",
+          "type": "bool",
+          "default": true,
+          "group": "📆 Haftalık & Aylık Zaman Dilimleri"
+        },
+        {
+          "key": "w_2w",
+          "label": "Ağırlık %",
+          "type": "float",
+          "default": 14.0,
+          "group": "📆 Haftalık & Aylık Zaman Dilimleri",
+          "min": 0,
+          "max": 100,
+          "step": 0.5
+        },
+        {
+          "key": "en_3w",
+          "label": "3 Haftalık",
+          "type": "bool",
+          "default": true,
+          "group": "📆 Haftalık & Aylık Zaman Dilimleri"
+        },
+        {
+          "key": "w_3w",
+          "label": "Ağırlık %",
+          "type": "float",
+          "default": 16.0,
+          "group": "📆 Haftalık & Aylık Zaman Dilimleri",
+          "min": 0,
+          "max": 100,
+          "step": 0.5
+        },
+        {
+          "key": "en_1m",
+          "label": "1 Aylık",
+          "type": "bool",
+          "default": true,
+          "group": "📆 Haftalık & Aylık Zaman Dilimleri"
+        },
+        {
+          "key": "w_1m",
+          "label": "Ağırlık %",
+          "type": "float",
+          "default": 20.0,
+          "group": "📆 Haftalık & Aylık Zaman Dilimleri",
+          "min": 0,
+          "max": 100,
+          "step": 0.5
+        }
+      ],
+      "outputs": [
+        {
+          "key": "score",
+          "label": "HTF RSI Skoru",
+          "kind": "number"
+        },
+        {
+          "key": "buy_signal",
+          "label": "DİP sinyali",
+          "kind": "boolean"
+        },
+        {
+          "key": "sell_signal",
+          "label": "TEPE sinyali",
+          "kind": "boolean"
+        },
+        {
+          "key": "any_signal",
+          "label": "DİP veya TEPE sinyali",
+          "kind": "boolean"
+        },
+        {
+          "key": "buy_zone",
+          "label": "DİP bölgesi",
+          "kind": "boolean"
+        },
+        {
+          "key": "sell_zone",
+          "label": "TEPE bölgesi",
+          "kind": "boolean"
+        },
+        {
+          "key": "active_count",
+          "label": "Etkin zaman dilimi sayısı",
+          "kind": "number"
+        },
+        {
+          "key": "ready_count",
+          "label": "RSI değeri hazır zaman dilimi sayısı",
+          "kind": "number"
+        }
+      ],
+      "base_policy": "any"
+    },
+    {
+      "id": "rsi_snapshot",
+      "name": "MTF RSI DİP + TEPE Snapshot [PRO]",
+      "inputs": [
+        {
+          "key": "dipTargetScore",
+          "label": "DİP Hedef Skoru",
+          "type": "float",
+          "default": 29.0,
+          "group": "00 • GENEL",
+          "min": 0.01,
+          "step": 0.25
+        },
+        {
+          "key": "topTargetScore",
+          "label": "TEPE Hedef Skoru",
+          "type": "float",
+          "default": 29.0,
+          "group": "00 • GENEL",
+          "min": 0.01,
+          "step": 0.25
+        },
+        {
+          "key": "maxStreak",
+          "label": "Maksimum Seri",
+          "type": "int",
+          "default": 0,
+          "group": "00 • GENEL",
+          "min": 0
+        },
+        {
+          "key": "en1",
+          "label": "Aktif",
+          "type": "bool",
+          "default": true,
+          "group": "01 • ZAMAN DİLİMİ 1"
+        },
+        {
+          "key": "tf1",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "1D",
+          "group": "01 • ZAMAN DİLİMİ 1"
+        },
+        {
+          "key": "len1",
+          "label": "RSI",
+          "type": "int",
+          "default": 14,
+          "group": "01 • ZAMAN DİLİMİ 1",
+          "min": 2
+        },
+        {
+          "key": "dipThr1",
+          "label": "DİP <",
+          "type": "float",
+          "default": 30.0,
+          "group": "01 • ZAMAN DİLİMİ 1",
+          "min": 0.0,
+          "max": 100.0,
+          "step": 0.1
+        },
+        {
+          "key": "topThr1",
+          "label": "TEPE >",
+          "type": "float",
+          "default": 70.0,
+          "group": "01 • ZAMAN DİLİMİ 1",
+          "min": 0.0,
+          "max": 100.0,
+          "step": 0.1
+        },
+        {
+          "key": "tfPts1",
+          "label": "TF Puanı",
+          "type": "float",
+          "default": 1.0,
+          "group": "01 • ZAMAN DİLİMİ 1",
+          "min": 0.0,
+          "step": 0.25
+        },
+        {
+          "key": "serialPts1",
+          "label": "Seri Puanı",
+          "type": "float",
+          "default": 1.0,
+          "group": "01 • ZAMAN DİLİMİ 1",
+          "min": 0.0,
+          "step": 0.25
+        },
+        {
+          "key": "en2",
+          "label": "Aktif",
+          "type": "bool",
+          "default": true,
+          "group": "02 • ZAMAN DİLİMİ 2"
+        },
+        {
+          "key": "tf2",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "2D",
+          "group": "02 • ZAMAN DİLİMİ 2"
+        },
+        {
+          "key": "len2",
+          "label": "RSI",
+          "type": "int",
+          "default": 14,
+          "group": "02 • ZAMAN DİLİMİ 2",
+          "min": 2
+        },
+        {
+          "key": "dipThr2",
+          "label": "DİP <",
+          "type": "float",
+          "default": 30.0,
+          "group": "02 • ZAMAN DİLİMİ 2",
+          "min": 0.0,
+          "max": 100.0,
+          "step": 0.1
+        },
+        {
+          "key": "topThr2",
+          "label": "TEPE >",
+          "type": "float",
+          "default": 70.0,
+          "group": "02 • ZAMAN DİLİMİ 2",
+          "min": 0.0,
+          "max": 100.0,
+          "step": 0.1
+        },
+        {
+          "key": "tfPts2",
+          "label": "TF Puanı",
+          "type": "float",
+          "default": 1.0,
+          "group": "02 • ZAMAN DİLİMİ 2",
+          "min": 0.0,
+          "step": 0.25
+        },
+        {
+          "key": "serialPts2",
+          "label": "Seri Puanı",
+          "type": "float",
+          "default": 1.0,
+          "group": "02 • ZAMAN DİLİMİ 2",
+          "min": 0.0,
+          "step": 0.25
+        },
+        {
+          "key": "en3",
+          "label": "Aktif",
+          "type": "bool",
+          "default": true,
+          "group": "03 • ZAMAN DİLİMİ 3"
+        },
+        {
+          "key": "tf3",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "3D",
+          "group": "03 • ZAMAN DİLİMİ 3"
+        },
+        {
+          "key": "len3",
+          "label": "RSI",
+          "type": "int",
+          "default": 14,
+          "group": "03 • ZAMAN DİLİMİ 3",
+          "min": 2
+        },
+        {
+          "key": "dipThr3",
+          "label": "DİP <",
+          "type": "float",
+          "default": 30.0,
+          "group": "03 • ZAMAN DİLİMİ 3",
+          "min": 0.0,
+          "max": 100.0,
+          "step": 0.1
+        },
+        {
+          "key": "topThr3",
+          "label": "TEPE >",
+          "type": "float",
+          "default": 70.0,
+          "group": "03 • ZAMAN DİLİMİ 3",
+          "min": 0.0,
+          "max": 100.0,
+          "step": 0.1
+        },
+        {
+          "key": "tfPts3",
+          "label": "TF Puanı",
+          "type": "float",
+          "default": 1.0,
+          "group": "03 • ZAMAN DİLİMİ 3",
+          "min": 0.0,
+          "step": 0.25
+        },
+        {
+          "key": "serialPts3",
+          "label": "Seri Puanı",
+          "type": "float",
+          "default": 1.0,
+          "group": "03 • ZAMAN DİLİMİ 3",
+          "min": 0.0,
+          "step": 0.25
+        },
+        {
+          "key": "en4",
+          "label": "Aktif",
+          "type": "bool",
+          "default": true,
+          "group": "04 • ZAMAN DİLİMİ 4"
+        },
+        {
+          "key": "tf4",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "4D",
+          "group": "04 • ZAMAN DİLİMİ 4"
+        },
+        {
+          "key": "len4",
+          "label": "RSI",
+          "type": "int",
+          "default": 14,
+          "group": "04 • ZAMAN DİLİMİ 4",
+          "min": 2
+        },
+        {
+          "key": "dipThr4",
+          "label": "DİP <",
+          "type": "float",
+          "default": 30.0,
+          "group": "04 • ZAMAN DİLİMİ 4",
+          "min": 0.0,
+          "max": 100.0,
+          "step": 0.1
+        },
+        {
+          "key": "topThr4",
+          "label": "TEPE >",
+          "type": "float",
+          "default": 70.0,
+          "group": "04 • ZAMAN DİLİMİ 4",
+          "min": 0.0,
+          "max": 100.0,
+          "step": 0.1
+        },
+        {
+          "key": "tfPts4",
+          "label": "TF Puanı",
+          "type": "float",
+          "default": 1.0,
+          "group": "04 • ZAMAN DİLİMİ 4",
+          "min": 0.0,
+          "step": 0.25
+        },
+        {
+          "key": "serialPts4",
+          "label": "Seri Puanı",
+          "type": "float",
+          "default": 1.0,
+          "group": "04 • ZAMAN DİLİMİ 4",
+          "min": 0.0,
+          "step": 0.25
+        },
+        {
+          "key": "en5",
+          "label": "Aktif",
+          "type": "bool",
+          "default": true,
+          "group": "05 • ZAMAN DİLİMİ 5"
+        },
+        {
+          "key": "tf5",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "5D",
+          "group": "05 • ZAMAN DİLİMİ 5"
+        },
+        {
+          "key": "len5",
+          "label": "RSI",
+          "type": "int",
+          "default": 14,
+          "group": "05 • ZAMAN DİLİMİ 5",
+          "min": 2
+        },
+        {
+          "key": "dipThr5",
+          "label": "DİP <",
+          "type": "float",
+          "default": 30.0,
+          "group": "05 • ZAMAN DİLİMİ 5",
+          "min": 0.0,
+          "max": 100.0,
+          "step": 0.1
+        },
+        {
+          "key": "topThr5",
+          "label": "TEPE >",
+          "type": "float",
+          "default": 70.0,
+          "group": "05 • ZAMAN DİLİMİ 5",
+          "min": 0.0,
+          "max": 100.0,
+          "step": 0.1
+        },
+        {
+          "key": "tfPts5",
+          "label": "TF Puanı",
+          "type": "float",
+          "default": 1.0,
+          "group": "05 • ZAMAN DİLİMİ 5",
+          "min": 0.0,
+          "step": 0.25
+        },
+        {
+          "key": "serialPts5",
+          "label": "Seri Puanı",
+          "type": "float",
+          "default": 1.0,
+          "group": "05 • ZAMAN DİLİMİ 5",
+          "min": 0.0,
+          "step": 0.25
+        },
+        {
+          "key": "en6",
+          "label": "Aktif",
+          "type": "bool",
+          "default": true,
+          "group": "06 • ZAMAN DİLİMİ 6"
+        },
+        {
+          "key": "tf6",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "6D",
+          "group": "06 • ZAMAN DİLİMİ 6"
+        },
+        {
+          "key": "len6",
+          "label": "RSI",
+          "type": "int",
+          "default": 14,
+          "group": "06 • ZAMAN DİLİMİ 6",
+          "min": 2
+        },
+        {
+          "key": "dipThr6",
+          "label": "DİP <",
+          "type": "float",
+          "default": 30.0,
+          "group": "06 • ZAMAN DİLİMİ 6",
+          "min": 0.0,
+          "max": 100.0,
+          "step": 0.1
+        },
+        {
+          "key": "topThr6",
+          "label": "TEPE >",
+          "type": "float",
+          "default": 70.0,
+          "group": "06 • ZAMAN DİLİMİ 6",
+          "min": 0.0,
+          "max": 100.0,
+          "step": 0.1
+        },
+        {
+          "key": "tfPts6",
+          "label": "TF Puanı",
+          "type": "float",
+          "default": 1.0,
+          "group": "06 • ZAMAN DİLİMİ 6",
+          "min": 0.0,
+          "step": 0.25
+        },
+        {
+          "key": "serialPts6",
+          "label": "Seri Puanı",
+          "type": "float",
+          "default": 1.0,
+          "group": "06 • ZAMAN DİLİMİ 6",
+          "min": 0.0,
+          "step": 0.25
+        },
+        {
+          "key": "en7",
+          "label": "Aktif",
+          "type": "bool",
+          "default": true,
+          "group": "07 • ZAMAN DİLİMİ 7"
+        },
+        {
+          "key": "tf7",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "7D",
+          "group": "07 • ZAMAN DİLİMİ 7"
+        },
+        {
+          "key": "len7",
+          "label": "RSI",
+          "type": "int",
+          "default": 14,
+          "group": "07 • ZAMAN DİLİMİ 7",
+          "min": 2
+        },
+        {
+          "key": "dipThr7",
+          "label": "DİP <",
+          "type": "float",
+          "default": 30.0,
+          "group": "07 • ZAMAN DİLİMİ 7",
+          "min": 0.0,
+          "max": 100.0,
+          "step": 0.1
+        },
+        {
+          "key": "topThr7",
+          "label": "TEPE >",
+          "type": "float",
+          "default": 70.0,
+          "group": "07 • ZAMAN DİLİMİ 7",
+          "min": 0.0,
+          "max": 100.0,
+          "step": 0.1
+        },
+        {
+          "key": "tfPts7",
+          "label": "TF Puanı",
+          "type": "float",
+          "default": 1.0,
+          "group": "07 • ZAMAN DİLİMİ 7",
+          "min": 0.0,
+          "step": 0.25
+        },
+        {
+          "key": "serialPts7",
+          "label": "Seri Puanı",
+          "type": "float",
+          "default": 1.0,
+          "group": "07 • ZAMAN DİLİMİ 7",
+          "min": 0.0,
+          "step": 0.25
+        },
+        {
+          "key": "en8",
+          "label": "Aktif",
+          "type": "bool",
+          "default": true,
+          "group": "08 • ZAMAN DİLİMİ 8"
+        },
+        {
+          "key": "tf8",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "2W",
+          "group": "08 • ZAMAN DİLİMİ 8"
+        },
+        {
+          "key": "len8",
+          "label": "RSI",
+          "type": "int",
+          "default": 14,
+          "group": "08 • ZAMAN DİLİMİ 8",
+          "min": 2
+        },
+        {
+          "key": "dipThr8",
+          "label": "DİP <",
+          "type": "float",
+          "default": 30.0,
+          "group": "08 • ZAMAN DİLİMİ 8",
+          "min": 0.0,
+          "max": 100.0,
+          "step": 0.1
+        },
+        {
+          "key": "topThr8",
+          "label": "TEPE >",
+          "type": "float",
+          "default": 70.0,
+          "group": "08 • ZAMAN DİLİMİ 8",
+          "min": 0.0,
+          "max": 100.0,
+          "step": 0.1
+        },
+        {
+          "key": "tfPts8",
+          "label": "TF Puanı",
+          "type": "float",
+          "default": 1.0,
+          "group": "08 • ZAMAN DİLİMİ 8",
+          "min": 0.0,
+          "step": 0.25
+        },
+        {
+          "key": "serialPts8",
+          "label": "Seri Puanı",
+          "type": "float",
+          "default": 1.0,
+          "group": "08 • ZAMAN DİLİMİ 8",
+          "min": 0.0,
+          "step": 0.25
+        },
+        {
+          "key": "en9",
+          "label": "Aktif",
+          "type": "bool",
+          "default": true,
+          "group": "09 • ZAMAN DİLİMİ 9"
+        },
+        {
+          "key": "tf9",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "3W",
+          "group": "09 • ZAMAN DİLİMİ 9"
+        },
+        {
+          "key": "len9",
+          "label": "RSI",
+          "type": "int",
+          "default": 14,
+          "group": "09 • ZAMAN DİLİMİ 9",
+          "min": 2
+        },
+        {
+          "key": "dipThr9",
+          "label": "DİP <",
+          "type": "float",
+          "default": 30.0,
+          "group": "09 • ZAMAN DİLİMİ 9",
+          "min": 0.0,
+          "max": 100.0,
+          "step": 0.1
+        },
+        {
+          "key": "topThr9",
+          "label": "TEPE >",
+          "type": "float",
+          "default": 70.0,
+          "group": "09 • ZAMAN DİLİMİ 9",
+          "min": 0.0,
+          "max": 100.0,
+          "step": 0.1
+        },
+        {
+          "key": "tfPts9",
+          "label": "TF Puanı",
+          "type": "float",
+          "default": 1.0,
+          "group": "09 • ZAMAN DİLİMİ 9",
+          "min": 0.0,
+          "step": 0.25
+        },
+        {
+          "key": "serialPts9",
+          "label": "Seri Puanı",
+          "type": "float",
+          "default": 1.0,
+          "group": "09 • ZAMAN DİLİMİ 9",
+          "min": 0.0,
+          "step": 0.25
+        },
+        {
+          "key": "en10",
+          "label": "Aktif",
+          "type": "bool",
+          "default": true,
+          "group": "10 • ZAMAN DİLİMİ 10"
+        },
+        {
+          "key": "tf10",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "1M",
+          "group": "10 • ZAMAN DİLİMİ 10"
+        },
+        {
+          "key": "len10",
+          "label": "RSI",
+          "type": "int",
+          "default": 14,
+          "group": "10 • ZAMAN DİLİMİ 10",
+          "min": 2
+        },
+        {
+          "key": "dipThr10",
+          "label": "DİP <",
+          "type": "float",
+          "default": 30.0,
+          "group": "10 • ZAMAN DİLİMİ 10",
+          "min": 0.0,
+          "max": 100.0,
+          "step": 0.1
+        },
+        {
+          "key": "topThr10",
+          "label": "TEPE >",
+          "type": "float",
+          "default": 70.0,
+          "group": "10 • ZAMAN DİLİMİ 10",
+          "min": 0.0,
+          "max": 100.0,
+          "step": 0.1
+        },
+        {
+          "key": "tfPts10",
+          "label": "TF Puanı",
+          "type": "float",
+          "default": 1.0,
+          "group": "10 • ZAMAN DİLİMİ 10",
+          "min": 0.0,
+          "step": 0.25
+        },
+        {
+          "key": "serialPts10",
+          "label": "Seri Puanı",
+          "type": "float",
+          "default": 1.0,
+          "group": "10 • ZAMAN DİLİMİ 10",
+          "min": 0.0,
+          "step": 0.25
+        }
+      ],
+      "outputs": [
+        {
+          "key": "dip_score",
+          "label": "DIP Skoru",
+          "kind": "number"
+        },
+        {
+          "key": "top_score",
+          "label": "TEPE Skoru",
+          "kind": "number"
+        },
+        {
+          "key": "buy_signal",
+          "label": "DİP sinyali",
+          "kind": "boolean"
+        },
+        {
+          "key": "sell_signal",
+          "label": "TEPE sinyali",
+          "kind": "boolean"
+        },
+        {
+          "key": "any_signal",
+          "label": "DİP veya TEPE sinyali",
+          "kind": "boolean"
+        },
+        {
+          "key": "active_count",
+          "label": "Etkin zaman dilimi sayısı",
+          "kind": "number"
+        },
+        {
+          "key": "ready_count",
+          "label": "RSI değeri hazır zaman dilimi sayısı",
+          "kind": "number"
+        }
+      ],
+      "base_policy": "daily"
+    },
+    {
+      "id": "rsi_votes",
+      "name": "MTF RSI DİP + TEPE • En Az N Oy",
+      "inputs": [
+        {
+          "key": "requiredBuyVotes",
+          "label": "AL için en az kaç zaman dilimi doğrulasın? (N)",
+          "type": "int",
+          "default": 2,
+          "group": "00 • GENEL",
+          "min": 1,
+          "max": 10
+        },
+        {
+          "key": "requiredSellVotes",
+          "label": "SAT için en az kaç zaman dilimi doğrulasın? (N)",
+          "type": "int",
+          "default": 2,
+          "group": "00 • GENEL",
+          "min": 1,
+          "max": 10
+        },
+        {
+          "key": "showTable",
+          "label": "Oy tablosunu göster",
+          "type": "bool",
+          "default": true,
+          "group": "00 • GENEL",
+          "visual": true
+        },
+        {
+          "key": "onlyFirst",
+          "label": "Sadece N şartının ilk mumunda sinyal",
+          "type": "bool",
+          "default": false,
+          "group": "00 • GENEL"
+        },
+        {
+          "key": "en1",
+          "label": "Aktif",
+          "type": "bool",
+          "default": true,
+          "group": "01 • ZAMAN DİLİMİ 1"
+        },
+        {
+          "key": "tf1",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "1D",
+          "group": "01 • ZAMAN DİLİMİ 1"
+        },
+        {
+          "key": "len1",
+          "label": "RSI uzunluğu",
+          "type": "int",
+          "default": 14,
+          "group": "01 • ZAMAN DİLİMİ 1",
+          "min": 2
+        },
+        {
+          "key": "dipThr1",
+          "label": "AL ≤",
+          "type": "float",
+          "default": 20.0,
+          "group": "01 • ZAMAN DİLİMİ 1",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "topThr1",
+          "label": "SAT ≥",
+          "type": "float",
+          "default": 80.0,
+          "group": "01 • ZAMAN DİLİMİ 1",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "en2",
+          "label": "Aktif",
+          "type": "bool",
+          "default": false,
+          "group": "02 • ZAMAN DİLİMİ 2"
+        },
+        {
+          "key": "tf2",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "2D",
+          "group": "02 • ZAMAN DİLİMİ 2"
+        },
+        {
+          "key": "len2",
+          "label": "RSI uzunluğu",
+          "type": "int",
+          "default": 14,
+          "group": "02 • ZAMAN DİLİMİ 2",
+          "min": 2
+        },
+        {
+          "key": "dipThr2",
+          "label": "AL ≤",
+          "type": "float",
+          "default": 20.0,
+          "group": "02 • ZAMAN DİLİMİ 2",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "topThr2",
+          "label": "SAT ≥",
+          "type": "float",
+          "default": 80.0,
+          "group": "02 • ZAMAN DİLİMİ 2",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "en3",
+          "label": "Aktif",
+          "type": "bool",
+          "default": true,
+          "group": "03 • ZAMAN DİLİMİ 3"
+        },
+        {
+          "key": "tf3",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "3D",
+          "group": "03 • ZAMAN DİLİMİ 3"
+        },
+        {
+          "key": "len3",
+          "label": "RSI uzunluğu",
+          "type": "int",
+          "default": 14,
+          "group": "03 • ZAMAN DİLİMİ 3",
+          "min": 2
+        },
+        {
+          "key": "dipThr3",
+          "label": "AL ≤",
+          "type": "float",
+          "default": 20.0,
+          "group": "03 • ZAMAN DİLİMİ 3",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "topThr3",
+          "label": "SAT ≥",
+          "type": "float",
+          "default": 80.0,
+          "group": "03 • ZAMAN DİLİMİ 3",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "en4",
+          "label": "Aktif",
+          "type": "bool",
+          "default": false,
+          "group": "04 • ZAMAN DİLİMİ 4"
+        },
+        {
+          "key": "tf4",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "4D",
+          "group": "04 • ZAMAN DİLİMİ 4"
+        },
+        {
+          "key": "len4",
+          "label": "RSI uzunluğu",
+          "type": "int",
+          "default": 14,
+          "group": "04 • ZAMAN DİLİMİ 4",
+          "min": 2
+        },
+        {
+          "key": "dipThr4",
+          "label": "AL ≤",
+          "type": "float",
+          "default": 20.0,
+          "group": "04 • ZAMAN DİLİMİ 4",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "topThr4",
+          "label": "SAT ≥",
+          "type": "float",
+          "default": 80.0,
+          "group": "04 • ZAMAN DİLİMİ 4",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "en5",
+          "label": "Aktif",
+          "type": "bool",
+          "default": false,
+          "group": "05 • ZAMAN DİLİMİ 5"
+        },
+        {
+          "key": "tf5",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "5D",
+          "group": "05 • ZAMAN DİLİMİ 5"
+        },
+        {
+          "key": "len5",
+          "label": "RSI uzunluğu",
+          "type": "int",
+          "default": 14,
+          "group": "05 • ZAMAN DİLİMİ 5",
+          "min": 2
+        },
+        {
+          "key": "dipThr5",
+          "label": "AL ≤",
+          "type": "float",
+          "default": 20.0,
+          "group": "05 • ZAMAN DİLİMİ 5",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "topThr5",
+          "label": "SAT ≥",
+          "type": "float",
+          "default": 80.0,
+          "group": "05 • ZAMAN DİLİMİ 5",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "en6",
+          "label": "Aktif",
+          "type": "bool",
+          "default": false,
+          "group": "06 • ZAMAN DİLİMİ 6"
+        },
+        {
+          "key": "tf6",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "6D",
+          "group": "06 • ZAMAN DİLİMİ 6"
+        },
+        {
+          "key": "len6",
+          "label": "RSI uzunluğu",
+          "type": "int",
+          "default": 14,
+          "group": "06 • ZAMAN DİLİMİ 6",
+          "min": 2
+        },
+        {
+          "key": "dipThr6",
+          "label": "AL ≤",
+          "type": "float",
+          "default": 20.0,
+          "group": "06 • ZAMAN DİLİMİ 6",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "topThr6",
+          "label": "SAT ≥",
+          "type": "float",
+          "default": 80.0,
+          "group": "06 • ZAMAN DİLİMİ 6",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "en7",
+          "label": "Aktif",
+          "type": "bool",
+          "default": false,
+          "group": "07 • ZAMAN DİLİMİ 7"
+        },
+        {
+          "key": "tf7",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "1W",
+          "group": "07 • ZAMAN DİLİMİ 7"
+        },
+        {
+          "key": "len7",
+          "label": "RSI uzunluğu",
+          "type": "int",
+          "default": 14,
+          "group": "07 • ZAMAN DİLİMİ 7",
+          "min": 2
+        },
+        {
+          "key": "dipThr7",
+          "label": "AL ≤",
+          "type": "float",
+          "default": 20.0,
+          "group": "07 • ZAMAN DİLİMİ 7",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "topThr7",
+          "label": "SAT ≥",
+          "type": "float",
+          "default": 80.0,
+          "group": "07 • ZAMAN DİLİMİ 7",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "en8",
+          "label": "Aktif",
+          "type": "bool",
+          "default": false,
+          "group": "08 • ZAMAN DİLİMİ 8"
+        },
+        {
+          "key": "tf8",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "2W",
+          "group": "08 • ZAMAN DİLİMİ 8"
+        },
+        {
+          "key": "len8",
+          "label": "RSI uzunluğu",
+          "type": "int",
+          "default": 14,
+          "group": "08 • ZAMAN DİLİMİ 8",
+          "min": 2
+        },
+        {
+          "key": "dipThr8",
+          "label": "AL ≤",
+          "type": "float",
+          "default": 20.0,
+          "group": "08 • ZAMAN DİLİMİ 8",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "topThr8",
+          "label": "SAT ≥",
+          "type": "float",
+          "default": 80.0,
+          "group": "08 • ZAMAN DİLİMİ 8",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "en9",
+          "label": "Aktif",
+          "type": "bool",
+          "default": false,
+          "group": "09 • ZAMAN DİLİMİ 9"
+        },
+        {
+          "key": "tf9",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "3W",
+          "group": "09 • ZAMAN DİLİMİ 9"
+        },
+        {
+          "key": "len9",
+          "label": "RSI uzunluğu",
+          "type": "int",
+          "default": 14,
+          "group": "09 • ZAMAN DİLİMİ 9",
+          "min": 2
+        },
+        {
+          "key": "dipThr9",
+          "label": "AL ≤",
+          "type": "float",
+          "default": 20.0,
+          "group": "09 • ZAMAN DİLİMİ 9",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "topThr9",
+          "label": "SAT ≥",
+          "type": "float",
+          "default": 80.0,
+          "group": "09 • ZAMAN DİLİMİ 9",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "en10",
+          "label": "Aktif",
+          "type": "bool",
+          "default": false,
+          "group": "10 • ZAMAN DİLİMİ 10"
+        },
+        {
+          "key": "tf10",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "1M",
+          "group": "10 • ZAMAN DİLİMİ 10"
+        },
+        {
+          "key": "len10",
+          "label": "RSI uzunluğu",
+          "type": "int",
+          "default": 14,
+          "group": "10 • ZAMAN DİLİMİ 10",
+          "min": 2
+        },
+        {
+          "key": "dipThr10",
+          "label": "AL ≤",
+          "type": "float",
+          "default": 20.0,
+          "group": "10 • ZAMAN DİLİMİ 10",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "topThr10",
+          "label": "SAT ≥",
+          "type": "float",
+          "default": 80.0,
+          "group": "10 • ZAMAN DİLİMİ 10",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        }
+      ],
+      "outputs": [
+        {
+          "key": "buy_votes",
+          "label": "AL Oy",
+          "kind": "number"
+        },
+        {
+          "key": "sell_votes",
+          "label": "SAT Oy",
+          "kind": "number"
+        },
+        {
+          "key": "buy_signal",
+          "label": "AL • DİP",
+          "kind": "boolean"
+        },
+        {
+          "key": "sell_signal",
+          "label": "SAT • TEPE",
+          "kind": "boolean"
+        },
+        {
+          "key": "any_signal",
+          "label": "AL veya SAT",
+          "kind": "boolean"
+        },
+        {
+          "key": "buy_zone",
+          "label": "AL için en az N oy",
+          "kind": "boolean"
+        },
+        {
+          "key": "sell_zone",
+          "label": "SAT için en az N oy",
+          "kind": "boolean"
+        },
+        {
+          "key": "active_count",
+          "label": "Aktif TF",
+          "kind": "number"
+        },
+        {
+          "key": "ready_count",
+          "label": "Hazır TF",
+          "kind": "number"
+        },
+        {
+          "key": "buy_reachable",
+          "label": "AL hedefi erişilebilir",
+          "kind": "boolean"
+        },
+        {
+          "key": "sell_reachable",
+          "label": "SAT hedefi erişilebilir",
+          "kind": "boolean"
+        }
+      ],
+      "base_policy": "minimum"
+    },
+    {
+      "id": "smi_votes",
+      "name": "SMI N OY",
+      "inputs": [
+        {
+          "key": "requiredBuyVotes",
+          "label": "AL için en az kaç zaman dilimi doğrulasın? (N)",
+          "type": "int",
+          "default": 2,
+          "group": "00 • GENEL",
+          "min": 1,
+          "max": 10
+        },
+        {
+          "key": "requiredSellVotes",
+          "label": "SAT için en az kaç zaman dilimi doğrulasın? (N)",
+          "type": "int",
+          "default": 2,
+          "group": "00 • GENEL",
+          "min": 1,
+          "max": 10
+        },
+        {
+          "key": "showTable",
+          "label": "Oy tablosunu göster",
+          "type": "bool",
+          "default": true,
+          "group": "00 • GENEL",
+          "visual": true
+        },
+        {
+          "key": "onlyFirst",
+          "label": "Sadece N şartının ilk mumunda sinyal",
+          "type": "bool",
+          "default": false,
+          "group": "00 • GENEL"
+        },
+        {
+          "key": "en1",
+          "label": "Aktif",
+          "type": "bool",
+          "default": true,
+          "group": "01 • ZAMAN DİLİMİ 1"
+        },
+        {
+          "key": "tf1",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "1D",
+          "group": "01 • ZAMAN DİLİMİ 1"
+        },
+        {
+          "key": "len1",
+          "label": "SMI pencere (%K)",
+          "type": "int",
+          "default": 10,
+          "group": "01 • ZAMAN DİLİMİ 1",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "smoothA1",
+          "label": "EMA 1",
+          "type": "int",
+          "default": 3,
+          "group": "01 • ZAMAN DİLİMİ 1",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "smoothB1",
+          "label": "EMA 2",
+          "type": "int",
+          "default": 3,
+          "group": "01 • ZAMAN DİLİMİ 1",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "dipThr1",
+          "label": "AL ≤",
+          "type": "float",
+          "default": -40.0,
+          "group": "01 • ZAMAN DİLİMİ 1",
+          "min": -100,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "topThr1",
+          "label": "SAT ≥",
+          "type": "float",
+          "default": 40.0,
+          "group": "01 • ZAMAN DİLİMİ 1",
+          "min": -100,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "en2",
+          "label": "Aktif",
+          "type": "bool",
+          "default": false,
+          "group": "02 • ZAMAN DİLİMİ 2"
+        },
+        {
+          "key": "tf2",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "2D",
+          "group": "02 • ZAMAN DİLİMİ 2"
+        },
+        {
+          "key": "len2",
+          "label": "SMI pencere (%K)",
+          "type": "int",
+          "default": 10,
+          "group": "02 • ZAMAN DİLİMİ 2",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "smoothA2",
+          "label": "EMA 1",
+          "type": "int",
+          "default": 3,
+          "group": "02 • ZAMAN DİLİMİ 2",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "smoothB2",
+          "label": "EMA 2",
+          "type": "int",
+          "default": 3,
+          "group": "02 • ZAMAN DİLİMİ 2",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "dipThr2",
+          "label": "AL ≤",
+          "type": "float",
+          "default": -40.0,
+          "group": "02 • ZAMAN DİLİMİ 2",
+          "min": -100,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "topThr2",
+          "label": "SAT ≥",
+          "type": "float",
+          "default": 40.0,
+          "group": "02 • ZAMAN DİLİMİ 2",
+          "min": -100,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "en3",
+          "label": "Aktif",
+          "type": "bool",
+          "default": true,
+          "group": "03 • ZAMAN DİLİMİ 3"
+        },
+        {
+          "key": "tf3",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "3D",
+          "group": "03 • ZAMAN DİLİMİ 3"
+        },
+        {
+          "key": "len3",
+          "label": "SMI pencere (%K)",
+          "type": "int",
+          "default": 10,
+          "group": "03 • ZAMAN DİLİMİ 3",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "smoothA3",
+          "label": "EMA 1",
+          "type": "int",
+          "default": 3,
+          "group": "03 • ZAMAN DİLİMİ 3",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "smoothB3",
+          "label": "EMA 2",
+          "type": "int",
+          "default": 3,
+          "group": "03 • ZAMAN DİLİMİ 3",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "dipThr3",
+          "label": "AL ≤",
+          "type": "float",
+          "default": -40.0,
+          "group": "03 • ZAMAN DİLİMİ 3",
+          "min": -100,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "topThr3",
+          "label": "SAT ≥",
+          "type": "float",
+          "default": 40.0,
+          "group": "03 • ZAMAN DİLİMİ 3",
+          "min": -100,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "en4",
+          "label": "Aktif",
+          "type": "bool",
+          "default": false,
+          "group": "04 • ZAMAN DİLİMİ 4"
+        },
+        {
+          "key": "tf4",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "4D",
+          "group": "04 • ZAMAN DİLİMİ 4"
+        },
+        {
+          "key": "len4",
+          "label": "SMI pencere (%K)",
+          "type": "int",
+          "default": 10,
+          "group": "04 • ZAMAN DİLİMİ 4",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "smoothA4",
+          "label": "EMA 1",
+          "type": "int",
+          "default": 3,
+          "group": "04 • ZAMAN DİLİMİ 4",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "smoothB4",
+          "label": "EMA 2",
+          "type": "int",
+          "default": 3,
+          "group": "04 • ZAMAN DİLİMİ 4",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "dipThr4",
+          "label": "AL ≤",
+          "type": "float",
+          "default": -40.0,
+          "group": "04 • ZAMAN DİLİMİ 4",
+          "min": -100,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "topThr4",
+          "label": "SAT ≥",
+          "type": "float",
+          "default": 40.0,
+          "group": "04 • ZAMAN DİLİMİ 4",
+          "min": -100,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "en5",
+          "label": "Aktif",
+          "type": "bool",
+          "default": false,
+          "group": "05 • ZAMAN DİLİMİ 5"
+        },
+        {
+          "key": "tf5",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "5D",
+          "group": "05 • ZAMAN DİLİMİ 5"
+        },
+        {
+          "key": "len5",
+          "label": "SMI pencere (%K)",
+          "type": "int",
+          "default": 10,
+          "group": "05 • ZAMAN DİLİMİ 5",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "smoothA5",
+          "label": "EMA 1",
+          "type": "int",
+          "default": 3,
+          "group": "05 • ZAMAN DİLİMİ 5",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "smoothB5",
+          "label": "EMA 2",
+          "type": "int",
+          "default": 3,
+          "group": "05 • ZAMAN DİLİMİ 5",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "dipThr5",
+          "label": "AL ≤",
+          "type": "float",
+          "default": -40.0,
+          "group": "05 • ZAMAN DİLİMİ 5",
+          "min": -100,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "topThr5",
+          "label": "SAT ≥",
+          "type": "float",
+          "default": 40.0,
+          "group": "05 • ZAMAN DİLİMİ 5",
+          "min": -100,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "en6",
+          "label": "Aktif",
+          "type": "bool",
+          "default": false,
+          "group": "06 • ZAMAN DİLİMİ 6"
+        },
+        {
+          "key": "tf6",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "6D",
+          "group": "06 • ZAMAN DİLİMİ 6"
+        },
+        {
+          "key": "len6",
+          "label": "SMI pencere (%K)",
+          "type": "int",
+          "default": 10,
+          "group": "06 • ZAMAN DİLİMİ 6",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "smoothA6",
+          "label": "EMA 1",
+          "type": "int",
+          "default": 3,
+          "group": "06 • ZAMAN DİLİMİ 6",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "smoothB6",
+          "label": "EMA 2",
+          "type": "int",
+          "default": 3,
+          "group": "06 • ZAMAN DİLİMİ 6",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "dipThr6",
+          "label": "AL ≤",
+          "type": "float",
+          "default": -40.0,
+          "group": "06 • ZAMAN DİLİMİ 6",
+          "min": -100,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "topThr6",
+          "label": "SAT ≥",
+          "type": "float",
+          "default": 40.0,
+          "group": "06 • ZAMAN DİLİMİ 6",
+          "min": -100,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "en7",
+          "label": "Aktif",
+          "type": "bool",
+          "default": false,
+          "group": "07 • ZAMAN DİLİMİ 7"
+        },
+        {
+          "key": "tf7",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "1W",
+          "group": "07 • ZAMAN DİLİMİ 7"
+        },
+        {
+          "key": "len7",
+          "label": "SMI pencere (%K)",
+          "type": "int",
+          "default": 10,
+          "group": "07 • ZAMAN DİLİMİ 7",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "smoothA7",
+          "label": "EMA 1",
+          "type": "int",
+          "default": 3,
+          "group": "07 • ZAMAN DİLİMİ 7",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "smoothB7",
+          "label": "EMA 2",
+          "type": "int",
+          "default": 3,
+          "group": "07 • ZAMAN DİLİMİ 7",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "dipThr7",
+          "label": "AL ≤",
+          "type": "float",
+          "default": -40.0,
+          "group": "07 • ZAMAN DİLİMİ 7",
+          "min": -100,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "topThr7",
+          "label": "SAT ≥",
+          "type": "float",
+          "default": 40.0,
+          "group": "07 • ZAMAN DİLİMİ 7",
+          "min": -100,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "en8",
+          "label": "Aktif",
+          "type": "bool",
+          "default": false,
+          "group": "08 • ZAMAN DİLİMİ 8"
+        },
+        {
+          "key": "tf8",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "2W",
+          "group": "08 • ZAMAN DİLİMİ 8"
+        },
+        {
+          "key": "len8",
+          "label": "SMI pencere (%K)",
+          "type": "int",
+          "default": 10,
+          "group": "08 • ZAMAN DİLİMİ 8",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "smoothA8",
+          "label": "EMA 1",
+          "type": "int",
+          "default": 3,
+          "group": "08 • ZAMAN DİLİMİ 8",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "smoothB8",
+          "label": "EMA 2",
+          "type": "int",
+          "default": 3,
+          "group": "08 • ZAMAN DİLİMİ 8",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "dipThr8",
+          "label": "AL ≤",
+          "type": "float",
+          "default": -40.0,
+          "group": "08 • ZAMAN DİLİMİ 8",
+          "min": -100,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "topThr8",
+          "label": "SAT ≥",
+          "type": "float",
+          "default": 40.0,
+          "group": "08 • ZAMAN DİLİMİ 8",
+          "min": -100,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "en9",
+          "label": "Aktif",
+          "type": "bool",
+          "default": false,
+          "group": "09 • ZAMAN DİLİMİ 9"
+        },
+        {
+          "key": "tf9",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "3W",
+          "group": "09 • ZAMAN DİLİMİ 9"
+        },
+        {
+          "key": "len9",
+          "label": "SMI pencere (%K)",
+          "type": "int",
+          "default": 10,
+          "group": "09 • ZAMAN DİLİMİ 9",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "smoothA9",
+          "label": "EMA 1",
+          "type": "int",
+          "default": 3,
+          "group": "09 • ZAMAN DİLİMİ 9",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "smoothB9",
+          "label": "EMA 2",
+          "type": "int",
+          "default": 3,
+          "group": "09 • ZAMAN DİLİMİ 9",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "dipThr9",
+          "label": "AL ≤",
+          "type": "float",
+          "default": -40.0,
+          "group": "09 • ZAMAN DİLİMİ 9",
+          "min": -100,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "topThr9",
+          "label": "SAT ≥",
+          "type": "float",
+          "default": 40.0,
+          "group": "09 • ZAMAN DİLİMİ 9",
+          "min": -100,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "en10",
+          "label": "Aktif",
+          "type": "bool",
+          "default": false,
+          "group": "10 • ZAMAN DİLİMİ 10"
+        },
+        {
+          "key": "tf10",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "1M",
+          "group": "10 • ZAMAN DİLİMİ 10"
+        },
+        {
+          "key": "len10",
+          "label": "SMI pencere (%K)",
+          "type": "int",
+          "default": 10,
+          "group": "10 • ZAMAN DİLİMİ 10",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "smoothA10",
+          "label": "EMA 1",
+          "type": "int",
+          "default": 3,
+          "group": "10 • ZAMAN DİLİMİ 10",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "smoothB10",
+          "label": "EMA 2",
+          "type": "int",
+          "default": 3,
+          "group": "10 • ZAMAN DİLİMİ 10",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "dipThr10",
+          "label": "AL ≤",
+          "type": "float",
+          "default": -40.0,
+          "group": "10 • ZAMAN DİLİMİ 10",
+          "min": -100,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "topThr10",
+          "label": "SAT ≥",
+          "type": "float",
+          "default": 40.0,
+          "group": "10 • ZAMAN DİLİMİ 10",
+          "min": -100,
+          "max": 100,
+          "step": 0.1
+        }
+      ],
+      "outputs": [
+        {
+          "key": "buy_votes",
+          "label": "AL Oy",
+          "kind": "number"
+        },
+        {
+          "key": "sell_votes",
+          "label": "SAT Oy",
+          "kind": "number"
+        },
+        {
+          "key": "buy_signal",
+          "label": "AL • DİP",
+          "kind": "boolean"
+        },
+        {
+          "key": "sell_signal",
+          "label": "SAT • TEPE",
+          "kind": "boolean"
+        },
+        {
+          "key": "any_signal",
+          "label": "AL veya SAT",
+          "kind": "boolean"
+        },
+        {
+          "key": "buy_zone",
+          "label": "AL için en az N oy",
+          "kind": "boolean"
+        },
+        {
+          "key": "sell_zone",
+          "label": "SAT için en az N oy",
+          "kind": "boolean"
+        },
+        {
+          "key": "active_count",
+          "label": "Aktif TF",
+          "kind": "number"
+        },
+        {
+          "key": "ready_count",
+          "label": "Hazır TF",
+          "kind": "number"
+        },
+        {
+          "key": "buy_reachable",
+          "label": "AL hedefi erişilebilir",
+          "kind": "boolean"
+        },
+        {
+          "key": "sell_reachable",
+          "label": "SAT hedefi erişilebilir",
+          "kind": "boolean"
+        }
+      ],
+      "base_policy": "minimum"
+    },
+    {
+      "id": "rmi_votes",
+      "name": "RMI N OY",
+      "inputs": [
+        {
+          "key": "requiredBuyVotes",
+          "label": "AL için en az kaç zaman dilimi doğrulasın? (N)",
+          "type": "int",
+          "default": 2,
+          "group": "00 • GENEL",
+          "min": 1,
+          "max": 10
+        },
+        {
+          "key": "requiredSellVotes",
+          "label": "SAT için en az kaç zaman dilimi doğrulasın? (N)",
+          "type": "int",
+          "default": 2,
+          "group": "00 • GENEL",
+          "min": 1,
+          "max": 10
+        },
+        {
+          "key": "showTable",
+          "label": "Oy tablosunu göster",
+          "type": "bool",
+          "default": true,
+          "group": "00 • GENEL",
+          "visual": true
+        },
+        {
+          "key": "onlyFirst",
+          "label": "Sadece N şartının ilk mumunda sinyal",
+          "type": "bool",
+          "default": false,
+          "group": "00 • GENEL"
+        },
+        {
+          "key": "en1",
+          "label": "Aktif",
+          "type": "bool",
+          "default": true,
+          "group": "01 • ZAMAN DİLİMİ 1"
+        },
+        {
+          "key": "tf1",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "1D",
+          "group": "01 • ZAMAN DİLİMİ 1"
+        },
+        {
+          "key": "len1",
+          "label": "RMI uzunluğu",
+          "type": "int",
+          "default": 14,
+          "group": "01 • ZAMAN DİLİMİ 1",
+          "min": 2
+        },
+        {
+          "key": "mom1",
+          "label": "Momentum periyodu",
+          "type": "int",
+          "default": 5,
+          "group": "01 • ZAMAN DİLİMİ 1",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "dipThr1",
+          "label": "AL ≤",
+          "type": "float",
+          "default": 20.0,
+          "group": "01 • ZAMAN DİLİMİ 1",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "topThr1",
+          "label": "SAT ≥",
+          "type": "float",
+          "default": 80.0,
+          "group": "01 • ZAMAN DİLİMİ 1",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "en2",
+          "label": "Aktif",
+          "type": "bool",
+          "default": false,
+          "group": "02 • ZAMAN DİLİMİ 2"
+        },
+        {
+          "key": "tf2",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "2D",
+          "group": "02 • ZAMAN DİLİMİ 2"
+        },
+        {
+          "key": "len2",
+          "label": "RMI uzunluğu",
+          "type": "int",
+          "default": 14,
+          "group": "02 • ZAMAN DİLİMİ 2",
+          "min": 2
+        },
+        {
+          "key": "mom2",
+          "label": "Momentum periyodu",
+          "type": "int",
+          "default": 5,
+          "group": "02 • ZAMAN DİLİMİ 2",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "dipThr2",
+          "label": "AL ≤",
+          "type": "float",
+          "default": 20.0,
+          "group": "02 • ZAMAN DİLİMİ 2",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "topThr2",
+          "label": "SAT ≥",
+          "type": "float",
+          "default": 80.0,
+          "group": "02 • ZAMAN DİLİMİ 2",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "en3",
+          "label": "Aktif",
+          "type": "bool",
+          "default": true,
+          "group": "03 • ZAMAN DİLİMİ 3"
+        },
+        {
+          "key": "tf3",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "3D",
+          "group": "03 • ZAMAN DİLİMİ 3"
+        },
+        {
+          "key": "len3",
+          "label": "RMI uzunluğu",
+          "type": "int",
+          "default": 14,
+          "group": "03 • ZAMAN DİLİMİ 3",
+          "min": 2
+        },
+        {
+          "key": "mom3",
+          "label": "Momentum periyodu",
+          "type": "int",
+          "default": 5,
+          "group": "03 • ZAMAN DİLİMİ 3",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "dipThr3",
+          "label": "AL ≤",
+          "type": "float",
+          "default": 20.0,
+          "group": "03 • ZAMAN DİLİMİ 3",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "topThr3",
+          "label": "SAT ≥",
+          "type": "float",
+          "default": 80.0,
+          "group": "03 • ZAMAN DİLİMİ 3",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "en4",
+          "label": "Aktif",
+          "type": "bool",
+          "default": false,
+          "group": "04 • ZAMAN DİLİMİ 4"
+        },
+        {
+          "key": "tf4",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "4D",
+          "group": "04 • ZAMAN DİLİMİ 4"
+        },
+        {
+          "key": "len4",
+          "label": "RMI uzunluğu",
+          "type": "int",
+          "default": 14,
+          "group": "04 • ZAMAN DİLİMİ 4",
+          "min": 2
+        },
+        {
+          "key": "mom4",
+          "label": "Momentum periyodu",
+          "type": "int",
+          "default": 5,
+          "group": "04 • ZAMAN DİLİMİ 4",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "dipThr4",
+          "label": "AL ≤",
+          "type": "float",
+          "default": 20.0,
+          "group": "04 • ZAMAN DİLİMİ 4",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "topThr4",
+          "label": "SAT ≥",
+          "type": "float",
+          "default": 80.0,
+          "group": "04 • ZAMAN DİLİMİ 4",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "en5",
+          "label": "Aktif",
+          "type": "bool",
+          "default": false,
+          "group": "05 • ZAMAN DİLİMİ 5"
+        },
+        {
+          "key": "tf5",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "5D",
+          "group": "05 • ZAMAN DİLİMİ 5"
+        },
+        {
+          "key": "len5",
+          "label": "RMI uzunluğu",
+          "type": "int",
+          "default": 14,
+          "group": "05 • ZAMAN DİLİMİ 5",
+          "min": 2
+        },
+        {
+          "key": "mom5",
+          "label": "Momentum periyodu",
+          "type": "int",
+          "default": 5,
+          "group": "05 • ZAMAN DİLİMİ 5",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "dipThr5",
+          "label": "AL ≤",
+          "type": "float",
+          "default": 20.0,
+          "group": "05 • ZAMAN DİLİMİ 5",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "topThr5",
+          "label": "SAT ≥",
+          "type": "float",
+          "default": 80.0,
+          "group": "05 • ZAMAN DİLİMİ 5",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "en6",
+          "label": "Aktif",
+          "type": "bool",
+          "default": false,
+          "group": "06 • ZAMAN DİLİMİ 6"
+        },
+        {
+          "key": "tf6",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "6D",
+          "group": "06 • ZAMAN DİLİMİ 6"
+        },
+        {
+          "key": "len6",
+          "label": "RMI uzunluğu",
+          "type": "int",
+          "default": 14,
+          "group": "06 • ZAMAN DİLİMİ 6",
+          "min": 2
+        },
+        {
+          "key": "mom6",
+          "label": "Momentum periyodu",
+          "type": "int",
+          "default": 5,
+          "group": "06 • ZAMAN DİLİMİ 6",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "dipThr6",
+          "label": "AL ≤",
+          "type": "float",
+          "default": 20.0,
+          "group": "06 • ZAMAN DİLİMİ 6",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "topThr6",
+          "label": "SAT ≥",
+          "type": "float",
+          "default": 80.0,
+          "group": "06 • ZAMAN DİLİMİ 6",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "en7",
+          "label": "Aktif",
+          "type": "bool",
+          "default": false,
+          "group": "07 • ZAMAN DİLİMİ 7"
+        },
+        {
+          "key": "tf7",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "1W",
+          "group": "07 • ZAMAN DİLİMİ 7"
+        },
+        {
+          "key": "len7",
+          "label": "RMI uzunluğu",
+          "type": "int",
+          "default": 14,
+          "group": "07 • ZAMAN DİLİMİ 7",
+          "min": 2
+        },
+        {
+          "key": "mom7",
+          "label": "Momentum periyodu",
+          "type": "int",
+          "default": 5,
+          "group": "07 • ZAMAN DİLİMİ 7",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "dipThr7",
+          "label": "AL ≤",
+          "type": "float",
+          "default": 20.0,
+          "group": "07 • ZAMAN DİLİMİ 7",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "topThr7",
+          "label": "SAT ≥",
+          "type": "float",
+          "default": 80.0,
+          "group": "07 • ZAMAN DİLİMİ 7",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "en8",
+          "label": "Aktif",
+          "type": "bool",
+          "default": false,
+          "group": "08 • ZAMAN DİLİMİ 8"
+        },
+        {
+          "key": "tf8",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "2W",
+          "group": "08 • ZAMAN DİLİMİ 8"
+        },
+        {
+          "key": "len8",
+          "label": "RMI uzunluğu",
+          "type": "int",
+          "default": 14,
+          "group": "08 • ZAMAN DİLİMİ 8",
+          "min": 2
+        },
+        {
+          "key": "mom8",
+          "label": "Momentum periyodu",
+          "type": "int",
+          "default": 5,
+          "group": "08 • ZAMAN DİLİMİ 8",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "dipThr8",
+          "label": "AL ≤",
+          "type": "float",
+          "default": 20.0,
+          "group": "08 • ZAMAN DİLİMİ 8",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "topThr8",
+          "label": "SAT ≥",
+          "type": "float",
+          "default": 80.0,
+          "group": "08 • ZAMAN DİLİMİ 8",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "en9",
+          "label": "Aktif",
+          "type": "bool",
+          "default": false,
+          "group": "09 • ZAMAN DİLİMİ 9"
+        },
+        {
+          "key": "tf9",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "3W",
+          "group": "09 • ZAMAN DİLİMİ 9"
+        },
+        {
+          "key": "len9",
+          "label": "RMI uzunluğu",
+          "type": "int",
+          "default": 14,
+          "group": "09 • ZAMAN DİLİMİ 9",
+          "min": 2
+        },
+        {
+          "key": "mom9",
+          "label": "Momentum periyodu",
+          "type": "int",
+          "default": 5,
+          "group": "09 • ZAMAN DİLİMİ 9",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "dipThr9",
+          "label": "AL ≤",
+          "type": "float",
+          "default": 20.0,
+          "group": "09 • ZAMAN DİLİMİ 9",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "topThr9",
+          "label": "SAT ≥",
+          "type": "float",
+          "default": 80.0,
+          "group": "09 • ZAMAN DİLİMİ 9",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "en10",
+          "label": "Aktif",
+          "type": "bool",
+          "default": false,
+          "group": "10 • ZAMAN DİLİMİ 10"
+        },
+        {
+          "key": "tf10",
+          "label": "TF",
+          "type": "timeframe",
+          "default": "1M",
+          "group": "10 • ZAMAN DİLİMİ 10"
+        },
+        {
+          "key": "len10",
+          "label": "RMI uzunluğu",
+          "type": "int",
+          "default": 14,
+          "group": "10 • ZAMAN DİLİMİ 10",
+          "min": 2
+        },
+        {
+          "key": "mom10",
+          "label": "Momentum periyodu",
+          "type": "int",
+          "default": 5,
+          "group": "10 • ZAMAN DİLİMİ 10",
+          "min": 1,
+          "max": 5000
+        },
+        {
+          "key": "dipThr10",
+          "label": "AL ≤",
+          "type": "float",
+          "default": 20.0,
+          "group": "10 • ZAMAN DİLİMİ 10",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        },
+        {
+          "key": "topThr10",
+          "label": "SAT ≥",
+          "type": "float",
+          "default": 80.0,
+          "group": "10 • ZAMAN DİLİMİ 10",
+          "min": 0,
+          "max": 100,
+          "step": 0.1
+        }
+      ],
+      "outputs": [
+        {
+          "key": "buy_votes",
+          "label": "AL Oy",
+          "kind": "number"
+        },
+        {
+          "key": "sell_votes",
+          "label": "SAT Oy",
+          "kind": "number"
+        },
+        {
+          "key": "buy_signal",
+          "label": "AL • DİP",
+          "kind": "boolean"
+        },
+        {
+          "key": "sell_signal",
+          "label": "SAT • TEPE",
+          "kind": "boolean"
+        },
+        {
+          "key": "any_signal",
+          "label": "AL veya SAT",
+          "kind": "boolean"
+        },
+        {
+          "key": "buy_zone",
+          "label": "AL için en az N oy",
+          "kind": "boolean"
+        },
+        {
+          "key": "sell_zone",
+          "label": "SAT için en az N oy",
+          "kind": "boolean"
+        },
+        {
+          "key": "active_count",
+          "label": "Aktif TF",
+          "kind": "number"
+        },
+        {
+          "key": "ready_count",
+          "label": "Hazır TF",
+          "kind": "number"
+        },
+        {
+          "key": "buy_reachable",
+          "label": "AL hedefi erişilebilir",
+          "kind": "boolean"
+        },
+        {
+          "key": "sell_reachable",
+          "label": "SAT hedefi erişilebilir",
+          "kind": "boolean"
+        }
+      ],
+      "base_policy": "minimum"
+    }
+  ],
+  "max_history_bars": 10000
+}

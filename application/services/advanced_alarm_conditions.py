@@ -26,6 +26,7 @@ FIELDS = frozenset(
         "wr",
         "combo",
         "hunter",
+        "custom",
     }
 )
 OPERATORS = frozenset({"gt", "gte", "lt", "lte", "eq", "crossed_above", "crossed_below"})
@@ -50,6 +51,35 @@ def _number(value: Any) -> float:
 
 
 def _reference(raw: Any) -> dict[str, Any]:
+    if isinstance(raw, dict) and raw.get("field") == "custom":
+        from application.services.custom_indicators.catalog import (
+            SPECS,
+            canonical_timeframe,
+            validate_config,
+        )
+
+        if set(raw) - {"field", "timeframe", "indicator", "output", "inputs"}:
+            raise ValueError("Özel gösterge alanı geçersiz.")
+        indicator = raw.get("indicator")
+        if not isinstance(indicator, str) or indicator not in SPECS:
+            raise ValueError("Özel gösterge desteklenmiyor.")
+        output = raw.get("output")
+        if not isinstance(output, str) or output not in {
+            item["key"] for item in SPECS[indicator]["outputs"]
+        }:
+            raise ValueError("Gösterge çıktısı desteklenmiyor.")
+        # Empty row timeframes refer to the chart. Resolve them only when the
+        # rule's base timeframe is known in prepare_condition.
+        inputs = raw.get("inputs", {})
+        canonical = validate_config(indicator, inputs, raw.get("timeframe", "1D"))
+        if isinstance(inputs, dict):
+            for key, value in inputs.items():
+                if value == "" and key.startswith("tf"):
+                    canonical[key] = ""
+        result = {"field": "custom", "indicator": indicator, "output": output, "inputs": canonical}
+        if "timeframe" in raw:
+            result["timeframe"] = canonical_timeframe(raw["timeframe"])
+        return result
     if not isinstance(raw, dict) or set(raw) - {"field", "timeframe", "period", "side"}:
         raise ValueError("Gösterge alanı geçersiz.")
     field = raw.get("field")
@@ -112,6 +142,12 @@ def validate_condition(raw: Any) -> dict[str, Any]:
 
 def field_key(ref: dict[str, Any], default_timeframe: str) -> str:
     """Stable cache/message key including the full indicator identity."""
+    if ref.get("field") == "custom":
+        from application.services.custom_indicators.catalog import canonical_timeframe, config_key
+
+        timeframe = canonical_timeframe(ref.get("timeframe", default_timeframe))
+        key = config_key(ref["indicator"], dict(ref["inputs"]), timeframe)
+        return f"custom:{ref['indicator']}:{timeframe}:{key}:{ref['output']}"
     return ":".join(
         str(value)
         for value in (
@@ -134,8 +170,13 @@ class PreparedCondition:
 
 def prepare_condition(condition: dict, default_timeframe: str) -> PreparedCondition:
     """Validate once and index repeated references for a configured rule revision."""
-    if default_timeframe not in TIMEFRAMES:
-        raise ValueError("Alarm periyodu desteklenmiyor.")
+    from application.services.custom_indicators.catalog import (
+        canonical_timeframe,
+        requirements,
+        validate_config,
+    )
+
+    canonical_timeframe(default_timeframe)
     indices: dict[str, int] = {}
     fields = []
 
@@ -143,9 +184,21 @@ def prepare_condition(condition: dict, default_timeframe: str) -> PreparedCondit
         if not isinstance(raw, dict):
             return raw  # Validation canonicalizes numeric constants to float.
         ref = {**raw, "timeframe": raw.get("timeframe", default_timeframe)}
+        if ref["field"] == "custom":
+            ref["timeframe"] = canonical_timeframe(ref["timeframe"])
+            if ref["timeframe"] != canonical_timeframe(default_timeframe):
+                raise ValueError(
+                    "Özel göstergenin ana periyodu alarm periyoduyla aynı olmalıdır; üst periyotları gösterge ayarlarından seçin."
+                )
+            ref["inputs"] = validate_config(ref["indicator"], ref["inputs"], ref["timeframe"])
+            requirements(ref["indicator"], ref["inputs"], ref["timeframe"])
+        elif ref["timeframe"] not in TIMEFRAMES:
+            raise ValueError("Standart gösterge için desteklenen bir periyot seçin.")
         key = field_key(ref, default_timeframe)
         if key not in indices:
             indices[key] = len(fields)
+            if "inputs" in ref:
+                ref["inputs"] = MappingProxyType(ref["inputs"])
             fields.append(MappingProxyType(ref))
         return indices[key]
 
@@ -155,11 +208,16 @@ def prepare_condition(condition: dict, default_timeframe: str) -> PreparedCondit
         return node["op"], operand(node["left"]), operand(node["right"])
 
     tree = visit(validate_condition(condition))
+    if default_timeframe not in TIMEFRAMES and any(ref["field"] != "custom" for ref in fields):
+        raise ValueError("Standart alanlarla birleşen alarm için standart bir ana periyot seçin.")
     return PreparedCondition(tree=tree, fields=tuple(fields), keys=tuple(indices))
 
 
 def condition_fields(condition: dict, default_timeframe: str) -> list[dict[str, Any]]:
-    return [dict(ref) for ref in prepare_condition(condition, default_timeframe).fields]
+    return [
+        {**ref, **({"inputs": dict(ref["inputs"])} if "inputs" in ref else {})}
+        for ref in prepare_condition(condition, default_timeframe).fields
+    ]
 
 
 def evaluate_condition(

@@ -14,7 +14,9 @@ repos:
     rev: v4.6.0
     hooks:
       - id: trailing-whitespace
+        exclude: '^indicators/pine/'
       - id: end-of-file-fixer
+        exclude: '^indicators/pine/'
       - id: check-yaml
       - id: check-added-large-files
         args: ['--maxkb=1000']

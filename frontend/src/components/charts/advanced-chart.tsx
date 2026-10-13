@@ -15,6 +15,7 @@ import {
 import { useBinanceTicker } from "@/lib/hooks/use-binance-ticker"
 import { useSession } from "@/lib/hooks/use-session"
 import { MarketDataStatus } from "@/components/market-data-status"
+import { CustomIndicatorPanel } from "@/components/indicators/custom-indicator-panel"
 import { BORSAPY_INTERVALS, borsapyVolumeWarning, fetchBorsapyCandles, fetchBorsapyChartSnapshot, mergeBorsapyCandles, releaseBorsapyChart } from "@/lib/api/borsapy-chart-api"
 import { ChartDrawingTools } from "./chart-drawing-tools"
 import { ServerWatchlistPanel } from "./server-watchlist-panel"
@@ -2633,6 +2634,8 @@ export function AdvancedChartPage({
                         onChartReady={registerIndicatorChart}
                     />
                 ))}
+
+                <CustomIndicatorPanel symbol={symbol} market={marketType} timeframe={timeframe} />
 
                 {/* Status Bar */}
                 <MarketDataStatus compact metadata={marketType === "Kripto" ? { ...candlesResponse, source: "Binance" } : candlesResponse} />

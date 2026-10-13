@@ -9,6 +9,14 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Kaldığımız nokta
 
+- **13 Ekim — beş kişisel Pine göstergesi:** Kullanıcının yeni talebi bütün
+  panel ayarlarıyla aynı göstergeleri sunucuda, grafikte ve liste alarmlarında
+  kullanmak. 289 input için metadata, beş saf hesaplayıcı, native geçmiş
+  adaptörü ve ortak önizleme/alarm yolu geliştiriliyor. [Sözleşme](CUSTOM_PINE_INDICATORS.md)
+  kaynak davranışını ve kapasite sınırlarını ayırır. Canlı piyasa karşılaştırması
+  kullanıcının sonraki piyasa günü testine bırakılır; otomatik takip, yeni etkin
+  test alarmı, Telegram gönderimi veya emir açılmaz. Yayın kabulü henüz bekliyor.
+
 - **13 Ekim — gösterge/liste alarmı düzeni ve eski geçmiş temizliği tamamlandı:** Kullanıcı
   COMBO/HUNTER motorunun sinyal/tarama geçmişinin silinmesini ve tüm sayfalardaki
   arşiv tüketicilerinin kaldırılmasını istedi. Grafik hesaplayıcıları ve kullanıcı

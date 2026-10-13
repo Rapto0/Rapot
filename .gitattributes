@@ -1,0 +1,2 @@
+# Preserve the owner's original Pine source bytes and license notices.
+indicators/pine/*.pine -text

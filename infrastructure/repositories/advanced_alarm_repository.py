@@ -207,6 +207,37 @@ def usage(owner):
         }
 
 
+def _check_custom_capacity(session, payload, rule_id):
+    from application.services.custom_indicator_data import MAX_CONFIGS, custom_configuration_ids
+
+    if not payload["enabled"]:
+        return
+    identities = custom_configuration_ids(payload["condition"], payload["timeframe"])
+    if not identities:
+        return
+    # The caller already holds BEGIN IMMEDIATE: concurrent saves cannot both
+    # consume the last slot. Paused/deleted and the rule being replaced do not
+    # count; different owners still share this single server worker.
+    configurations = session.execute(
+        select(Rule.condition_json, Rule.timeframe)
+        .where(
+            Rule.enabled.is_(True),
+            Rule.deleted_at.is_(None),
+            Rule.id != (rule_id or ""),
+            Rule.condition_json.contains('"custom"'),
+        )
+        .distinct()
+    ).yield_per(20)
+    for condition, timeframe in configurations:
+        identities.update(custom_configuration_ids(json.loads(condition), timeframe))
+        if len(identities) > MAX_CONFIGS:
+            break
+    if len(identities) > MAX_CONFIGS:
+        raise Conflict(
+            f"Özel göstergelerde {MAX_CONFIGS} farklı etkin ayar sınırına ulaşıldı. Aynı ayarlar paylaşılır; yeni bir ayar açmadan önce başka bir ayarı kullanan alarmları duraklatın."
+        )
+
+
 def save_rule(owner, payload, rule_id=None):
     with get_session_factory()() as session:
         _write(session)
@@ -230,6 +261,7 @@ def save_rule(owner, payload, rule_id=None):
             target = session.get(Watchlist, payload["watchlist_id"])
             if target is None or target.owner != owner:
                 raise NotFound("İzleme listesi bulunamadı.")
+        _check_custom_capacity(session, payload, rule_id)
         if row:
             _invalidate(session, row)
         else:

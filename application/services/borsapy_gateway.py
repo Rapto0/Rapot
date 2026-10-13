@@ -529,6 +529,91 @@ class BorsapyGateway:
                     provider.close()
             self._alarm_history_slots.release()
 
+    def custom_indicator_history(self, symbol, *, exchange, timeframe, bars):
+        """Exact native resolution and account boundary for the custom Pine ports.
+
+        The BINANCE context is explicitly TradingView's BINANCE feed, not the
+        site's normal Binance REST candle adapter. No provider fallback occurs.
+        """
+        from infrastructure.providers.custom_indicator_history import (
+            history_provider,
+            validate_native_request,
+        )
+
+        try:
+            validate_native_request(symbol, exchange, timeframe, bars)
+        except ValueError as exc:
+            raise BorsapyGatewayError(str(exc), 422) from None
+        if not self._alarm_history_slots.acquire(timeout=1):
+            raise BorsapyGatewayError("Özel gösterge geçmişi iş kuyruğu dolu.", 429)
+        provider = None
+        try:
+            with self._account_lock():
+                self._prepare(require_auth=True)
+                token, epoch, revision = self._token, self._data_epoch, self._credentials_revision
+                if not token or token == "unauthorized_user_token":
+                    raise BorsapyGatewayError("TradingView hesabı doğrulanmalı.", 409)
+            provider = history_provider(token, timeframe, bars)
+            frame = provider.get_history(
+                symbol, exchange=exchange, interval=timeframe, period="max"
+            )
+            with self._account_lock():
+                if (
+                    self._data_epoch != epoch
+                    or self._store.revision() != revision
+                    or self._token != token
+                    or not self._authenticated
+                    or self._blocked
+                ):
+                    raise BorsapyGatewayError("Hesap değişti; yeni geçmiş bekleniyor.", 409)
+            result = self._validated_custom_history(frame)
+            result.attrs.update(
+                native_timeframe=frame.attrs.get("native_timeframe"),
+                session_metadata=frame.attrs.get("session_metadata", {}),
+                source=f"borsapy_tradingview:{exchange}",
+            )
+            return result
+        except BorsapyGatewayError:
+            raise
+        except Exception:
+            raise BorsapyGatewayError(
+                "Özel göstergenin native mum verisi alınamadı.", 502
+            ) from None
+        finally:
+            if provider is not None:
+                with suppress(Exception):
+                    provider.close()
+            self._alarm_history_slots.release()
+
+    @staticmethod
+    def _validated_custom_history(frame):
+        """The five custom ports consume OHLC only; absent volume is not zero."""
+        try:
+            import numpy as np
+            import pandas as pd
+
+            columns = ["Open", "High", "Low", "Close"]
+            if frame.empty or not set(columns).issubset(frame.columns):
+                raise ValueError
+            result = frame[columns].apply(pd.to_numeric, errors="raise").astype(float)
+            if (
+                not isinstance(result.index, pd.DatetimeIndex)
+                or result.index.tz is None
+                or result.index.hasnans
+                or not result.index.is_unique
+                or not result.index.is_monotonic_increasing
+                or not np.isfinite(result.to_numpy()).all()
+                or (result <= 0).any().any()
+                or (result.High < result[["Open", "Close", "Low"]].max(axis=1)).any()
+                or (result.Low > result[["Open", "Close", "High"]].min(axis=1)).any()
+            ):
+                raise ValueError
+            result.attrs.update(frame.attrs)
+            result.attrs.update(adjustment="splits", open_quality="provider")
+            return result
+        except Exception:
+            raise BorsapyGatewayError("Sağlayıcı geçerli OHLC verisi döndürmedi.", 502) from None
+
     @staticmethod
     def _validated_history(frame):
         try:

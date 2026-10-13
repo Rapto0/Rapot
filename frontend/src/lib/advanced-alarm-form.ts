@@ -2,11 +2,24 @@ import type { AdvancedAlarmRule, AdvancedAlarmWrite, AlarmCategory, AlarmField, 
 
 export const CATEGORY_LABELS: Record<AlarmCategory, string> = { price: "Fiyat", technical: "Teknik", watchlist: "İzleme listesi" }
 export const TIMEFRAME_LABELS: Record<AlarmTimeframe, string> = { "1m": "1 dakika", "5m": "5 dakika", "15m": "15 dakika", "30m": "30 dakika", "1h": "1 saat", "4h": "4 saat", "1d": "1 gün", "1wk": "1 hafta", "1mo": "1 ay" }
-export const FIELD_LABELS: Record<AlarmField, string> = { price: "Son fiyat", open: "Açılış", high: "En yüksek", low: "En düşük", close: "Kapanış", volume: "Hacim", rsi: "RSI", ema: "EMA", sma: "SMA", macd: "MACD", macd_signal: "MACD sinyal", atr: "ATR", wr: "Williams %R", combo: "COMBO", hunter: "HUNTER" }
+export const FIELD_LABELS: Record<AlarmField, string> = { price: "Son fiyat", open: "Açılış", high: "En yüksek", low: "En düşük", close: "Kapanış", volume: "Hacim", rsi: "RSI", ema: "EMA", sma: "SMA", macd: "MACD", macd_signal: "MACD sinyal", atr: "ATR", wr: "Williams %R", combo: "COMBO", hunter: "HUNTER", custom: "Özel Pine göstergesi" }
+export const CUSTOM_INDICATOR_LABELS: Record<string, string> = { htf_rsi_score: "HTF RSI Score", rsi_snapshot: "MTF RSI DİP + TEPE Snapshot", rsi_votes: "RSI N OY", smi_votes: "SMI N OY", rmi_votes: "RMI N OY" }
+export const OUTPUT_LABELS: Record<string, string> = { score: "Skor", dip_score: "DİP skoru", top_score: "TEPE skoru", buy_votes: "AL oyu", sell_votes: "SAT oyu", buy_signal: "AL sinyali", sell_signal: "SAT sinyali", any_signal: "AL veya SAT sinyali", buy_zone: "AL koşulu", sell_zone: "SAT koşulu", active_count: "Etkin periyot", ready_count: "Hazır periyot", buy_reachable: "AL hedefi erişilebilir", sell_reachable: "SAT hedefi erişilebilir" }
 export const OP_LABELS: Record<CompareOp, string> = { gt: "Büyüktür", gte: "Büyük veya eşit", lt: "Küçüktür", lte: "Küçük veya eşit", eq: "Eşittir", crossed_above: "Yukarı keser", crossed_below: "Aşağı keser" }
 export const PERIOD_FIELDS = new Set<AlarmField>(["rsi", "ema", "sma", "atr", "wr"])
 export const isGroup = (node: Condition): node is ConditionGroup => node.op === "and" || node.op === "or"
-export const makeRef = (field: AlarmField): FieldRef => ({ field, ...(PERIOD_FIELDS.has(field) ? { period: field === "ema" || field === "sma" ? 20 : 14 } : {}), ...(field === "combo" || field === "hunter" ? { side: "buy" as const } : {}) })
+export const makeRef = (field: AlarmField): FieldRef => ({ field, ...(PERIOD_FIELDS.has(field) ? { period: field === "ema" || field === "sma" ? 20 : 14 } : {}), ...(field === "combo" || field === "hunter" ? { side: "buy" as const } : {}), ...(field === "custom" ? { indicator: "htf_rsi_score", output: "buy_signal", inputs: {} } : {}) })
+export function isCustomTimeframe(value: string): boolean {
+    if (Object.hasOwn(TIMEFRAME_LABELS, value)) return true
+    const match = /^([1-9][0-9]{0,3})([SDWM]?)$/.exec(value)
+    if (!match) return false
+    const count = Number(match[1]), unit = match[2]
+    return unit === "S" ? [1, 5, 10, 15, 30, 45].includes(count) : count <= ({ "": 1440, D: 365, W: 52, M: 12 }[unit] ?? 0)
+}
+export function withIndicatorPreset(draft: AdvancedDraft, indicator: string): AdvancedDraft {
+    if (!Object.hasOwn(CUSTOM_INDICATOR_LABELS, indicator)) throw new Error("Gösterge desteklenmiyor.")
+    return { ...draft, timeframe: "1d", trigger: indicator === "htf_rsi_score" ? "intrabar" : "bar_close", mode: "once_per_bar", condition: { op: "eq", left: { field: "custom", indicator, output: "buy_signal", inputs: {} }, right: 1 } }
+}
 export const defaultLeaf = (category: AlarmCategory = "technical"): ConditionLeaf => ({ op: "crossed_above", left: makeRef(category === "price" ? "price" : "rsi"), right: category === "price" ? 100 : 30 })
 
 export interface AdvancedDraft extends Omit<AdvancedAlarmWrite, "symbols" | "revision"> { bist: string; crypto: string }
@@ -42,7 +55,11 @@ export function validateTree(tree: Condition): void {
     let leaves = 0, nodes = 0
     function ref(value: FieldRef) {
         if (!Object.hasOwn(FIELD_LABELS, value.field)) throw new Error("Gösterge desteklenmiyor.")
-        if (value.timeframe && !Object.hasOwn(TIMEFRAME_LABELS, value.timeframe)) throw new Error("Gösterge periyodu desteklenmiyor.")
+        if (value.timeframe && !(value.field === "custom" ? isCustomTimeframe(value.timeframe) : Object.hasOwn(TIMEFRAME_LABELS, value.timeframe))) throw new Error("Gösterge periyodu desteklenmiyor.")
+        if (value.field === "custom") {
+            if (!value.indicator || !Object.hasOwn(CUSTOM_INDICATOR_LABELS, value.indicator) || !value.output || !Object.hasOwn(OUTPUT_LABELS, value.output)) throw new Error("Gösterge ve çıktısını seçin.")
+            for (const input of Object.values(value.inputs ?? {})) if (!(typeof input === "boolean" || typeof input === "string" || typeof input === "number" && Number.isFinite(input))) throw new Error("Gösterge ayarları geçerli olmalıdır.")
+        }
         if (PERIOD_FIELDS.has(value.field) && (!Number.isInteger(value.period) || (value.period ?? 0) < 2 || (value.period ?? 0) > 200)) throw new Error("Gösterge uzunluğu 2–200 arasında olmalıdır.")
     }
     function visit(node: Condition, depth: number) {
@@ -65,6 +82,7 @@ export function writeFromAdvancedDraft(draft: AdvancedDraft, revision?: number):
     const name = draft.name.trim()
     if (!name || name.length > 80 || /[\u0000-\u001f]/.test(name)) throw new Error("Alarm adı 1–80 karakter olmalıdır.")
     validateTree(draft.condition)
+    if (!isCustomTimeframe(draft.timeframe)) throw new Error("Alarm periyodu geçersiz.")
     const symbols = draft.scope === "symbols" ? parseAlarmSymbols(draft.bist, draft.crypto) : []
     if (draft.scope === "symbols" && !symbols.length) throw new Error("En az bir hisse veya kripto çifti girin.")
     if (draft.scope === "watchlist" && !draft.watchlist_id) throw new Error("Sunucuda kayıtlı bir izleme listesi seçin.")
@@ -78,7 +96,7 @@ export function draftFromAdvancedRule(rule: AdvancedAlarmRule): AdvancedDraft {
 }
 export function conditionLabel(node: Condition): string {
     if (isGroup(node)) return `(${node.children.map(conditionLabel).join(node.op === "and" ? " VE " : " VEYA ")})`
-    const field = (ref: FieldRef) => `${FIELD_LABELS[ref.field]}${ref.period ? `(${ref.period})` : ""}${ref.side ? ref.side === "buy" ? " alış" : " satış" : ""}${ref.timeframe ? ` · ${TIMEFRAME_LABELS[ref.timeframe]}` : ""}`
+    const field = (ref: FieldRef) => `${ref.field === "custom" ? `${CUSTOM_INDICATOR_LABELS[ref.indicator ?? ""] ?? "Özel gösterge"} · ${OUTPUT_LABELS[ref.output ?? ""] ?? ref.output}` : FIELD_LABELS[ref.field]}${ref.period ? `(${ref.period})` : ""}${ref.side ? ref.side === "buy" ? " alış" : " satış" : ""}${ref.timeframe ? ` · ${TIMEFRAME_LABELS[ref.timeframe] ?? ref.timeframe}` : ""}`
     return `${field(node.left)} ${OP_LABELS[node.op].toLocaleLowerCase("tr-TR")} ${typeof node.right === "number" ? node.right : field(node.right)}`
 }
 export function mergeAlarmEvents<T extends { id: number }>(oldRows: T[], incoming: T[], limit = 200): T[] {

@@ -1,0 +1,1380 @@
+//@version=6
+indicator(title="MTF RSI DİP + TEPE Snapshot [PRO]", shorttitle="RSI DT", overlay=true)
+
+// ============================================================================
+// GENEL AYARLAR
+// ============================================================================
+
+const string G_GENERAL = "00 • GENEL"
+
+float dipTargetScore = input.float(
+     29.0,
+     "DİP Hedef Skoru",
+     minval=0.01,
+     step=0.25,
+     group=G_GENERAL
+)
+
+float topTargetScore = input.float(
+     29.0,
+     "TEPE Hedef Skoru",
+     minval=0.01,
+     step=0.25,
+     group=G_GENERAL
+)
+
+int maxStreak = input.int(
+     0,
+     "Maksimum Seri",
+     minval=0,
+     group=G_GENERAL,
+     tooltip="0 = sınırsız. Hem DİP hem TEPE serilerine uygulanır."
+)
+
+
+// ============================================================================
+// 1D GRAFİK KONTROLÜ
+// ============================================================================
+//
+// Bu mimari 1 günlük grafik üzerinde çalışır.
+//
+// Amaç:
+//
+// Geçmişteki her 1D kapanışında,
+// o anda açık olan 2D / 3D / 1W / 1M vb. HTF mumunun
+// o günkü DEVELOPING RSI değerini yeniden üretmek.
+//
+// Böylece:
+//
+// Replay'de o gün RSI = 27
+//
+// fakat ay sonunda:
+//
+// RSI = 34
+//
+// olmuş olsa dahi geçmişteki o günlük snapshot
+// ay sonu değeriyle değiştirilmez.
+//
+// ============================================================================
+
+bool validChart = timeframe.isdaily and timeframe.multiplier == 1
+
+if barstate.isfirst and not validChart
+    runtime.error("Bu sürüm 1D grafik için tasarlanmıştır.")
+
+
+// ============================================================================
+// 01 • 1 GÜNLÜK
+// ============================================================================
+
+const string G1 = "01 • ZAMAN DİLİMİ 1"
+
+bool en1 = input.bool(
+     true,
+     "Aktif",
+     group=G1,
+     inline="a1"
+)
+
+string tf1 = input.timeframe(
+     "1D",
+     "TF",
+     group=G1,
+     inline="a1"
+)
+
+int len1 = input.int(
+     14,
+     "RSI",
+     minval=2,
+     group=G1,
+     inline="b1"
+)
+
+float dipThr1 = input.float(
+     30.0,
+     "DİP <",
+     minval=0.0,
+     maxval=100.0,
+     step=0.1,
+     group=G1,
+     inline="b1"
+)
+
+float topThr1 = input.float(
+     70.0,
+     "TEPE >",
+     minval=0.0,
+     maxval=100.0,
+     step=0.1,
+     group=G1,
+     inline="b1"
+)
+
+float tfPts1 = input.float(
+     1.0,
+     "TF Puanı",
+     minval=0.0,
+     step=0.25,
+     group=G1,
+     inline="c1"
+)
+
+float serialPts1 = input.float(
+     1.0,
+     "Seri Puanı",
+     minval=0.0,
+     step=0.25,
+     group=G1,
+     inline="c1"
+)
+
+
+// ============================================================================
+// 02 • 2 GÜNLÜK
+// ============================================================================
+
+const string G2 = "02 • ZAMAN DİLİMİ 2"
+
+bool en2 = input.bool(
+     true,
+     "Aktif",
+     group=G2,
+     inline="a2"
+)
+
+string tf2 = input.timeframe(
+     "2D",
+     "TF",
+     group=G2,
+     inline="a2"
+)
+
+int len2 = input.int(
+     14,
+     "RSI",
+     minval=2,
+     group=G2,
+     inline="b2"
+)
+
+float dipThr2 = input.float(
+     30.0,
+     "DİP <",
+     minval=0.0,
+     maxval=100.0,
+     step=0.1,
+     group=G2,
+     inline="b2"
+)
+
+float topThr2 = input.float(
+     70.0,
+     "TEPE >",
+     minval=0.0,
+     maxval=100.0,
+     step=0.1,
+     group=G2,
+     inline="b2"
+)
+
+float tfPts2 = input.float(
+     1.0,
+     "TF Puanı",
+     minval=0.0,
+     step=0.25,
+     group=G2,
+     inline="c2"
+)
+
+float serialPts2 = input.float(
+     1.0,
+     "Seri Puanı",
+     minval=0.0,
+     step=0.25,
+     group=G2,
+     inline="c2"
+)
+
+
+// ============================================================================
+// 03 • 3 GÜNLÜK
+// ============================================================================
+
+const string G3 = "03 • ZAMAN DİLİMİ 3"
+
+bool en3 = input.bool(
+     true,
+     "Aktif",
+     group=G3,
+     inline="a3"
+)
+
+string tf3 = input.timeframe(
+     "3D",
+     "TF",
+     group=G3,
+     inline="a3"
+)
+
+int len3 = input.int(
+     14,
+     "RSI",
+     minval=2,
+     group=G3,
+     inline="b3"
+)
+
+float dipThr3 = input.float(
+     30.0,
+     "DİP <",
+     minval=0.0,
+     maxval=100.0,
+     step=0.1,
+     group=G3,
+     inline="b3"
+)
+
+float topThr3 = input.float(
+     70.0,
+     "TEPE >",
+     minval=0.0,
+     maxval=100.0,
+     step=0.1,
+     group=G3,
+     inline="b3"
+)
+
+float tfPts3 = input.float(
+     1.0,
+     "TF Puanı",
+     minval=0.0,
+     step=0.25,
+     group=G3,
+     inline="c3"
+)
+
+float serialPts3 = input.float(
+     1.0,
+     "Seri Puanı",
+     minval=0.0,
+     step=0.25,
+     group=G3,
+     inline="c3"
+)
+
+
+// ============================================================================
+// 04 • 4 GÜNLÜK
+// ============================================================================
+
+const string G4 = "04 • ZAMAN DİLİMİ 4"
+
+bool en4 = input.bool(
+     true,
+     "Aktif",
+     group=G4,
+     inline="a4"
+)
+
+string tf4 = input.timeframe(
+     "4D",
+     "TF",
+     group=G4,
+     inline="a4"
+)
+
+int len4 = input.int(
+     14,
+     "RSI",
+     minval=2,
+     group=G4,
+     inline="b4"
+)
+
+float dipThr4 = input.float(
+     30.0,
+     "DİP <",
+     minval=0.0,
+     maxval=100.0,
+     step=0.1,
+     group=G4,
+     inline="b4"
+)
+
+float topThr4 = input.float(
+     70.0,
+     "TEPE >",
+     minval=0.0,
+     maxval=100.0,
+     step=0.1,
+     group=G4,
+     inline="b4"
+)
+
+float tfPts4 = input.float(
+     1.0,
+     "TF Puanı",
+     minval=0.0,
+     step=0.25,
+     group=G4,
+     inline="c4"
+)
+
+float serialPts4 = input.float(
+     1.0,
+     "Seri Puanı",
+     minval=0.0,
+     step=0.25,
+     group=G4,
+     inline="c4"
+)
+
+
+// ============================================================================
+// 05 • 5 GÜNLÜK
+// ============================================================================
+
+const string G5 = "05 • ZAMAN DİLİMİ 5"
+
+bool en5 = input.bool(
+     true,
+     "Aktif",
+     group=G5,
+     inline="a5"
+)
+
+string tf5 = input.timeframe(
+     "5D",
+     "TF",
+     group=G5,
+     inline="a5"
+)
+
+int len5 = input.int(
+     14,
+     "RSI",
+     minval=2,
+     group=G5,
+     inline="b5"
+)
+
+float dipThr5 = input.float(
+     30.0,
+     "DİP <",
+     minval=0.0,
+     maxval=100.0,
+     step=0.1,
+     group=G5,
+     inline="b5"
+)
+
+float topThr5 = input.float(
+     70.0,
+     "TEPE >",
+     minval=0.0,
+     maxval=100.0,
+     step=0.1,
+     group=G5,
+     inline="b5"
+)
+
+float tfPts5 = input.float(
+     1.0,
+     "TF Puanı",
+     minval=0.0,
+     step=0.25,
+     group=G5,
+     inline="c5"
+)
+
+float serialPts5 = input.float(
+     1.0,
+     "Seri Puanı",
+     minval=0.0,
+     step=0.25,
+     group=G5,
+     inline="c5"
+)
+
+
+// ============================================================================
+// 06 • 6 GÜNLÜK
+// ============================================================================
+
+const string G6 = "06 • ZAMAN DİLİMİ 6"
+
+bool en6 = input.bool(
+     true,
+     "Aktif",
+     group=G6,
+     inline="a6"
+)
+
+string tf6 = input.timeframe(
+     "6D",
+     "TF",
+     group=G6,
+     inline="a6"
+)
+
+int len6 = input.int(
+     14,
+     "RSI",
+     minval=2,
+     group=G6,
+     inline="b6"
+)
+
+float dipThr6 = input.float(
+     30.0,
+     "DİP <",
+     minval=0.0,
+     maxval=100.0,
+     step=0.1,
+     group=G6,
+     inline="b6"
+)
+
+float topThr6 = input.float(
+     70.0,
+     "TEPE >",
+     minval=0.0,
+     maxval=100.0,
+     step=0.1,
+     group=G6,
+     inline="b6"
+)
+
+float tfPts6 = input.float(
+     1.0,
+     "TF Puanı",
+     minval=0.0,
+     step=0.25,
+     group=G6,
+     inline="c6"
+)
+
+float serialPts6 = input.float(
+     1.0,
+     "Seri Puanı",
+     minval=0.0,
+     step=0.25,
+     group=G6,
+     inline="c6"
+)
+
+
+// ============================================================================
+// 07 • 7 GÜNLÜK
+// ============================================================================
+
+const string G7 = "07 • ZAMAN DİLİMİ 7"
+
+bool en7 = input.bool(
+     true,
+     "Aktif",
+     group=G7,
+     inline="a7"
+)
+
+string tf7 = input.timeframe(
+     "7D",
+     "TF",
+     group=G7,
+     inline="a7"
+)
+
+int len7 = input.int(
+     14,
+     "RSI",
+     minval=2,
+     group=G7,
+     inline="b7"
+)
+
+float dipThr7 = input.float(
+     30.0,
+     "DİP <",
+     minval=0.0,
+     maxval=100.0,
+     step=0.1,
+     group=G7,
+     inline="b7"
+)
+
+float topThr7 = input.float(
+     70.0,
+     "TEPE >",
+     minval=0.0,
+     maxval=100.0,
+     step=0.1,
+     group=G7,
+     inline="b7"
+)
+
+float tfPts7 = input.float(
+     1.0,
+     "TF Puanı",
+     minval=0.0,
+     step=0.25,
+     group=G7,
+     inline="c7"
+)
+
+float serialPts7 = input.float(
+     1.0,
+     "Seri Puanı",
+     minval=0.0,
+     step=0.25,
+     group=G7,
+     inline="c7"
+)
+
+
+// ============================================================================
+// 08 • 2 HAFTALIK
+// ============================================================================
+
+const string G8 = "08 • ZAMAN DİLİMİ 8"
+
+bool en8 = input.bool(
+     true,
+     "Aktif",
+     group=G8,
+     inline="a8"
+)
+
+string tf8 = input.timeframe(
+     "2W",
+     "TF",
+     group=G8,
+     inline="a8"
+)
+
+int len8 = input.int(
+     14,
+     "RSI",
+     minval=2,
+     group=G8,
+     inline="b8"
+)
+
+float dipThr8 = input.float(
+     30.0,
+     "DİP <",
+     minval=0.0,
+     maxval=100.0,
+     step=0.1,
+     group=G8,
+     inline="b8"
+)
+
+float topThr8 = input.float(
+     70.0,
+     "TEPE >",
+     minval=0.0,
+     maxval=100.0,
+     step=0.1,
+     group=G8,
+     inline="b8"
+)
+
+float tfPts8 = input.float(
+     1.0,
+     "TF Puanı",
+     minval=0.0,
+     step=0.25,
+     group=G8,
+     inline="c8"
+)
+
+float serialPts8 = input.float(
+     1.0,
+     "Seri Puanı",
+     minval=0.0,
+     step=0.25,
+     group=G8,
+     inline="c8"
+)
+
+
+// ============================================================================
+// 09 • 3 HAFTALIK
+// ============================================================================
+
+const string G9 = "09 • ZAMAN DİLİMİ 9"
+
+bool en9 = input.bool(
+     true,
+     "Aktif",
+     group=G9,
+     inline="a9"
+)
+
+string tf9 = input.timeframe(
+     "3W",
+     "TF",
+     group=G9,
+     inline="a9"
+)
+
+int len9 = input.int(
+     14,
+     "RSI",
+     minval=2,
+     group=G9,
+     inline="b9"
+)
+
+float dipThr9 = input.float(
+     30.0,
+     "DİP <",
+     minval=0.0,
+     maxval=100.0,
+     step=0.1,
+     group=G9,
+     inline="b9"
+)
+
+float topThr9 = input.float(
+     70.0,
+     "TEPE >",
+     minval=0.0,
+     maxval=100.0,
+     step=0.1,
+     group=G9,
+     inline="b9"
+)
+
+float tfPts9 = input.float(
+     1.0,
+     "TF Puanı",
+     minval=0.0,
+     step=0.25,
+     group=G9,
+     inline="c9"
+)
+
+float serialPts9 = input.float(
+     1.0,
+     "Seri Puanı",
+     minval=0.0,
+     step=0.25,
+     group=G9,
+     inline="c9"
+)
+
+
+// ============================================================================
+// 10 • 1 AYLIK
+// ============================================================================
+
+const string G10 = "10 • ZAMAN DİLİMİ 10"
+
+bool en10 = input.bool(
+     true,
+     "Aktif",
+     group=G10,
+     inline="a10"
+)
+
+string tf10 = input.timeframe(
+     "1M",
+     "TF",
+     group=G10,
+     inline="a10"
+)
+
+int len10 = input.int(
+     14,
+     "RSI",
+     minval=2,
+     group=G10,
+     inline="b10"
+)
+
+float dipThr10 = input.float(
+     30.0,
+     "DİP <",
+     minval=0.0,
+     maxval=100.0,
+     step=0.1,
+     group=G10,
+     inline="b10"
+)
+
+float topThr10 = input.float(
+     70.0,
+     "TEPE >",
+     minval=0.0,
+     maxval=100.0,
+     step=0.1,
+     group=G10,
+     inline="b10"
+)
+
+float tfPts10 = input.float(
+     1.0,
+     "TF Puanı",
+     minval=0.0,
+     step=0.25,
+     group=G10,
+     inline="c10"
+)
+
+float serialPts10 = input.float(
+     1.0,
+     "Seri Puanı",
+     minval=0.0,
+     step=0.25,
+     group=G10,
+     inline="c10"
+)
+
+
+// ============================================================================
+// RSI MOTORU
+// ============================================================================
+//
+// TradingView RSI:
+//
+// RSI = 100 - 100 / (1 + RS)
+//
+// RS = RMA Kazanç / RMA Kayıp
+//
+// ============================================================================
+
+f_rsiFromAverages(float _avgGain, float _avgLoss) =>
+    float _rs = _avgGain / _avgLoss
+    100.0 - (100.0 / (1.0 + _rs))
+
+
+// ============================================================================
+// ÖNCEKİ KAPANMIŞ HTF DURUMU
+// ============================================================================
+//
+// Burada alınan:
+//
+// close[1]
+// avgGain[1]
+// avgLoss[1]
+// dipStreak[1]
+// topStreak[1]
+//
+// değerleri sinyali bir HTF geciktirmek için kullanılmıyor.
+//
+// Bunlar açık HTF mumunun geçmişteki developing değerini
+// yeniden oluşturmak için BAŞLANGIÇ DURUMU olarak kullanılıyor.
+//
+// ============================================================================
+
+f_previousConfirmedState(
+     int _length,
+     float _dipThreshold,
+     float _topThreshold
+ ) =>
+
+    float _change = ta.change(close)
+
+    float _gain = _change >= 0.0 ? _change : 0.0
+    float _loss = _change < 0.0 ? -_change : 0.0
+
+    float _avgGain = ta.rma(_gain, _length)
+    float _avgLoss = ta.rma(_loss, _length)
+
+    float _rsi = ta.rsi(close, _length)
+
+    int _dipStreak = 0
+
+    _dipStreak := (
+         not na(_rsi) and
+         _rsi < _dipThreshold
+    ) ? nz(_dipStreak[1], 0) + 1 : 0
+
+    int _topStreak = 0
+
+    _topStreak := (
+         not na(_rsi) and
+         _rsi > _topThreshold
+    ) ? nz(_topStreak[1], 0) + 1 : 0
+
+    [close[1], _avgGain[1], _avgLoss[1], _dipStreak[1], _topStreak[1]]
+
+
+// ============================================================================
+// DEVELOPING SNAPSHOT MOTORU
+// ============================================================================
+//
+// Örnek 1M:
+//
+// Önceki aylık kapanış:
+//
+// Temmuz Close
+//
+// +
+// mevcut günlük kapanış:
+//
+// 12 Ağustos Close
+//
+// kullanılır.
+//
+// Böylece 12 Ağustos itibarıyla açık Ağustos mumunun
+// o günkü aylık RSI değeri yeniden oluşturulur.
+//
+// ============================================================================
+
+f_buildSnapshot(
+     int _length,
+     float _dipThreshold,
+     float _topThreshold,
+     float _prevClose,
+     float _prevAvgGain,
+     float _prevAvgLoss,
+     int _prevDipStreak,
+     int _prevTopStreak
+ ) =>
+
+    float _currentChange = close - _prevClose
+
+    float _currentGain = (
+         _currentChange >= 0.0
+         ? _currentChange
+         : 0.0
+    )
+
+    float _currentLoss = (
+         _currentChange < 0.0
+         ? -_currentChange
+         : 0.0
+    )
+
+    float _developingAvgGain = na
+    float _developingAvgLoss = na
+
+    if (
+         not na(_prevClose) and
+         not na(_prevAvgGain) and
+         not na(_prevAvgLoss)
+    )
+        _developingAvgGain := (
+             (_prevAvgGain * (_length - 1)) +
+             _currentGain
+        ) / _length
+
+        _developingAvgLoss := (
+             (_prevAvgLoss * (_length - 1)) +
+             _currentLoss
+        ) / _length
+
+    float _developingRsi = f_rsiFromAverages(
+         _developingAvgGain,
+         _developingAvgLoss
+    )
+
+    int _dipStreak = (
+         not na(_developingRsi) and
+         _developingRsi < _dipThreshold
+    ) ? nz(_prevDipStreak, 0) + 1 : 0
+
+    int _topStreak = (
+         not na(_developingRsi) and
+         _developingRsi > _topThreshold
+    ) ? nz(_prevTopStreak, 0) + 1 : 0
+
+    [_developingRsi, _dipStreak, _topStreak]
+
+
+// ============================================================================
+// PUAN MOTORU
+// ============================================================================
+//
+// Yeni puan mimarisi:
+//
+// SERİ 1:
+//
+// TF Puanı
+//
+// SERİ 2:
+//
+// TF Puanı + Seri Puanı
+//
+// SERİ 3:
+//
+// TF Puanı + 2 × Seri Puanı
+//
+// FORMÜL:
+//
+// TF Puanı + (Seri - 1) × Seri Puanı
+//
+// ÖRNEK:
+//
+// TF Puanı   = 4
+// Seri Puanı = 1.5
+//
+// Seri 1 = 4
+// Seri 2 = 5.5
+// Seri 3 = 7
+// Seri 4 = 8.5
+//
+// Eski:
+//
+// Seri × TF Puanı
+//
+// davranışını istersen:
+//
+// Seri Puanı = TF Puanı
+//
+// yapman yeterlidir.
+//
+// ============================================================================
+
+f_score(
+     bool _enabled,
+     int _streak,
+     float _tfPoints,
+     float _serialPoints,
+     int _maxStreak
+ ) =>
+
+    float _result = 0.0
+
+    if _enabled and _streak > 0
+
+        int _effectiveStreak = (
+             _maxStreak > 0
+             ? math.min(_streak, _maxStreak)
+             : _streak
+        )
+
+        _result := (
+             _tfPoints +
+             ((_effectiveStreak - 1) * _serialPoints)
+        )
+
+    _result
+
+
+// ============================================================================
+// ÖNCEKİ KAPANMIŞ TF DURUMLARI
+// ============================================================================
+//
+// Kritik nokta:
+//
+// request.security() çağrıları fonksiyonun içine gizlenmedi.
+// Global scope'ta açık açık bulunuyor.
+//
+// ============================================================================
+
+[prevClose1, prevAvgGain1, prevAvgLoss1, prevDipStreak1, prevTopStreak1] = request.security(syminfo.tickerid, tf1, f_previousConfirmedState(len1, dipThr1, topThr1), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_on)
+
+[prevClose2, prevAvgGain2, prevAvgLoss2, prevDipStreak2, prevTopStreak2] = request.security(syminfo.tickerid, tf2, f_previousConfirmedState(len2, dipThr2, topThr2), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_on)
+
+[prevClose3, prevAvgGain3, prevAvgLoss3, prevDipStreak3, prevTopStreak3] = request.security(syminfo.tickerid, tf3, f_previousConfirmedState(len3, dipThr3, topThr3), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_on)
+
+[prevClose4, prevAvgGain4, prevAvgLoss4, prevDipStreak4, prevTopStreak4] = request.security(syminfo.tickerid, tf4, f_previousConfirmedState(len4, dipThr4, topThr4), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_on)
+
+[prevClose5, prevAvgGain5, prevAvgLoss5, prevDipStreak5, prevTopStreak5] = request.security(syminfo.tickerid, tf5, f_previousConfirmedState(len5, dipThr5, topThr5), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_on)
+
+[prevClose6, prevAvgGain6, prevAvgLoss6, prevDipStreak6, prevTopStreak6] = request.security(syminfo.tickerid, tf6, f_previousConfirmedState(len6, dipThr6, topThr6), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_on)
+
+[prevClose7, prevAvgGain7, prevAvgLoss7, prevDipStreak7, prevTopStreak7] = request.security(syminfo.tickerid, tf7, f_previousConfirmedState(len7, dipThr7, topThr7), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_on)
+
+[prevClose8, prevAvgGain8, prevAvgLoss8, prevDipStreak8, prevTopStreak8] = request.security(syminfo.tickerid, tf8, f_previousConfirmedState(len8, dipThr8, topThr8), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_on)
+
+[prevClose9, prevAvgGain9, prevAvgLoss9, prevDipStreak9, prevTopStreak9] = request.security(syminfo.tickerid, tf9, f_previousConfirmedState(len9, dipThr9, topThr9), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_on)
+
+[prevClose10, prevAvgGain10, prevAvgLoss10, prevDipStreak10, prevTopStreak10] = request.security(syminfo.tickerid, tf10, f_previousConfirmedState(len10, dipThr10, topThr10), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_on)
+
+
+// ============================================================================
+// TARİHSEL DEVELOPING SNAPSHOTLAR
+// ============================================================================
+
+[rsi1, dipStreak1, topStreak1] = f_buildSnapshot(len1, dipThr1, topThr1, prevClose1, prevAvgGain1, prevAvgLoss1, prevDipStreak1, prevTopStreak1)
+
+[rsi2, dipStreak2, topStreak2] = f_buildSnapshot(len2, dipThr2, topThr2, prevClose2, prevAvgGain2, prevAvgLoss2, prevDipStreak2, prevTopStreak2)
+
+[rsi3, dipStreak3, topStreak3] = f_buildSnapshot(len3, dipThr3, topThr3, prevClose3, prevAvgGain3, prevAvgLoss3, prevDipStreak3, prevTopStreak3)
+
+[rsi4, dipStreak4, topStreak4] = f_buildSnapshot(len4, dipThr4, topThr4, prevClose4, prevAvgGain4, prevAvgLoss4, prevDipStreak4, prevTopStreak4)
+
+[rsi5, dipStreak5, topStreak5] = f_buildSnapshot(len5, dipThr5, topThr5, prevClose5, prevAvgGain5, prevAvgLoss5, prevDipStreak5, prevTopStreak5)
+
+[rsi6, dipStreak6, topStreak6] = f_buildSnapshot(len6, dipThr6, topThr6, prevClose6, prevAvgGain6, prevAvgLoss6, prevDipStreak6, prevTopStreak6)
+
+[rsi7, dipStreak7, topStreak7] = f_buildSnapshot(len7, dipThr7, topThr7, prevClose7, prevAvgGain7, prevAvgLoss7, prevDipStreak7, prevTopStreak7)
+
+[rsi8, dipStreak8, topStreak8] = f_buildSnapshot(len8, dipThr8, topThr8, prevClose8, prevAvgGain8, prevAvgLoss8, prevDipStreak8, prevTopStreak8)
+
+[rsi9, dipStreak9, topStreak9] = f_buildSnapshot(len9, dipThr9, topThr9, prevClose9, prevAvgGain9, prevAvgLoss9, prevDipStreak9, prevTopStreak9)
+
+[rsi10, dipStreak10, topStreak10] = f_buildSnapshot(len10, dipThr10, topThr10, prevClose10, prevAvgGain10, prevAvgLoss10, prevDipStreak10, prevTopStreak10)
+
+
+// ============================================================================
+// DİP SKORLARI
+// ============================================================================
+
+float dipScore1 = f_score(
+     en1,
+     dipStreak1,
+     tfPts1,
+     serialPts1,
+     maxStreak
+)
+
+float dipScore2 = f_score(
+     en2,
+     dipStreak2,
+     tfPts2,
+     serialPts2,
+     maxStreak
+)
+
+float dipScore3 = f_score(
+     en3,
+     dipStreak3,
+     tfPts3,
+     serialPts3,
+     maxStreak
+)
+
+float dipScore4 = f_score(
+     en4,
+     dipStreak4,
+     tfPts4,
+     serialPts4,
+     maxStreak
+)
+
+float dipScore5 = f_score(
+     en5,
+     dipStreak5,
+     tfPts5,
+     serialPts5,
+     maxStreak
+)
+
+float dipScore6 = f_score(
+     en6,
+     dipStreak6,
+     tfPts6,
+     serialPts6,
+     maxStreak
+)
+
+float dipScore7 = f_score(
+     en7,
+     dipStreak7,
+     tfPts7,
+     serialPts7,
+     maxStreak
+)
+
+float dipScore8 = f_score(
+     en8,
+     dipStreak8,
+     tfPts8,
+     serialPts8,
+     maxStreak
+)
+
+float dipScore9 = f_score(
+     en9,
+     dipStreak9,
+     tfPts9,
+     serialPts9,
+     maxStreak
+)
+
+float dipScore10 = f_score(
+     en10,
+     dipStreak10,
+     tfPts10,
+     serialPts10,
+     maxStreak
+)
+
+
+// ============================================================================
+// TEPE SKORLARI
+// ============================================================================
+
+float topScore1 = f_score(
+     en1,
+     topStreak1,
+     tfPts1,
+     serialPts1,
+     maxStreak
+)
+
+float topScore2 = f_score(
+     en2,
+     topStreak2,
+     tfPts2,
+     serialPts2,
+     maxStreak
+)
+
+float topScore3 = f_score(
+     en3,
+     topStreak3,
+     tfPts3,
+     serialPts3,
+     maxStreak
+)
+
+float topScore4 = f_score(
+     en4,
+     topStreak4,
+     tfPts4,
+     serialPts4,
+     maxStreak
+)
+
+float topScore5 = f_score(
+     en5,
+     topStreak5,
+     tfPts5,
+     serialPts5,
+     maxStreak
+)
+
+float topScore6 = f_score(
+     en6,
+     topStreak6,
+     tfPts6,
+     serialPts6,
+     maxStreak
+)
+
+float topScore7 = f_score(
+     en7,
+     topStreak7,
+     tfPts7,
+     serialPts7,
+     maxStreak
+)
+
+float topScore8 = f_score(
+     en8,
+     topStreak8,
+     tfPts8,
+     serialPts8,
+     maxStreak
+)
+
+float topScore9 = f_score(
+     en9,
+     topStreak9,
+     tfPts9,
+     serialPts9,
+     maxStreak
+)
+
+float topScore10 = f_score(
+     en10,
+     topStreak10,
+     tfPts10,
+     serialPts10,
+     maxStreak
+)
+
+
+// ============================================================================
+// TOPLAM DİP SKORU
+// ============================================================================
+
+float totalDipScore = (
+       dipScore1
+     + dipScore2
+     + dipScore3
+     + dipScore4
+     + dipScore5
+     + dipScore6
+     + dipScore7
+     + dipScore8
+     + dipScore9
+     + dipScore10
+)
+
+
+// ============================================================================
+// TOPLAM TEPE SKORU
+// ============================================================================
+
+float totalTopScore = (
+       topScore1
+     + topScore2
+     + topScore3
+     + topScore4
+     + topScore5
+     + topScore6
+     + topScore7
+     + topScore8
+     + topScore9
+     + topScore10
+)
+
+
+// ============================================================================
+// SİNYAL MOTORU
+// ============================================================================
+//
+// ÖRNEK DİP:
+//
+// Hedef = 29
+//
+// 27 → yok
+// 29 → DİP
+// 31 → DİP
+// 36 → DİP
+// 30 → DİP
+// 29 → DİP
+// 28 → yok
+//
+// Aynı sistem TEPE için de geçerlidir.
+//
+// Sinyal yalnızca günlük mum kapanışında kesinleşir.
+//
+// ============================================================================
+
+bool dipSignal = (
+     barstate.isconfirmed and
+     totalDipScore >= dipTargetScore
+)
+
+bool topSignal = (
+     barstate.isconfirmed and
+     totalTopScore >= topTargetScore
+)
+
+
+// ============================================================================
+// DİP GÖRSELİ
+// ============================================================================
+
+plotshape(
+     dipSignal,
+     title="DİP",
+     style=shape.triangleup,
+     location=location.belowbar,
+     color=color.lime,
+     size=size.small,
+     text="DİP",
+     textcolor=color.white
+)
+
+
+// ============================================================================
+// TEPE GÖRSELİ
+// ============================================================================
+
+plotshape(
+     topSignal,
+     title="TEPE",
+     style=shape.triangledown,
+     location=location.abovebar,
+     color=color.red,
+     size=size.small,
+     text="TEPE",
+     textcolor=color.white
+)
+
+
+// ============================================================================
+// SKOR TABLOSU
+// ============================================================================
+
+var table scoreTable = table.new(
+     position.top_right,
+     1,
+     1,
+     border_width=1
+)
+
+if barstate.islast
+
+    color tableBg = color.new(
+         color.black,
+         15
+    )
+
+    if (
+         totalDipScore >= dipTargetScore and
+         totalTopScore >= topTargetScore
+    )
+        tableBg := color.new(
+             color.orange,
+             15
+        )
+
+    else if totalDipScore >= dipTargetScore
+        tableBg := color.new(
+             color.lime,
+             15
+        )
+
+    else if totalTopScore >= topTargetScore
+        tableBg := color.new(
+             color.red,
+             15
+        )
+
+    string scoreText = (
+         "DİP: " +
+         str.tostring(
+             totalDipScore,
+             "#.##"
+         ) +
+         "\nTEPE: " +
+         str.tostring(
+             totalTopScore,
+             "#.##"
+         )
+    )
+
+    table.cell(
+         scoreTable,
+         0,
+         0,
+         scoreText,
+         text_color=color.white,
+         bgcolor=tableBg,
+         text_size=size.large
+    )
+
+
+// ============================================================================
+// GİZLİ SKOR PLOTLARI
+// ============================================================================
+
+plot(
+     totalDipScore,
+     title="DIP Skoru",
+     display=display.none
+)
+
+plot(
+     totalTopScore,
+     title="TEPE Skoru",
+     display=display.none
+)
+
+
+// ============================================================================
+// ALARMLAR
+// ============================================================================
+
+alertcondition(
+     dipSignal,
+     title="MTF RSI DİP",
+     message="MTF RSI DİP | {{ticker}} | Fiyat: {{close}} | DİP Skoru: {{plot(\"DIP Skoru\")}}"
+)
+
+alertcondition(
+     topSignal,
+     title="MTF RSI TEPE",
+     message="MTF RSI TEPE | {{ticker}} | Fiyat: {{close}} | TEPE Skoru: {{plot(\"TEPE Skoru\")}}"
+)

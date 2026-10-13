@@ -414,6 +414,48 @@
         "title": "HealthResponse",
         "type": "object"
       },
+      "IndicatorPreview": {
+        "additionalProperties": false,
+        "properties": {
+          "chart_timeframe": {
+            "default": "1D",
+            "maxLength": 10,
+            "title": "Chart Timeframe",
+            "type": "string"
+          },
+          "indicator": {
+            "maxLength": 40,
+            "title": "Indicator",
+            "type": "string"
+          },
+          "inputs": {
+            "additionalProperties": true,
+            "title": "Inputs",
+            "type": "object"
+          },
+          "market_type": {
+            "enum": [
+              "BIST",
+              "Kripto"
+            ],
+            "title": "Market Type",
+            "type": "string"
+          },
+          "symbol": {
+            "maxLength": 25,
+            "minLength": 1,
+            "title": "Symbol",
+            "type": "string"
+          }
+        },
+        "required": [
+          "symbol",
+          "market_type",
+          "indicator"
+        ],
+        "title": "IndicatorPreview",
+        "type": "object"
+      },
       "MarketAnalysisResponse": {
         "description": "Manual AI analysis response.",
         "properties": {
@@ -1284,17 +1326,6 @@
           },
           "timeframe": {
             "default": "1d",
-            "enum": [
-              "1m",
-              "5m",
-              "15m",
-              "30m",
-              "1h",
-              "4h",
-              "1d",
-              "1wk",
-              "1mo"
-            ],
             "title": "Timeframe",
             "type": "string"
           },
@@ -1769,6 +1800,84 @@
           }
         ],
         "summary": "History",
+        "tags": [
+          "Advanced alarms"
+        ],
+        "x-access-role": "admin"
+      }
+    },
+    "/advanced-alarms/indicators/catalog": {
+      "get": {
+        "operationId": "indicator_catalog_advanced_alarms_indicators_catalog_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Indicator Catalog Advanced Alarms Indicators Catalog Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Indicator Catalog",
+        "tags": [
+          "Advanced alarms"
+        ],
+        "x-access-role": "admin"
+      }
+    },
+    "/advanced-alarms/indicators/preview": {
+      "post": {
+        "operationId": "indicator_preview_advanced_alarms_indicators_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IndicatorPreview"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Indicator Preview Advanced Alarms Indicators Preview Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Indicator Preview",
         "tags": [
           "Advanced alarms"
         ],

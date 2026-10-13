@@ -72,6 +72,9 @@ def test_coverage_missing_stale_and_invalidated_stay_distinct_without_io(tmp_pat
     hub = AdvancedMarketData(
         settings, provider=provider, cache=object(), clock=lambda: NOW.timestamp()
     )
+    # Continuity identifiers may legitimately contain the same digits as a
+    # quote. Verify the diagnostic fields instead of substring-searching them.
+    hub._generation = "a" * 29 + "123"
     hub._epoch = 1
     hub._state = "waiting"
     hub._connection = SimpleNamespace(connected=True)
@@ -104,7 +107,21 @@ def test_coverage_missing_stale_and_invalidated_stay_distinct_without_io(tmp_pat
     assert rows["UNKNOWN"]["quote"]["source_timestamp"] is None
     assert rows["THYAO"]["history_1m"]["native_gap_count"] == 1
     assert result["universe"]["equity_membership_verified"] is False
-    assert "private_price" not in str(result) and "123" not in str(result)
+    assert "private_price" not in str(result) and result["prices_included"] is False
+    for row in rows.values():
+        assert set(row["quote"]) == {"state", "source_timestamp", "received_at", "sequence"}
+        assert set(row["history_1m"]) == {
+            "requested",
+            "state",
+            "source_timestamp",
+            "received_at",
+            "closed_through",
+            "native_gap_count",
+            "request_reason",
+            "request_failures",
+            "request_busy",
+            "request_due_at",
+        }
     hub._connection.connected = False
     assert all(row["quote"]["state"] == "invalidated" for row in hub.coverage()["rows"])
 

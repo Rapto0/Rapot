@@ -122,6 +122,18 @@ class AdvancedMarketData:
         self._storage_error = False
         self._cache_bytes = 0
         self._state, self._message = "warming", "Sunucu piyasa verisi hazırlanıyor."
+        self._custom = None
+
+    @property
+    def custom(self):
+        with self._lock:
+            if self._custom is None:
+                from application.services.custom_indicator_data import CustomIndicatorData
+
+                self._custom = CustomIndicatorData(clock=self._clock)
+                if self._running:
+                    self._custom.start()
+            return self._custom
 
     @property
     def enabled(self) -> bool:
@@ -157,7 +169,8 @@ class AdvancedMarketData:
                 prepared,
             )
             # Bar-close price also requires the real primary candle series.
-            if rule.get("trigger") == "bar_close" or rule.get("mode") == "once_per_bar":
+            refs = [ref for ref in refs if ref["field"] != "custom"]
+            if refs and (rule.get("trigger") == "bar_close" or rule.get("mode") == "once_per_bar"):
                 refs.append({"field": "close", "timeframe": rule["timeframe"]})
             all_bist = rule.get("scope") == "all_bist"
             members = tuple(
@@ -233,6 +246,10 @@ class AdvancedMarketData:
                 if changed:
                     work.due = min(work.due, self._clock())
         self._wake.set()
+        if self._custom is not None or any(
+            ref["field"] == "custom" for _, refs, _ in plans.values() for ref in refs
+        ):
+            self.custom.configure(rules, universe=self._universe)
 
     def _rebuild_requests(self) -> None:
         now = self._clock()
@@ -308,6 +325,8 @@ class AdvancedMarketData:
             ]
             for thread in self._threads:
                 thread.start()
+            if self._custom is not None:
+                self._custom.start()
 
     async def stop(self) -> None:
         self._stop.set()
@@ -317,6 +336,8 @@ class AdvancedMarketData:
             self._invalidate("stopped", "Sunucu piyasa veri servisi durduruldu.")
 
         def finish():
+            if self._custom is not None:
+                self._custom.stop()
             if connection:
                 connection.close()
             # Fixed workers use native provider timeouts. Do not abandon an in-flight thread.
@@ -347,6 +368,8 @@ class AdvancedMarketData:
         self._hot.clear()
         self._calculation_inputs.clear()
         self._state, self._message = state, message
+        if self._custom is not None:
+            self._custom.invalidate()
         for work in self._requests.values():
             work.due = self._clock()
 
@@ -379,6 +402,8 @@ class AdvancedMarketData:
         with self._lock:
             self._universe = tuple({"symbol": symbol, "market_type": "BIST"} for symbol in symbols)
             self._rebuild_requests()
+            if self._custom is not None:
+                self._custom.set_universe(self._universe)
 
     def connection_step(self) -> None:
         """One deterministic I/O step; called only by the connection worker in production."""
@@ -792,8 +817,56 @@ class AdvancedMarketData:
         )
         refs = plan[1] if plan and plan[2] is prepared else prepared.fields
         closed = rule["trigger"] == "bar_close"
-        data = {}
+        custom_data = {}
         for ref in refs:
+            if ref["field"] == "custom":
+                custom = self.custom.observation(
+                    ref, {"market_type": market, "symbol": name}, rule["trigger"], now
+                )
+                if not custom["ready"]:
+                    result = self._unknown(market, name, "warming")
+                    result["reason"] = custom["reason"]
+                    return result
+                custom_data[field_key(ref, timeframe)] = custom
+        ordinary_refs = [ref for ref in refs if ref["field"] != "custom"]
+        if custom_data and not ordinary_refs:
+            observations = list(custom_data.values())
+            if len({(row["bar_time"], row["bar_end"]) for row in observations}) != 1:
+                return self._unknown(market, name, "warming")
+            if (
+                closed
+                and len(
+                    {(row["previous_bar_time"], row["previous_bar_end"]) for row in observations}
+                )
+                != 1
+            ):
+                return self._unknown(market, name, "warming")
+            latest_update = max(row["observed_at"] for row in observations)
+            result = evaluate_prepared_condition(
+                prepared,
+                lambda ref: (
+                    custom_data[field_key(ref, timeframe)]["current"],
+                    custom_data[field_key(ref, timeframe)]["previous"]
+                    if closed
+                    or custom_data[field_key(ref, timeframe)]["observed_at"] == latest_update
+                    else custom_data[field_key(ref, timeframe)]["current"],
+                ),
+            )
+            if not result["ready"]:
+                return self._unknown(market, name, "warming")
+            return {
+                **result,
+                "continuity_reason": None,
+                "continuity_id": ":".join(row["continuity_id"] for row in observations),
+                "observation_id": hashlib.sha256(
+                    "|".join(str(row["observation_id"]) for row in observations).encode()
+                ).hexdigest()[:24],
+                "observed_at": utc(max(row["observed_at"] for row in observations)),
+                "bar_time": utc(observations[0]["bar_time"]),
+                "source_timestamp": utc(min(row["source_timestamp"] for row in observations)),
+            }
+        data = {}
+        for ref in ordinary_refs:
             if ref["field"] == "price" and not closed:
                 continue
             key = (market, name, ref["timeframe"])
@@ -829,18 +902,60 @@ class AdvancedMarketData:
             if not anchors:
                 return self._unknown(market, name, "warming")
             anchor, prior_anchor = anchors[-1], anchors[-2] if len(anchors) > 1 else None
+            cutoff, prior_cutoff = anchor.end, prior_anchor.end if prior_anchor else None
+            if custom_data:
+                customs = list(custom_data.values())
+                if (
+                    len(
+                        {
+                            (
+                                row["bar_time"],
+                                row["bar_end"],
+                                row["previous_bar_time"],
+                                row["previous_bar_end"],
+                            )
+                            for row in customs
+                        }
+                    )
+                    != 1
+                ):
+                    return self._unknown(market, name, "warming")
+                selected = customs[0]
+                if selected["bar_time"] != anchor.time or selected["previous_bar_time"] != (
+                    prior_anchor.time if prior_anchor else None
+                ):
+                    return self._unknown(market, name, "warming")
+                if selected["bar_end"] is None or (
+                    prior_anchor and selected["previous_bar_end"] is None
+                ):
+                    return self._unknown(market, name, "warming")
+                cutoff, prior_cutoff = selected["bar_end"], selected["previous_bar_end"]
             if anchor.segment != data[timeframe][0].points[-1].segment:
                 return self._unknown(market, name, "gap")
             bar_time = anchor.time
 
             def resolve(ref):
+                if ref["field"] == "custom":
+                    custom = custom_data[field_key(ref, timeframe)]
+                    sources.append(custom["source_timestamp"])
+                    return custom["current"], custom["previous"]
                 series = data[ref["timeframe"]][0]
-                points = [p for p in series.points if p.confirmed and p.end <= anchor.end]
+                points = [p for p in series.points if p.confirmed and p.end <= cutoff]
                 previous = [
                     p
                     for p in series.points
-                    if p.confirmed and prior_anchor and p.end <= prior_anchor.end
+                    if p.confirmed and prior_cutoff and p.end <= prior_cutoff
                 ]
+                if custom_data and ref["timeframe"] == timeframe:
+                    # The old daily reader uses a conservative midnight end.
+                    # A matching, provider-confirmed primary candle is the same
+                    # observation; never select a different date to compensate.
+                    points = [p for p in series.points if p.confirmed and p.time == anchor.time]
+                    previous = [
+                        p
+                        for p in series.points
+                        if p.confirmed and prior_anchor and p.time == prior_anchor.time
+                    ]
                 key = field_key(ref, timeframe)
                 sources.append(series.source_time)
                 if points and previous and points[-1].segment != previous[-1].segment:
@@ -856,12 +971,20 @@ class AdvancedMarketData:
             # Merge actual arrival observations. Unchanged fields carry into the
             # previous snapshot; only fields changed at the newest arrival step back.
             updates = [series.changed for series, _ in data.values()]
+            updates.extend(item["observed_at"] for item in custom_data.values())
             if needs_quote:
                 updates.append(quote_pair[0].received)
             newest = max(updates) if updates else now
 
             def resolve(ref):
                 key = field_key(ref, timeframe)
+                if ref["field"] == "custom":
+                    custom = custom_data[key]
+                    observations.append(str(custom["observation_id"]))
+                    sources.append(custom["source_timestamp"])
+                    return custom["current"], (
+                        custom["previous"] if custom["observed_at"] == newest else custom["current"]
+                    )
                 if ref["field"] == "price":
                     current, previous = quote_pair
                     observations.append(f"q:{current.sequence}")
@@ -887,7 +1010,8 @@ class AdvancedMarketData:
         return {
             **result,
             "continuity_reason": None,
-            "continuity_id": self._continuity(market, name),
+            "continuity_id": self._continuity(market, name)
+            + "".join(":" + item["continuity_id"] for item in custom_data.values()),
             "observation_id": observation,
             "observed_at": utc(observed),
             "bar_time": utc(bar_time),
@@ -1171,6 +1295,7 @@ class AdvancedMarketData:
                 "continuity_id": f"{self._generation}:{self._reset_count}",
                 "realtime_verified": False,
                 "one_second_coverage_guaranteed": False,
+                "custom_indicators": self._custom.status() if self._custom is not None else None,
                 "bar_finality_policy": "BIST son mumunun kapanışı sonraki gerçek sağlayıcı mumu ile doğrulanır; seans sonu teyidi gecikebilir. Tatil/yarım gün takvimi varsayılmaz.",
             }
 

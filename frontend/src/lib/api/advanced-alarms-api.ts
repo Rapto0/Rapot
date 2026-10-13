@@ -1,9 +1,9 @@
 import { API_BASE_URL, fetchApi } from "./core"
 
 export type AlarmCategory = "price" | "technical" | "watchlist"
-export type AlarmTimeframe = "1m" | "5m" | "15m" | "30m" | "1h" | "4h" | "1d" | "1wk" | "1mo"
-export type AlarmField = "price" | "open" | "high" | "low" | "close" | "volume" | "rsi" | "ema" | "sma" | "macd" | "macd_signal" | "atr" | "wr" | "combo" | "hunter"
-export interface FieldRef { field: AlarmField; timeframe?: AlarmTimeframe; period?: number; side?: "buy" | "sell" }
+export type AlarmTimeframe = string
+export type AlarmField = "price" | "open" | "high" | "low" | "close" | "volume" | "rsi" | "ema" | "sma" | "macd" | "macd_signal" | "atr" | "wr" | "combo" | "hunter" | "custom"
+export interface FieldRef { field: AlarmField; timeframe?: AlarmTimeframe; period?: number; side?: "buy" | "sell"; indicator?: string; output?: string; inputs?: Record<string, number | string | boolean> }
 export type CompareOp = "gt" | "gte" | "lt" | "lte" | "eq" | "crossed_above" | "crossed_below"
 export interface ConditionLeaf { op: CompareOp; left: FieldRef; right: number | FieldRef }
 export interface ConditionGroup { op: "and" | "or"; children: Condition[] }

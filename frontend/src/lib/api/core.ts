@@ -50,10 +50,19 @@ export async function fetchApi<T>(
         if (response.status === 401 && token && headers.get('Authorization') === `Bearer ${token}`) {
             clearSession(token);
         }
-        const message = response.status === 401 ? 'Bu işlem için giriş yapın.'
+        let message = response.status === 401 ? 'Bu işlem için giriş yapın.'
             : response.status === 403 ? 'Bu işlem için yetkiniz bulunmuyor.'
                 : response.status === 429 ? 'İstek sınırına ulaşıldı. Biraz sonra tekrar deneyin.'
                     : `API error: ${response.statusText}`;
+        if (response.status === 422 && /\/advanced-alarms(?:\/|$)/.test(url)) {
+            try {
+                const payload: unknown = await response.json();
+                if (payload && typeof payload === 'object' && 'detail' in payload && Array.isArray(payload.detail)) {
+                    const messages = payload.detail.slice(0, 3).flatMap((item: unknown) => item && typeof item === 'object' && 'msg' in item && typeof item.msg === 'string' ? [item.msg.replace(/^Value error, /, '').slice(0, 300)] : []);
+                    if (messages.length) message = messages.join(' ');
+                }
+            } catch { /* Keep the bounded HTTP status message if validation JSON is unavailable. */ }
+        }
         throw new ApiError(
             message,
             response.status

@@ -1,0 +1,700 @@
+[
+  {
+    "indicator": "htf_rsi_score",
+    "latest": {
+      "time": 2678313600,
+      "end": 2678400000,
+      "confirmed": true,
+      "outputs": {
+        "score": 42.7418609245303,
+        "buy_zone": 0.0,
+        "sell_zone": 0.0,
+        "buy_signal": 0.0,
+        "sell_signal": 0.0,
+        "any_signal": 0.0,
+        "active_count": 10.0,
+        "ready_count": 10.0
+      },
+      "rows": [
+        {
+          "slot": "1d",
+          "timeframe": "1D",
+          "enabled": true,
+          "rsi": 42.7418609245303,
+          "weight": 3.0,
+          "ready": true
+        },
+        {
+          "slot": "2d",
+          "timeframe": "2D",
+          "enabled": true,
+          "rsi": 42.7418609245303,
+          "weight": 6.0,
+          "ready": true
+        },
+        {
+          "slot": "3d",
+          "timeframe": "3D",
+          "enabled": true,
+          "rsi": 42.7418609245303,
+          "weight": 7.0,
+          "ready": true
+        },
+        {
+          "slot": "4d",
+          "timeframe": "4D",
+          "enabled": true,
+          "rsi": 42.7418609245303,
+          "weight": 7.0,
+          "ready": true
+        },
+        {
+          "slot": "5d",
+          "timeframe": "5D",
+          "enabled": true,
+          "rsi": 42.7418609245303,
+          "weight": 8.0,
+          "ready": true
+        },
+        {
+          "slot": "6d",
+          "timeframe": "6D",
+          "enabled": true,
+          "rsi": 42.7418609245303,
+          "weight": 9.0,
+          "ready": true
+        },
+        {
+          "slot": "1w",
+          "timeframe": "1W",
+          "enabled": true,
+          "rsi": 42.7418609245303,
+          "weight": 10.0,
+          "ready": true
+        },
+        {
+          "slot": "2w",
+          "timeframe": "2W",
+          "enabled": true,
+          "rsi": 42.7418609245303,
+          "weight": 14.0,
+          "ready": true
+        },
+        {
+          "slot": "3w",
+          "timeframe": "3W",
+          "enabled": true,
+          "rsi": 42.7418609245303,
+          "weight": 16.0,
+          "ready": true
+        },
+        {
+          "slot": "1m",
+          "timeframe": "1M",
+          "enabled": true,
+          "rsi": 42.7418609245303,
+          "weight": 20.0,
+          "ready": true
+        }
+      ],
+      "ready": true,
+      "reason": null
+    }
+  },
+  {
+    "indicator": "rsi_snapshot",
+    "latest": {
+      "time": 2678313600,
+      "end": 2678400000,
+      "confirmed": true,
+      "outputs": {
+        "dip_score": 0.0,
+        "top_score": 0.0,
+        "buy_signal": 0.0,
+        "sell_signal": 0.0,
+        "any_signal": 0.0,
+        "active_count": 10.0,
+        "ready_count": 10.0
+      },
+      "rows": [
+        {
+          "slot": 1,
+          "timeframe": "1D",
+          "enabled": true,
+          "rsi": 42.7418609245303,
+          "dip_streak": 0,
+          "top_streak": 0,
+          "dip_score": 0.0,
+          "top_score": 0.0,
+          "ready": true
+        },
+        {
+          "slot": 2,
+          "timeframe": "2D",
+          "enabled": true,
+          "rsi": 42.7418609245303,
+          "dip_streak": 0,
+          "top_streak": 0,
+          "dip_score": 0.0,
+          "top_score": 0.0,
+          "ready": true
+        },
+        {
+          "slot": 3,
+          "timeframe": "3D",
+          "enabled": true,
+          "rsi": 42.7418609245303,
+          "dip_streak": 0,
+          "top_streak": 0,
+          "dip_score": 0.0,
+          "top_score": 0.0,
+          "ready": true
+        },
+        {
+          "slot": 4,
+          "timeframe": "4D",
+          "enabled": true,
+          "rsi": 42.7418609245303,
+          "dip_streak": 0,
+          "top_streak": 0,
+          "dip_score": 0.0,
+          "top_score": 0.0,
+          "ready": true
+        },
+        {
+          "slot": 5,
+          "timeframe": "5D",
+          "enabled": true,
+          "rsi": 42.7418609245303,
+          "dip_streak": 0,
+          "top_streak": 0,
+          "dip_score": 0.0,
+          "top_score": 0.0,
+          "ready": true
+        },
+        {
+          "slot": 6,
+          "timeframe": "6D",
+          "enabled": true,
+          "rsi": 42.7418609245303,
+          "dip_streak": 0,
+          "top_streak": 0,
+          "dip_score": 0.0,
+          "top_score": 0.0,
+          "ready": true
+        },
+        {
+          "slot": 7,
+          "timeframe": "7D",
+          "enabled": true,
+          "rsi": 42.7418609245303,
+          "dip_streak": 0,
+          "top_streak": 0,
+          "dip_score": 0.0,
+          "top_score": 0.0,
+          "ready": true
+        },
+        {
+          "slot": 8,
+          "timeframe": "2W",
+          "enabled": true,
+          "rsi": 42.7418609245303,
+          "dip_streak": 0,
+          "top_streak": 0,
+          "dip_score": 0.0,
+          "top_score": 0.0,
+          "ready": true
+        },
+        {
+          "slot": 9,
+          "timeframe": "3W",
+          "enabled": true,
+          "rsi": 42.7418609245303,
+          "dip_streak": 0,
+          "top_streak": 0,
+          "dip_score": 0.0,
+          "top_score": 0.0,
+          "ready": true
+        },
+        {
+          "slot": 10,
+          "timeframe": "1M",
+          "enabled": true,
+          "rsi": 42.7418609245303,
+          "dip_streak": 0,
+          "top_streak": 0,
+          "dip_score": 0.0,
+          "top_score": 0.0,
+          "ready": true
+        }
+      ],
+      "ready": true,
+      "reason": null
+    }
+  },
+  {
+    "indicator": "rsi_votes",
+    "latest": {
+      "time": 2678313600,
+      "end": 2678400000,
+      "confirmed": true,
+      "outputs": {
+        "buy_votes": 0.0,
+        "sell_votes": 0.0,
+        "buy_signal": 0.0,
+        "sell_signal": 0.0,
+        "any_signal": 0.0,
+        "buy_zone": 0.0,
+        "sell_zone": 0.0,
+        "active_count": 2.0,
+        "ready_count": 2.0,
+        "buy_reachable": 1.0,
+        "sell_reachable": 1.0
+      },
+      "rows": [
+        {
+          "slot": 1,
+          "timeframe": "1D",
+          "enabled": true,
+          "value": 42.7418609245303,
+          "rsi": 42.7418609245303,
+          "ready": true,
+          "reason": null,
+          "buy_vote": false,
+          "sell_vote": false,
+          "buy_threshold": 20.0,
+          "sell_threshold": 80.0
+        },
+        {
+          "slot": 2,
+          "timeframe": "2D",
+          "enabled": false,
+          "value": null,
+          "rsi": null,
+          "ready": false,
+          "reason": "disabled",
+          "buy_vote": false,
+          "sell_vote": false,
+          "buy_threshold": 20.0,
+          "sell_threshold": 80.0
+        },
+        {
+          "slot": 3,
+          "timeframe": "3D",
+          "enabled": true,
+          "value": 42.7418609245303,
+          "rsi": 42.7418609245303,
+          "ready": true,
+          "reason": null,
+          "buy_vote": false,
+          "sell_vote": false,
+          "buy_threshold": 20.0,
+          "sell_threshold": 80.0
+        },
+        {
+          "slot": 4,
+          "timeframe": "4D",
+          "enabled": false,
+          "value": null,
+          "rsi": null,
+          "ready": false,
+          "reason": "disabled",
+          "buy_vote": false,
+          "sell_vote": false,
+          "buy_threshold": 20.0,
+          "sell_threshold": 80.0
+        },
+        {
+          "slot": 5,
+          "timeframe": "5D",
+          "enabled": false,
+          "value": null,
+          "rsi": null,
+          "ready": false,
+          "reason": "disabled",
+          "buy_vote": false,
+          "sell_vote": false,
+          "buy_threshold": 20.0,
+          "sell_threshold": 80.0
+        },
+        {
+          "slot": 6,
+          "timeframe": "6D",
+          "enabled": false,
+          "value": null,
+          "rsi": null,
+          "ready": false,
+          "reason": "disabled",
+          "buy_vote": false,
+          "sell_vote": false,
+          "buy_threshold": 20.0,
+          "sell_threshold": 80.0
+        },
+        {
+          "slot": 7,
+          "timeframe": "1W",
+          "enabled": false,
+          "value": null,
+          "rsi": null,
+          "ready": false,
+          "reason": "disabled",
+          "buy_vote": false,
+          "sell_vote": false,
+          "buy_threshold": 20.0,
+          "sell_threshold": 80.0
+        },
+        {
+          "slot": 8,
+          "timeframe": "2W",
+          "enabled": false,
+          "value": null,
+          "rsi": null,
+          "ready": false,
+          "reason": "disabled",
+          "buy_vote": false,
+          "sell_vote": false,
+          "buy_threshold": 20.0,
+          "sell_threshold": 80.0
+        },
+        {
+          "slot": 9,
+          "timeframe": "3W",
+          "enabled": false,
+          "value": null,
+          "rsi": null,
+          "ready": false,
+          "reason": "disabled",
+          "buy_vote": false,
+          "sell_vote": false,
+          "buy_threshold": 20.0,
+          "sell_threshold": 80.0
+        },
+        {
+          "slot": 10,
+          "timeframe": "1M",
+          "enabled": false,
+          "value": null,
+          "rsi": null,
+          "ready": false,
+          "reason": "disabled",
+          "buy_vote": false,
+          "sell_vote": false,
+          "buy_threshold": 20.0,
+          "sell_threshold": 80.0
+        }
+      ],
+      "ready": true,
+      "reason": null
+    }
+  },
+  {
+    "indicator": "smi_votes",
+    "latest": {
+      "time": 2678313600,
+      "end": 2678400000,
+      "confirmed": true,
+      "outputs": {
+        "buy_votes": 0.0,
+        "sell_votes": 0.0,
+        "buy_signal": 0.0,
+        "sell_signal": 0.0,
+        "any_signal": 0.0,
+        "buy_zone": 0.0,
+        "sell_zone": 0.0,
+        "active_count": 2.0,
+        "ready_count": 2.0,
+        "buy_reachable": 1.0,
+        "sell_reachable": 1.0
+      },
+      "rows": [
+        {
+          "slot": 1,
+          "timeframe": "1D",
+          "enabled": true,
+          "value": 20.864356760336367,
+          "smi": 20.864356760336367,
+          "ready": true,
+          "reason": null,
+          "buy_vote": false,
+          "sell_vote": false,
+          "buy_threshold": -40.0,
+          "sell_threshold": 40.0
+        },
+        {
+          "slot": 2,
+          "timeframe": "2D",
+          "enabled": false,
+          "value": null,
+          "smi": null,
+          "ready": false,
+          "reason": "disabled",
+          "buy_vote": false,
+          "sell_vote": false,
+          "buy_threshold": -40.0,
+          "sell_threshold": 40.0
+        },
+        {
+          "slot": 3,
+          "timeframe": "3D",
+          "enabled": true,
+          "value": 20.864356760336367,
+          "smi": 20.864356760336367,
+          "ready": true,
+          "reason": null,
+          "buy_vote": false,
+          "sell_vote": false,
+          "buy_threshold": -40.0,
+          "sell_threshold": 40.0
+        },
+        {
+          "slot": 4,
+          "timeframe": "4D",
+          "enabled": false,
+          "value": null,
+          "smi": null,
+          "ready": false,
+          "reason": "disabled",
+          "buy_vote": false,
+          "sell_vote": false,
+          "buy_threshold": -40.0,
+          "sell_threshold": 40.0
+        },
+        {
+          "slot": 5,
+          "timeframe": "5D",
+          "enabled": false,
+          "value": null,
+          "smi": null,
+          "ready": false,
+          "reason": "disabled",
+          "buy_vote": false,
+          "sell_vote": false,
+          "buy_threshold": -40.0,
+          "sell_threshold": 40.0
+        },
+        {
+          "slot": 6,
+          "timeframe": "6D",
+          "enabled": false,
+          "value": null,
+          "smi": null,
+          "ready": false,
+          "reason": "disabled",
+          "buy_vote": false,
+          "sell_vote": false,
+          "buy_threshold": -40.0,
+          "sell_threshold": 40.0
+        },
+        {
+          "slot": 7,
+          "timeframe": "1W",
+          "enabled": false,
+          "value": null,
+          "smi": null,
+          "ready": false,
+          "reason": "disabled",
+          "buy_vote": false,
+          "sell_vote": false,
+          "buy_threshold": -40.0,
+          "sell_threshold": 40.0
+        },
+        {
+          "slot": 8,
+          "timeframe": "2W",
+          "enabled": false,
+          "value": null,
+          "smi": null,
+          "ready": false,
+          "reason": "disabled",
+          "buy_vote": false,
+          "sell_vote": false,
+          "buy_threshold": -40.0,
+          "sell_threshold": 40.0
+        },
+        {
+          "slot": 9,
+          "timeframe": "3W",
+          "enabled": false,
+          "value": null,
+          "smi": null,
+          "ready": false,
+          "reason": "disabled",
+          "buy_vote": false,
+          "sell_vote": false,
+          "buy_threshold": -40.0,
+          "sell_threshold": 40.0
+        },
+        {
+          "slot": 10,
+          "timeframe": "1M",
+          "enabled": false,
+          "value": null,
+          "smi": null,
+          "ready": false,
+          "reason": "disabled",
+          "buy_vote": false,
+          "sell_vote": false,
+          "buy_threshold": -40.0,
+          "sell_threshold": 40.0
+        }
+      ],
+      "ready": true,
+      "reason": null
+    }
+  },
+  {
+    "indicator": "rmi_votes",
+    "latest": {
+      "time": 2678313600,
+      "end": 2678400000,
+      "confirmed": true,
+      "outputs": {
+        "buy_votes": 0.0,
+        "sell_votes": 0.0,
+        "buy_signal": 0.0,
+        "sell_signal": 0.0,
+        "any_signal": 0.0,
+        "buy_zone": 0.0,
+        "sell_zone": 0.0,
+        "active_count": 2.0,
+        "ready_count": 2.0,
+        "buy_reachable": 1.0,
+        "sell_reachable": 1.0
+      },
+      "rows": [
+        {
+          "slot": 1,
+          "timeframe": "1D",
+          "enabled": true,
+          "value": 55.84588126054161,
+          "rmi": 55.84588126054161,
+          "ready": true,
+          "reason": null,
+          "buy_vote": false,
+          "sell_vote": false,
+          "buy_threshold": 20.0,
+          "sell_threshold": 80.0
+        },
+        {
+          "slot": 2,
+          "timeframe": "2D",
+          "enabled": false,
+          "value": null,
+          "rmi": null,
+          "ready": false,
+          "reason": "disabled",
+          "buy_vote": false,
+          "sell_vote": false,
+          "buy_threshold": 20.0,
+          "sell_threshold": 80.0
+        },
+        {
+          "slot": 3,
+          "timeframe": "3D",
+          "enabled": true,
+          "value": 55.84588126054161,
+          "rmi": 55.84588126054161,
+          "ready": true,
+          "reason": null,
+          "buy_vote": false,
+          "sell_vote": false,
+          "buy_threshold": 20.0,
+          "sell_threshold": 80.0
+        },
+        {
+          "slot": 4,
+          "timeframe": "4D",
+          "enabled": false,
+          "value": null,
+          "rmi": null,
+          "ready": false,
+          "reason": "disabled",
+          "buy_vote": false,
+          "sell_vote": false,
+          "buy_threshold": 20.0,
+          "sell_threshold": 80.0
+        },
+        {
+          "slot": 5,
+          "timeframe": "5D",
+          "enabled": false,
+          "value": null,
+          "rmi": null,
+          "ready": false,
+          "reason": "disabled",
+          "buy_vote": false,
+          "sell_vote": false,
+          "buy_threshold": 20.0,
+          "sell_threshold": 80.0
+        },
+        {
+          "slot": 6,
+          "timeframe": "6D",
+          "enabled": false,
+          "value": null,
+          "rmi": null,
+          "ready": false,
+          "reason": "disabled",
+          "buy_vote": false,
+          "sell_vote": false,
+          "buy_threshold": 20.0,
+          "sell_threshold": 80.0
+        },
+        {
+          "slot": 7,
+          "timeframe": "1W",
+          "enabled": false,
+          "value": null,
+          "rmi": null,
+          "ready": false,
+          "reason": "disabled",
+          "buy_vote": false,
+          "sell_vote": false,
+          "buy_threshold": 20.0,
+          "sell_threshold": 80.0
+        },
+        {
+          "slot": 8,
+          "timeframe": "2W",
+          "enabled": false,
+          "value": null,
+          "rmi": null,
+          "ready": false,
+          "reason": "disabled",
+          "buy_vote": false,
+          "sell_vote": false,
+          "buy_threshold": 20.0,
+          "sell_threshold": 80.0
+        },
+        {
+          "slot": 9,
+          "timeframe": "3W",
+          "enabled": false,
+          "value": null,
+          "rmi": null,
+          "ready": false,
+          "reason": "disabled",
+          "buy_vote": false,
+          "sell_vote": false,
+          "buy_threshold": 20.0,
+          "sell_threshold": 80.0
+        },
+        {
+          "slot": 10,
+          "timeframe": "1M",
+          "enabled": false,
+          "value": null,
+          "rmi": null,
+          "ready": false,
+          "reason": "disabled",
+          "buy_vote": false,
+          "sell_vote": false,
+          "buy_threshold": 20.0,
+          "sell_threshold": 80.0
+        }
+      ],
+      "ready": true,
+      "reason": null
+    }
+  }
+]

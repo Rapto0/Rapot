@@ -22,6 +22,7 @@ kaynak, üretim kabulü ve açık kalan piyasa testlerini ayırır.
 - [Mimari ve veri akışları](ARCHITECTURE.md) — güncel giriş noktaları, veri yolları ve korunan geçmiş kayıtlar.
 - [Frontend: kurulum, testler ve ekran davranışları](FRONTEND.md)
 - [Sunucuda çalışan alarmlar: kurallar, bildirim ve sınırlar](SERVER_ALARMS.md)
+- [Beş kişisel Pine göstergesi: tüm ayarlar, grafik ve liste alarmları](CUSTOM_PINE_INDICATORS.md)
 - [Borsapy araştırma merkezi, hesap bağlantısı ve kabul sınırları](BORSAPY_INTEGRATION.md)
 - [Canonical paketler ve compatibility importları](PACKAGING_REFACTOR_MAP.md)
 - [Wrapper kaldırma koşulları](WRAPPER_DEPRECATION_SCHEDULE.md)

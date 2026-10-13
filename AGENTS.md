@@ -5,6 +5,15 @@ yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DE
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 Teknik rehberler [docs dizininde](docs/README.md) listelenir.
 
+**13 Ekim yeni iş:** Kullanıcının beş Pine göstergesi (HTF RSI Score, RSI
+Snapshot, RSI/SMI/RMI N OY) tüm 289 inputuyla sunucu hesaplayıcısı, grafik
+önizlemesi ve kalıcı liste alarmlarına taşınıyor. Orijinal kaynaklar
+`indicators/pine/` altında korunur. [Gösterge sözleşmesi](docs/CUSTOM_PINE_INDICATORS.md)
+native periyot/seans, eksik veri, kaynak sinyali ve kapasite sınırlarını açıklar.
+Canlı TradingView/piyasa ve yeni Telegram alarm kabulü kullanıcı tarafından
+sonraki piyasa gününe bırakılmıştır; test için üretimde etkin kural kurulmaz.
+Kaynak doğrulaması ve yayın tamamlanmadan bu paragraf üretim kabulü sayılmaz.
+
 **13 Ekim tamamlandı:** Eski COMBO/HUNTER sinyal/tarama geçmişi silindi ve
 site gösterge/izleme listesi alarmları etrafında düzenlendi. `/signals` alarm
 merkezine yönlenir; arşiv REST yolları kimlikli 410, signal WS 4410'dur. Eski

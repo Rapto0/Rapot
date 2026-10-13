@@ -1,0 +1,329 @@
+//@version=6
+indicator("RMI N OY", shorttitle="RMI N OY", overlay=true, dynamic_requests=true)
+// Her aktif satır bir koşuldur. AL ve SAT için minimum N ayrı ayrı belirlenir.
+// Puan, ağırlık ve seri birikimi yoktur. Eşiklere eşitlik dahildir.
+// Sinyal yalnızca en küçük aktif TF grafiğinin kapanışında oluşur.
+// Üst TF: önceki kapanmış Wilder durumu + bu grafiğin kapanışı = snapshot RMI.
+// Üst TF'nin kendi kapanışı beklenmez; açık grafikte tablodaki değerler geçicidir.
+// Momentum her satırın kendi TF mumlarıyla ölçülür: ör. 3D ve momentum 5 = beş 3D mum.
+// Varsayılan: 1D + 3D aktif, AL N=2, SAT N=2, uzunluk=14, momentum=5, AL<=20, SAT>=80.
+// Aynı TF birden çok satırda seçilirse kaynak kodda olduğu gibi her satır ayrı oy sayılır.
+// Kullanım: En küçük aktif TF'de standart grafik aç; alarmı mum kapanışında kur.
+// Bu gösterge emir göndermez. Eşikler ve varsayılanlar performans için optimize edilmedi.
+
+const string G0 = "00 • GENEL"
+int requiredBuyVotes = input.int(2, "AL için en az kaç zaman dilimi doğrulasın? (N)", minval=1, maxval=10, group=G0, tooltip="Yalnızca AL sinyali için minimum onay sayısı. Aktif satır sayısını aşarsa sadece AL sinyali oluşmaz. SAT kendi N değeriyle çalışır. Veri olmayan satır oy vermez.")
+int requiredSellVotes = input.int(2, "SAT için en az kaç zaman dilimi doğrulasın? (N)", minval=1, maxval=10, group=G0, tooltip="Yalnızca SAT sinyali için minimum onay sayısı. Aktif satır sayısını aşarsa sadece SAT sinyali oluşmaz. AL kendi N değeriyle çalışır. Veri olmayan satır oy vermez.")
+bool showTable = input.bool(true, "Oy tablosunu göster", group=G0)
+bool onlyFirst = input.bool(false, "Sadece N şartının ilk mumunda sinyal", group=G0, tooltip="Kapalı: ilgili yönün kendi N şartı sürdükçe her en küçük TF kapanışında sinyal. Açık: AL kendi N şartına, SAT kendi N şartına ilk ulaştığında sinyal verir. Yeniden sinyal için ilgili yönün şartı önce bozulmalıdır.")
+
+const string G1 = "01 • ZAMAN DİLİMİ 1"
+bool en1 = input.bool(true, "Aktif", group=G1, inline="a1")
+string tf1 = input.timeframe("1D", "TF", group=G1, inline="a1")
+int len1 = input.int(14, "RMI uzunluğu", minval=2, group=G1, inline="b1")
+int mom1 = input.int(5, "Momentum periyodu", minval=1, maxval=5000, group=G1, inline="m1", tooltip="Bu satırın kendi zaman diliminde kaç mum önceki kapanışla karşılaştırılacağını belirler. 5: close - close[5]. 1: Wilder RSI hesabı. RMI uzunluğu ise kazanç/kayıp ortalamalarının yumuşatma süresidir.")
+float dipThr1 = input.float(20.0, "AL ≤", minval=0, maxval=100, step=0.1, group=G1, inline="c1")
+float topThr1 = input.float(80.0, "SAT ≥", minval=0, maxval=100, step=0.1, group=G1, inline="c1")
+
+const string G2 = "02 • ZAMAN DİLİMİ 2"
+bool en2 = input.bool(false, "Aktif", group=G2, inline="a2")
+string tf2 = input.timeframe("2D", "TF", group=G2, inline="a2")
+int len2 = input.int(14, "RMI uzunluğu", minval=2, group=G2, inline="b2")
+int mom2 = input.int(5, "Momentum periyodu", minval=1, maxval=5000, group=G2, inline="m2", tooltip="Bu satırın kendi zaman diliminde kaç mum önceki kapanışla karşılaştırılacağını belirler. 5: close - close[5]. 1: Wilder RSI hesabı. RMI uzunluğu ise kazanç/kayıp ortalamalarının yumuşatma süresidir.")
+float dipThr2 = input.float(20.0, "AL ≤", minval=0, maxval=100, step=0.1, group=G2, inline="c2")
+float topThr2 = input.float(80.0, "SAT ≥", minval=0, maxval=100, step=0.1, group=G2, inline="c2")
+
+const string G3 = "03 • ZAMAN DİLİMİ 3"
+bool en3 = input.bool(true, "Aktif", group=G3, inline="a3")
+string tf3 = input.timeframe("3D", "TF", group=G3, inline="a3")
+int len3 = input.int(14, "RMI uzunluğu", minval=2, group=G3, inline="b3")
+int mom3 = input.int(5, "Momentum periyodu", minval=1, maxval=5000, group=G3, inline="m3", tooltip="Bu satırın kendi zaman diliminde kaç mum önceki kapanışla karşılaştırılacağını belirler. 5: close - close[5]. 1: Wilder RSI hesabı. RMI uzunluğu ise kazanç/kayıp ortalamalarının yumuşatma süresidir.")
+float dipThr3 = input.float(20.0, "AL ≤", minval=0, maxval=100, step=0.1, group=G3, inline="c3")
+float topThr3 = input.float(80.0, "SAT ≥", minval=0, maxval=100, step=0.1, group=G3, inline="c3")
+
+const string G4 = "04 • ZAMAN DİLİMİ 4"
+bool en4 = input.bool(false, "Aktif", group=G4, inline="a4")
+string tf4 = input.timeframe("4D", "TF", group=G4, inline="a4")
+int len4 = input.int(14, "RMI uzunluğu", minval=2, group=G4, inline="b4")
+int mom4 = input.int(5, "Momentum periyodu", minval=1, maxval=5000, group=G4, inline="m4", tooltip="Bu satırın kendi zaman diliminde kaç mum önceki kapanışla karşılaştırılacağını belirler. 5: close - close[5]. 1: Wilder RSI hesabı. RMI uzunluğu ise kazanç/kayıp ortalamalarının yumuşatma süresidir.")
+float dipThr4 = input.float(20.0, "AL ≤", minval=0, maxval=100, step=0.1, group=G4, inline="c4")
+float topThr4 = input.float(80.0, "SAT ≥", minval=0, maxval=100, step=0.1, group=G4, inline="c4")
+
+const string G5 = "05 • ZAMAN DİLİMİ 5"
+bool en5 = input.bool(false, "Aktif", group=G5, inline="a5")
+string tf5 = input.timeframe("5D", "TF", group=G5, inline="a5")
+int len5 = input.int(14, "RMI uzunluğu", minval=2, group=G5, inline="b5")
+int mom5 = input.int(5, "Momentum periyodu", minval=1, maxval=5000, group=G5, inline="m5", tooltip="Bu satırın kendi zaman diliminde kaç mum önceki kapanışla karşılaştırılacağını belirler. 5: close - close[5]. 1: Wilder RSI hesabı. RMI uzunluğu ise kazanç/kayıp ortalamalarının yumuşatma süresidir.")
+float dipThr5 = input.float(20.0, "AL ≤", minval=0, maxval=100, step=0.1, group=G5, inline="c5")
+float topThr5 = input.float(80.0, "SAT ≥", minval=0, maxval=100, step=0.1, group=G5, inline="c5")
+
+const string G6 = "06 • ZAMAN DİLİMİ 6"
+bool en6 = input.bool(false, "Aktif", group=G6, inline="a6")
+string tf6 = input.timeframe("6D", "TF", group=G6, inline="a6")
+int len6 = input.int(14, "RMI uzunluğu", minval=2, group=G6, inline="b6")
+int mom6 = input.int(5, "Momentum periyodu", minval=1, maxval=5000, group=G6, inline="m6", tooltip="Bu satırın kendi zaman diliminde kaç mum önceki kapanışla karşılaştırılacağını belirler. 5: close - close[5]. 1: Wilder RSI hesabı. RMI uzunluğu ise kazanç/kayıp ortalamalarının yumuşatma süresidir.")
+float dipThr6 = input.float(20.0, "AL ≤", minval=0, maxval=100, step=0.1, group=G6, inline="c6")
+float topThr6 = input.float(80.0, "SAT ≥", minval=0, maxval=100, step=0.1, group=G6, inline="c6")
+
+const string G7 = "07 • ZAMAN DİLİMİ 7"
+bool en7 = input.bool(false, "Aktif", group=G7, inline="a7")
+string tf7 = input.timeframe("1W", "TF", group=G7, inline="a7")
+int len7 = input.int(14, "RMI uzunluğu", minval=2, group=G7, inline="b7")
+int mom7 = input.int(5, "Momentum periyodu", minval=1, maxval=5000, group=G7, inline="m7", tooltip="Bu satırın kendi zaman diliminde kaç mum önceki kapanışla karşılaştırılacağını belirler. 5: close - close[5]. 1: Wilder RSI hesabı. RMI uzunluğu ise kazanç/kayıp ortalamalarının yumuşatma süresidir.")
+float dipThr7 = input.float(20.0, "AL ≤", minval=0, maxval=100, step=0.1, group=G7, inline="c7")
+float topThr7 = input.float(80.0, "SAT ≥", minval=0, maxval=100, step=0.1, group=G7, inline="c7")
+
+const string G8 = "08 • ZAMAN DİLİMİ 8"
+bool en8 = input.bool(false, "Aktif", group=G8, inline="a8")
+string tf8 = input.timeframe("2W", "TF", group=G8, inline="a8")
+int len8 = input.int(14, "RMI uzunluğu", minval=2, group=G8, inline="b8")
+int mom8 = input.int(5, "Momentum periyodu", minval=1, maxval=5000, group=G8, inline="m8", tooltip="Bu satırın kendi zaman diliminde kaç mum önceki kapanışla karşılaştırılacağını belirler. 5: close - close[5]. 1: Wilder RSI hesabı. RMI uzunluğu ise kazanç/kayıp ortalamalarının yumuşatma süresidir.")
+float dipThr8 = input.float(20.0, "AL ≤", minval=0, maxval=100, step=0.1, group=G8, inline="c8")
+float topThr8 = input.float(80.0, "SAT ≥", minval=0, maxval=100, step=0.1, group=G8, inline="c8")
+
+const string G9 = "09 • ZAMAN DİLİMİ 9"
+bool en9 = input.bool(false, "Aktif", group=G9, inline="a9")
+string tf9 = input.timeframe("3W", "TF", group=G9, inline="a9")
+int len9 = input.int(14, "RMI uzunluğu", minval=2, group=G9, inline="b9")
+int mom9 = input.int(5, "Momentum periyodu", minval=1, maxval=5000, group=G9, inline="m9", tooltip="Bu satırın kendi zaman diliminde kaç mum önceki kapanışla karşılaştırılacağını belirler. 5: close - close[5]. 1: Wilder RSI hesabı. RMI uzunluğu ise kazanç/kayıp ortalamalarının yumuşatma süresidir.")
+float dipThr9 = input.float(20.0, "AL ≤", minval=0, maxval=100, step=0.1, group=G9, inline="c9")
+float topThr9 = input.float(80.0, "SAT ≥", minval=0, maxval=100, step=0.1, group=G9, inline="c9")
+
+const string G10 = "10 • ZAMAN DİLİMİ 10"
+bool en10 = input.bool(false, "Aktif", group=G10, inline="a10")
+string tf10 = input.timeframe("1M", "TF", group=G10, inline="a10")
+int len10 = input.int(14, "RMI uzunluğu", minval=2, group=G10, inline="b10")
+int mom10 = input.int(5, "Momentum periyodu", minval=1, maxval=5000, group=G10, inline="m10", tooltip="Bu satırın kendi zaman diliminde kaç mum önceki kapanışla karşılaştırılacağını belirler. 5: close - close[5]. 1: Wilder RSI hesabı. RMI uzunluğu ise kazanç/kayıp ortalamalarının yumuşatma süresidir.")
+float dipThr10 = input.float(20.0, "AL ≤", minval=0, maxval=100, step=0.1, group=G10, inline="c10")
+float topThr10 = input.float(80.0, "SAT ≥", minval=0, maxval=100, step=0.1, group=G10, inline="c10")
+
+// ── Zaman dilimi seçimi ───────────────────────────────────────────────────────
+f_tfKey(string tf) =>
+    string value = tf == "" ? timeframe.period : tf
+    switch value
+        "S" => "1S"
+        "D" => "1D"
+        "W" => "1W"
+        "M" => "1M"
+        => value
+// Tick grafikleri saniyeye çevrilemez; sessizce yanlış hesaplamaya katılmaz.
+f_seconds(simple string tf) =>
+    string value = tf == "" ? timeframe.period : tf
+    str.endswith(value, "T") ? float(na) : timeframe.in_seconds(value)
+array<bool> enabled = array.from(en1, en2, en3, en4, en5, en6, en7, en8, en9, en10)
+array<string> frames = array.from(tf1, tf2, tf3, tf4, tf5, tf6, tf7, tf8, tf9, tf10)
+array<float> frameSeconds = array.from(f_seconds(tf1), f_seconds(tf2), f_seconds(tf3), f_seconds(tf4), f_seconds(tf5), f_seconds(tf6), f_seconds(tf7), f_seconds(tf8), f_seconds(tf9), f_seconds(tf10))
+array<float> dipLevels = array.from(dipThr1, dipThr2, dipThr3, dipThr4, dipThr5, dipThr6, dipThr7, dipThr8, dipThr9, dipThr10)
+array<float> topLevels = array.from(topThr1, topThr2, topThr3, topThr4, topThr5, topThr6, topThr7, topThr8, topThr9, topThr10)
+int activeCount = 0
+float minSeconds = na
+string minTf = ""
+bool settingsOk = true
+string settingsMessage = ""
+for i = 0 to 9
+    if array.get(enabled, i)
+        activeCount += 1
+        string selectedTf = f_tfKey(array.get(frames, i))
+        float seconds = array.get(frameSeconds, i)
+        if na(seconds)
+            settingsOk := false
+            settingsMessage := "Saniye/dakika/gün/hafta/ay seç. Tick TF desteklenmez."
+        else if na(minSeconds) or seconds < minSeconds
+            minSeconds := seconds
+            minTf := selectedTf
+        if array.get(dipLevels, i) >= array.get(topLevels, i)
+            settingsOk := false
+            settingsMessage := "Satır " + str.tostring(i + 1) + ": AL eşiği SAT eşiğinden küçük olmalı."
+// Eşit süreli farklı takvimler (ör. 7D ve 1W) aynı TF kabul edilmez.
+// Böyle bir eşitlikte ilk aktif satır sinyal grafiğini belirler.
+bool validChart = settingsOk and activeCount > 0 and chart.is_standard and f_tfKey(timeframe.period) == minTf
+
+// ── RMI ve geçmişe dönük snapshot ────────────────────────────────────────────
+// Wilder RMI: delta = close - close[momentum].
+// Kazanç = RMA(max(delta, 0), length); kayıp = RMA(max(-delta, 0), length).
+// RMI = 100 * kazanç / (kazanç + kayıp). EMA/SMA varyantı kullanılmaz.
+// Kaynak: https://infront-portfolio-manager.helpcenter.infront.co/en/pm/latest/relative-momentum-index
+// İlk eksik farklar sıfıra çevrilmez. İki ortalama da sıfırsa RMI tanımsızdır;
+// bu satır veri yok olarak gösterilir ve oy vermez.
+f_fromAverages(float gain, float loss) =>
+    float result = na
+    if not na(gain) and not na(loss)
+        if gain == 0.0 and loss == 0.0
+            result := na
+        else if loss == 0.0
+            result := 100.0
+        else if gain == 0.0
+            result := 0.0
+        else
+            result := 100.0 - 100.0 / (1.0 + gain / loss)
+    result
+
+f_nativeRmi(simple int length, simple int momentum) =>
+    float delta = close - close[momentum]
+    float avgGain = ta.rma(math.max(delta, 0.0), length)
+    float avgLoss = ta.rma(math.max(-delta, 0.0), length)
+    f_fromAverages(avgGain, avgLoss)
+
+f_previousState(simple int length, simple int momentum) =>
+    float delta = close - close[momentum]
+    float avgGain = ta.rma(math.max(delta, 0.0), length)
+    float avgLoss = ta.rma(math.max(-delta, 0.0), length)
+    float nativeRmi = f_fromAverages(avgGain, avgLoss)
+    // Açık HTF barı t için delta = bu grafiğin kapanışı - HTF close[t-momentum].
+    // momentum >= 1: lookahead_on paketinin bütün verileri geçmişten gelir.
+    [close[momentum], avgGain[1], avgLoss[1], time_close[1], nativeRmi[1]]
+
+f_currentState(simple int length, simple int momentum) =>
+    float delta = close - close[momentum]
+    float avgGain = ta.rma(math.max(delta, 0.0), length)
+    float avgLoss = ta.rma(math.max(-delta, 0.0), length)
+    float nativeRmi = f_fromAverages(avgGain, avgLoss)
+    // Paket kapanmış HTF j'ye aitse, sonraki barın referansı close[j+1-momentum].
+    [close[momentum - 1], avgGain, avgLoss, time_close, nativeRmi]
+
+f_rmi(simple bool on, simple string tf, simple int length, simple int momentum, bool chartOk) =>
+    float localRmi = f_nativeRmi(length, momentum)
+    // Geçmişe bağlı hesaplar her çalıştırmada çağrılır.
+    // Kapalı/geçersiz satırda güvenli bir TF sorgulanır; sonuç sinyale katılmaz.
+    string requestedTf = on and chartOk ? tf : "1D"
+    // A: önceki kapanmış HTF ortalamaları ve güncel momentum referansı.
+    [aRef, aGain, aLoss, aEnd, aRmi] = request.security(syminfo.tickerid, requestedTf, f_previousState(length, momentum), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_on)
+    // B: tarihsel HTF kapanışlarını yakalar. Canlıda açık HTF içerebilir.
+    // Zaman kontrolü henüz kapanmamış B durumunu dışlar; açık grafik oyları geçicidir.
+    [bRef, bGain, bLoss, bEnd, bRmi] = request.security(syminfo.tickerid, requestedTf, f_currentState(length, momentum), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+    float result = na
+    if on and chartOk
+        if f_tfKey(tf) == f_tfKey(timeframe.period)
+            result := localRmi
+        else
+            bool aUsable = not na(aEnd) and aEnd <= time_close
+            bool bUsable = not na(bEnd) and bEnd <= time_close
+            bool useB = bUsable and (not aUsable or bEnd >= aEnd)
+            float anchorRef = useB ? bRef : aRef
+            float anchorGain = useB ? bGain : aGain
+            float anchorLoss = useB ? bLoss : aLoss
+            float anchorRmi = useB ? bRmi : aRmi
+            int anchorEnd = useB ? bEnd : aEnd
+            if aUsable or bUsable
+                if anchorEnd == time_close
+                    // HTF de bu mumda kapandı: ikinci bir RMA adımı uygulama.
+                    result := anchorRmi
+                else if not na(anchorRef) and not na(anchorGain) and not na(anchorLoss)
+                    float changeNow = close - anchorRef
+                    // Her snapshot aynı son kapanmış HTF durumundan hesaplanır.
+                    // Ara grafik kapanışları ayrı HTF mumları gibi biriktirilmez.
+                    float gainNow = (anchorGain * (length - 1) + math.max(changeNow, 0.0)) / length
+                    float lossNow = (anchorLoss * (length - 1) + math.max(-changeNow, 0.0)) / length
+                    result := f_fromAverages(gainNow, lossNow)
+    result
+
+// Her satır ayrı fonksiyon çağrısı: RMI uzunluğu ve momentum periyodu bağımsızdır.
+float rmi1 = f_rmi(en1, tf1, len1, mom1, validChart)
+float rmi2 = f_rmi(en2, tf2, len2, mom2, validChart)
+float rmi3 = f_rmi(en3, tf3, len3, mom3, validChart)
+float rmi4 = f_rmi(en4, tf4, len4, mom4, validChart)
+float rmi5 = f_rmi(en5, tf5, len5, mom5, validChart)
+float rmi6 = f_rmi(en6, tf6, len6, mom6, validChart)
+float rmi7 = f_rmi(en7, tf7, len7, mom7, validChart)
+float rmi8 = f_rmi(en8, tf8, len8, mom8, validChart)
+float rmi9 = f_rmi(en9, tf9, len9, mom9, validChart)
+float rmi10 = f_rmi(en10, tf10, len10, mom10, validChart)
+array<float> rmis = array.from(rmi1, rmi2, rmi3, rmi4, rmi5, rmi6, rmi7, rmi8, rmi9, rmi10)
+int readyCount = 0
+int dipVotes = 0
+int topVotes = 0
+for i = 0 to 9
+    if array.get(enabled, i)
+        float value = array.get(rmis, i)
+        if not na(value)
+            readyCount += 1
+            dipVotes += value <= array.get(dipLevels, i) ? 1 : 0
+            topVotes += value >= array.get(topLevels, i) ? 1 : 0
+// Veri olmayan satır oy vermez; diğer satırlardan ilgili yönün N onayı yeterlidir.
+// Hedefler otomatik küçültülmez. Bir yönün erişilememesi diğer yönü engellemez.
+bool buyThresholdReachable = activeCount >= requiredBuyVotes
+bool sellThresholdReachable = activeCount >= requiredSellVotes
+bool dipConsensus = validChart and buyThresholdReachable and dipVotes >= requiredBuyVotes
+bool topConsensus = validChart and sellThresholdReachable and topVotes >= requiredSellVotes
+bool dipSignal = barstate.isconfirmed and dipConsensus and (not onlyFirst or not dipConsensus[1])
+bool topSignal = barstate.isconfirmed and topConsensus and (not onlyFirst or not topConsensus[1])
+plotshape(dipSignal, title="AL • DİP", style=shape.triangleup, location=location.belowbar, color=color.lime, size=size.small, text="AL", textcolor=color.white)
+plotshape(topSignal, title="SAT • TEPE", style=shape.triangledown, location=location.abovebar, color=color.red, size=size.small, text="SAT", textcolor=color.white)
+// Alarm ve Veri Penceresi değerleri. Bunlar puan değil, sağlanan koşul sayısıdır.
+plot(validChart ? dipVotes : na, title="AL Oy", display=display.data_window)
+plot(validChart ? topVotes : na, title="SAT Oy", display=display.data_window)
+plot(activeCount, title="Aktif TF", display=display.data_window)
+plot(requiredBuyVotes, title="Gerekli AL N", display=display.data_window)
+plot(requiredSellVotes, title="Gerekli SAT N", display=display.data_window)
+alertcondition(dipSignal, title="MTF RMI • AL En Az N Oy", message="MTF RMI AL | {{ticker}} | TF: {{interval}} | Fiyat: {{close}} | AL için belirlenen minimum N onayı sağlandı.")
+alertcondition(topSignal, title="MTF RMI • SAT En Az N Oy", message="MTF RMI SAT | {{ticker}} | TF: {{interval}} | Fiyat: {{close}} | SAT için belirlenen minimum N onayı sağlandı.")
+
+// ── Oy tablosu ───────────────────────────────────────────────────────────────
+var table voteTable = table.new(position.top_right, 5, 14, border_width=1)
+if barstate.isfirst
+    table.merge_cells(voteTable, 0, 12, 4, 12)
+    table.merge_cells(voteTable, 0, 13, 4, 13)
+if barstate.islast
+    if not showTable
+        table.clear(voteTable, 0, 0, 4, 13)
+    else
+        color headerBg = color.rgb(35, 42, 54)
+        color neutralBg = color.new(color.black, 20)
+        table.cell(voteTable, 0, 0, "TF", bgcolor=headerBg, text_color=color.white)
+        table.cell(voteTable, 1, 0, "RMI*", bgcolor=headerBg, text_color=color.white)
+        table.cell(voteTable, 2, 0, "AL ≤", bgcolor=headerBg, text_color=color.white)
+        table.cell(voteTable, 3, 0, "SAT ≥", bgcolor=headerBg, text_color=color.white)
+        table.cell(voteTable, 4, 0, "OY", bgcolor=headerBg, text_color=color.white)
+        for i = 0 to 9
+            bool on = array.get(enabled, i)
+            float value = array.get(rmis, i)
+            float dipLevel = array.get(dipLevels, i)
+            float topLevel = array.get(topLevels, i)
+            string vote = not on ? "Kapalı" : not validChart ? "-" : na(value) ? "Veri yok" : value <= dipLevel ? "AL" : value >= topLevel ? "SAT" : "Bekle"
+            color rowBg = vote == "AL" ? color.new(color.green, 55) : vote == "SAT" ? color.new(color.red, 55) : neutralBg
+            color txt = on ? color.white : color.gray
+            table.cell(voteTable, 0, i + 1, f_tfKey(array.get(frames, i)), bgcolor=rowBg, text_color=txt)
+            table.cell(voteTable, 1, i + 1, na(value) ? "-" : str.tostring(value, "#.00"), bgcolor=rowBg, text_color=txt)
+            table.cell(voteTable, 2, i + 1, str.tostring(dipLevel, "#.##"), bgcolor=rowBg, text_color=txt)
+            table.cell(voteTable, 3, i + 1, str.tostring(topLevel, "#.##"), bgcolor=rowBg, text_color=txt)
+            table.cell(voteTable, 4, i + 1, vote, bgcolor=rowBg, text_color=txt)
+        string fraction = "/" + str.tostring(activeCount)
+        table.cell(voteTable, 0, 11, "En az N oy", bgcolor=headerBg, text_color=color.white)
+        table.cell(voteTable, 1, 11, "AL N = " + str.tostring(requiredBuyVotes) + "\nSAT N = " + str.tostring(requiredSellVotes), bgcolor=headerBg, text_color=color.white)
+        table.cell(voteTable, 2, 11, validChart ? str.tostring(dipVotes) + fraction : "-", bgcolor=headerBg, text_color=color.lime)
+        table.cell(voteTable, 3, 11, validChart ? str.tostring(topVotes) + fraction : "-", bgcolor=headerBg, text_color=color.orange)
+        table.cell(voteTable, 4, 11, minTf == "" ? "-" : minTf, bgcolor=headerBg, text_color=color.white)
+        string status = ""
+        if activeCount == 0
+            status := "En az bir zaman dilimini aktif et."
+        else if not settingsOk
+            status := settingsMessage
+        else if not chart.is_standard
+            status := "Standart mum/çubuk grafiği kullan."
+        else if not validChart
+            status := "Sinyal için " + minTf + " grafiğini aç."
+        else if not barstate.isconfirmed
+            status := "Mum açık • oylar geçici, sinyal kapanışta."
+        else if dipSignal and topSignal
+            status := "AL + SAT • iki yön de kendi N şartını sağladı."
+        else if dipSignal
+            status := "AL • en az " + str.tostring(requiredBuyVotes) + " onay tamamlandı."
+        else if topSignal
+            status := "SAT • en az " + str.tostring(requiredSellVotes) + " onay tamamlandı."
+        else if dipConsensus or topConsensus
+            status := "İlgili yönün N şartı sürüyor • ilk mum filtresi açık."
+        else
+            status := "Onay bekleniyor • AL N = " + str.tostring(requiredBuyVotes) + " • SAT N = " + str.tostring(requiredSellVotes)
+
+        // Uyarılar yön bazındadır; diğer yönün sinyalini engellemez.
+        if settingsOk and activeCount > 0
+            if not buyThresholdReachable
+                status := status + "\nAL hedefi erişilemez: N = " + str.tostring(requiredBuyVotes) + ", aktif TF = " + str.tostring(activeCount) + ". AL N değerini azalt veya TF aç."
+            else if validChart and readyCount < requiredBuyVotes
+                status := status + "\nAL için RMI verisi yetersiz: " + str.tostring(readyCount) + " TF hazır, en az " + str.tostring(requiredBuyVotes) + " gerekli."
+            if not sellThresholdReachable
+                status := status + "\nSAT hedefi erişilemez: N = " + str.tostring(requiredSellVotes) + ", aktif TF = " + str.tostring(activeCount) + ". SAT N değerini azalt veya TF aç."
+            else if validChart and readyCount < requiredSellVotes
+                status := status + "\nSAT için RMI verisi yetersiz: " + str.tostring(readyCount) + " TF hazır, en az " + str.tostring(requiredSellVotes) + " gerekli."
+        table.cell(voteTable, 0, 12, status, bgcolor=headerBg, text_color=color.white, text_size=size.small)
+        table.cell(voteTable, 0, 13, "* Üst TF: bu mum kapanışındaki snapshot RMI", bgcolor=neutralBg, text_color=color.silver, text_size=size.tiny)

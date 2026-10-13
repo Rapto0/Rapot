@@ -3,21 +3,49 @@
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from fastapi.routing import APIRoute
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from api.auth import User, get_current_admin_user
 from api.rate_limit import limiter
 from api.routes.alarm_routes import AlarmSymbol
-from api.routes.borsapy_connection_routes import PrivateRoute
-from application.services.advanced_alarm_conditions import validate_condition
+from application.services.advanced_alarm_conditions import prepare_condition, validate_condition
 from application.services.advanced_alarm_service import (
     get_advanced_alarm_engine,
     telegram_configured,
 )
 from infrastructure.repositories import advanced_alarm_repository as repository
 
-router = APIRouter(prefix="/advanced-alarms", tags=["Advanced alarms"], route_class=PrivateRoute)
-Timeframe = Literal["1m", "5m", "15m", "30m", "1h", "4h", "1d", "1wk", "1mo"]
+
+class AlarmPrivateRoute(APIRoute):
+    def get_route_handler(self):
+        handler = super().get_route_handler()
+
+        async def private(request):
+            try:
+                response = await handler(request)
+            except StarletteHTTPException as exc:
+                response = JSONResponse(
+                    {"detail": exc.detail}, status_code=exc.status_code, headers=exc.headers
+                )
+            except RequestValidationError as exc:
+                # Fixed validator messages help the form recover without echoing
+                # submitted input, locations or exception context (credentials).
+                details = [{"msg": str(error["msg"])[:300]} for error in exc.errors()[:3]]
+                response = JSONResponse({"detail": details}, status_code=422)
+            response.headers["Cache-Control"] = "private, no-store"
+            return response
+
+        return private
+
+
+router = APIRouter(
+    prefix="/advanced-alarms", tags=["Advanced alarms"], route_class=AlarmPrivateRoute
+)
+Timeframe = str
 
 
 class WatchlistWrite(BaseModel):
@@ -55,7 +83,21 @@ class AlarmWrite(WatchlistWrite):
 
     @model_validator(mode="after")
     def consistent_scope(self):
+        from application.services.custom_indicators.catalog import ALIASES, canonical_timeframe
+
+        base = canonical_timeframe(self.timeframe)
+        self.timeframe = next((alias for alias, native in ALIASES.items() if native == base), base)
         self.condition = validate_condition(self.condition)
+        prepared = prepare_condition(self.condition, self.timeframe)
+        if self.trigger != "bar_close" and any(
+            ref["field"] == "custom"
+            and ref["indicator"] != "htf_rsi_score"
+            and ref["output"] in {"buy_signal", "sell_signal", "any_signal"}
+            for ref in prepared.fields
+        ):
+            raise ValueError(
+                "Snapshot ve N OY sinyalleri için 'Yalnız kapanmış mum' seçin; mum içinde skor veya oy çıktısını kullanabilirsiniz."
+            )
         if self.category == "watchlist":
             if self.scope not in {"watchlist", "all_bist"} or self.symbols:
                 raise ValueError("İzleme listesi alarmında kalıcı liste veya bütün BIST seçin.")
@@ -78,6 +120,42 @@ class AlarmWrite(WatchlistWrite):
             if not price_only(self.condition):
                 raise ValueError("Fiyat alarmında yalnız fiyat alanı kullanılabilir.")
         return self
+
+
+class IndicatorPreview(AlarmSymbol):
+    model_config = ConfigDict(extra="forbid")
+    indicator: str = Field(max_length=40)
+    inputs: dict = Field(default_factory=dict)
+    chart_timeframe: str = Field("1D", max_length=10)
+
+    @model_validator(mode="after")
+    def valid_indicator(self):
+        from application.services.custom_indicators.catalog import (
+            canonical_timeframe,
+            requirements,
+            validate_config,
+        )
+
+        self.chart_timeframe = canonical_timeframe(self.chart_timeframe)
+        self.inputs = validate_config(self.indicator, self.inputs, self.chart_timeframe)
+        requirements(self.indicator, self.inputs, self.chart_timeframe)
+        return self
+
+
+@router.get("/indicators/catalog")
+@limiter.limit("60/minute")
+def indicator_catalog(request: Request, user: User = Depends(get_current_admin_user)) -> dict:
+    from application.services.custom_indicators.catalog import catalog
+
+    return catalog()
+
+
+@router.post("/indicators/preview")
+@limiter.limit("30/minute")
+def indicator_preview(
+    request: Request, payload: IndicatorPreview, user: User = Depends(get_current_admin_user)
+) -> dict:
+    return get_advanced_alarm_engine().hub.custom.preview(**payload.model_dump())
 
 
 def _call(method, *args, **kwargs):
@@ -145,7 +223,7 @@ def history(
     request: Request,
     symbol: str = Query(min_length=1, max_length=25),
     market_type: Literal["BIST", "Kripto"] = "BIST",
-    timeframe: Timeframe = "1m",
+    timeframe: Literal["1m", "5m", "15m", "30m", "1h", "4h", "1d", "1wk", "1mo"] = "1m",
     limit: int = Query(1000, ge=1, le=1500),
     user: User = Depends(get_current_admin_user),
 ) -> dict:
