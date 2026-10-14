@@ -81,6 +81,7 @@ def test_native_series_have_unique_routing_and_no_daily_or_volume_fallback():
     assert {item["p"][4] for item in creates} == {"2D", "3W", "3D"}
     assert len({item["p"][1] for item in creates}) == 3
     assert all(item["p"][-1] == 2 for item in creates)
+    assert len({item["p"][0] for item in creates}) == 3
     for index, sid in enumerate(stream.series):
         fill(stream, sid, 120 + index)
     assert len(events) == 3
@@ -126,6 +127,54 @@ def test_subscription_removal_and_transport_timeout_are_latched():
         ["qs1", {"n": "BIST:GARAN", "s": "ok", "v": {"lp": 100, "lp_time": clock[0]}}],
     )
     assert events == []
+
+
+def test_provider_one_series_per_chart_session_limit_preserves_shared_quote_socket():
+    stream, events, _ = connection()
+    chart_sessions = set()
+
+    def provider_send(message):
+        stream.sent.append(message)
+        if message["m"] == "create_series":
+            session = message["p"][0]
+            if session in chart_sessions:
+                packet(
+                    stream,
+                    "critical_error",
+                    [session, "exceed limit of series in the session", "method: create_series"],
+                )
+            chart_sessions.add(session)
+
+    stream._ws.send = provider_send
+    wanted = {
+        ("BIST", "THYAO", timeframe) for timeframe in ("1D", "2D", "3D", "6D", "1W", "2W", "3W")
+    }
+    stream.reconcile(wanted)
+    assert stream.healthy
+    assert len(chart_sessions) == len(wanted)
+    assert len([item for item in stream.sent if item["m"] == "quote_add_symbols"]) == 1
+    for sid in stream.series:
+        fill(stream, sid, 120)
+    assert {event["key"] for event in events} == wanted
+    remaining = {("BIST", "THYAO", "1D")}
+    stream.reconcile(remaining)
+    assert set(stream.sessions) == remaining
+    assert "BIST:THYAO" in stream.members_by_full
+    assert not [item for item in stream.sent if item["m"] == "quote_remove_symbols"]
+    stream.reconcile(set())
+    assert not stream.sessions and not stream.sessions_by_id and not stream.members_by_full
+    assert len([item for item in stream.sent if item["m"] == "quote_remove_symbols"]) == 1
+
+
+def test_chart_session_protocol_limit_is_not_reported_as_authentication_failure():
+    stream, _, _ = connection()
+    packet(
+        stream,
+        "critical_error",
+        ["cs_private", "exceed limit of series in the session", "method: create_series"],
+    )
+    assert not stream.healthy
+    assert not stream.auth_failed
 
 
 def test_malformed_private_payload_and_send_error_are_never_logged(caplog):

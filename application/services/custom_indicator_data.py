@@ -1039,6 +1039,7 @@ class CustomIndicatorData:
                 "source": f"borsapy_tradingview:{'BIST' if market_type == 'BIST' else 'BINANCE'}",
                 "received_at": _iso(result["received"]) if result else None,
                 "source_timestamp": _iso(result["source_time"]) if result else None,
+                "observation_price": result.get("live_price") if result else None,
                 "continuity_id": result.get("continuity") if result else None,
                 "observation_id": result.get("digest") if result else None,
                 "points": points,

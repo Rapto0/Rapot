@@ -57,6 +57,7 @@ middleware/emir kabulünü tamamlamaz.
 - [Frontend bağımlılık güvenliği ve üretim kabulü](FRONTEND_DEPENDENCY_SECURITY.md)
 - [21 Eylül Pine derleme/grafik kabulü](PINE_RUNTIME_ACCEPTANCE.md)
 - [7 Ekim canlı BIST, Telegram ve veri kalitesi kabulü](LIVE_MARKET_ACCEPTANCE_2026-10-07.md)
+- [14 Ekim özel gösterge canlı kabulü ve bağlantı düzeltmeleri](LIVE_INDICATOR_ACCEPTANCE_2026-10-14.md)
 - [8 Ekim tam seans ve 3.000 alarm kabulü; hacim/takvim bulguları](FULL_SESSION_ACCEPTANCE_2026-10-08.md)
 - [12 Ekim izleme listeleri, CPU/RAM ve ihtiyaç temelli mum kuyruğu](WATCHLIST_EFFICIENCY_2026-10-12.md)
 - [Backup branch karşılaştırması ve aktarım yapmama kararı](BACKUP_BRANCH_REVIEW.md)

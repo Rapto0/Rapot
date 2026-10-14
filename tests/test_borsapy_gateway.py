@@ -642,6 +642,94 @@ def test_existing_quotes_read_during_history_lock_but_new_subscriptions_wait(gat
         thread.join(2)
 
 
+def test_watchlist_reuses_ready_server_quotes_while_account_lock_is_busy(gateway):
+    from application.services.borsapy_gateway import _AUTH_LOCK
+    from application.services.borsapy_market_data import BorsapyMarketData
+
+    connect(gateway)
+    symbols = [f"EQUITY{index}" for index in range(50)]
+    connection = gateway.create_alarm_quote_stream(symbols, lambda *args: None)
+    connection._entry["stream"].quote = {"last": 125, "timestamp": time.time()}
+    connection._entry["received"].update({symbol: time.time() for symbol in symbols})
+    instances = len(FakeStream.instances)
+    entered, release = threading.Event(), threading.Event()
+
+    def slow_history():
+        with _AUTH_LOCK:
+            entered.set()
+            release.wait(5)
+
+    thread = threading.Thread(target=slow_history)
+    thread.start()
+    try:
+        assert entered.wait(2)
+        rows = BorsapyMarketData(gateway).quotes([symbol + ".IS" for symbol in symbols])
+        assert len(rows) == 50
+        assert all(row["state"] == "ok" and row["regularMarketPrice"] == 125 for row in rows)
+        assert len(FakeStream.instances) == instances
+        assert gateway._quotes is None
+        assert gateway.fake.history_calls == 0
+    finally:
+        release.set()
+        thread.join(2)
+
+
+@pytest.mark.parametrize(
+    "change",
+    ["credentials", "epoch", "closed", "disconnected", "expired", "auth", "membership", "exchange"],
+)
+def test_shared_server_quote_read_rejects_invalidated_source(gateway, monkeypatch, change):
+    connect(gateway)
+    connection = gateway.create_alarm_quote_stream(["THYAO"], lambda *args: None)
+    entry = connection._entry
+
+    def mutate():
+        if change == "credentials":
+            monkeypatch.setattr(gateway._store, "revision", lambda: "changed-on-disk")
+        elif change == "epoch":
+            gateway._data_epoch += 1
+        elif change == "closed":
+            connection.close()
+        elif change == "disconnected":
+            entry["stream"]._connected.clear()
+        elif change == "expired":
+            gateway.clock[0] += 91
+        elif change == "auth":
+            entry["auth_error"] = True
+        elif change == "membership":
+            entry["symbols"].pop("THYAO")
+        else:
+            entry["symbols"]["THYAO"] = ("NASDAQ", 0)
+
+    original = gateway._read_quotes
+
+    def changed_during_read(entry, symbols):
+        result = original(entry, symbols)
+        mutate()
+        return result
+
+    monkeypatch.setattr(gateway, "_read_quotes", changed_during_read)
+    assert gateway._shared_alarm_snapshot([("BIST", "THYAO")]) is None
+    # The pre-read check also rejects the same invalidated source.
+    assert gateway._shared_alarm_snapshot([("BIST", "THYAO")]) is None
+
+
+def test_shared_server_quotes_preserve_freshness_errors_and_exchange_identity(gateway):
+    connect(gateway)
+    connection = gateway.create_alarm_quote_stream(["THYAO", "GARAN"], lambda *args: None)
+    entry = connection._entry
+    entry["stream"].quote = {"last": 125, "timestamp": time.time() - 1000}
+    entry["received"].update(THYAO=time.time(), GARAN=time.time())
+    entry["errors"].add("GARAN")
+    result = gateway.quote_snapshot([("BIST", "THYAO"), ("BIST", "GARAN")])
+    assert result["BIST:THYAO"]["state"] == "stale"
+    assert result["BIST:GARAN"]["state"] == "error"
+    assert result["BIST:GARAN"]["price"] is None
+    assert gateway._quotes is None
+    assert gateway._shared_alarm_snapshot([("NASDAQ", "THYAO")]) is None
+    assert gateway._shared_alarm_snapshot([("BIST", "MISSING")]) is None
+
+
 def test_public_calendar_callback_does_not_hold_account_lock(gateway):
     connect(gateway)
     entered, release = threading.Event(), threading.Event()

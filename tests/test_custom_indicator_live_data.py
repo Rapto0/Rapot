@@ -61,6 +61,9 @@ def test_live_prices_cross_and_return_before_next_timer_without_history_io():
     assert service._results[key]["live_price"] == 20
     assert service._results[key]["previous"]["live_price"] == 200
     assert service.status()["live_processed"] == 4
+    preview = service.preview("rsi_votes", inputs(), "THYAO")
+    assert preview["observation_price"] == 20
+    assert preview["latest"]["observed_at"] == clock[0]
 
 
 def test_unknown_native_bucket_never_projects_old_multiday_identity():

@@ -141,6 +141,12 @@ hesaplanmaz. Canlı hesaplayıcı en fazla on satırlık kapalı durum özeti tu
 Bir sembolün bütün ayarları aynı fiyat ve kaynak zamanıyla yayımlandıktan sonra
 ilgili alarmlar eşzamanlı çağrıyla değerlendirilir; bu işlem bitmeden sonraki
 fiyat gözlemi onun yerini alamaz. Kısa eşik aşımı/geri dönüş böyle korunur.
+Her native periyot ayrı TradingView chart session kullanır; aynı sembolün
+bütün periyotları ve tek fiyat aboneliği aynı sıralı WebSocket üzerinde kalır.
+14 Ekim canlı denemesinde aynı chart session'a ikinci fiyat serisinin
+eklenmesi sağlayıcı tarafından reddedildi; bu protokol sınırı yerel testlere
+de eklendi. Önizlemedeki `observation_price`, kaynak zamanı ve hesap çıktısıyla
+aynı fiyat gözlemidir; ayrı grafik fiyatı kullanılarak aynı an varsayılmaz.
 Sembol-kural ilişkisi bitset ile indekslenir; her tick bütün evreni taramaz.
 Değişmeyen gözlem durumları SQLite yazısı üretmez. Olaylar hemen kalıcılaştırılır;
 olay üretmeyen durum değişimleri sınırlı gruplarla birleştirilir. Telegram

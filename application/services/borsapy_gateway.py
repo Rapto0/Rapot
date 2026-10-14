@@ -904,12 +904,49 @@ class BorsapyGateway:
             self._authenticated, self._token, self._blocked = False, None, False
             self._state, self._message = "auth_needed", "Alarm bağlantısı yeniden doğrulanacak."
 
+    def _shared_alarm_snapshot(self, symbols: list[tuple[str, str]]) -> dict | None:
+        """Read existing BIST subscriptions without new sockets or account-lock waits."""
+        if any(exchange != "BIST" for exchange, _ in symbols):
+            return None
+        epoch, revision = self._data_epoch, self._credentials_revision
+
+        def matches(connection):
+            return (
+                self._authenticated
+                and not self._blocked
+                and self._data_epoch == epoch
+                and self._credentials_revision == revision
+                and connection.epoch == epoch
+                and connection in self._alarm_quotes
+                and connection.connected
+                and all(
+                    connection._entry["symbols"].get(symbol, (None,))[0] == exchange
+                    for exchange, symbol in symbols
+                )
+            )
+
+        try:
+            if self._store.revision() != revision:
+                return None
+            for connection in tuple(self._alarm_quotes):
+                if not matches(connection):
+                    continue
+                result = self._read_quotes(connection._entry, symbols)
+                # Credential edits, unsubscribe and transport failure may occur
+                # during the read. Never publish a mixed or retired account view.
+                if matches(connection) and self._store.revision() == revision:
+                    return result
+        except SecretStoreError:
+            pass
+        return None
+
     def quote_snapshot(self, symbols: list[tuple[str, str]]) -> dict[str, dict]:
-        """One account-scoped socket for bounded dashboard/watchlist batches.
+        """Account-scoped quotes for bounded dashboard/watchlist batches.
 
         Keys are exchange:symbol. Upstream indexes by the bare symbol, so a
         conflicting exchange is rejected instead of returning the wrong market.
-        The pool is separate from chart sessions and expires unused subscriptions.
+        Existing server BIST subscriptions are shared when the whole batch is
+        covered. Other requests use a leased pool separate from chart sessions.
         """
         allowed = {"BIST", "NASDAQ", "NYSE", "SP", "TVC", "CBOE", "FX", "OANDA"}
         if not 1 <= len(symbols) <= 50 or any(
@@ -919,6 +956,9 @@ class BorsapyGateway:
             raise BorsapyGatewayError("Geçersiz fiyat listesi.", 422)
         if len({symbol for _, symbol in symbols}) != len(set(symbols)):
             raise BorsapyGatewayError("Aynı sembol için farklı borsalar birlikte istenemez.", 422)
+        shared = self._shared_alarm_snapshot(symbols)
+        if shared is not None:
+            return shared
         if not _AUTH_LOCK.acquire(timeout=1):
             # Read an existing, account-matching socket while a history request
             # owns the provider auth lock. Never connect/subscribe/authenticate here.

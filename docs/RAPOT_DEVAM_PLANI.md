@@ -1,6 +1,6 @@
 # Rapot Devam Planı
 
-**Güncel özet: 13 Ekim 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
+**Güncel özet: 14 Ekim 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
 Çalışma kuralı: **incele → düzelt → doğrula → belgeyi güncelle**.
 Teknik ayrıntılar [belge indeksinde](README.md), çalışma kuralları
 [AGENTS.md](../AGENTS.md), önceki planın eksiksiz metni
@@ -8,6 +8,18 @@ Teknik ayrıntılar [belge indeksinde](README.md), çalışma kuralları
 Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi değildir.
 
 ## Kaldığımız nokta
+
+- **14 Ekim — manuel canlı gösterge kabulü:** Kullanıcı piyasanın açık olduğunu
+  bildirdi; kontrol 07:10:40 UTC'de başladı. Native WS ikinci fiyat serisini aynı
+  chart session'da reddediyordu. Her native TF ayrı session'a taşındı; sembol
+  başına tek quote ve aynı sıralı soket korunur. İzole gerçek bağlantıda 11 TF,
+  15 fiyat/226 mum olayı ve sıfır hata görüldü. Dashboard liste fiyatları mevcut
+  alarm akışını güvenli hesap/revizyon/epoch kontrolüyle paylaşır. 1.995 Python/
+  bir atlama, 307 frontend, typecheck/lint ve Ruff geçti. Bu kaynak aşamasında
+  taze yedek, yayın ve uygulama içi kabul sürüyor; tamamlanmış sayılmaz.
+  [Canlı kabul kaydı](LIVE_INDICATOR_ACCEPTANCE_2026-10-14.md) ölçümleri ve açık
+  sınırları tutar. Yeni otomatik takip veya emir yok; gerçek testler kontrollü
+  manuel kabul kapsamındadır.
 
 - **13 Ekim — fiyat güncellemesiyle canlı özel göstergeler:** Kullanıcı 30 saniyeyi
   kaldırmayı, beş göstergede bütün etkin TF'lerin aynı güncel fiyat anında

@@ -1,9 +1,21 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-Kaynaklarla son karşılaştırma: **13 Ekim 2026 / gösterge ve izleme listesi alarmları**. İş sırası, kullanıcı
+Kaynaklarla son karşılaştırma: **14 Ekim 2026 / canlı gösterge kabulü**. İş sırası, kullanıcı
 yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DEVAM_PLANI.md)
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 Teknik rehberler [docs dizininde](docs/README.md) listelenir.
+
+**14 Ekim canlı kabul başladı:** Kullanıcının “Piyasa şuan açık” mesajıyla
+07:10:40 UTC'de manuel kontrol açıldı; otomatik takip yok. Beş özel gösterge
+akışındaki gerçek `exceed limit of series in the session` hatası ayrı native
+periyot chart session'larıyla düzeltilir; sembolün tek fiyat aboneliği ve bütün
+periyotları aynı WS üzerinde kalır. 11 periyotlu izole canlı protokol kabulü
+geçti. Dashboard BIST listesi mevcut sunucu fiyat akışını hesap/revizyon/epoch
+kontrolüyle paylaşır. 1.995 Python/bir atlama, 307 frontend ve Ruff geçti.
+Üretim yayını ve uygulama içi canlı kabul henüz bu kaynak aşamasında bekler;
+sonuçlar [14 Ekim kaydında](docs/LIVE_INDICATOR_ACCEPTANCE_2026-10-14.md) tutulur.
+631 resmî payın tamamı abonelikte; 07:16 örneği 565 taze/66 eski/0 eksik,
+tam seans veya gecikmesiz tüm evren kanıtı değildir. Mum hacmi hâlâ eksiktir.
 
 **13 Ekim son talimat — canlı fiyat politikası:** Kullanıcı 30 saniyelik geçmiş
 sorgusu yerine beş göstergenin aynı canlı fiyat anındaki bütün etkin zaman

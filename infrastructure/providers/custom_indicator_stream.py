@@ -1,8 +1,9 @@
 """Bounded, multiplexed native TradingView charts and matching price events.
 
 The upstream convenience stream uses one fixed ``$prices`` identifier. This
-adapter gives every native series its own identifier and each symbol its own
-chart session; native 2D/3W bars are never assembled from calendar arithmetic.
+adapter gives every native series its own identifier and chart session. The
+provider allows one price series per chart session; all of a symbol's sessions
+and its single quote subscription still share one ordered WebSocket.
 """
 
 from __future__ import annotations
@@ -40,6 +41,7 @@ def stream_class(base):
             super().__init__(auth_token=token)
             self.callback, self.clock = callback, clock
             self.sessions, self.series, self.quotes = {}, {}, {}
+            self.sessions_by_id = {}
             self.members_by_full = {}
             self.counter = 0
             self.failed = self.auth_failed = self.closed = False
@@ -131,37 +133,38 @@ def stream_class(base):
                 for sid, item in list(self.series.items()):
                     if item["key"] not in wanted:
                         self._send(self._create_message("remove_series", [item["session"], sid]))
+                        self._send(self._create_message("chart_delete_session", [item["session"]]))
+                        self.sessions.pop(item["key"], None)
+                        self.sessions_by_id.pop(item["session"], None)
                         del self.series[sid]
                 present = {item["key"] for item in self.series.values()}
                 active_symbols = {key[:2] for key in wanted}
-                for member, item in list(self.sessions.items()):
+                for full, member in list(self.members_by_full.items()):
                     if member not in active_symbols:
-                        self._send(self._create_message("chart_delete_session", [item["id"]]))
                         self._send(
                             self._create_message(
-                                "quote_remove_symbols", [self._quote_session, item["full"]]
+                                "quote_remove_symbols", [self._quote_session, full]
                             )
                         )
-                        self.sessions.pop(member)
-                        self.members_by_full.pop(item["full"], None)
-                        self.quotes.pop(item["full"], None)
+                        self.members_by_full.pop(full)
+                        self.quotes.pop(full, None)
                 for market, symbol, timeframe in sorted(wanted - present):
                     exchange = "BIST" if market == "BIST" else "BINANCE"
                     member = market, symbol
-                    item = self.sessions.get(member)
-                    if item is None:
-                        session = self._generate_session_id("cs")
-                        full = f"{exchange}:{symbol}"
-                        item = {"id": session, "full": full, "metadata": {}}
-                        self.sessions[member] = item
+                    full = f"{exchange}:{symbol}"
+                    session = self._generate_session_id("cs")
+                    item = {"id": session, "full": full, "metadata": {}}
+                    self.sessions[(market, symbol, timeframe)] = item
+                    self.sessions_by_id[session] = item
+                    self._send(self._create_message("chart_create_session", [session, ""]))
+                    config = json.dumps(
+                        {"symbol": full, "adjustment": "splits", "session": "regular"}
+                    )
+                    self._send(
+                        self._create_message("resolve_symbol", [session, "sym", f"={config}"])
+                    )
+                    if full not in self.members_by_full:
                         self.members_by_full[full] = member
-                        self._send(self._create_message("chart_create_session", [session, ""]))
-                        config = json.dumps(
-                            {"symbol": full, "adjustment": "splits", "session": "regular"}
-                        )
-                        self._send(
-                            self._create_message("resolve_symbol", [session, "sym", f"={config}"])
-                        )
                         self._send(
                             self._create_message("quote_add_symbols", [self._quote_session, full])
                         )
@@ -200,7 +203,19 @@ def stream_class(base):
                     continue
                 if method == "critical_error":
                     self.failed = True
-                    self.auth_failed = True
+                    self.auth_failed = any(
+                        isinstance(value, str)
+                        and any(
+                            marker in value.lower()
+                            for marker in (
+                                "authentication",
+                                "auth_token",
+                                "auth token",
+                                "unauthorized",
+                            )
+                        )
+                        for value in params
+                    )
                     return
                 events = []
                 with self._lock:
@@ -220,14 +235,14 @@ def stream_class(base):
                         and len(params) >= 3
                         and isinstance(params[2], dict)
                     ):
-                        for item in self.sessions.values():
-                            if item["id"] == params[0]:
-                                item["metadata"] = {
-                                    key: value
-                                    for key in SESSION_KEYS
-                                    if isinstance((value := params[2].get(key)), str)
-                                    and len(value) <= 32768
-                                }
+                        item = self.sessions_by_id.get(params[0])
+                        if item is not None:
+                            item["metadata"] = {
+                                key: value
+                                for key in SESSION_KEYS
+                                if isinstance((value := params[2].get(key)), str)
+                                and len(value) <= 32768
+                            }
                     elif (
                         method in {"timescale_update", "du"}
                         and len(params) >= 2
@@ -302,7 +317,7 @@ def stream_class(base):
                 "kind": "bars",
                 "key": item["key"],
                 "rows": tuple(item["rows"].values()),
-                "metadata": self.sessions[item["key"][:2]]["metadata"].copy(),
+                "metadata": self.sessions[item["key"]]["metadata"].copy(),
                 "received_at": self.clock(),
             }
 
