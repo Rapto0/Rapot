@@ -4,12 +4,10 @@ Fetches and caches BIST data with automatic refresh.
 """
 
 import asyncio
-import json
 import ssl
 from contextlib import suppress
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from pathlib import Path
 from typing import Any
 
 import aiohttp
@@ -81,48 +79,11 @@ class BISTDataService:
         self._load_symbols()
 
     def _load_symbols(self):
-        """Load BIST symbols from file."""
-        symbols_file = Path(__file__).parent / "data" / "bist_symbols.json"
-        if symbols_file.exists():
-            with open(symbols_file) as f:
-                data = json.load(f)
-                self._symbols = data.get("symbols", [])
-                logger.info(f"Loaded {len(self._symbols)} BIST symbols")
-        else:
-            # Default BIST 30 symbols
-            self._symbols = [
-                "AKBNK",
-                "ARCLK",
-                "ASELS",
-                "BIMAS",
-                "EKGYO",
-                "EREGL",
-                "FROTO",
-                "GARAN",
-                "GUBRF",
-                "HEKTS",
-                "ISCTR",
-                "KCHOL",
-                "KOZAA",
-                "KOZAL",
-                "KRDMD",
-                "PETKM",
-                "PGSUS",
-                "SAHOL",
-                "SASA",
-                "SISE",
-                "TAVHL",
-                "TCELL",
-                "THYAO",
-                "TKFEN",
-                "TOASO",
-                "TTKOM",
-                "TUPRS",
-                "VAKBN",
-                "VESTL",
-                "YKBNK",
-            ]
-            logger.info("Using default BIST 30 symbols")
+        """Use the same approved share membership as the API and alarms."""
+        from application.services.bist_share_universe import share_universe
+
+        self._symbols = list(share_universe().symbols)
+        logger.info(f"Loaded {len(self._symbols)} verified BIST share symbols")
 
     async def start(self):
         """Start the BIST data service."""

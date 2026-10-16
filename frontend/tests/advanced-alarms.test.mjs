@@ -240,7 +240,7 @@ test('saving is explicit and never silently enables Telegram', async () => {
   view.elements().find(e => e.type === 'button' && text(e).includes('Yeni alarm')).props.onClick(); view.render();
   const labelInput = label => allElements(view.elements().find(e => e.type === 'label' && text(e).startsWith(label))).find(e => e.type === 'input');
   labelInput('Alarm adı').props.onChange({ target: { value: 'Fiyat geçişi' } }); view.render();
-  labelInput('BIST hisseleri').props.onChange({ target: { value: 'THYAO' } }); view.render();
+  labelInput('BIST sembolleri').props.onChange({ target: { value: 'THYAO' } }); view.render();
   assert.equal(view.requests.length, 0);
   await view.elements().find(e => e.type === 'form').props.onSubmit({ preventDefault() {} }); view.render();
   assert.equal(view.requests[0].name, 'saveAdvancedAlarm');
@@ -396,7 +396,7 @@ test('adding a fetched universe is explicit and draft-only; empty or failed resp
   const local = { id: 'old', name: 'Liste', rows: [{ kind: 'symbol', rawSymbol: 'THYAO', marketType: 'BIST' }, { kind: 'symbol', rawSymbol: 'BTCUSDT', marketType: 'Kripto' }] };
   const view = harness({ localLists: [local], searchParams: '?watchlist=old', symbolLoader: async name => ({ symbols: name === 'fetchBistSymbols' ? ['THYAO', 'GARAN'] : ['BTCUSDT', 'ETHUSDT'] }) });
   assert.equal(view.requests.length, 0);
-  await view.elements().find(e => e.type === 'button' && text(e) === 'Tüm BIST kodlarını ekle').props.onClick(); view.render();
+  await view.elements().find(e => e.type === 'button' && text(e) === 'BIST hisselerini ekle').props.onClick(); view.render();
   assert.equal(view.elements().find(e => e.type === 'textarea').props.value, 'THYAO, GARAN');
   await view.elements().find(e => e.type === 'button' && text(e) === 'Binance USDT çiftlerini ekle').props.onClick(); view.render();
   assert.ok(view.elements().some(e => e.type === 'input' && e.props.value === 'BTCUSDT, ETHUSDT'));
@@ -404,7 +404,7 @@ test('adding a fetched universe is explicit and draft-only; empty or failed resp
   assert.match(view.text(), /anlık bir liste kopyası/);
   for (const loader of [async () => ({ symbols: [] }), async () => { throw new Error('private provider message'); }]) {
     const failed = harness({ localLists: [local], searchParams: '?watchlist=old', symbolLoader: loader });
-    await failed.elements().find(e => e.type === 'button' && text(e) === 'Tüm BIST kodlarını ekle').props.onClick(); failed.render();
+    await failed.elements().find(e => e.type === 'button' && text(e) === 'BIST hisselerini ekle').props.onClick(); failed.render();
     assert.equal(failed.elements().find(e => e.type === 'textarea').props.value, 'THYAO');
     assert.match(failed.text(), /Mevcut girişler korundu/);
     assert.doesNotMatch(failed.text(), /private provider message/);

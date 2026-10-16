@@ -399,6 +399,9 @@ class AdvancedMarketData:
             self._stop.wait(1)
 
     def _set_universe(self, symbols: list[str]) -> None:
+        normalize = getattr(self._provider, "filter_universe", None)
+        if normalize is not None:
+            symbols = normalize(symbols)
         symbols = sorted(
             {
                 value
@@ -1166,13 +1169,16 @@ class AdvancedMarketData:
     def coverage(self) -> dict:
         """Bounded diagnostic view; no provider, history enqueue or disk access.
 
-        KAP company codes are candidates, not a verified exchange equity universe.
+        The production share universe is a dated verified KAP snapshot. Explicit
+        user symbols remain independent; a registry code is not a trading-status proof.
         Quote absence cannot distinguish an invalid code from an inactive security.
         This sampled view also cannot certify every intervening provider tick.
         """
         with self._lock:
             now = self._clock()
             candidates = {item["symbol"] for item in self._universe}
+            describe = getattr(self._provider, "universe_metadata", None)
+            universe_metadata = describe() if describe is not None else {}
             subscribed = set(self._subscriptions)
             all_symbols = candidates | subscribed | self._explicit_bist
             names = sorted(all_symbols)[:4000]
@@ -1248,11 +1254,14 @@ class AdvancedMarketData:
                 "universe": {
                     "source": "borsapy_kap_company_codes",
                     "classification": "unverified_candidates",
-                    "candidate_count": len(candidates),
                     "subscription_limit": self.settings.advanced_alarm_max_symbols,
                     "provider_source_total_known": False,
                     "equity_membership_verified": False,
                     "provider_resolution_verified": False,
+                    **universe_metadata,
+                    "candidate_count": len(candidates),
+                    "universe_complete": len(candidates)
+                    == universe_metadata.get("source_total_count"),
                 },
                 "rows": rows,
                 "row_count": len(rows),
@@ -1267,6 +1276,8 @@ class AdvancedMarketData:
     def status(self) -> dict:
         with self._lock:
             now = self._clock()
+            describe = getattr(self._provider, "universe_metadata", None)
+            universe_metadata = describe() if describe is not None else {}
             quotes = [pair[0] for pair in self._quotes.values()]
             fresh = sum(
                 max(now - q.source, now - q.received)
@@ -1302,6 +1313,12 @@ class AdvancedMarketData:
                 if fresh
                 else self._message,
                 "universe_count": len(self._universe),
+                "universe_as_of": universe_metadata.get("audit_as_of"),
+                "universe_source": universe_metadata.get("source"),
+                "universe_source_count": universe_metadata.get("source_total_count"),
+                "universe_equity_membership_verified": universe_metadata.get(
+                    "equity_membership_verified", False
+                ),
                 "tracked_symbols": tracked,
                 "subscribed_symbols": len(self._subscriptions)
                 if self._connection and self._connection.connected

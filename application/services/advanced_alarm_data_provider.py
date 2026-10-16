@@ -9,6 +9,7 @@ from typing import Any
 
 import pandas as pd
 
+from application.services.bist_share_universe import share_universe
 from application.services.borsapy_gateway import get_borsapy_gateway
 
 PERIODS = {
@@ -31,6 +32,8 @@ class NativeMarketProvider:
         self._client_factory = client_factory
         self._clients: dict[threading.Thread, Any] = {}
         self._clients_lock = threading.Lock()
+        self._share_universe = share_universe()
+        self._share_symbols = frozenset(self._share_universe.symbols)
 
     @staticmethod
     def _close_client(client) -> None:
@@ -90,8 +93,18 @@ class NativeMarketProvider:
         return self.gateway.memory_epoch()
 
     def universe(self) -> list[str]:
-        frame = self.gateway.run_public(lambda bp: bp.companies())
-        return frame["ticker"].tolist()
+        return list(self._share_universe.symbols)
+
+    def filter_universe(self, symbols) -> list[str]:
+        """Discard old issuer candidates only from the automatic universe cache."""
+        return [
+            symbol
+            for symbol in symbols
+            if isinstance(symbol, str) and symbol in self._share_symbols
+        ]
+
+    def universe_metadata(self) -> dict:
+        return self._share_universe.metadata()
 
     def open_quotes(self, symbols: list[str], callback):
         return self.gateway.create_alarm_quote_stream(symbols, callback)

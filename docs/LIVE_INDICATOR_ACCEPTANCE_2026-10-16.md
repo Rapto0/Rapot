@@ -9,6 +9,41 @@ geçmiş düzeltmesi `5472db4` ile yayımlandı; bağımsız yayın kabulleri ge
 Mevcut 805 üyeli listenin tamamının hazır canlı hesabı henüz
 doğrulanmadı.** Önceki denemelerin başarısız ve sınırlı sonuçları aşağıda korunur.
 
+## Kullanıcının 631 hisse / 174 diğer kod ayrımı
+
+Kullanıcı 12 Ekim tarihli Excel denetimini ve 631 kodluk metin dosyasını gönderdi;
+hem “BIST Tümü” evreninin 631 pay olarak düzeltilmesini hem mevcut SMI listesinde
+bu payların kalıp diğer 174 kodun ayrı, alarmsız listede saklanmasını açıkça
+onayladı. Dosyalarda 805 benzersiz kod, 631 pay ve 174 ayrılan kod vardır. TXT
+ile Excel'in pay sırası aynı; 631'lik küme, 14 Ekim'de saklanan resmî KAP pay
+pazarları kümesiyle de aynı. Ayrılanların sınıfları 124 borçlanma aracı
+ihraççısı, 12 alternatif kurum kodu, dört yapılandırılmış ürün, bir gayrimenkul
+sertifikası, bir emtia sertifikası ihraççısı ve 32 pay kodu eşleşmesi olmayan
+koddur. Bu kodların tümü “sahte” veya Borsa İstanbul'la ilgisiz değildir.
+
+Ortak hisse evreni tarihli, özeti doğrulanan kaynak dosyasından gelir.
+Şirket/ihraççı araştırması, kullanıcının açıkça eklediği diğer semboller ve
+karma listeler bu hisse filtresine tabi değildir. Denetim tarihi 12 Ekim;
+resmî saklanmış kaynakla ek karşılaştırma 14 Ekim'dir. Bugünkü canlı işlem,
+fiyat erişimi veya gelecekte değişmeyecek üyelik iddiası yapılmaz. Kaynak
+düzeltmesi ve sunucudaki liste aktarımının kabulü ayrı kaydedilir.
+
+## Kripto yıl geçişinde bulunan gerçek native mum uyuşmazlığı
+
+`5472db4` üzerinde izole, sınırlı ve salt okunur BTCUSDT tanısı
+**15:12:38–15:13:04 UTC**'de on periyodu sorguladı. Sağlayıcı bütün serileri
+tamamladı, protokol hatası yoktu; günlük ve aylık doğrulama geçti. 2–7D ile
+2–3W olmak üzere sekiz periyot, mevcut sabit süre kontrolünde yıl sınırındaki
+kısalmış native mumlar nedeniyle reddedildi. Örneğin 30 Aralık 2022 tarihli
+3D mumdan sonra 1 Ocak 2023 gerçek native mumu geliyor; sabit üç gün eklemek
+2 Ocak üretir. Bu nedenle reddi genel sağlayıcı gecikmesi saymak yanlıştı.
+[TradingView'in resmî hizalama açıklaması](https://www.tradingview.com/charting-library-docs/latest/ui_elements/Resolution/#bar-alignment)
+günlük periyotların 1 Ocak'ta, haftalıkların yılın ilk tam haftasında yeniden
+başladığını ve yıl sonunda kısalabildiğini belirtir. Tanı kanıtı
+`btc-native-history-5472-first.json`; fiyat, ham paket veya kimlik içermez.
+Kaynak/container ve hesap revizyonu korundu. Bu tanı, canlı beşli alarm kabulü
+değildir; BIST periyotları ayrıca kendi native tanıklarıyla korunur.
+
 ## Sonraki kaynak düzeltmesi: önizleme yenilemesi ve gereken periyotlar
 
 `5472db4` üzerindeki 180 saniyelik BTCUSDT kabulü de **14:58:27–15:01:27 UTC**

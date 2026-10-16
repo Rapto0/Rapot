@@ -1,5 +1,14 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
+**16 Ekim ek kullanıcı talimatı:** Gönderilen 12 Ekim denetimindeki 805 benzersiz
+kodun yalnız 631'i KAP pay pazarlarıyla eşleşir. Kullanıcı hem sistemin “BIST
+Tümü” evreninin 631 paya indirilmesini hem mevcut SMI alarmı listesindeki 174
+diğer kodun ayrı, alarmsız bir listede korunmasını açıkça onayladı. 174 kod
+“sahte” veya Borsa İstanbul'la ilgisiz sayılmaz; kurum/ihraççı, hisse dışı ürün
+ve pay eşleşmesi olmayan kodlar içerir. Bu tarihli sınıflama canlı veri veya
+gelecekte değişmeyecek üyelik kanıtı değildir. İşlemin gerçek yayın/liste
+sonucu 16 Ekim kabul kaydına yazılır; bu talimat tamamlanma kanıtı değildir.
+
 Kaynaklarla son karşılaştırma: **16 Ekim 2026 / büyük liste canlı akış düzeltmesi**. İş sırası, kullanıcı
 yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DEVAM_PLANI.md)
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.

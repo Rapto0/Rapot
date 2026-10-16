@@ -1,6 +1,5 @@
 """BIST primary selection, independent confirmation and private cache boundaries."""
 
-import threading
 import time
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -19,22 +18,6 @@ def bars():
         {"Open": [10.0], "High": [12.0], "Low": [9.0], "Close": [11.0], "Volume": [100.0]},
         index=pd.date_range("2026-10-02 10:00", periods=1, tz="Europe/Istanbul"),
     )
-
-
-@pytest.fixture(params=[0.0, 3_000_000.0], ids=["fresh-clock", "long-running-clock"])
-def isolated_universe(monkeypatch, request):
-    clock = [request.param]
-    # The clock origin is arbitrary. Replace only data_loader's clock facade;
-    # futures/thread timeout machinery must continue using the real clock.
-    monkeypatch.setattr(data_loader, "time", SimpleNamespace(monotonic=lambda: clock[0]))
-    monkeypatch.setattr(settings, "borsapy_use_for_bist", True)
-    monkeypatch.setattr(data_loader, "_bist_symbols_cache", None)
-    monkeypatch.setattr(data_loader, "_bist_symbols_future", None)
-    monkeypatch.setattr(data_loader, "_bist_symbols_executor", None)
-    monkeypatch.setattr(data_loader, "_bist_symbols_error", None)
-    yield clock
-    if data_loader._bist_symbols_executor is not None:
-        data_loader._bist_symbols_executor.shutdown(wait=True, cancel_futures=True)
 
 
 def test_borsapy_is_the_default_not_a_silent_legacy_fallback(monkeypatch):
@@ -134,95 +117,23 @@ async def test_borsapy_alarm_rechecks_gateway_after_connection_failure(monkeypat
         evaluator.close()
 
 
-def test_company_universe_is_lazy_bounded_copied_and_cached(monkeypatch, isolated_universe):
-    company = Mock(return_value=pd.DataFrame({"ticker": ["THYAO", "GARAN", "THYAO"]}))
-    gateway_calls = []
-
-    def run(callback):
-        gateway_calls.append("public")
-        return callback(SimpleNamespace(companies=company))
-
-    monkeypatch.setattr(
-        borsapy_gateway, "get_borsapy_gateway", lambda: SimpleNamespace(run_public=run)
-    )
-    assert data_loader.bist_symbols_status()["state"] == "not_loaded"
-    company.assert_not_called()
-    first = data_loader.get_all_bist_symbols()
-    assert first == ["GARAN", "THYAO"]
-    first.clear()
-    assert data_loader.get_all_bist_symbols() == ["GARAN", "THYAO"]
-    company.assert_called_once()
-    assert gateway_calls == ["public"]
-    assert data_loader.bist_symbols_status()["state"] == "ready"
-    isolated_universe[0] += data_loader._BIST_SYMBOL_TTL_SECONDS - 1
-    assert data_loader.get_all_bist_symbols() == ["GARAN", "THYAO"]
-    assert data_loader.bist_symbols_status()["state"] == "ready"
-    company.assert_called_once()
-    isolated_universe[0] += 1
-    assert data_loader.bist_symbols_status()["state"] == "not_loaded"
-    assert data_loader.bist_symbols_status()["count"] == 0
-    company.return_value = pd.DataFrame({"ticker": ["ASELS"]})
-    assert data_loader.get_all_bist_symbols() == ["ASELS"]
-    assert company.call_count == 2
-    assert data_loader.bist_symbols_status()["state"] == "ready"
-
-
-@pytest.mark.parametrize(
-    "frame",
-    [
-        pd.DataFrame(),
-        pd.DataFrame({"ticker": ["INVALID/PAIR"]}),
-        pd.DataFrame({"ticker": ["THYAO"] * 2001}),
-    ],
-)
-def test_invalid_company_universe_never_returns_static_or_expired_data(
-    monkeypatch, isolated_universe, frame
+@pytest.mark.parametrize("use_borsapy", [True, False])
+def test_share_universe_is_approved_copied_and_independent_of_price_provider(
+    monkeypatch, use_borsapy
 ):
-    provider = Mock(side_effect=[pd.DataFrame({"ticker": ["OLD"]}), frame])
+    monkeypatch.setattr(settings, "borsapy_use_for_bist", use_borsapy)
     monkeypatch.setattr(
         borsapy_gateway,
         "get_borsapy_gateway",
-        lambda: SimpleNamespace(run_public=provider),
-    )
-    assert data_loader.get_all_bist_symbols() == ["OLD"]
-    isolated_universe[0] += data_loader._BIST_SYMBOL_TTL_SECONDS
-    with pytest.raises(data_loader.BistSymbolSourceError, match="eski listeye geçilmedi"):
-        data_loader.get_all_bist_symbols()
-    assert provider.call_count == 2
-    assert data_loader.bist_symbols_status()["state"] == "error"
-    assert data_loader.bist_symbols_status()["count"] == 0
-
-
-def test_slow_company_source_has_one_inflight_worker(monkeypatch, isolated_universe):
-    release = threading.Event()
-    calls = []
-
-    def load():
-        calls.append(True)
-        release.wait(timeout=2)
-        return ("THYAO",)
-
-    monkeypatch.setattr(data_loader, "_load_borsapy_symbols", load)
-    monkeypatch.setattr(data_loader, "_BIST_SYMBOL_TIMEOUT_SECONDS", 0.01)
-    try:
-        for _ in range(3):
-            with pytest.raises(data_loader.BistSymbolSourceError, match="zaman aşımına"):
-                data_loader.get_all_bist_symbols()
-        assert calls == [True]
-        assert data_loader.bist_symbols_status()["state"] == "error"
-    finally:
-        release.set()
-    assert data_loader.get_all_bist_symbols() == ["THYAO"]
-
-
-def test_explicit_legacy_universe_never_calls_borsapy(monkeypatch):
-    monkeypatch.setattr(settings, "borsapy_use_for_bist", False)
-    monkeypatch.setattr(
-        data_loader,
-        "_load_borsapy_symbols",
         Mock(side_effect=AssertionError("unexpected provider")),
     )
     symbols = data_loader.get_all_bist_symbols()
-    assert symbols == data_loader.ALL_BIST_TICKERS
-    assert symbols is not data_loader.ALL_BIST_TICKERS
-    assert data_loader.bist_symbols_status()["source"] == "legacy_json"
+    assert len(symbols) == len(set(symbols)) == 631
+    assert {"THYAO", "GARAN", "ASELS"} <= set(symbols)
+    assert not {"ACP", "ADBNK", "DRPHN"} & set(symbols)
+    symbols.clear()
+    assert len(data_loader.get_all_bist_symbols()) == 631
+    assert data_loader.bist_symbols_status()["source"] == "kap_verified_share_snapshot"
+    assert data_loader.bist_symbols_status()["audit_as_of"] == "2026-10-12"
+    assert data_loader.bist_symbols_status()["live_trading_status_verified"] is False
+    assert data_loader.get_all_bist_symbols() == data_loader.ALL_BIST_TICKERS

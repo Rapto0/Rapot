@@ -1,17 +1,13 @@
-import json
-import re
-import threading
 import time
 import unicodedata
-from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime
 from io import StringIO
-from pathlib import Path
 
 import pandas as pd
 from isyatirimhisse import fetch_stock_data
 
+from application.services.bist_share_universe import share_universe
 from config import rate_limits, signal_guard_settings
 from infrastructure.time import utc_now_naive
 from isyatirim_ssl import ensure_isyatirim_ca_bundle
@@ -228,121 +224,22 @@ def _get_binance_client():
     return _binance_client
 
 
-def _load_bist_symbols() -> list[str]:
-    """BIST sembollerini JSON dosyasından yükler."""
-    try:
-        data_file = Path(__file__).parent / "data" / "bist_symbols.json"
-        with open(data_file, encoding="utf-8") as f:
-            data = json.load(f)
-        logger.debug(f"BIST sembolleri yüklendi: {len(data['symbols'])} sembol")
-        return data["symbols"]
-    except FileNotFoundError:
-        logger.error("data/bist_symbols.json bulunamadı!")
-        return []
-    except json.JSONDecodeError as e:
-        logger.error(f"BIST JSON parse hatası: {e}")
-        return []
-
-
-# BIST sembolleri JSON'dan yükleniyor
-ALL_BIST_TICKERS = _load_bist_symbols()
-_BIST_SYMBOL_TTL_SECONDS = 3600
-_BIST_SYMBOL_TIMEOUT_SECONDS = 25
-_MAX_BIST_SYMBOLS = 2000
-_bist_symbols_lock = threading.Lock()
-_bist_symbols_executor: ThreadPoolExecutor | None = None
-_bist_symbols_future: Future | None = None
-_bist_symbols_cache: tuple[float, tuple[str, ...]] | None = None
-_bist_symbols_error: str | None = None
-
-
-class BistSymbolSourceError(RuntimeError):
-    """Safe source failure; no stale/static universe is substituted."""
-
-
-def _load_borsapy_symbols() -> tuple[str, ...]:
-    from application.services.borsapy_gateway import get_borsapy_gateway
-
-    frame = get_borsapy_gateway().run_public(lambda bp: bp.companies())
-    if (
-        not isinstance(frame, pd.DataFrame)
-        or frame.empty
-        or len(frame) > _MAX_BIST_SYMBOLS
-        or "ticker" not in frame
-    ):
-        raise BistSymbolSourceError("Borsapy şirket listesi boş veya geçersiz.")
-    symbols = []
-    for raw in frame["ticker"]:
-        if not isinstance(raw, str) or not re.fullmatch(r"[A-Z0-9]{1,20}", raw.strip().upper()):
-            raise BistSymbolSourceError("Borsapy şirket listesinde geçersiz sembol var.")
-        symbols.append(raw.strip().upper())
-    return tuple(sorted(set(symbols)))
+# Compatibility export; the approved share registry also serves scanner/API/all-BIST.
+ALL_BIST_TICKERS = list(share_universe().symbols)
 
 
 def get_all_bist_symbols() -> list[str]:
-    """Lazy KAP universe through Borsapy; legacy JSON requires explicit selection.
+    """Approved 631-share snapshot, independent of the selected price provider.
 
-    One bounded worker avoids accumulating timed-out native requests. Neither
-    imports nor status checks contact a provider. No expired/static fallback.
+    This is the explicit dated membership source, not a fallback for a failed
+    company query. General KAP company/issuer research remains available separately.
     """
-    global _bist_symbols_executor, _bist_symbols_future, _bist_symbols_cache, _bist_symbols_error
-    if not settings.borsapy_use_for_bist:
-        return list(ALL_BIST_TICKERS)
-    with _bist_symbols_lock:
-        if _bist_symbols_cache and (
-            time.monotonic() - _bist_symbols_cache[0] < _BIST_SYMBOL_TTL_SECONDS
-        ):
-            return list(_bist_symbols_cache[1])
-        if _bist_symbols_future is None:
-            if _bist_symbols_executor is None:
-                _bist_symbols_executor = ThreadPoolExecutor(
-                    max_workers=1, thread_name_prefix="bist-universe"
-                )
-            _bist_symbols_future = _bist_symbols_executor.submit(_load_borsapy_symbols)
-        pending = _bist_symbols_future
-    try:
-        symbols = pending.result(timeout=_BIST_SYMBOL_TIMEOUT_SECONDS)
-    except TimeoutError:
-        with _bist_symbols_lock:
-            _bist_symbols_error = "Borsapy şirket listesi zaman aşımına uğradı."
-        raise BistSymbolSourceError(_bist_symbols_error) from None
-    except Exception:
-        with _bist_symbols_lock:
-            if _bist_symbols_future is pending:
-                _bist_symbols_future = None
-            _bist_symbols_error = "Borsapy şirket listesi alınamadı; eski listeye geçilmedi."
-        raise BistSymbolSourceError(_bist_symbols_error) from None
-    with _bist_symbols_lock:
-        if _bist_symbols_future is pending:
-            _bist_symbols_cache = (time.monotonic(), symbols)
-            _bist_symbols_future = None
-        _bist_symbols_error = None
-    return list(symbols)
+    return list(share_universe().symbols)
 
 
-def bist_symbols_status() -> dict[str, str | int | bool | None]:
-    """Inspect selection/cache state without triggering a provider request."""
-    if not settings.borsapy_use_for_bist:
-        return {"source": "legacy_json", "state": "selected", "count": len(ALL_BIST_TICKERS)}
-    with _bist_symbols_lock:
-        fresh = bool(
-            _bist_symbols_cache
-            and time.monotonic() - _bist_symbols_cache[0] < _BIST_SYMBOL_TTL_SECONDS
-        )
-        return {
-            "source": "borsapy_kap",
-            "state": "error"
-            if _bist_symbols_error
-            else "ready"
-            if fresh
-            else "loading"
-            if _bist_symbols_future
-            else "not_loaded",
-            "count": len(_bist_symbols_cache[1]) if fresh else 0,
-            "error": _bist_symbols_error,
-            "cache_ttl_seconds": _BIST_SYMBOL_TTL_SECONDS,
-            "provider_cache_ttl_seconds": 86400,
-        }
+def bist_symbols_status() -> dict:
+    """Return dated membership provenance without provider or account access."""
+    return share_universe().metadata()
 
 
 def get_all_binance_symbols() -> list[str]:

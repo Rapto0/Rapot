@@ -80,11 +80,27 @@ def _duration(timeframe):
 
 
 def _crypto_end(stamp, timeframe):
+    """BINANCE 24x7 native periods restart at each TradingView year anchor.
+
+    The next supplied native start must still equal this end in native_bars;
+    a shorter year-boundary bar is not permission to accept arbitrary gaps.
+    https://www.tradingview.com/charting-library-docs/latest/ui_elements/Resolution/#bar-alignment
+    """
     if timeframe.endswith("M"):
         value = datetime.fromtimestamp(stamp, UTC)
         month = value.month - 1 + int(timeframe[:-1])
-        return value.replace(year=value.year + month // 12, month=month % 12 + 1, day=1).timestamp()
-    return stamp + _duration(timeframe)
+        end = value.replace(year=value.year + month // 12, month=month % 12 + 1, day=1)
+        # Non-divisors such as 5M also restart in January, not in April.
+        return min(end, datetime(value.year + 1, 1, 1, tzinfo=UTC)).timestamp()
+    end = stamp + _duration(timeframe)
+    if timeframe.endswith(("D", "W")) and timeframe not in {"1D", "1W"}:
+        value = datetime.fromtimestamp(stamp, UTC)
+        boundary = datetime(value.year + 1, 1, 1, tzinfo=UTC)
+        if timeframe.endswith("W"):
+            # The partial week before the first Monday remains in the old bar.
+            boundary += timedelta(days=(-boundary.weekday()) % 7)
+        end = min(end, boundary.timestamp())
+    return end
 
 
 def _bist_daily_end(stamp, metadata):
