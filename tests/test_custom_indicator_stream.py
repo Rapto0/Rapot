@@ -616,3 +616,60 @@ def test_final_ack_during_network_reconciliation_still_retires_the_chart():
     assert len(stream.series) == 1 and not pool.needs_reconcile
     assert pool.member_ready(("BIST", "THYAO"))
     assert len([message for message in stream.sent if message["m"] == "chart_delete_session"]) == 1
+
+
+def test_required_periods_do_not_wait_for_unrelated_pending_or_refused_lease():
+    member = ("BIST", "THYAO")
+    day, long, extra = ((*member, timeframe) for timeframe in ("1D", "3D", "7D"))
+    wanted = {day, long, extra}
+    events = []
+    pool = NativeStreamPool(Transport, "isolated-test-token", 1, events.append, clock=lambda: 100)
+    pool.configure(wanted)
+    stream = next(iter(pool._streams.values()))
+
+    def acknowledge(key):
+        sid, item = next((sid, item) for sid, item in stream.series.items() if item["key"] == key)
+        packet(stream, "symbol_resolved", [item["session"], "sym", {"timezone": "Europe/Istanbul"}])
+        fill(stream, sid, 120)
+        assert pool.confirm_native_witness(events[-1])["accepted"]
+
+    assert not pool.history_ready(member, {"1D", "3D"})
+    acknowledge(day)
+    pool.configure(wanted)
+    assert not pool.history_ready(member, {"1D", "3D"})
+    acknowledge(long)
+    assert pool.history_ready(member, {"1D", "3D"})
+    assert pool.history_ready(member, {"3D"})  # The persistent daily anchor is still required.
+    assert not pool.history_ready(member, {"1D", "7D"})
+    assert not pool.member_ready(member)
+    assert not pool.history_ready(member, {"1D", "2D"})  # Not admitted, never optimistic.
+    assert not pool.history_ready(member, set())
+    sid, item = next((sid, item) for sid, item in stream.series.items() if item["key"] == extra)
+    packet(stream, "series_error", [item["session"], sid, "unsupported"])
+    assert pool.history_ready(member, {"1D", "3D"})
+    assert not pool.history_ready(member, {"1D", "7D"})
+    pool.invalidate_native_member(member)
+    assert not pool.history_ready(member, {"1D", "3D"})
+    assert not pool.history_ready(member, {"3D"})
+
+
+def test_required_subset_preserves_transport_and_persistent_session_guards():
+    member = ("BIST", "THYAO")
+    day, extra = ((*member, timeframe) for timeframe in ("1D", "60"))
+    pool = NativeStreamPool(
+        Transport,
+        "isolated-test-token",
+        1,
+        lambda _: None,
+        clock=lambda: 100,
+        lease_long_timeframes=False,
+    )
+    pool.configure({day, extra})
+    stream = next(iter(pool._streams.values()))
+    stream.sessions.pop(extra)
+    assert pool.history_ready(member, {"1D"})
+    assert not pool.member_ready(member)
+    assert not pool.history_ready(member, {"1D", "60"})
+    assert not pool.history_ready(("BIST", "ABSENT"), {"1D"})
+    stream.disconnect()
+    assert not pool.history_ready(member, {"1D"})

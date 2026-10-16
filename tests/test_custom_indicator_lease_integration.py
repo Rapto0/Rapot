@@ -132,6 +132,26 @@ def test_real_pool_closes_only_semantically_acked_long_chart_and_keeps_quotes():
     assert service._results[key]["points"][-1]["ready"]
 
 
+def test_ready_two_period_job_is_not_blocked_by_another_jobs_pending_native_period():
+    clock, provider, service, pool, key = setup_native()
+    pool.configure(
+        service.live._wanted | {(*MEMBER, "7D")}, member_slots=service.live._member_slots
+    )
+    assert not pool.member_ready(MEMBER)
+    assert service.live.history_ready(MEMBER, {"1D", "2D"})
+    assert not service.live.history_ready(MEMBER, {"1D", "7D"})
+    clock[0] += 2
+    send_quote(service, pool, clock, 150)
+    assert service._read(key, clock[0])[1] == "ready"
+    # The readiness subset cannot reuse a certificate across an actual daily revision.
+    rows = frame_rows(provider)
+    rows[0] = (*rows[0][:-1], rows[0][-1] + 0.1)
+    send_bars(pool, DAY, rows)
+    drain(service)
+    assert not service.live.history_ready(MEMBER, {"1D", "2D"})
+    assert service._read(key, clock[0])[1] != "ready"
+
+
 def test_daily_extreme_after_lease_close_cannot_leak_into_older_quote():
     clock, provider, service, pool, key = setup_native()
     rows = frame_rows(provider)

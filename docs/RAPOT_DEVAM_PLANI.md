@@ -6,8 +6,10 @@ Ek kaynak düzeltmesi, `fe9e7e63` canlı kabulünde görülen reddedilmiş günl
 verilerin sürekli planlanmasını ve farklı gösterge geçmiş uzunluklarının
 birbirini yeniden hazırlatmasını giderir. Kuyruk kontrolü tur başına 64 + 64
 ile sınırlanır; sembol/periyot başına en yüksek istenen geçmiş uzunluğu korunur.
-Bu ek düzeltmenin yayını henüz bekler; beşli önizleme, tam liste hazırlığı ve
-sürekli kapasite kabulü tamamlanmış sayılmaz. Güncel ayrıntılar
+Bu ek düzeltme **`5472db4` ile 14:52:02 UTC**'de API/frontend/Compose/current'e
+yayımlandı; **14:52:50–14:53:24 UTC** bağımsız kabul geçti. Beşli önizleme,
+tam liste hazırlığı ve sürekli kapasite kabulü bu yayınla tamamlanmış sayılmaz.
+Güncel ayrıntılar
 [16 Ekim kabul kaydındadır](LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md).
 Çalışma kuralı: **incele → düzelt → doğrula → belgeyi güncelle**.
 Teknik ayrıntılar [belge indeksinde](README.md), çalışma kuralları
@@ -16,6 +18,29 @@ Teknik ayrıntılar [belge indeksinde](README.md), çalışma kuralları
 Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi değildir.
 
 ## Kaldığımız nokta
+
+- **16 Ekim — planlama ve ortak geçmiş düzeltmesi üretimde:**
+  `5472db486f4578a7a5d3b2454a3766d9b26cb83f`, **14:52:02 UTC / 17:52:02 TSİ**
+  API/frontend/Compose/current yayını; **14:52:50–14:53:24 UTC** bağımsız kabul
+  geçti. Günlük ret nedeniyle kullanılamayan uzun periyotlar işlenebilir kuyruktan
+  ayrılır; gerçek değişiklik/yeniden deneme zamanı dışında tüm abonelik planı
+  dolaşılmaz. 64 + 64 hazırlık kontrolü, önizleme payı ve fallback'te yinelenen
+  işi tüketme korunur. Ortak geçmişin en büyük talebi ham önbellek boşalsa da
+  saklanır; geçmiş revizyonu korumaları gevşetilmez. Yerelde 2.114 Python/bir
+  atlama, ardından son fallback düzeltmesinin 40 ilgili testi; 310 frontend,
+  üretim derlemesi/standalone geçti. Aynı kaynakta beş CI işi ve temiz imaj yayını
+  başarılı. Taze 1.342.660.608 bayt yedek bütün 15 tabloyla bağımsız restore edildi;
+  kanıt SHA-256 `7d5f8754d01be5f5a7ec36a584161d9e59799915776551580d4212d3c30c5125`.
+  Dört kural satırı (biri etkin), tek 805 üyeli liste, 805 durum, altı olay,
+  12 statik tablo ve özel dosyalar korundu; yeni olay sıfır. Dört servis
+  healthy/restart0; middleware/PG aynı. 13 SSR/33 statik/iki yönlendirme/
+  18 anonim401, v2/5/289 katalog ve 422 kabulü geçti. Başlangıç örneğinde
+  8.051 mantıksal talep (805 üyeli kuralın 8.050 TF'si + önizleme), dört bağlantı,
+  1.680 uzun periyot sertifikası ve üç derlenmiş hesap vardı; 803 kural üyesi
+  bekleyen/eskiydi. İki kısa CPU aralığı %100'dü. Manuel beşli önizleme ve
+  sonraki gözlem sürer; tam liste/tam seans/3.000 alarm kapasitesi iddiası yok.
+  Yeni test alarmı, AI/emir veya otomatik takip bu yayın kabulünde oluşturulmadı.
+  [16 Ekim kanıtı](LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md).
 
 - **16 Ekim — süreli native tanık düzeni üretimde:** `fe9e7e632f6a3aee280c3f3c5b68c2b01a3620cc`
   **14:13:07 UTC** API/frontend/Compose/current yayını; **14:13:17–14:13:45 UTC**
@@ -880,17 +905,17 @@ repodan kaldırıldı. Dağıtım ve geri dönüş adımları [DEPLOY.md](DEPLOY
 | Alan | Son kayıt |
 |---|---|
 | Sunucu / erişim | `root@138.68.71.27`, IP üzerinden HTTPS |
-| API / Compose / current kaynak | `fe9e7e632f6a3aee280c3f3c5b68c2b01a3620cc` |
-| Frontend kaynak | `fe9e7e632f6a3aee280c3f3c5b68c2b01a3620cc` |
-| API imaj referansı | `ghcr.io/rapto0/rapot/backend@sha256:414e5dd937f6d152c0ef5a7fe761ea264a80a708a9396f7916777373eb66d2fc` |
-| Frontend imaj referansı | `ghcr.io/rapto0/rapot/frontend@sha256:1a2215479f346ac7abd2f9e44bfe670a6fa5f392fe718033dfd90936d227aa29` |
+| API / Compose / current kaynak | `5472db486f4578a7a5d3b2454a3766d9b26cb83f` |
+| Frontend kaynak | `5472db486f4578a7a5d3b2454a3766d9b26cb83f` |
+| API imaj referansı | `ghcr.io/rapto0/rapot/backend@sha256:73375f30d1a930623c1be630d6f0d5e255787694a5efbf0c1bd1c6d54a807799` |
+| Frontend imaj referansı | `ghcr.io/rapto0/rapot/frontend@sha256:b6ac6ba2beda189d542c6d5d40626444a1b26d96fa6463dd3b242a17a740e77e` |
 | Bot | 12 Ekim kaldırıldı; Compose servisi/5000 dinleyicisi yok |
 | Middleware kaynak | `279aa9fea99b520e661b43f104a2bf4791893ac3`; container kimliği korunuyor |
 | Middleware imajı | `sha256:9be0fdb6097f52bf97730f44c86d28c24e2c0cea1fe181e7e8fd668177fdb034` |
 | Veri / kaynak pointer | `/var/lib/rapot/main` ve `/opt/rapot/current`; operator kaynak kopyası bunlardan ayrıdır |
 | Çalışma modu | `MW_EXECUTION_MODE=DRY_RUN`, `MW_TRADING_ENABLED=false`, `MW_BINANCE_LIVE_ENABLED=false`; otomatik Telegram AI kaldırıldı, site AI korunur; API `BORSAPY_USE_FOR_BIST=true` |
-| Son uzak yayın kabulü | 16 Ekim 14:13:17–14:13:45 UTC: dört servis healthy/restart0; 15 şema, 12 statik tablo, kullanıcı kuralı/listesi, 805 durum, altı olay ve özel dosyalar korundu. 13 SSR/33 statik/iki yönlendirme/18 anonim401, v2 / 5 / 289 katalog ve 422 doğrulandı; etkin işçiler varken genel iş sayaçlarının sabit kaldığı iddia edilmez. [16 Ekim kaydı](LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md). |
-| Son yayın başlangıç örneği | 16 Ekim 14:13 UTC: 8.050 mantıksal TF kabulü, 933 açık fiziksel chart ve 128 geçici oturum; sıfır sertifika/derlenmiş hesap, 805 bekleyen üye. Tam listenin canlı hazırlığı ayrı doğrulanacaktır. Önceki e290 örneği ve altı normal olayın kaydı [16 Ekim belgesinde](LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md). |
+| Son uzak yayın kabulü | 16 Ekim 14:52:50–14:53:24 UTC: dört servis healthy/restart0; 15 şema, 12 statik tablo, dört kural satırı (biri etkin), tek 805 üyeli liste, 805 durum, altı olay ve özel dosyalar korundu. 13 SSR/33 statik/iki yönlendirme/18 anonim401, v2 / 5 / 289 katalog ve 422 doğrulandı. Taze yedek tam bağımsız restore edildi; canlı durum ilerlemesine izin verilir. [16 Ekim kaydı](LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md). |
+| Son yayın başlangıç örneği | 16 Ekim 14:53 UTC: önizleme dahil 8.051 mantıksal TF kabulü, 933 açık fiziksel chart, 124 geçici oturum, 1.680 sertifika, üç derlenmiş hesap; 803 kural üyesi bekleyen/eski. 1.557 uzun periyot günlük ret nedeniyle kullanılamıyor. İki kısa CPU aralığı %100; tam liste hazırlığı veya sürekli kaynak kazancı kabulü değildir. [16 Ekim belgesi](LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md). |
 | TradingView bağlantısı | Şifreli kimlik korundu; 7 Ekim dar canlı kabulü mevcut. Tam evren/hacim/bölünme/tam seans kabulü açık, `realtime_verified=false` |
 
 Son kayıtlar:

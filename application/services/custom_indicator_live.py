@@ -190,8 +190,13 @@ class LiveIndicatorData:
         connection = self._connection
         if connection is None:
             return False
-        member_ready = getattr(connection, "member_ready", None)
-        if not (member_ready(member) if member_ready else connection.connected):
+        history_ready = getattr(connection, "history_ready", None)
+        if history_ready is not None:
+            transport_ready = history_ready(member, needed_timeframes)
+        else:
+            member_ready = getattr(connection, "member_ready", None)
+            transport_ready = member_ready(member) if member_ready else connection.connected
+        if not transport_ready:
             return False
         with self._lock:
             return all(

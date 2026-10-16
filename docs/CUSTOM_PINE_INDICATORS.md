@@ -185,7 +185,15 @@ paylaşılır. İstenen en yüksek mum sayısı sınırlı devamlılık özetind
 ham önbellek boşalsa da sonraki küçük ayar geçmiş penceresini daraltmaz.
 Yeni, daha uzun geçmiş ilk kez gerekirse hesap bir kez yeniden hazırlanabilir.
 Eski kapalı mum hash'i, eksik satır ve bağlantı/revizyon korumaları gevşetilmez.
-Bu ek düzeltmelerin yayın ve canlı kabul durumu 16 Ekim kaydında ayrıca tutulur.
+Bu ek düzeltmeler **`5472db4`, 16 Ekim 14:52:02 UTC**'de
+API/frontend/Compose/current'e yayımlandı; **14:52:50–14:53:24 UTC** bağımsız
+yayın kabulü geçti. Yerelde 2.114 Python/bir atlama ve son fallback düzeltmesi
+için 40 ilgili test; 310 frontend/derleme/standalone ve aynı kaynakta beş CI
+işi geçti. Taze yedek bütün 15 tabloyla bağımsız restore edildi; mevcut dört
+kural satırı (biri etkin), tek 805 üyeli liste, 805 durum ve altı olay korundu.
+Bu yayın kabulü beş göstergenin birlikte hazır canlı önizlemesini veya sürekli
+CPU kazancını kanıtlamaz; sonraki manuel kabul [16 Ekim kaydında](LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md)
+ayrı tutulur.
 
 Akış bütün fiyat olaylarını korur. Native açık mumun yalnız Close değişimi,
 gösterge fiyatını ayrıca taşıyan quote bulunduğu için yeni mum işi üretmez;
@@ -193,7 +201,8 @@ son Close dahili satırda saklanır ve sonraki rollover'a aktarılır. İlk veri
 geçmiş mum düzeltmesi, O/H/L ve metadata değişimleri işlenir. BIST günlük
 native kimliği değişince üst periyodun ilk gerçek yeni paketi tanık olarak
 yeniden işlenir; takvim günü hesabından veya önbellekten tanık üretilmez.
-Bu düzen **16 Ekim 14:13:07 UTC**'de API/frontend/Compose/current'e yayımlandı;
+Süreli native tanık düzeninin ilk yayını **16 Ekim 14:13:07 UTC**'de
+`fe9e7e63` ile API/frontend/Compose/current'e yapıldı;
 14:13:17–45 UTC bağımsız yayın kabulü geçti. [16 Ekim kaydı](LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md)
 imaj/CI/yedek ve koruma kanıtlarını tutar. İlk durumdaki sıfır derlenmiş hesap,
 805 bekleyen üye ve %100 CPU örnekleri nedeniyle yayın kabulü tam liste veya

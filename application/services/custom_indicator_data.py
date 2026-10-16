@@ -318,7 +318,9 @@ class CustomIndicatorData:
 
     def _sync_live(self):
         with self._lock:
-            active_previews = tuple(
+            # Preview reads renew their LRU position, but unchanged membership
+            # must not rebuild the whole universe or reset the history cursor.
+            active_previews = frozenset(
                 key for key, (expires, _) in self._previews.items() if expires > self._clock()
             )
             signature = self._generation, id(self._universe), active_previews

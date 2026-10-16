@@ -5,14 +5,25 @@ yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DE
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 Teknik rehberler [docs dizininde](docs/README.md) listelenir.
 
-**16 Ekim yayın sonrası ek düzeltme kaynakta:** `fe9e7e63` sonrasında 805 üyede
+**16 Ekim yayın sonrası ek düzeltme üretimde:** **`5472db486f4578a7a5d3b2454a3766d9b26cb83f`,
+14:52:02 UTC / 17:52:02 TSİ** API/frontend/Compose/current yayını tamamlandı;
+**14:52:50–14:53:24 UTC** bağımsız kabul geçti. `fe9e7e63` sonrasında 805 üyede
 8.050 mantıksal talep kabul edildi; 173 reddedilen günlük veri 1.557 üst periyodu
 gereksiz bekleme/planlama döngüsünde tutuyordu. Yeni kaynak bunu ayırır ve
 hazırlık kuyruğunu tur başına 64 + 64 kontrolle sınırlar. Beş göstergenin
 511/515/519 mum talepleri için ortak en yüksek istek sayısı ham önbellekten
-bağımsız korunur; gerçek geçmiş revizyonu koruması değişmez. Önizlemeler henüz
-beş gösterge birlikte canlı kabulünü geçmedi. Bu ek kaynağın yayın/sonuçları
-[16 Ekim kaydından](docs/LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md) doğrulanmalıdır.
+bağımsız korunur; gerçek geçmiş revizyonu koruması değişmez. Yerel tam turda
+2.114 Python/bir atlama, son kuyruk düzeltmesinin 40 ilgili testi, 310 frontend,
+üretim derlemesi/standalone; aynı kaynakta beş CI işi ve temiz imaj yayını geçti.
+Taze 1.342.660.608 bayt yedek bütün 15 tabloyla bağımsız restore edildi;
+restore kanıtı `7d5f8754…` ile sabitlendi. Dört kural satırı (biri etkin),
+tek 805 üyeli liste, 805 durum ve altı eski olay korundu; yeni olay sıfırdı.
+Dört servis healthy/restart0, middleware/PG ve özel dosyalar aynı; 13 SSR,
+33 statik, iki yönlendirme, 18 anonim401 ve v2/5/289 katalog kabulü geçti.
+Yayın sonrası kısa başlangıç örnekleri hâlâ %100 CPU gösterdi; beş gösterge
+birlikte canlı kabulü, tam liste hazırlığı ve sürekli kaynak kazanımı bu
+yayın kabulünden çıkarılamaz. Manuel önizleme/son gözlem ayrı yürür.
+[16 Ekim yayın ve kabul kaydı](docs/LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md).
 
 **16 Ekim süreli native tanık yayını tamamlandı:** `fe9e7e63`, **14:13:07 UTC**
 API/frontend/Compose/current'e yayımlandı; **14:13:17–14:13:45 UTC** bağımsız

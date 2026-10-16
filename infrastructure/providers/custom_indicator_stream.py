@@ -528,15 +528,24 @@ class NativeStreamPool:
     def member_ready(self, member):
         """Persistent transport and current daily generation's ACKed witnesses."""
         member = tuple(member)
+        return self._keys_ready(member, self._wanted_by_member.get(member, set()))
+
+    def _keys_ready(self, member, needed):
+        """An independent job need not wait for another job's native periods."""
         slot = self._member_slots.get(member)
         stream = self._streams.get(slot)
         if self.closed or stream is None or not stream.healthy:
             return False
         wanted = self._wanted_by_member.get(member, set())
-        persistent = persistent_keys(wanted) if self._leases is not None else wanted
+        admitted = wanted | persistent_keys(wanted) if self._leases is not None else wanted
+        if not needed or not needed <= admitted:
+            return False
+        persistent = persistent_keys(needed) if self._leases is not None else needed
         with stream._lock:
-            registered = bool(wanted) and all(key in stream.sessions for key in persistent)
-        return registered and (self._leases is None or self._leases.ready(member, wanted))
+            registered = all(key in stream.sessions for key in persistent)
+        return registered and (
+            self._leases is None or self._leases.ready(member, needed | persistent)
+        )
 
     def confirm_native_witness(self, event):
         if self.closed:
@@ -565,10 +574,8 @@ class NativeStreamPool:
             self._needs_refresh = True
 
     def history_ready(self, member, needed):
-        return self.member_ready(member) and (
-            self._leases is None
-            or self._leases.ready(tuple(member), {(*member, timeframe) for timeframe in needed})
-        )
+        member = tuple(member)
+        return self._keys_ready(member, {(*member, timeframe) for timeframe in needed})
 
     def _on_event(self, event):
         if (
