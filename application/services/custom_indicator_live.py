@@ -784,6 +784,8 @@ class LiveIndicatorData:
                 "native_lease_certified": transport.get("lease_certified", 0),
                 "native_lease_pending": transport.get("lease_pending", 0),
                 "native_lease_refused": transport.get("lease_refused", 0),
+                "native_lease_direct_refused": transport.get("lease_direct_refused", 0),
+                "native_lease_anchor_blocked": transport.get("lease_anchor_blocked", 0),
                 "native_lease_retry_waiting": transport.get("lease_retry_waiting", 0),
                 "native_physical_capacity": transport.get("physical_capacity", 2000),
                 "last_native_failure_codes": list(self._last_transport_failures),

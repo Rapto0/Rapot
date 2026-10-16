@@ -47,9 +47,15 @@ class NativeLeaseBook:
         self._refused = set()
         self._retry = {}
         self._sequence = 0
+        self._dirty = True
+        self._next_due = float("inf")
 
     def configure(self, wanted, slots):
+        wanted = set(wanted)
         with self._lock:
+            if self.wanted == wanted and self.slots == slots:
+                return
+            self._dirty = True
             new_members = set(slots) - self.slots.keys()
             for member in new_members:
                 self._sequence += 1
@@ -78,6 +84,7 @@ class NativeLeaseBook:
         }
 
     def _invalidate(self, member, *, fresh_anchor=False):
+        self._dirty = True
         self._day_counters[member] = self._day_counters.get(member, 0) + 1
         for mapping in (self._certificates, self._inflight):
             for key in self._members.get(member, ()):
@@ -91,6 +98,20 @@ class NativeLeaseBook:
         with self._lock:
             if member in self.slots:
                 self._invalidate(member, fresh_anchor=True)
+
+    @property
+    def scheduling_due(self):
+        """Pending-but-impossible demand is status, not a reason to rebuild a plan."""
+        with self._lock:
+            return self._dirty or self.clock() >= self._next_due
+
+    def _eligible(self, key):
+        return (
+            key[:2] in self._days
+            and (*key[:2], "1D") not in self._refused
+            and key not in self._certificates
+            and key not in self._refused
+        )
 
     def desired(self):
         """Return bounded actual subscriptions plus their immutable wire context."""
@@ -113,11 +134,8 @@ class NativeLeaseBook:
                 member = key[:2]
                 slot = self.slots[member]
                 if (
-                    member not in self._days
-                    or (*member, "1D") in self._refused
-                    or key in self._certificates
+                    not self._eligible(key)
                     or key in self._inflight
-                    or key in self._refused
                     or self._retry.get(key, (0, 0))[1] > now
                     or counts.get(slot, 0) >= LEASE_SLOTS_PER_CONNECTION
                 ):
@@ -131,6 +149,24 @@ class NativeLeaseBook:
             groups = {}
             for key in contexts:
                 groups.setdefault(self.slots[key[:2]], set()).add(key)
+            deadlines = [
+                lease["started"] + LEASE_TIMEOUT_SECONDS
+                for lease in self._inflight.values()
+                if lease["started"] is not None
+            ]
+            deadlines.extend(
+                retry_at
+                for key, (_, retry_at) in self._retry.items()
+                if retry_at > now
+                and key not in self._inflight
+                and self._eligible(key)
+                and counts.get(self.slots[key[:2]], 0) < LEASE_SLOTS_PER_CONNECTION
+            )
+            self._next_due = min(deadlines, default=float("inf"))
+            # ACK/rejection can only change this latch after releasing this
+            # lock. A callback received during network reconciliation remains
+            # visible to the next control turn, including the final retirement.
+            self._dirty = False
             return groups, contexts
 
     def mark_started(self, registered):
@@ -139,6 +175,7 @@ class NativeLeaseBook:
                 lease = self._inflight.get(key)
                 if lease is not None and lease["started"] is None:
                     lease["started"] = self.clock()
+                    self._next_due = min(self._next_due, lease["started"] + LEASE_TIMEOUT_SECONDS)
 
     def _current_context(self, event):
         member = tuple(event.get("key", ()))[:2]
@@ -151,7 +188,7 @@ class NativeLeaseBook:
     def reject(self, event):
         with self._lock:
             key = tuple(event.get("key", ()))
-            if len(key) != 3 or not self._current_context(event):
+            if len(key) != 3 or not self._current_context(event) or key in self._refused:
                 return False
             if is_leased_timeframe(key[2]):
                 lease = self._inflight.get(key)
@@ -160,6 +197,7 @@ class NativeLeaseBook:
                 del self._inflight[key]
                 self._certificates.pop(key, None)
             self._refused.add(key)
+            self._dirty = True
             if key[2] == "1D":
                 self._invalidate(key[:2])
                 self._days.pop(key[:2], None)
@@ -238,6 +276,7 @@ class NativeLeaseBook:
             self._certificates[key] = certificate
             del self._inflight[key]
             self._retry.pop(key, None)
+            self._dirty = True
             answer["accepted"] = True
             return answer
 
@@ -263,17 +302,23 @@ class NativeLeaseBook:
     def status(self):
         with self._lock:
             leased = self.wanted - self.persistent
+            anchor_blocked = {key for key in leased if (*key[:2], "1D") in self._refused}
+            refused = (leased & self._refused) | anchor_blocked
+            pending = leased - self._certificates.keys() - refused
             return {
                 "virtual_subscriptions": len(self.wanted),
                 "persistent_subscriptions": len(self.persistent),
                 "transient_subscriptions": len(self._inflight),
                 "witnesses_confirmed": len(self._certificates),
-                "witnesses_pending": len(leased - self._certificates.keys() - self._refused),
+                "witnesses_pending": len(pending),
                 "lease_active": len(self._inflight),
                 "lease_certified": len(self._certificates),
-                "lease_pending": len(leased - self._certificates.keys() - self._refused),
-                "lease_refused": len(leased & self._refused),
+                "lease_pending": len(pending),
+                "lease_refused": len(refused),
+                "lease_direct_refused": len(leased & self._refused),
+                "lease_anchor_blocked": len(anchor_blocked),
                 "lease_retry_waiting": sum(
-                    retry_at > self.clock() for _, retry_at in self._retry.values()
+                    retry_at > self.clock() and self._eligible(key)
+                    for key, (_, retry_at) in self._retry.items()
                 ),
             }

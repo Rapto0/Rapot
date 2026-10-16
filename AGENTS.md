@@ -5,7 +5,34 @@ yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DE
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 Teknik rehberler [docs dizininde](docs/README.md) listelenir.
 
-**16 Ekim manuel devam:** Üretimde kullanıcıya ait bir etkin izleme listesi
+**16 Ekim yayın sonrası ek düzeltme kaynakta:** `fe9e7e63` sonrasında 805 üyede
+8.050 mantıksal talep kabul edildi; 173 reddedilen günlük veri 1.557 üst periyodu
+gereksiz bekleme/planlama döngüsünde tutuyordu. Yeni kaynak bunu ayırır ve
+hazırlık kuyruğunu tur başına 64 + 64 kontrolle sınırlar. Beş göstergenin
+511/515/519 mum talepleri için ortak en yüksek istek sayısı ham önbellekten
+bağımsız korunur; gerçek geçmiş revizyonu koruması değişmez. Önizlemeler henüz
+beş gösterge birlikte canlı kabulünü geçmedi. Bu ek kaynağın yayın/sonuçları
+[16 Ekim kaydından](docs/LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md) doğrulanmalıdır.
+
+**16 Ekim süreli native tanık yayını tamamlandı:** `fe9e7e63`, **14:13:07 UTC**
+API/frontend/Compose/current'e yayımlandı; **14:13:17–14:13:45 UTC** bağımsız
+kabul geçti. Günlük/gün içi mumlar sürekli bağlı, uzun D/W/M mumları aynı
+native gün için doğrulanan geçici chart oturumlarıyla hazırlanır. 805 × 10 TF
+talebi 805 sürekli + en fazla 128 geçici fiziksel chart olarak planlanır.
+Normal günlük rollover kapalı hesap durumunu korur; yeni üst periyot tanıkları
+gelmeden sinyal verilmez. Gerçek revizyon/kopma geçmişi yeniden hazırlatır.
+2.095 Python/bir atlama, 310 frontend, beş kaynak CI işi ve temiz imaj yayını
+geçti. Taze 1.342.660.608 bayt yedek bağımsız restore edildi; 15 tablo şeması,
+12 statik tablo, mevcut 805 üyeli kural/liste, 805 durum ve altı olay korundu.
+Dört servis healthy/restart0; middleware/PG, özel dosyalar ve kapalı takip aynı.
+13 SSR/33 statik/iki yönlendirme/18 anonim401, v2/5/289 katalog ve 422 kabulü
+geçti. İlk yayın örneğinde 8.050 mantıksal talep/933 açık chart/128 geçici
+oturum vardı; sertifika ve derlenmiş hesap sıfır, 805 üye henüz bekliyordu.
+İki kısa CPU aralığı %100'dü; bu yayın kabulü tam liste, tam seans veya
+3.000 canlı alarm kapasitesi kanıtı değildir. Sonuçlar
+[16 Ekim kaydındadır](docs/LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md).
+
+**16 Ekim önceki manuel tanı ve yayınlar:** Üretimde kullanıcıya ait bir etkin izleme listesi
 alarmı, 805 sembol ve 8.050 native seri talebi var. 07:55:28 UTC tanısında
 native bağlantı/derlenmiş hesap/işlenen fiyat sıfır; eski 601 sonuç hazır veri
 değildir. İzole gerçek sağlayıcı tanısı büyük abonelik patlamasında
@@ -30,8 +57,9 @@ dışındadır; 805 üyeli tam canlı kapsam henüz çalışmıyor. Kullanıcın
 alarmı toplam gönderilmiş olay sayısını üçten altıya çıkardı; yeni test alarmı
 kurulmadı. Tek 500-seri bağlantı 13:39–13:42 UTC denemesinde 130 saniye sağlıklı
 kaldı; üretimdeki genel protokol hatasının nedeni bu denemede tekrarlanmadı.
-Uzun periyotların native tanıklarını paylaşan düzen kaynakta geliştirilir;
-henüz üretim kabulü değildir. Kullanıcının kuralı/listesi/bildirim ayarı değiştirilmedi; yeni
+Bu aşamada uzun periyotların native tanıklarını paylaşan düzen kaynakta
+geliştiriliyordu; sonraki `fe9e7e63` yayını yukarıda kayıtlıdır.
+Kullanıcının kuralı/listesi/bildirim ayarı değiştirilmedi; yeni
 otomatik takip yok. [16 Ekim kanıtı](docs/LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md).
 
 **14 Ekim canlı bağlantı yayını tamamlandı:** Kullanıcının “Piyasa şuan açık” mesajıyla

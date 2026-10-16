@@ -165,7 +165,7 @@ test('leased native coverage separates required periods from physical charts and
     native_subscriptions_registered: 933, native_subscriptions_pending: 16,
     native_persistent_subscriptions: 805, native_physical_capacity: 2000,
     native_lease_active: 128, native_lease_certified: 6000, native_lease_pending: 1117,
-    native_lease_refused: 128, native_lease_retry_waiting: 20, compiled_configurations: 701,
+    native_lease_refused: 128, native_lease_anchor_blocked: 90, native_lease_retry_waiting: 20, compiled_configurations: 701,
   } } });
   const card = view.elements().find(element => element.props['aria-label'] === 'Günlük ve uzun periyot takibi');
   assert.ok(card);
@@ -176,7 +176,8 @@ test('leased native coverage separates required periods from physical charts and
   assert.match(text(card), /Geçici uzun periyot kontrolü: 128/);
   assert.match(text(card), /Güncel günlük mumla doğrulanan uzun periyot: 6.000/);
   assert.match(text(card), /Doğrulama bekleyen uzun periyot: 1.117/);
-  assert.match(text(card), /Reddedilen uzun periyot: 128/);
+  assert.match(text(card), /Kullanılamayan uzun periyot: 128/);
+  assert.match(text(card), /Günlük verisi reddedilen uzun periyot: 90/);
   assert.match(text(card), /Yeniden deneme bekleyen uzun periyot: 20/);
   assert.match(text(card), /Planlanan sembol-periyot sayısı açık abonelik sayısı değildir/);
   assert.match(view.text(), /Canlı hesap başlangıcı hazır: 701/);
@@ -210,7 +211,8 @@ test('missing lease counters remain unknown while explicitly reported zero stays
   assert.match(text(card), /Geçici uzun periyot kontrolü: 0/);
   assert.match(text(card), /Güncel günlük mumla doğrulanan uzun periyot: —/);
   assert.match(text(card), /Doğrulama bekleyen uzun periyot: —/);
-  assert.match(text(card), /Reddedilen uzun periyot: 0/);
+  assert.match(text(card), /Kullanılamayan uzun periyot: 0/);
+  assert.match(text(card), /Günlük verisi reddedilen uzun periyot: —/);
   assert.match(text(card), /Yeniden deneme bekleyen uzun periyot: —/);
   assert.doesNotMatch(text(card), /NaN|Infinity/);
 });

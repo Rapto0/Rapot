@@ -226,7 +226,8 @@ export function AdvancedAlarmCenter() {
                             <p>Geçici uzun periyot kontrolü: <strong>{statistic(customStatus.native_lease_active)}</strong></p>
                             <p>Güncel günlük mumla doğrulanan uzun periyot: <strong>{statistic(customStatus.native_lease_certified)}</strong></p>
                             <p>Doğrulama bekleyen uzun periyot: <strong>{statistic(customStatus.native_lease_pending)}</strong></p>
-                            <p>Reddedilen uzun periyot: <strong>{statistic(customStatus.native_lease_refused)}</strong></p>
+                            <p>Kullanılamayan uzun periyot: <strong>{statistic(customStatus.native_lease_refused)}</strong></p>
+                            <p>Günlük verisi reddedilen uzun periyot: <strong>{statistic(customStatus.native_lease_anchor_blocked)}</strong></p>
                             <p>Yeniden deneme bekleyen uzun periyot: <strong>{statistic(customStatus.native_lease_retry_waiting)}</strong></p>
                         </div>
                         <p className="leading-relaxed text-muted-foreground">Günlük ve gün içi mumlar için sürekli akış kullanılır. Uzun periyotlar kaynağın gerçek mumlarıyla sırayla doğrulanır; ardından açık bir mum aboneliği tutmaları gerekmez. Günlük mum değiştiğinde veya veri devamlılığı bozulduğunda yeniden doğrulanır. Planlanan sembol-periyot sayısı açık abonelik sayısı değildir.</p>

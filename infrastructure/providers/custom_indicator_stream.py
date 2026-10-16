@@ -514,7 +514,7 @@ class NativeStreamPool:
             return False
         if self._needs_refresh:
             return True
-        if self._leases is not None and self._leases.status()["lease_pending"]:
+        if self._leases is not None and self._leases.scheduling_due:
             return True
         for slot, wanted in tuple(self._wire_by_slot.items()):
             stream = self._streams.get(slot)
@@ -523,13 +523,6 @@ class NativeStreamPool:
             with stream._lock:
                 if set(stream.sessions) != wanted:
                     return True
-        if self._leases is not None:
-            # ACKed temporary charts must be retired even when no work remains.
-            return any(
-                is_leased_timeframe(key[2])
-                for stream in tuple(self._streams.values())
-                for key in tuple(stream.sessions)
-            )
         return False
 
     def member_ready(self, member):

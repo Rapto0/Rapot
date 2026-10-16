@@ -37,6 +37,7 @@ REFRESH_SECONDS = 21600  # History reconciliation only; live prices are event dr
 STALE_SECONDS = 180
 HISTORY_RETRY_SECONDS = 30
 MAX_HISTORY_RETRY_SECONDS = 1800
+MAX_SEED_CHECKS_PER_TURN = 64
 
 
 def custom_configuration_ids(condition, timeframe):
@@ -230,9 +231,10 @@ class HistorySummary:
     heads: tuple[tuple[float, int], ...]
     historical_digest: int
     received: float
+    requested: int
 
     @classmethod
-    def build(cls, bars, now):
+    def build(cls, bars, now, *, requested=None):
         hashes = tuple(_record_hash(bar) for bar in bars)
         return cls(
             len(bars),
@@ -241,6 +243,7 @@ class HistorySummary:
             tuple((bar.time, value) for bar, value in zip(bars[:4], hashes[:4], strict=True)),
             _rolling_hash(hashes[:-1]),
             now,
+            len(bars) if requested is None else requested,
         )
 
     def continues(self, bars, now):
@@ -573,9 +576,12 @@ class CustomIndicatorData:
                     self._seed_queue.remove(key)
                     self._seed_queued.discard(key)
                 return preview_job
-            # Rotate deferred seeds once. A bad symbol or disconnected shard
-            # must not starve already witnessed members or bypass retry bounds.
-            for _ in range(len(self._seed_queue)):
+            # Native packets can wake this worker repeatedly during bootstrap.
+            # Bound each turn instead of rescanning every deferred member on
+            # every packet. Rotation preserves eventual service, while the
+            # separate bounded fallback below still recovers missing seeds and
+            # due refreshes even if unavailable members remain queued forever.
+            for _ in range(min(MAX_SEED_CHECKS_PER_TURN, len(self._seed_queue))):
                 key = self._seed_queue.popleft()
                 self._seed_queued.discard(key)
                 if self.live.admitted(key):
@@ -610,6 +616,12 @@ class CustomIndicatorData:
                     and now - cached["received"] >= 30
                     or now - cached.get("seed_received", cached["received"]) >= REFRESH_SECONDS
                 ):
+                    # The fallback cursor can reach a deferred key before the
+                    # bounded queue cursor. Consume its queued demand too, so
+                    # successful preparation is not repeated on queue rotation.
+                    if key in self._seed_queued:
+                        self._seed_queue.remove(key)
+                        self._seed_queued.discard(key)
                     return key, self.live._configs[key], self._generation
             return preview_job
 
@@ -630,6 +642,12 @@ class CustomIndicatorData:
             if self._stop.is_set():
                 raise ValueError("Özel gösterge veri servisi durduruldu.")
             old = self._native.get(key)
+            summary = self._history_summaries.get(key)
+            # Configuration changes may need a longer prefix once. Preserve
+            # that request size even after raw-cache eviction, so smaller
+            # configurations cannot oscillate the shared continuity window.
+            # Requested count matters: young listings may return fewer rows.
+            bars = max(bars, summary.requested if summary else 0)
             if (
                 old
                 and old.epoch == epoch
@@ -676,7 +694,9 @@ class CustomIndicatorData:
                     "Native geçmiş düzeltildi; canlı gösterge yeniden hazırlanıyor.", member
                 )
             self._native[key] = entry
-            self._history_summaries[key] = HistorySummary.build(points, entry.received)
+            self._history_summaries[key] = HistorySummary.build(
+                points, entry.received, requested=entry.requested
+            )
             self._history_summaries.move_to_end(key)
             while len(self._history_summaries) > MAX_HISTORY_SUMMARIES:
                 forgotten, _ = self._history_summaries.popitem(last=False)
@@ -695,6 +715,15 @@ class CustomIndicatorData:
                 self._native.popitem(last=False)
         return entry
 
+    @staticmethod
+    def _native_demand(config, market):
+        demand = {row["timeframe"]: row["bars"] for row in config["requirements"]}
+        primary_tf = config["chart_timeframe"]
+        demand[primary_tf] = max(demand.get(primary_tf, 0), 500)
+        if market == "BIST" or any(is_leased_timeframe(tf) for tf in demand):
+            demand["1D"] = max(demand.get("1D", 0), 500)
+        return demand
+
     def process(self, key, config, generation):
         """Worker seam used by isolated tests; never called from a request/snapshot."""
         from application.services.custom_indicators.catalog import evaluate
@@ -712,11 +741,18 @@ class CustomIndicatorData:
                     self.invalidate()
                     generation = self._generation
                 self._epoch = epoch
-            demand = {row["timeframe"]: row["bars"] for row in config["requirements"]}
+            demand = self._native_demand(config, market)
             primary_tf = config["chart_timeframe"]
-            demand[primary_tf] = max(demand.get(primary_tf, 0), 500)
-            if market == "BIST" or any(is_leased_timeframe(tf) for tf in demand):
-                demand["1D"] = max(demand.get("1D", 0), 500)
+            # One indexed pass over this member's admitted configurations,
+            # never an all-universe scan for each native frame.
+            with self.live._lock:
+                sibling_configs = tuple(
+                    self.live._configs[item] for item in self.live._members.get(key[:2], ())
+                )
+            for sibling in sibling_configs:
+                for tf, count in self._native_demand(sibling, market).items():
+                    if tf in demand:
+                        demand[tf] = max(demand[tf], count)
             entries = {
                 tf: self._native_frame(market, symbol, tf, count, epoch)
                 for tf, count in demand.items()
@@ -1002,7 +1038,9 @@ class CustomIndicatorData:
                     ]
                 )
                 self._native[native_key] = replace(old, bars=points, digest=digest)
-                self._history_summaries[native_key] = HistorySummary.build(points, self._clock())
+                self._history_summaries[native_key] = HistorySummary.build(
+                    points, self._clock(), requested=old.requested
+                )
 
     def publish_live(
         self,

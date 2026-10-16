@@ -145,7 +145,7 @@ ilgili alarmlar eşzamanlı çağrıyla değerlendirilir; bu işlem bitmeden son
 fiyat gözlemi onun yerini alamaz. Kısa eşik aşımı/geri dönüş böyle korunur.
 Her native periyot ayrı TradingView chart session kullanır; aynı sembolün
 bütün periyotları ve tek fiyat aboneliği aynı sıralı WebSocket üzerinde kalır.
-16 Ekim kaynak düzeninde günlük ve gün içi periyotlar sürekli bağlıdır;
+16 Ekim `fe9e7e63` düzeninde günlük ve gün içi periyotlar sürekli bağlıdır;
 1D dışındaki D/W/M periyotları iki native mumla doğrulanan süreli aboneliklerdir.
 Native günlük mum önce uygulamanın seans/saat doğrulamasından geçer. Uzun periyot
 paketi de aynı doğrulamayı geçip tüketici tarafından onaylanınca aboneliği
@@ -173,14 +173,31 @@ Ağ gönderimi alıcı kilidini tutmaz. Mum içi geçmiş başlangıcı ilgili s
 gereken native tanıklarını bekler; başarısız geçmiş işi 30–1.800 saniye artan
 gecikmeyle yinelenir. Bağlantı kopması bu beklemeyi atlatmaz.
 
+16 Ekim ek kaynak düzeltmesi, planlamayı abonelik değişikliği, native onay/ret
+ve gerçek yeniden deneme süresine bağlar. Günlük verisi reddedilen sembolün
+üst periyotları işlenebilir bekleme kuyruğunda sayılmaz; kullanılamayan veri
+olarak görünür. Sembol listeden silinmez. Hazırlık işçisi her turda en fazla
+64 ertelenmiş işi döndürür; eksik başlangıç/yenileme için ayrı 64 işlik arama
+ve önizleme adaleti korunur.
+
+Aynı sembol/periyodu kullanan etkin ayarların en büyük geçmiş ihtiyacı
+paylaşılır. İstenen en yüksek mum sayısı sınırlı devamlılık özetinde saklanır;
+ham önbellek boşalsa da sonraki küçük ayar geçmiş penceresini daraltmaz.
+Yeni, daha uzun geçmiş ilk kez gerekirse hesap bir kez yeniden hazırlanabilir.
+Eski kapalı mum hash'i, eksik satır ve bağlantı/revizyon korumaları gevşetilmez.
+Bu ek düzeltmelerin yayın ve canlı kabul durumu 16 Ekim kaydında ayrıca tutulur.
+
 Akış bütün fiyat olaylarını korur. Native açık mumun yalnız Close değişimi,
 gösterge fiyatını ayrıca taşıyan quote bulunduğu için yeni mum işi üretmez;
 son Close dahili satırda saklanır ve sonraki rollover'a aktarılır. İlk veri,
 geçmiş mum düzeltmesi, O/H/L ve metadata değişimleri işlenir. BIST günlük
 native kimliği değişince üst periyodun ilk gerçek yeni paketi tanık olarak
 yeniden işlenir; takvim günü hesabından veya önbellekten tanık üretilmez.
-Bu yeni kaynak davranışının yayın durumu [16 Ekim kabulünde](LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md)
-izlenir; bu paragraf tek başına üretim kabulü değildir.
+Bu düzen **16 Ekim 14:13:07 UTC**'de API/frontend/Compose/current'e yayımlandı;
+14:13:17–45 UTC bağımsız yayın kabulü geçti. [16 Ekim kaydı](LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md)
+imaj/CI/yedek ve koruma kanıtlarını tutar. İlk durumdaki sıfır derlenmiş hesap,
+805 bekleyen üye ve %100 CPU örnekleri nedeniyle yayın kabulü tam liste veya
+sürekli kapasite kabulü olarak sunulmaz.
 Sembol-kural ilişkisi bitset ile indekslenir; her tick bütün evreni taramaz.
 Değişmeyen gözlem durumları SQLite yazısı üretmez. Olaylar hemen kalıcılaştırılır;
 olay üretmeyen durum değişimleri sınırlı gruplarla birleştirilir. Telegram

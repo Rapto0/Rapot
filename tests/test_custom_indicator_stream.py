@@ -559,3 +559,60 @@ def test_malformed_private_payload_and_send_error_are_never_logged(caplog):
         other.reconcile({("BIST", "THYAO", "2D")})
     assert private_marker not in str(failure.value)
     assert not other.healthy and private_marker not in caplog.text
+
+
+def test_rejected_daily_anchor_does_not_rebuild_or_resubscribe_unchanged_virtual_demand():
+    pool = NativeStreamPool(Transport, "isolated-test-token", 1, lambda _: None, clock=lambda: 100)
+    wanted = {("BIST", "INVALID", tf) for tf in ("1D", "2D", "3W")}
+    pool.configure(wanted)
+    stream = next(iter(pool._streams.values()))
+    sid, item = next(iter(stream.series.items()))
+    packet(stream, "symbol_error", [item["session"], "sym", "unsupported"])
+    assert pool.needs_reconcile
+    pool.configure(wanted)
+    sent = len(stream.sent)
+    for _ in range(20):
+        assert not pool.needs_reconcile
+    assert len(stream.sent) == sent
+    assert pool._wanted_by_member[("BIST", "INVALID")] == wanted
+    assert pool.status()["virtual_subscriptions"] == 3
+    assert pool.status()["lease_anchor_blocked"] == pool.status()["lease_refused"] == 2
+    assert pool.status()["lease_pending"] == 0
+    assert not pool.member_ready(("BIST", "INVALID"))
+    assert sid in stream.series  # No retry storm for the rejected persistent chart.
+
+
+def test_final_ack_during_network_reconciliation_still_retires_the_chart():
+    wanted = {("BIST", "THYAO", tf) for tf in ("1D", "2D")}
+    events = []
+    pool = NativeStreamPool(Transport, "isolated-test-token", 1, events.append, clock=lambda: 100)
+    pool.configure(wanted)
+    stream = next(iter(pool._streams.values()))
+    sid, item = next(iter(stream.series.items()))
+    packet(stream, "symbol_resolved", [item["session"], "sym", {"timezone": "Europe/Istanbul"}])
+    fill(stream, sid, 120)
+    assert pool.confirm_native_witness(events[-1])["accepted"]
+
+    def received(event):
+        events.append(event)
+        if event["kind"] == "bars":
+            assert pool.confirm_native_witness(event)["accepted"]
+
+    pool._callback = received
+
+    def send(message):
+        stream.sent.append(message)
+        if message["m"] == "create_series":
+            session, new_sid = message["p"][:2]
+            packet(stream, "symbol_resolved", [session, "sym", {"timezone": "Europe/Istanbul"}])
+            fill(stream, new_sid, 120)
+
+    stream._ws.send = send
+    pool.configure(wanted)
+    assert pool.status()["lease_pending"] == 0
+    assert len(stream.series) == 2
+    assert pool.needs_reconcile
+    pool.configure(wanted)
+    assert len(stream.series) == 1 and not pool.needs_reconcile
+    assert pool.member_ready(("BIST", "THYAO"))
+    assert len([message for message in stream.sent if message["m"] == "chart_delete_session"]) == 1

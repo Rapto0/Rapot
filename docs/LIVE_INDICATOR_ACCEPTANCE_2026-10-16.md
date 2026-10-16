@@ -3,8 +3,206 @@
 Kullanıcının **“Çalışmana devam et”** talimatıyla manuel kabul sürdürüldü.
 Otomatik takip/timer kurulmaz; kullanıcıya ait kural, liste ve bildirim ayarı
 korunur. Bu kayıt kaynak düzeltmesini, izole sağlayıcı denemesini ve üretim
-kabulünü ayrı tutar. **İlk düzeltme `2ea4ea31` ile yayımlandı; tam 805 üyeli
-canlı kabul başarısızdır. İkinci kapasite koruması kaynak aşamasındadır.**
+kabulünü ayrı tutar. **İlk düzeltme `2ea4ea31` ve kapasite koruması `e290604b`
+sonrasında süreli native tanık düzeni `fe9e7e63` ile yayımlandı; bağımsız yayın
+kabulü geçti. Mevcut 805 üyeli listenin tamamının hazır canlı hesabı henüz
+doğrulanmadı.** Önceki denemelerin başarısız ve sınırlı sonuçları aşağıda korunur.
+
+## Süreli native tanık düzeninin üretim yayını
+
+**`fe9e7e632f6a3aee280c3f3c5b68c2b01a3620cc`, 14:13:07 UTC / 17:13:07 TSİ**
+API/frontend/Compose/current yayını tamamlandı. Bağımsız kabul
+**14:13:17–14:13:45 UTC** arasında geçti. Önceki API/current `e290604b` ve
+frontend `2ea4ea31` bu yayının doğrulanmış başlangıçlarıdır; middleware ve
+PostgreSQL aynı container/runtime kimliğinde kaldı. Main-init çalıştırılmadı;
+üretim veritabanına restore/migration veya silme uygulanmadı.
+
+| Kanıt | Kimlik |
+|---|---|
+| API imajı | `ghcr.io/rapto0/rapot/backend@sha256:414e5dd937f6d152c0ef5a7fe761ea264a80a708a9396f7916777373eb66d2fc` |
+| Frontend imajı | `ghcr.io/rapto0/rapot/frontend@sha256:1a2215479f346ac7abd2f9e44bfe670a6fa5f392fe718033dfd90936d227aa29` |
+| Beş kaynak CI işi | [38912184633](https://github.com/Rapto0/Rapot/actions/runs/38912184633), tamamı başarılı |
+| Temiz imaj yayını | [38912466333](https://github.com/Rapto0/Rapot/actions/runs/38912466333), başarılı; additive/delta yolları çalıştırılmadı |
+| Yayın receipt SHA-256 | `9fb3f7e46faf4ce4ce5b1994a2b71f2794ad7783074b760c1c701edfb1c3db1e` |
+| Bağımsız kabul SHA-256 | `bbd0316c6f37c669c93a98b8a04fcdabdc26ca30320fbe592ba2c3c287067fcd` |
+| Taze SQLite yedeği | 1.342.660.608 bayt; `090d6d0fac6e5ee59c27a27b5137c8b225fef083fd2812433985ec395980094e` |
+| Bağımsız restore kanıtı SHA-256 | `1333dceb5be9d2efe10020673abb6b92ee6a39ffa6113c523783e5adbe5f3f57` |
+
+13:53:27 UTC'de tamamlanan taze `e290604b` kaynaklı SQLite snapshot'ı,
+sunucu dışında tam bağımsız restore ve bütün tablo parmak izleriyle doğrulandı.
+Etkin yazıcı sürerken sabit salt okunur transaction kullanıldı. Snapshot ve
+restore'un etkin alarm durum izdüşümleri de eşleşti. Yayın ve ayrı kabulde
+**15 tablo şeması, 12 statik tablo, kullanıcının etkin kural tanımı/revizyonu,
+805 üyeli listesi, 805 durum satırı ve altı eski olay** korundu; bu kısa kabul
+aralığında yeni olay sıfırdı. Tanımsız 290 kurtarma satırı ve özel dosyalar
+korundu. Araçlar doğal alarm/teslim ilerlemesine izin verir, kullanıcı kuralını
+durdurmaz veya değiştirmez. Ayrı test alarmı/Telegram/AI/emir üretilmedi;
+eski gözlem timer'ı disabled/inactive kaldı.
+
+Dört servis healthy/restart0; 13 SSR sayfası, 33 statik dosya, iki yönlendirme
+ve 18 anonim401 yanıtı geçti. Yönetici katalog v2 / beş gösterge / 289 input,
+canlı fiyat politikası ve geçersiz önizlemenin 422 cevabı doğrulandı. Etkin
+işçiler eşzamanlı çalıştığından genel sayaçların sabit kaldığı veya 422 sırasında
+başka doğal iş oluşmadığı iddia edilmez. İmaj ve kaynak arşivinin seçilmiş
+**301 dosyası** tam ham SHA-256 ile eşleşti. Yerel 2.095 Python/bir atlama,
+310 frontend, üretim derlemesi ve standalone kabulü; aynı commit'in beş CI
+işi ve temiz imaj yayını geçti. Yayın araçlarının 46 çevrimdışı kontrolü de
+başarılıydı; eski yedek/review/receipt yeni kanıt yerine kullanılmadı.
+
+Yayın sonrası ilk durum henüz hazırlık aşamasıdır: **8.050 mantıksal TF kabulü,
+805 sürekli günlük chart, 128 geçici oturum, toplam 933 açık fiziksel chart**
+ve dört bağlantı vardı. Uzun periyot sertifikası/derlenmiş hesap **0/0**, 805
+üye bekleyen/eski, native ret 84; işçi kuyruk örnekleri 1.652–1.656 idi.
+149 bellek sonucu hazır hesap kanıtı değildir; sağlayıcı çalışma hata bayrağı
+mevcuttu. Ana fiyat akışı 805 abonelikte 524 taze sembol gösterdi; normal mum
+işi/kuyruk 0/0'dı. Bunlar özel gösterge evreninin tamamının canlı hazır olduğunu
+göstermez.
+
+14:13:35–45 UTC üç kısa örnekte kullanılabilir RAM **300,33 / 274,38 / 279,22
+MiB**, iki CPU aralığı **%100 / %100**, son boş alan **4.520.148.992 bayt** idi.
+Bu yayın ve veri koruma kabulüdür; sürekli CPU/RAM kazancı, tam liste hazırlığı,
+uçtan uca gecikme, tam seans veya 3.000 eşzamanlı canlı alarm kabulü değildir.
+Sonraki manuel canlı gözlemler aşağıda ayrı kaydedilmiştir. Yayın kanıtları
+`runtime-data/20261016-native-lease-deploy/deployment-receipt.json`,
+`acceptance.json`, `github-evidence.json` ve `backup-verified.json` altındadır.
+
+## `fe9e7e63` sonrasında mevcut listedeki canlı gözlemler
+
+İki ayrı altı örnekli salt okunur gözlem **14:13:35–14:14:26 UTC /
+17:13:35–17:14:26 TSİ** ve **14:16:09–14:16:59 UTC /
+17:16:09–17:16:59 TSİ** aralıklarında tamamlandı. Aradaki süre sürekli
+gözlenmiş sayılmaz. İki araç da mevcut tek etkin `smi_votes` izleme listesi
+kuralını, revizyonunu, 805 üyeli listesini ve Telegram tercihini aynı hash'lerle
+doğruladı. Kural `intrabar` / `once_per_bar` olarak kaldı. Teslim sayacı bütün
+örneklerde **altı önceki gönderim**, sıfır bekleyen/başarısızdı; yeni TEST
+alarmı veya Telegram mesajı oluşturulmadı. Üç özel gösterge işçisi canlıydı;
+normal mum işi/kuyruk 0/0 kaldı.
+
+| Gözlem | İlk altı örnek | İkinci altı örnek |
+|---|---|---|
+| Kullanıcı kapsamı | 805 üye / 8.050 mantıksal TF kabul edildi | Aynı 805 üye; önizlemeyle toplam 8.051 TF |
+| Açık fiziksel chart | 933 → 869 | 869 → 805 |
+| Uzun periyot sertifikası | 0 → 1.352 | 4.468 → 5.689 |
+| Derlenmiş hesap | 0 → 3 | 12 → 18 |
+| Bekleyen/eski kullanıcı hesabı | 805 → 804 | 798 → 796; ara örneklerde 799 |
+| Canlı kuyruk | 1.636 → 0; en yüksek 1.636 | 6 → 0; en yüksek 96 |
+| Son işlenen fiyatın kaynak yaşı | 24,77 → 2,09 sn; en yüksek 27,10 sn | 1,49 → 0,78 sn |
+| Kullanılabilir RAM | 286,49–301,31 MiB | 252,98–264,83 MiB |
+| Sunucu CPU aralıkları | Beş aralığın tamamı %100 | Beş aralığın tamamı %100 |
+
+Dört native bağlantı örnekler boyunca açık, kuyruk taşması sıfırdı; yeni
+protokol hata kodu kaydedilmedi. Canlı işlenen sayaç 267 → 2.986 ve ikinci
+aralıkta 6.686 → 8.505 ilerledi. İlk hazırlıkta eski/geçersiz kabul edilen
+fiyat sayacı 189 → 437 oldu; ikinci gözlemde artmadı. Bunlar bütün fiyatların
+işlendiği veya sıfır gecikme kanıtı değildir. Derlenmiş hesap sayısı taze
+sinyal veya hazır kullanıcı üyesi sayısı değildir.
+
+İkinci gözlemdeki **8.051 TF ve 5.689 sertifika**, THYAO RSI Snapshot
+önizlemesinin ek `7D` talebini içerir; kullanıcı kuralı 8.050 TF olarak kaldı.
+Son örnekte 805 sürekli günlük chart ve sıfır geçici chart vardı. **173
+günlük native aboneliği reddedildiği halde bunlara bağlı 1.557 uzun TF
+`pending` sayılıyordu**; uzun periyot ret sayacı sıfır görünüyordu. Bu 1.557
+iş, açılmayı bekleyen sağlıklı periyot değildir. Yayındaki kaynak bu yanlış
+bekleyen sayısını yeniden planlama gerekçesi sayarak değişmeyen talebi tekrar
+dolaşıyordu. Yeni aday kaynak bu işleri günlük veri reddi nedeniyle
+kullanılamayan grupta gösterir; bu paragraf adayın üretime alındığını söylemez.
+
+### Resmî pay listesi, fiyat önbelleği ve alarm durum satırları
+
+**14:17:08 UTC / 17:17:08 TSİ** kontrolü bir salt okunur SQLite transaction'ı
+ve mevcut önbellek GET'leriyle tamamlandı; yeni sağlayıcı isteği veya abonelik
+oluşturmadı. Resmî karşılaştırma, **14 Ekim 07:19:45 UTC'de kaydedilmiş KAP
+pazar manifestindeki 631 paydır**; 16 Ekim üyeliği yeniden sorgulanmadı.
+Bu 631 kodun tamamı kullanıcının 805 üyeli listesinde vardı.
+
+| Kapsam | Önbelleğin `fresh` sınıfı | `stale` | Eksik fiyat | Kaynak ve alım yaşı en fazla 30 sn |
+|---|---:|---:|---:|---:|
+| Kayıtlı resmî 631 pay | 519 | 112 | 0 | 332 |
+| Kullanıcının 805 üyesi | 520 | 112 | 173 | 332 |
+| Resmî listede olmayan 174 üye | 1 | 0 | 173 | 0 |
+
+`fresh`, standart fiyat önbelleğinin kendi tazelik sınıfıdır; özel gösterge
+akışının 30 saniyelik koşuluyla aynı anlamda kullanılmaz. Tablodaki son sütun
+kaynak ve alım zamanlarından ayrıca hesaplanmıştır. Seyrek işlem ile veri
+teslim sorunu tek örnekten ayrıştırılamaz; 173 eksik fiyat da tek başına
+geçersiz sembol kanıtı değildir. Kişi/sembol bazında güncel özel gösterge
+hazırlığı ve native ret eşlemesi bu API alanlarından çıkarılamadı.
+
+DB'de 805 durum satırı bulundu: 13 `ready`, 792 `unknown` kontrol noktası;
+resmî pay alt kümesinde 13/618 idi. **Bunlar son anlamlı durum değişiminde
+yazılan kayıtlardır; o andaki hazır alarm sayısı değildir.** `updated_at`
+son fiyatı veya son değerlendirmeyi göstermez; DB kimlikleri mevcut özel
+akış nesliyle eşlenemedi. Aynı anda genel sayaçta 19 derlenmiş hesap ve 793
+bekleyen/eski kullanıcı hesabı vardı; periyot sertifikası yine hesap hazırlığı
+yerine geçmez. İlk kapsam okuması Docker'ın nanosaniyeli `StartedAt` değerini
+Python 3.10'da ayrıştıramayıp `container_timestamp_guard` ile, DB okumasına
+başlamadan durdu. İlk kanıt korundu; parser gerçek Python 3.10.19 ve 3.12.8'de
+on kontrolle doğrulandıktan sonra yeni dosyaya yazılan ikinci okuma geçti.
+
+### CPU yükünün ayrıştırılması
+
+**14:21:27–14:21:37 UTC / 17:21:27–17:21:37 TSİ**, 10,003 saniyelik iki
+salt okunur procfs/cgroup örneği tek mantıksal CPU'da sunucu meşguliyetini
+**%96,01**, hypervisor `steal` payını **%0,40**, API container yürütmesini
+**%90,32** gösterdi. API cgroup'u 9,036 CPU saniyesi kullandı; bunun 8,654
+saniyesi user, 0,381 saniyesi system idi. CPU throttling artışı sıfırdı.
+Dolayısıyla bu kısa aralıktaki yüksek yük yalnız hypervisor beklemesine
+bağlanamaz; API gerçek CPU tüketiyordu. Bu ölçüm önceki %100 aralıklarının
+yeniden hesaplanması değildir ve tek başına hangi Python fonksiyonunun
+maliyeti olduğunu belirlemez.
+
+API cgroup belleği **232,79 → 232,87 MiB**, swap kullanımı **11,55 MiB**,
+Python RSS son örneği **216,16 MiB** idi; kullanılabilir sunucu RAM'i
+**236,42 → 236,73 MiB** ölçüldü. OOM/oom-kill sayaçları sıfırdı. Süreç ve
+thread RSS değerleri ortak sayfaları içerebildiğinden toplanmadı. Tanı
+uygulamaya bağlanmadı, profil enstrümantasyonu, kill veya restart yapmadı.
+
+### Beş gösterge önizlemesinin kısmi ve başarısız sonuçları
+
+| Sembol/deneme | UTC aralığı; TSİ için +3 saat | Sonuç |
+|---|---|---|
+| THYAO ilk | 14:14:53–14:15:53 | Hiçbir gösterge kabul koşullarında hazır olmadı; `TimeoutError` / `incomplete` |
+| THYAO ikinci | 14:17:33–14:18:33 | RSI Snapshot ve RSI Votes hazır gözlemleri; sonra HTF RSI Score da hazır; SMI/RMI hazır olmadı; `TimeoutError` / `incomplete` |
+| THYAO üçüncü | 14:19:03–14:20:03 | İlk üç turda HTF RSI Score, RSI Snapshot ve RSI Votes hazır; ardından geçmiş sıfırlamasıyla tümü `unknown`; `TimeoutError` / `incomplete` |
+| BTCUSDT ilk | 14:21:08–14:22:08 | 79 önizleme isteğinde beş göstergenin hiçbiri hazır olmadı; `NOT_READY_WITHIN_BOUND` |
+
+**Hiçbir tur beş göstergenin birlikte kabulünü geçmedi.** Üçüncü THYAO
+denemesinde 14:19:16 UTC'de açık “Native geçmiş düzeltildi” nedeni görüldü;
+devamlılık son eki 0 → 2, daha sonra 4 oldu. Yeni canlı fiyatın gelmesi
+hesap başlangıcının hazır olduğu anlamına gelmedi. Üç THYAO denemesinin
+süre sınırında kesilen son aşamaları ve tamamlanmamış kapanış kontrolleri
+korundu. BTCUSDT denemesi sonrasında kaynak, healthy/restart0 ve kullanıcı
+tanımı yeniden doğrulandı. Son kısmi/boş aşamalarda alınamayan durum cevabından
+üretilen `false` kabul bayrakları gerçek bağlantı kopması veya işçi ölümü
+kanıtı sayılmadı. Yalnız süreli önizleme talepleri açıldı; alarm, liste,
+Telegram veya emir değişikliği yapılmadı.
+
+Kaynak incelemesi, paylaşılan geçmişin **511/515/519 mumluk farklı taleplerinde**
+eski kapalı satırlar aynı kalsa bile daha eski başlangıç eklenmesini revizyon
+sayan bir koşul buldu. Ham önbellek silindikten sonra daha kısa talebe dönüş
+de üç satırlık kayan pencere sınırını aşabiliyor. Bu davranış canlı sıfırlama
+bulgusuyla uyumludur; kayıt tek başına bütün sağlayıcı satırlarının değişmezliğini
+kanıtlamaz. Aday düzeltme gerekli en yüksek geçmiş talebini korur; mevcut
+sayı/zaman/OHLC hash'i ve pencere devamlılığı korumalarını gevşetmez. İlk kez
+daha uzun geçmiş gerekirse bir defa yeniden hazırlama olabilir; sonraki
+küçük talepler ham önbellek silindiğinde bile pencereyi tekrar daraltmaz.
+Aynı sembolün etkin ayarları başlangıçta ortak en büyük talebi kullanır.
+
+Bu kayıt aşamasında **değişiklik/zaman aşımı geldiğinde abonelik planlama,
+64 işle sınırlı hazırlık kuyruğu taraması ve geçmiş talebi üst sınırını
+koruma düzeltmeleri aday kaynaktadır; henüz yayımlanmamıştır.** Gerçek geçmiş
+düzeltmesi, kopma, eski fiyat ve eksik native tanıkta `unknown` davranışı
+korunur. Yayındaki `fe9e7e63` için tam 805 üye hazırlığı, beş gösterge canlı
+kabulü ve kalıcı CPU iyileşmesi tamamlandı denemez.
+
+Bu bölümün özel kanıtları `runtime-data/20261016-native-lease-acceptance/`
+altındaki `native-lease-observation-first.json`, `native-lease-observation-second.json`,
+`lease-preview-first-thyao.json`, `lease-preview-second-thyao.json`,
+`lease-preview-third-thyao.json`, `lease-preview-first-crypto-btcusdt.json` ile
+`runtime-data/20261016-live-market/` altındaki
+`existing-watchlist-coverage-fe9e-first.json`, `existing-watchlist-coverage-fe9e-second.json`
+ve `cpu-attribution-fe9e-first.json` dosyalarıdır. Başarısız kanıtlar silinmedi;
+bu okumalar otomatik takip veya tam seans kaydı değildir.
 
 ## İlk yayın ve bulunan ikinci sınır
 
@@ -133,7 +331,7 @@ abonelik mesajını gönderirken tutuyordu. Bağlantının tekrar kapanması bü
 canlı başlangıçları sıfırlıyor; geçmiş işçisi de hazır olmayan sembollere
 gereksiz başlangıç sorguları yapabiliyordu.
 
-## Kaynak düzeltmesi
+## İlk düzeltmenin kaynak davranışı (`2ea4ea31`)
 
 - Bağlantı başına kontrol turunda en fazla **16 yeni native seri** açılır.
   Kalan işler sonraki turda devam eder ve bekleyen sayı durum çıktısındadır.
@@ -178,7 +376,7 @@ Yerelde tam pakette **2.014 Python testi / bir atlama**, **307 frontend testi**
 geçti. Son hazırlık indeksi, önizleme adaleti ve hata tanısı değişikliklerinin
 ardından **97 ilgili Python testi**, arayüz metni sonrası **25 alarm ekranı
 testi**, 290 Python kaynağında Ruff, frontend lint ve typecheck geçti. Son
-kaynak CI'si ve yayın kabulü ayrıca kaydedilecektir.
+kaynak CI'si ve yayın kabulü yukarıdaki ilk yayın kaydında ayrıca tutulur.
 
 805 sembol × 10 TF hazırlık kontrolünün yerel ortalaması **171 ms → 4,57 ms**
 oldu; bu üretim CPU ölçümü değildir. Önizlemeler başlangıç kuyruğunun arkasında
@@ -187,10 +385,10 @@ yinelenmez. Kalan üç iş alarm hazırlığına ayrılır.
 
 ## Açık kalan kabul ve korunan sınırlar
 
-Süreli native tanık düzeninin yedekli yayını, kullanıcının mevcut 805 üyeli
-alarmında 8.050 mantıksal TF talebinin kabulü, bütün hazır hesaplar, uçtan uca
-gecikme ve kaynak tüketimi henüz doğrulanmadı. Önceki iki yayın yukarıda ayrı
-kayıtlıdır. 500 serilik protokol denemesi 3.000 canlı alarmı veya tam
+Süreli native tanık düzeninin yedekli `fe9e7e63` yayını ve 8.050 mantıksal TF'nin
+yerel planlamaya kabulü doğrulandı. Kullanıcının mevcut 805 üyeli alarmında bütün
+hazır hesaplar, uçtan uca gecikme ve sürekli kaynak tüketimi henüz doğrulanmadı.
+Önceki iki yayın yukarıda ayrı kayıtlıdır. 500 serilik protokol denemesi 3.000 canlı alarmı veya tam
 seans kesintisizliğini kanıtlamaz. Yeni test alarmı/bildirim bu tanıda
 oluşturulmadı; kullanıcının mevcut etkin Telegram tercihi değiştirilmedi.
 

@@ -263,3 +263,130 @@ def test_persistent_admission_reserves_lease_capacity_and_does_not_move_incumben
     extended = wanted | {("BIST", "EARLIER", "2D")}
     _, updated, _ = plan_native_subscriptions(extended, slots)
     assert all(updated[member] == slot for member, slot in slots.items())
+
+
+def test_reconcile_waits_for_native_ack_and_real_timeout_or_retry_deadline():
+    book, clock = setup_book()
+    assert book.scheduling_due
+    anchor = event(book, DAY)
+    assert not book.scheduling_due  # Missing native1D ACK needs no repeated plan.
+    assert book.confirm(anchor)["accepted"]
+    assert book.scheduling_due
+    lease = event(book, LONG)
+    book.mark_started({LONG})
+    assert not book.scheduling_due
+    clock[0] += 29
+    assert not book.scheduling_due
+    clock[0] += 1
+    assert book.scheduling_due
+    assert book.desired()[0] == {0: {DAY}}
+    assert not book.scheduling_due
+    clock[0] += 29
+    assert not book.scheduling_due
+    clock[0] += 1
+    assert book.scheduling_due
+    retry = event(book, LONG)
+    assert not book.confirm(lease)["accepted"]
+    assert book.confirm(retry)["accepted"]
+    assert book.scheduling_due  # The final ACK still needs chart retirement.
+    assert book.status()["lease_pending"] == 0
+    book.desired()
+    assert not book.scheduling_due
+
+
+def test_rejected_anchor_removes_its_retry_deadline_and_exposes_blocked_witnesses():
+    book, clock = setup_book()
+    anchor = event(book, DAY)
+    book.confirm(anchor)
+    event(book, LONG)
+    book.mark_started({LONG})
+    clock[0] += 30
+    book.desired()
+    assert book.status()["lease_retry_waiting"] == 1
+    assert book.reject(anchor)
+    assert book.scheduling_due
+    book.desired()
+    status = book.status()
+    assert status["lease_anchor_blocked"] == status["lease_refused"] == 1
+    assert status["lease_direct_refused"] == status["lease_pending"] == 0
+    assert status["lease_retry_waiting"] == 0
+    clock[0] += 10000
+    assert not book.scheduling_due
+    assert not book.reject(anchor)  # Duplicate rejection cannot keep the latch hot.
+    assert not book.scheduling_due
+    assert book.wanted == {DAY, LONG}
+
+
+def test_due_retry_does_not_rebuild_a_full_shard_until_a_lease_slot_is_released():
+    wanted = {("BIST", f"SYM{i:02}", "2D") for i in range(33)}
+    book, clock = setup_book(wanted)
+    _, anchors = book.desired()
+    for key, context in anchors.items():
+        book.confirm({"key": key, "rows": ROWS, "metadata": META, **context})
+    _, contexts = book.desired()
+    leases = {key for key in contexts if is_leased_timeframe(key[2])}
+    first = min(leases)
+    book.mark_started({first})
+    clock[0] += 30
+    _, contexts = book.desired()  # First times out; symbol33 fills its slot.
+    active = {key for key in contexts if is_leased_timeframe(key[2])}
+    assert len(active) == 32 and first not in active
+    clock[0] += 20
+    book.mark_started(active)
+    clock[0] += 10  # First retry is due, but all32 lease slots await valid ACKs.
+    assert not book.scheduling_due
+    completed = min(active)
+    assert book.confirm({"key": completed, "rows": ROWS, "metadata": META, **contexts[completed]})[
+        "accepted"
+    ]
+    assert book.scheduling_due
+    _, contexts = book.desired()
+    assert first in contexts
+    assert not book.scheduling_due
+
+
+def test_anchor_and_direct_refusal_counts_do_not_double_count_the_same_long_series():
+    book, _ = setup_book()
+    anchor = event(book, DAY)
+    book.confirm(anchor)
+    assert book.reject(event(book, LONG))
+    assert book.reject(anchor)
+    status = book.status()
+    assert status["lease_direct_refused"] == status["lease_anchor_blocked"] == 1
+    assert status["lease_refused"] == 1 and status["lease_pending"] == 0
+
+
+def test_full_list_with_173_refused_anchors_settles_without_dropping_virtual_demand():
+    timeframes = ("1D", "2D", "3D", "4D", "5D", "6D", "1W", "2W", "3W", "1M")
+    wanted = {("BIST", f"SYM{i:04}", tf) for i in range(805) for tf in timeframes}
+    _, slots, refused = plan_native_subscriptions(wanted)
+    assert not refused
+    clock = [100.0]
+    book = NativeLeaseBook(lambda: clock[0])
+    book.configure(wanted, slots)
+    _, anchors = book.desired()
+    for index, (key, context) in enumerate(sorted(anchors.items())):
+        value = {"key": key, "rows": ROWS, "metadata": META, **context}
+        if index < 173:
+            assert book.reject(value)
+        else:
+            assert book.confirm(value)["accepted"]
+    for _ in range(70):
+        if not book.scheduling_due:
+            break
+        _, contexts = book.desired()
+        for key, context in contexts.items():
+            if is_leased_timeframe(key[2]):
+                assert book.confirm({"key": key, "rows": ROWS, "metadata": META, **context})[
+                    "accepted"
+                ]
+    assert not book.scheduling_due
+    status = book.status()
+    assert status["virtual_subscriptions"] == 8050
+    assert status["persistent_subscriptions"] == 805
+    assert status["lease_certified"] == 632 * 9
+    assert status["lease_anchor_blocked"] == status["lease_refused"] == 173 * 9
+    assert status["lease_direct_refused"] == status["lease_pending"] == 0
+    assert book.wanted == wanted
+    clock[0] += 21600
+    assert not book.scheduling_due
