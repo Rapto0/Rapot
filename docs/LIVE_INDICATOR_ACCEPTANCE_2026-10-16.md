@@ -5,9 +5,15 @@ Otomatik takip/timer kurulmaz; kullanıcıya ait kural, liste ve bildirim ayarı
 korunur. Bu kayıt kaynak düzeltmesini, izole sağlayıcı denemesini ve üretim
 kabulünü ayrı tutar. **İlk düzeltme `2ea4ea31` ve kapasite koruması `e290604b`
 sonrasında süreli native tanık düzeni `fe9e7e63` ile, ardından planlama ve ortak
-geçmiş düzeltmesi `5472db4` ile yayımlandı; bağımsız yayın kabulleri geçti.
-Mevcut 805 üyeli listenin tamamının hazır canlı hesabı henüz
-doğrulanmadı.** Önceki denemelerin başarısız ve sınırlı sonuçları aşağıda korunur.
+geçmiş düzeltmesi `5472db4` ile yayımlandı. Sonraki önizleme, kripto takvimi ve
+631 pay evreni düzeltmesi `c801e275` ile 15:35:15 UTC'de üretime alındı;
+15:35:24–15:35:56 UTC bağımsız yayın kabulü geçti.
+BTCUSDT'de beş göstergenin sınırlı canlı önizleme kabulü 15:40:56 UTC'de geçti;
+normal motor alarmı ve TradingView ile sayısal eşitlik kabulü değildir.
+805 üyeli eski kapsamın tamamının hazır canlı hesabı doğrulanmadı. Kullanıcının
+onayladığı 631 pay / 174 diğer kod ayrımı 15:27:36 UTC'de üretimde tamamlandı;
+yeni 631 üyeli kapsamın canlı kabulü de henüz tamamlanmadı.** Önceki denemelerin
+başarısız ve sınırlı sonuçları aşağıda tarihsel kanıt olarak korunur.
 
 ## Kullanıcının 631 hisse / 174 diğer kod ayrımı
 
@@ -27,6 +33,165 @@ karma listeler bu hisse filtresine tabi değildir. Denetim tarihi 12 Ekim;
 resmî saklanmış kaynakla ek karşılaştırma 14 Ekim'dir. Bugünkü canlı işlem,
 fiyat erişimi veya gelecekte değişmeyecek üyelik iddiası yapılmaz. Kaynak
 düzeltmesi ve sunucudaki liste aktarımının kabulü ayrı kaydedilir.
+
+**Liste ayrımı 15:27:36 UTC / 18:27:36 TSİ'de `COMPLETE` oldu.** İşlem,
+üretim kaynağı `5472db486f4578a7a5d3b2454a3766d9b26cb83f` üzerinde normal
+yönetici API'siyle yürütüldü. Mevcut listenin kimliği korunarak üyeleri 631'e
+indirildi ve liste revizyonu **3** oldu. Ayrılan 174 kod yeni, **alarmsız**
+bir listede saklandı. Mevcut etkin kuralın koşulu, ayarları ve bildirim tercihi
+korundu; normal liste güncellemesi bağlı kuralın revizyonunu **2**'ye taşıdı.
+Kural payload'ına ayrı yazma yapılmadı. API'nin normal geçersizleştirme yolu
+eski değerlendirme durumlarını temizledi; bu değişiklik kuralı yeniden yazma
+veya yeni test alarmı kurma işlemi değildir.
+
+Altı eski olay değişmeden korundu; bu işlem aralığında yeni doğal olay sıfırdı.
+Teslim sayıları gönderilmiş/bekleyen/başarısız **6/0/0** kaldı. Ayrı Telegram,
+AI, emir veya alarm çağrısı yapılmadı. Üretim receipt'i
+`runtime-data/20261016-bist-classification/execute-receipt-7e56cdaf285c4f2a89de29ada7db9885.json`
+(SHA-256 `096f51d14eb8a887901e6acdfa882f979da26ace5091b27c6e9fe4f2670d95d1`)
+üyelikleri, kural/listelerin parmak izlerini ve altı olayın korunduğunu kaydeder.
+Bu sonuç liste aktarımının kabulüdür; yeni pay evreni kaynak kodunun yayımlandığı
+veya 631 üyenin bütün canlı hesaplarının hazır olduğu anlamına gelmez.
+
+**`c801e275a2848c03c2a0f1b2f29c19329955f52f` ile yayımlanan kaynak:** ortak
+631 pay evreni, gereken periyot alt kümesi, önizleme üyeliğinin sabit planı ve
+kripto yıl geçişi düzeltmesi kaynakta tamamlandı. Yerel tam turda **2.190 Python
+testi / bir atlama** ve **310 frontend testi** geçti. 15:35:15 UTC'de üretim
+`5472db4`'ten bu kaynağa geçti; bağımsız yayın kabulü aşağıda kaydedilir.
+Kaynak testleri tam piyasa, tam seans, 3.000 canlı alarm veya TradingView
+derleyicisi eşitliği kanıtı değildir. Yeni kabul araçları hem 631 üyeli etkin
+listeyi hem 174 üyeli alarmsız listeyi koruyacak şekilde hazırlandı; hazırlık
+otomatik takip oluşturmaz.
+
+## Önizleme, kripto takvimi ve 631 pay evreninin üretim yayını
+
+**`c801e275a2848c03c2a0f1b2f29c19329955f52f`, 15:35:15 UTC / 18:35:15 TSİ**
+API/frontend/Compose/current yayını tamamlandı. **15:35:24–15:35:56 UTC /
+18:35:24–18:35:56 TSİ** bağımsız kabul geçti. Middleware ve PostgreSQL aynı
+container/runtime kimliklerinde kaldı; dört servis healthy/restart0.
+Üretimde restore, migration veya veri temizliği yapılmadı.
+
+| Kanıt | Kimlik |
+|---|---|
+| API imajı | `ghcr.io/rapto0/rapot/backend@sha256:f5f0b92333bed5d29b309c938a1bace2db0d5b7bcfec07e03c01d74549153d77` |
+| Frontend imajı | `ghcr.io/rapto0/rapot/frontend@sha256:3089cdd5af935f8b3848edb8a06431d6579d6f2175973e6d15be86b451bf8251` |
+| Beş kaynak CI işi | [38923488768](https://github.com/Rapto0/Rapot/actions/runs/38923488768), tamamı başarılı |
+| Temiz imaj yayını | [38923509194](https://github.com/Rapto0/Rapot/actions/runs/38923509194), başarılı; additive/delta yolları çalıştırılmadı |
+| Yerel yayın receipt dosyası SHA-256 | `f3f41e18ad15642cf0b059cdcf147e062be344cf9ff5a5fdbd673a9289fa3eeb` |
+| Bağımsız kabul dosyası SHA-256 | `5b28fcdfa0213dc2873405c7e6176bc56081de26ba8f1c629bb7023f5545ba63` |
+| Taze SQLite yedeği | 1.342.660.608 bayt; `3fbf3c89b32805952cda47e72d1df9039ec063780d4b6e63caa22f172b8c9095` |
+| Bağımsız restore kanıtı SHA-256 | `8f8c53733f995d3d23677347a3e0e2396703f5c821f0dbdafb00faf903cf4c6f` |
+
+Onaylı liste ayrımından sonra **15:28:05–15:28:20 UTC**'de alınan taze
+snapshot, sunucu dışında tam SQL restore ve bütün **15 tablo** için tipli
+satır/şema parmak izleriyle doğrulandı. Etkin alarm koruma izdüşümü de eşleşti.
+Yayın ve ayrı kabul; 15 şemayı, 12 statik tabloyu, dört kural satırını (biri
+etkin), **631 üyeli liste/revizyon3, bağlı kural/revizyon2, 174 üyeli ayrı
+alarmsız liste/revizyon1 ve altı eski olayı** korudu. Bu kısa kabulde yeni
+olay sıfırdı. Özel dosyalar ve 290 tanımsız kurtarma satırı korundu.
+Canlı durum ilerlemesine izin veren koruma kullanıldı; genel sayaçların
+sabitliği iddia edilmedi. Yeni alarm, Telegram/AI üretimi, emir veya otomatik
+takip oluşturulmadı; eski gözlem timer'ı disabled/inactive kaldı.
+
+13 SSR sayfası, 33 statik dosya, iki yönlendirme ve 18 anonim401 kontrolü
+geçti. Katalog v2 / beş gösterge / 289 input, canlı fiyat politikası ve
+geçersiz önizlemenin 422 yanıtı doğrulandı. İmaj/arşivde seçilmiş **307 kaynak
+dosyası** ham SHA-256 ile eşleşti. Yerel 2.190 Python/bir atlama, 310 frontend
+ve aynı kaynağın beş CI işi başarılıydı. Kanıtlar
+`runtime-data/20261016-native-preview-deploy/` içindeki `deployment-receipt.json`,
+`acceptance.json`, `github-evidence.json` ve `backup-verified.json` dosyalarıdır.
+
+Başlangıç örneği **6.310 mantıksal TF**, 631 sürekli chart, dört bağlantı,
+527→545 uzun periyot sertifikası ve bir derlenmiş hesap gösterdi; **631 kural
+üyesinin tamamı hâlâ bekleyen/eski** durumundaydı. Örnekte native ret sıfır,
+normal mum işi/kuyruk 0/0 ve ana fiyat aboneliği 631'di; taze fiyat sayısı
+sıfırdı. **15:35:46–15:35:56 UTC** kısa kaynak örneklerinde kullanılabilir RAM
+275,551 / 303,957 / 305,133 MiB, CPU aralıkları **%96,6 / %100** idi.
+Bu başlangıç ölçümü kalıcı CPU/RAM çözümü veya hazır canlı gösterge kapsamı
+kabulü değildir. Sonraki sınırlı BTCUSDT beşli önizleme sonucu aşağıdadır.
+
+**15:36:26 UTC** ayrı salt okunur üyelik kabulü geçti: `/symbols/bist` ve
+çalışan motorun aday evreni aynı **631** payı döndürdü; ikisinin sıralı küme
+özeti `e49d93571a6de780664f5a11baeebfb8bc69bb042034616db9de5dd795db4c9e` idi.
+Canlı kural indeksi, özel gösterge talebi ve kuralın bildirdiği kapsam da
+631'di. 12 Ekim denetimi / 14 Ekim resmî karşılaştırması metadata'da eşleşti.
+İki kişisel liste ve kural korunurken 174 üyeli liste alarmsız kaldı. Bu
+kontrol veri sağlayıcıya gitmedi; **yalnız üyelik/kapsam doğrular, fiyat veya
+gösterge hazırlığı doğrulamaz.** Kanıt
+`runtime-data/20261016-native-preview-acceptance/automatic-bist-universe-first.json`
+(SHA-256 `09cf45b57794850f3b9b0cc5ed132646b85334a8bc6749b1a6d6334ff085199a`).
+
+## `c801e275` üzerinde BTCUSDT beşli canlı önizleme kabulü
+
+İlk 180 saniyelik çağrı **15:36:06–15:39:06 UTC** arasında **276 önizleme
+isteğiyle `NOT_READY_WITHIN_BOUND`** döndü. HTF RSI Score için yedi farklı
+hazır gözlem görüldü; diğer dört gösterge için sayı sıfırdı. Son tam aşamada
+5.689 native sertifika, sıfır bekleyen/ret/yeniden deneme, 20 derlenmiş hesap
+vardı. Bu hazırlık sırasındaki başarısız süre sınırı korunur; sonraki başarı
+ilk denemeyi başarılı saydırmaz. Kaynak ve kullanıcı tanımları değişmedi,
+API healthy/restart0 kaldı. Kanıt `preview-c801-btc-first-btcusdt.json`
+(SHA-256 `f1ba38701f45c7e3ff42e9549c4b110deb41fb962d2ed94adf6df11b58d1e366`).
+
+İlk çağrıyla eşzamanlı **15:36:29–15:37:19 UTC** altı salt okunur örnekte
+iki liste ve mevcut kural korundu. Kullanılabilir RAM **245,090–271,480 MiB**,
+ölçülebilen beş CPU aralığının tamamı **%100** idi. Native sertifikalar
+2.485→4.744, bekleyenler 3.204→945, derlenmiş hesaplar 5→11 ilerledi.
+İşçi kuyruğu 0–40, taşma sıfır; günlük ret, uzun periyot ret ve geçmiş
+yeniden deneme sayıları sıfırdı. Üç işçi ve dört bağlantı canlıydı; hata
+bayrakları false, son işlenen kaynak zamanıyla fark **0,395–1,655 saniye**
+aralığındaydı. Bu fark uçtan uca alarm teslim süresi değildir. Ana BIST
+akışında 631 abonelik, sıfır taze sembol ve 631 bekleyen/eski kural üyesi
+vardı; normal mum işi/kuyruk 0/0, teslim sayıları 6/0/0 kaldı. Bu örnek
+kalıcı CPU kazanımı veya BIST canlı hazırlığı göstermedi. Kanıt
+`preview-c801-observation-first.json`
+(SHA-256 `a69cbb3ed21b80f6be4cdef481d038eacf84b7f8519731cf291791849b21f26a`).
+
+Aynı kaynakta ikinci manuel çağrı **15:39:45.199–15:40:56.620 UTC /
+18:39:45.199–18:40:56.620 TSİ** arasında **`passed`** oldu. 71,177 saniyelik
+gözlemde 22 aşama ve 110 sıralı önizleme POST'u yapıldı. Son aşamada beş
+göstergenin tamamı hazırdı; her göstergenin kendi etkin periyotları aynı
+güncel fiyat gözlemini kullanıyor, native mum sınırları ve tazelik kontrolleri
+geçiyordu. HTTP yanıtları sıralıdır; beş göstergenin hepsinin tek ortak tick'te
+örneklendiği iddia edilmez.
+
+| Gösterge | Denenen etkin periyot sayısı | Farklı hazır gözlem |
+|---|---|---|
+| HTF RSI Score | 10 | 22 |
+| RSI Snapshot | 10 | 22 |
+| RSI N OY | 2 (1D ve 3D) | 22 |
+| SMI N OY | 2 (1D ve 3D) | 12 |
+| RMI N OY | 2 (1D ve 3D) | 2 |
+
+Son durumda dört bağlantı, 632 sürekli chart, **5.689 native sertifika**,
+sıfır geçici chart/bekleyen/ret, **34 derlenmiş hesap**, sıfır işçi kuyruğu
+ve sıfır taşma vardı. Günlük ret ve geçmiş yeniden deneme de sıfırdı. Son
+işlenen kaynak zamanı farkı yaklaşık 0,468 saniyeydi; genel gecikme garantisi
+değildir. Kural ve iki listenin parmak izleri korundu; API healthy/restart0 ve
+kaynak aynı kaldı. Başlangıç/son kullanılabilir RAM 251,563 / 236,363 MiB idi.
+Normal alarm değerlendirme sayacı bu kayıtta sıfır ve 631 BIST üyesi hâlâ
+bekleyen/eskiydi; yalnız önizleme talebi açıldı, alarm/liste/Telegram/emir
+mutasyonu yapılmadı.
+
+**Bu kabul, tabloda belirtilen ayarlarla BTCUSDT sunucu önizlemesinin canlı
+tazelik ve aynı gözlem içindeki periyot tutarlılığıdır.** Beş göstergenin
+normal alarm motoru/Telegram teslimi, bütün ayar kombinasyonları, bağımsız
+sayısal TradingView/Pine karşılaştırması, 631 payın hazır canlı hesabı, tam
+seans veya 3.000 alarm yükü kabulü değildir. Üç kanıt dosyası
+`runtime-data/20261016-native-preview-acceptance/` altındadır; ikinci kabul
+dosyası `preview-c801-btc-second-btcusdt.json`
+(SHA-256 `c37a80fe48ccf3764c2ad184bed6518366180f9a907a950ae47b7cd72ad6f315`).
+
+Son manuel salt okunur gözlem **15:41:38–15:42:28 UTC** arasında altı örnekle
+`read_only_completed` bitti. Kullanılabilir RAM **232,105–251,027 MiB**,
+beş CPU aralığı **%58,632 / %47,247 / %69,339 / %47,787 / %40,100** idi.
+Son örnekte 42 derlenmiş hesap, 5.689 sertifika, sıfır bekleyen/ret ve sıfır
+canlı kuyruk/taşma vardı. Normal mum işi/kuyruk 0/0, teslim 6 gönderilmiş /
+0 bekleyen / 0 başarısız kaldı; genel/geçmiş/hesap hata bayrakları false idi.
+Kural ve iki liste korundu. BIST'te 631 üye hâlâ bekleyen/eski ve taze fiyat
+sıfırdı. Başlangıca göre bu kısa örnekte CPU azalmıştır; yaklaşık elli saniyelik
+ölçüm **kalıcı kaynak kazanımı veya tam seans kapasitesi kanıtı değildir**.
+Kanıt `preview-c801-observation-final.json`
+(SHA-256 `2a61c6e1d71dd34d408696648e305d429305085654e2e1487ae5128c87243cce`).
 
 ## Kripto yıl geçişinde bulunan gerçek native mum uyuşmazlığı
 

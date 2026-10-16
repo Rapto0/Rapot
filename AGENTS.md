@@ -1,20 +1,50 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-**16 Ekim ek kullanıcı talimatı:** Gönderilen 12 Ekim denetimindeki 805 benzersiz
+**16 Ekim onaylı liste ayrımı tamamlandı:** Gönderilen 12 Ekim denetimindeki 805 benzersiz
 kodun yalnız 631'i KAP pay pazarlarıyla eşleşir. Kullanıcı hem sistemin “BIST
 Tümü” evreninin 631 paya indirilmesini hem mevcut SMI alarmı listesindeki 174
 diğer kodun ayrı, alarmsız bir listede korunmasını açıkça onayladı. 174 kod
 “sahte” veya Borsa İstanbul'la ilgisiz sayılmaz; kurum/ihraççı, hisse dışı ürün
 ve pay eşleşmesi olmayan kodlar içerir. Bu tarihli sınıflama canlı veri veya
-gelecekte değişmeyecek üyelik kanıtı değildir. İşlemin gerçek yayın/liste
-sonucu 16 Ekim kabul kaydına yazılır; bu talimat tamamlanma kanıtı değildir.
+gelecekte değişmeyecek üyelik kanıtı değildir. **15:27:36 UTC** normal API
+işlemiyle asıl liste 631 üye/revizyon3, bağlı etkin kural revizyon2 oldu;
+174 kod yeni alarmsız listede korunur. Kural semantiği ve altı eski olay
+değişmedi; yeni olay sıfır. Gerçek receipt 16 Ekim kabul kaydındadır.
 
 Kaynaklarla son karşılaştırma: **16 Ekim 2026 / büyük liste canlı akış düzeltmesi**. İş sırası, kullanıcı
 yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DEVAM_PLANI.md)
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 Teknik rehberler [docs dizininde](docs/README.md) listelenir.
 
-**16 Ekim yayın sonrası ek düzeltme üretimde:** **`5472db486f4578a7a5d3b2454a3766d9b26cb83f`,
+**16 Ekim güncel kaynak üretimde:** **`c801e275a2848c03c2a0f1b2f29c19329955f52f`,
+15:35:15 UTC / 18:35:15 TSİ** API/frontend/Compose/current yayını tamamlandı;
+**15:35:24–15:35:56 UTC** bağımsız kabul geçti. Önizleme üyeliğinin değişmeyen
+planı, gereken TF alt kümesinin hazırlığı, kripto native yıl geçişi ve ortak
+631 pay evreni düzeltildi. Explicit kullanıcı sembolleri/karma listeler
+filtrelenmez. 2.190 Python/bir atlama, 310 frontend, aynı kaynakta beş CI işi
+ve temiz imaj yayını geçti. Liste ayrımından sonraki taze 1.342.660.608 bayt
+yedek bütün 15 tabloyla bağımsız restore edildi; kanıt `8f8c53733f995d3d23677347a3e0e2396703f5c821f0dbdafb00faf903cf4c6f`.
+Dört servis healthy/restart0; middleware/PG, özel dosyalar, 15 şema/12 statik
+tablo, iki kişisel liste, etkin kural ve altı olay korundu. 13 SSR/33 statik/
+iki yönlendirme/18 anonim401, v2/5/289 katalog, 422 ve 307 kaynak dosyası
+kabulü geçti. **15:36:26 UTC** ayrı API kontrolü `/symbols/bist`, çalışan
+aday evreni ve etkin kural kapsamında aynı 631 payı doğruladı; 174 kodluk
+liste alarmsız kaldı. Bu üyelik kabulüdür; fiyat ve gösterge hazırlığı değildir.
+Başlangıçta 6.310 TF, 631 sürekli chart, 545 sertifika, bir derlenmiş hesap
+ve 631 bekleyen/eski üye vardı. Kısa CPU %96,6/%100; sürekli CPU/RAM kazanımı,
+tam seans/3.000 alarm veya Pine derleyicisi eşitliği doğrulanmadı. Aynı kaynakta
+**15:39:45–15:40:56 UTC BTCUSDT beşli canlı önizleme kabulü geçti:** 71,177 saniye,
+110 POST; etkin periyot sayıları 10/10/2/2/2, farklı hazır gözlemler
+22/22/22/12/2. Her göstergenin etkin TF'leri kendi aynı fiyat gözlemiyle
+doğrulandı. Önceki 180 saniye denemesi hazır olmadan bitti ve kaydı korundu.
+Bu sınırlı önizleme normal motor alarmı/Telegram, TradingView sayısal eşitliği
+veya 631 payın canlı hesabı kabulü değildir. İlk altı gözlemde CPU %100;
+15:41:38–15:42:28 UTC son kısa örnekte %40,100–69,339, RAM 232,105–251,027 MiB,
+kuyruk/taşma 0/0 ve 42 derlenmiş hesap görüldü. Bu kısa düşüş kalıcı kaynak
+kazanımı kanıtı değildir. Otomatik takip kurulmaz.
+[16 Ekim yayın ve kabul kaydı](docs/LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md).
+
+**16 Ekim önceki planlama/geçmiş düzeltmesi:** **`5472db486f4578a7a5d3b2454a3766d9b26cb83f`,
 14:52:02 UTC / 17:52:02 TSİ** API/frontend/Compose/current yayını tamamlandı;
 **14:52:50–14:53:24 UTC** bağımsız kabul geçti. `fe9e7e63` sonrasında 805 üyede
 8.050 mantıksal talep kabul edildi; 173 reddedilen günlük veri 1.557 üst periyodu
