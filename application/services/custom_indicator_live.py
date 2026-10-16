@@ -12,7 +12,10 @@ import threading
 from collections import OrderedDict, deque
 from dataclasses import replace
 
-from infrastructure.providers.custom_indicator_stream import MAX_LIVE_SERIES
+from infrastructure.providers.custom_indicator_stream import (
+    MAX_LIVE_SERIES,
+    plan_native_subscriptions,
+)
 
 MAX_LIVE_EVENTS = 8192
 MAX_COMPILED_ROWS = 40960
@@ -33,6 +36,7 @@ class LiveIndicatorData:
         self._configs = {}
         self._members = {}
         self._wanted = set()
+        self._member_slots = {}
         self._requested = 0
         self._compiled = OrderedDict()
         self._buckets = {}
@@ -95,7 +99,15 @@ class LiveIndicatorData:
             wanted.add((*key[:2], config["chart_timeframe"]))
             if key[0] == "BIST":
                 wanted.add((*key[:2], "1D"))
+        _, member_slots, refused_members = plan_native_subscriptions(wanted, self._member_slots)
+        if refused_members:
+            blocked += sum(key[:2] in refused_members for key in configs)
+            configs = {key: value for key, value in configs.items() if key[:2] in member_slots}
+            members = {key: value for key, value in members.items() if key in member_slots}
+            wanted = {key for key in wanted if key[:2] in member_slots}
+            cells = sum(estimates[key[2]] for key in configs)
         with self._lock:
+            self._member_slots = member_slots
             self._blocked_jobs = blocked
             self._admitted_cells = cells
             self._admitted_rule_jobs = len(set(configs).intersection(rule_job_keys))
@@ -195,6 +207,7 @@ class LiveIndicatorData:
         allowed = {
             "authentication_failed",
             "session_rate_limited",
+            "chart_capacity_exceeded",
             "provider_critical_error",
             "provider_protocol_error",
         }
@@ -207,6 +220,7 @@ class LiveIndicatorData:
         now = self.owner._clock()
         with self._lock:
             wanted = self._wanted.copy()
+            member_slots = self._member_slots.copy()
             connection = self._connection
         if not wanted:
             if connection:
@@ -237,7 +251,7 @@ class LiveIndicatorData:
                 )
                 self._connection = connection
             if wanted != self._subscribed or getattr(connection, "needs_reconcile", False):
-                connection.configure(wanted)
+                connection.configure(wanted, member_slots=member_slots)
                 self._subscribed = wanted
             if not connection.connected:
                 raise ValueError("Native stream is not connected")

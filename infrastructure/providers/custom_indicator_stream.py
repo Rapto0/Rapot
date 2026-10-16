@@ -19,9 +19,66 @@ from infrastructure.providers.custom_indicator_history import SESSION_KEYS, vali
 
 MAX_LIVE_SERIES = 8192
 MAX_LIVE_CONNECTIONS = 4
+MAX_CHARTS_PER_CONNECTION = 500
+MAX_PROVIDER_SERIES = MAX_CHARTS_PER_CONNECTION * MAX_LIVE_CONNECTIONS
 MAX_SERIES_PER_RECONCILE = 16
 MAX_PACKET_BYTES = 2 * 1024 * 1024
 TRANSPORT_TIMEOUT = 90
+
+
+def _preferred_slot(member):
+    market, symbol = member
+    return (
+        int.from_bytes(hashlib.sha256(f"{market}:{symbol}".encode()).digest()[:4])
+        % MAX_LIVE_CONNECTIONS
+    )
+
+
+def plan_native_subscriptions(requested, previous_slots=None):
+    """Plan whole symbols within verified per-socket capacity, without moving incumbents.
+
+    The local 8,192 request budget is distinct from the provider's measured
+    500 chart-session boundary on each of four sockets. A refused member is
+    never partially subscribed or represented as admitted.
+    """
+    members = {}
+    for key in set(requested):
+        members.setdefault(key[:2], set()).add(key)
+    previous = previous_slots or {}
+    groups, slots, refused = {}, {}, set()
+    for member in sorted(members):
+        if member not in previous:
+            continue
+        slot = previous[member]
+        if type(slot) is not int or not 0 <= slot < MAX_LIVE_CONNECTIONS:
+            raise ValueError("Native bağlantı yerleşimi geçersiz.")
+        keys = members[member]
+        if len(groups.get(slot, ())) + len(keys) > MAX_CHARTS_PER_CONNECTION:
+            refused.add(member)
+            continue
+        groups.setdefault(slot, set()).update(keys)
+        slots[member] = slot
+    for member in sorted(set(members) - set(previous)):
+        keys = members[member]
+        candidates = [
+            slot
+            for slot in range(MAX_LIVE_CONNECTIONS)
+            if len(groups.get(slot, ())) + len(keys) <= MAX_CHARTS_PER_CONNECTION
+        ]
+        if not candidates:
+            refused.add(member)
+            continue
+        preferred = _preferred_slot(member)
+        slot = min(
+            candidates,
+            key=lambda value: (
+                len(groups.get(value, ())),
+                (value - preferred) % MAX_LIVE_CONNECTIONS,
+            ),
+        )
+        groups.setdefault(slot, set()).update(keys)
+        slots[member] = slot
+    return groups, slots, refused
 
 
 def _number(value):
@@ -133,6 +190,8 @@ def stream_class(base):
         def reconcile(self, wanted, *, additions_limit=None):
             """Called by the single control worker, never from a socket callback."""
             wanted = set(wanted)
+            if len(wanted) > MAX_CHARTS_PER_CONNECTION:
+                raise ValueError("Native bağlantı başına doğrulanmış mum kapasitesi aşıldı.")
             removed = []
             removed_quotes = []
             with self._lock:
@@ -239,6 +298,12 @@ def stream_class(base):
                         for value in params
                     ):
                         self.failure_code = "session_rate_limited"
+                    elif any(
+                        isinstance(value, str)
+                        and "max charts per connection reached" in value.lower()
+                        for value in params
+                    ):
+                        self.failure_code = "chart_capacity_exceeded"
                     else:
                         self.failure_code = f"provider_{method}"
                     self._connected.clear()
@@ -394,6 +459,7 @@ class NativeStreamPool:
         self._streams = {}
         self._wanted_by_slot = {}
         self._wanted_by_member = {}
+        self._member_slots = {}
         self.closed = False
         self._lock = threading.Lock()
 
@@ -411,11 +477,7 @@ class NativeStreamPool:
 
     @staticmethod
     def _slot(member):
-        market, symbol = member
-        return (
-            int.from_bytes(hashlib.sha256(f"{market}:{symbol}".encode()).digest()[:4])
-            % MAX_LIVE_CONNECTIONS
-        )
+        return _preferred_slot(member)
 
     @property
     def needs_reconcile(self):
@@ -433,7 +495,7 @@ class NativeStreamPool:
     def member_ready(self, member):
         """Transport admission only; callers must also verify native bar witnesses."""
         member = tuple(member)
-        slot = self._slot(member)
+        slot = self._member_slots.get(member)
         stream = self._streams.get(slot)
         if self.closed or stream is None or not stream.healthy:
             return False
@@ -441,21 +503,37 @@ class NativeStreamPool:
         with stream._lock:
             return bool(wanted) and all(key in stream.sessions for key in wanted)
 
-    def configure(self, requested):
+    def configure(self, requested, *, member_slots=None):
         requested = sorted(set(requested))
         if len(requested) > MAX_LIVE_SERIES:
             raise ValueError("Native canlı gösterge abonelik sınırı aşıldı.")
-        groups, members = {}, {}
+        members = {}
         for market, symbol, timeframe in requested:
             exchange = "BIST" if market == "BIST" else "BINANCE"
             validate_native_request(symbol, exchange, timeframe, 2)
-            # Stable symbol ownership keeps all its native bars and quote packets
-            # on the same ordered transport, even when a watchlist is edited.
-            slot = self._slot((market, symbol))
-            groups.setdefault(slot, set()).add((market, symbol, timeframe))
             members.setdefault((market, symbol), set()).add((market, symbol, timeframe))
+        if member_slots is None:
+            groups, member_slots, refused = plan_native_subscriptions(requested, self._member_slots)
+            if refused:
+                raise ValueError("Native sağlayıcı kapasitesi aşıldı; semboller planlanamadı.")
+        else:
+            if set(member_slots) != set(members):
+                raise ValueError("Native bağlantı yerleşimi sembollerle eşleşmiyor.")
+            groups = {}
+            for member, slot in member_slots.items():
+                if type(slot) is not int or not 0 <= slot < MAX_LIVE_CONNECTIONS:
+                    raise ValueError("Native bağlantı yerleşimi geçersiz.")
+                if member in self._member_slots and self._member_slots[member] != slot:
+                    raise ValueError(
+                        "Native sembol bağlantısı devamlılık sıfırlanmadan değiştirilemez."
+                    )
+                groups.setdefault(slot, set()).update(members[member])
+            if any(len(wanted) > MAX_CHARTS_PER_CONNECTION for wanted in groups.values()):
+                raise ValueError("Native bağlantı başına doğrulanmış mum kapasitesi aşıldı.")
+        # Every plan is validated before transport creation/removal or writes.
         self._wanted_by_slot = groups
         self._wanted_by_member = members
+        self._member_slots = dict(member_slots)
         for slot in list(self._streams):
             if slot not in groups:
                 self._streams.pop(slot).disconnect()
@@ -500,3 +578,4 @@ class NativeStreamPool:
         self._streams.clear()
         self._wanted_by_slot.clear()
         self._wanted_by_member.clear()
+        self._member_slots.clear()

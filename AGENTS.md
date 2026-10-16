@@ -15,8 +15,16 @@ Geçmiş başlangıcı gerçek native tanıkları bekler, hatalı istekler 30–
 arasında artan gecikmeyle yinelenir. Açık mumun yalnız Close değişimi gereksiz
 mum olayını çoğaltmaz; fiyat olayları, kapanış/rollover, O/H/L, metadata ve yeni
 gün tanıkları korunur. 500 serilik iki izole canlı deneme geçti; bu 8.050 seri
-üretim kabulü değildir. **Bu yeni düzeltmenin yayını ve üretim canlı kabulü
-bekliyor.** Kullanıcının kuralı/listesi/bildirim ayarı değiştirilmedi; yeni
+üretim kabulü değildir. **`2ea4ea31`, 08:24:52 UTC API/frontend/Compose/current
+yayını; 08:25:20–48 UTC bağımsız kabul geçti.** Taze 1.342.660.608 bayt yedek
+bağımsız restore edildi; 15 şema, 12 statik tablo, mevcut kural/liste ve üç olay
+korundu. 500'den 516 seriye ayrı deneme `max charts per connection reached`
+verdi. 08:34:31–08:35:21 UTC altı örnekte özel hesap sıfır ve yeniden bağlantı
+döngüsü sürüyordu. Yeni kaynak koruması bağlantı başına 500, dört bağlantıda
+2.000 fiziksel seriyle bütün sembolleri atomik kabul eder; fazla iş görünür
+kapasite durumudur. **Bu ikinci koruma henüz yayımlanmadı; 805 üyeli tam canlı
+kapsam çalışmıyor.** Uzun periyotların native tanıklarını paylaşan düzen ayrıca
+geliştirilecektir. Kullanıcının kuralı/listesi/bildirim ayarı değiştirilmedi; yeni
 otomatik takip yok. [16 Ekim kanıtı](docs/LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md).
 
 **14 Ekim canlı bağlantı yayını tamamlandı:** Kullanıcının “Piyasa şuan açık” mesajıyla

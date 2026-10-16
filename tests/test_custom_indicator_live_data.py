@@ -173,7 +173,8 @@ def test_control_continues_paced_subscriptions_without_resetting_existing_seed()
         close=lambda: pytest.fail("A healthy paced connection must stay open"),
     )
 
-    def configure(wanted):
+    def configure(wanted, *, member_slots):
+        assert member_slots == service.live._member_slots
         batches.append(wanted.copy())
         connection.needs_reconcile = len(batches) < 3
 

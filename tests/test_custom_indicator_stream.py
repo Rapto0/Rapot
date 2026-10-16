@@ -7,9 +7,12 @@ from types import SimpleNamespace
 import pytest
 
 from infrastructure.providers.custom_indicator_stream import (
+    MAX_CHARTS_PER_CONNECTION,
     MAX_LIVE_CONNECTIONS,
+    MAX_PROVIDER_SERIES,
     MAX_SERIES_PER_RECONCILE,
     NativeStreamPool,
+    plan_native_subscriptions,
     stream_class,
 )
 
@@ -288,6 +291,7 @@ def test_daily_rollover_requires_and_emits_first_real_unchanged_htf_witness():
         ("max sessions rate reached", "session_rate_limited"),
         ("unexpected protocol request", "provider_protocol_error"),
         ("authentication required", "authentication_failed"),
+        ("session_start_error: max charts per connection reached", "chart_capacity_exceeded"),
     ],
 )
 def test_protocol_failure_is_latched_and_only_safe_category_is_exposed(message, expected, caplog):
@@ -424,7 +428,7 @@ def test_member_readiness_checks_only_its_indexed_native_series():
         def __iter__(self):
             raise AssertionError("A member readiness check must not copy all registered sessions")
 
-    slot = pool._slot(member)
+    slot = pool._member_slots[member]
     pool._wanted_by_slot[slot] = UnscannableSet(pool._wanted_by_slot[slot])
     pool._streams[slot].sessions = UnscannableDict(pool._streams[slot].sessions)
     assert pool.member_ready(member)
@@ -434,6 +438,69 @@ def test_member_readiness_checks_only_its_indexed_native_series():
     assert pool._wanted_by_member[member] == wanted
     pool.close()
     assert pool._wanted_by_member == {}
+
+
+def test_verified_chart_capacity_plans_whole_members_across_balanced_sockets():
+    timeframes = ("1D", "2D", "3D", "4D", "5D", "6D", "1W", "2W", "3W", "1M")
+    requested = {("BIST", f"SYM{index:04}", tf) for index in range(805) for tf in timeframes}
+    groups, slots, refused = plan_native_subscriptions(requested)
+    assert len(groups) == MAX_LIVE_CONNECTIONS
+    assert all(len(keys) == MAX_CHARTS_PER_CONNECTION for keys in groups.values())
+    assert sum(map(len, groups.values())) == MAX_PROVIDER_SERIES == 2000
+    assert len(slots) == 200 and len(refused) == 605
+    assert not (set(slots) & refused)
+    for member, slot in slots.items():
+        assert {key[2] for key in groups[slot] if key[:2] == member} == set(timeframes)
+    assert plan_native_subscriptions(sorted(requested, reverse=True)) == (groups, slots, refused)
+    # An added lexically earlier symbol cannot move existing ordered streams.
+    extended = requested | {("BIST", "A", "1D")}
+    _, new_slots, _ = plan_native_subscriptions(extended, slots)
+    assert all(new_slots[member] == slot for member, slot in slots.items())
+
+
+def test_oversized_member_is_refused_atomically_and_does_not_consume_other_capacity():
+    requested = {("BIST", "HUGE", str(value)) for value in range(1, 502)}
+    requested.add(("BIST", "THYAO", "1D"))
+    groups, slots, refused = plan_native_subscriptions(requested)
+    assert refused == {("BIST", "HUGE")}
+    assert set(slots) == {("BIST", "THYAO")}
+    assert sum(map(len, groups.values())) == 1
+
+
+def test_invalid_or_overloaded_pool_plan_is_rejected_before_any_transport_change():
+    pool = NativeStreamPool(Transport, "isolated-test-token", 1, lambda _: None, clock=lambda: 100)
+    requested = {("BIST", f"SYM{index:04}", "1D") for index in range(501)}
+    with pytest.raises(ValueError, match="kapasitesi"):
+        pool.configure(requested, member_slots={key[:2]: 0 for key in requested})
+    assert not pool._streams and not pool._wanted_by_slot
+    with pytest.raises(ValueError, match="eşleşmiyor"):
+        pool.configure(requested, member_slots={})
+    assert not pool._streams
+    pool.configure({("BIST", "THYAO", "1D")})
+    member, slot = next(iter(pool._member_slots.items()))
+    before = pool.status()
+    sent = sum(len(stream.sent) for stream in pool._streams.values())
+    with pytest.raises(ValueError, match="devamlılık"):
+        pool.configure({(*member, "1D")}, member_slots={member: (slot + 1) % 4})
+    assert pool.status() == before
+    assert sum(len(stream.sent) for stream in pool._streams.values()) == sent
+
+
+def test_unplanned_pool_demand_over_provider_capacity_is_never_silently_truncated():
+    pool = NativeStreamPool(Transport, "isolated-test-token", 1, lambda _: None, clock=lambda: 100)
+    requested = {("BIST", f"SYM{index:04}", "1D") for index in range(MAX_PROVIDER_SERIES + 1)}
+    with pytest.raises(ValueError, match="planlanamadı"):
+        pool.configure(requested)
+    assert not pool._streams and not pool._wanted_by_slot
+
+
+def test_single_stream_capacity_guard_rejects_before_creating_chart_sessions():
+    stream, _, _ = connection()
+    before = len(stream.sent)
+    with pytest.raises(ValueError, match="kapasitesi"):
+        stream.reconcile({("BIST", f"SYM{index:04}", "1D") for index in range(501)})
+    assert len(stream.sent) == before
+    assert not stream.sessions and stream.healthy
 
 
 def test_malformed_private_payload_and_send_error_are_never_logged(caplog):

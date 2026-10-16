@@ -187,7 +187,13 @@ başlangıcı sıfırlamaz. Gerçek geçmiş düzeltmesi ve bağlantı boşluğu
 karşılaştırma durumunu geçersiz kılar.
 
 Bağlantı sayısı, native seri, derlenmiş satırlar ve sıralı olay kuyruğu yerel
-üst sınırlarla korunur. Bunlar TradingView hesabının kabul edeceği abonelik
+üst sınırlarla korunur. 16 Ekim'de 500'den 516 chart session'a büyüme gerçek
+sağlayıcı kapasite hatası verdi. Sonraki kaynak koruması dört bağlantının her
+birinde en fazla 500 fiziksel seri kabul eder; sembolün bütün gerekli TF'leri
+tek bağlantıya birlikte sığmazsa sembol kapasite nedeniyle hazır sayılmaz.
+8.192 yerel istek bütçesi 8.192 fiziksel abonelik kabulü değildir. Kararlı
+yerleşim çalışan sembolleri liste değiştiğinde başka bağlantıya taşımaz.
+Bunlar TradingView hesabının kabul edeceği abonelik
 kapasitesi iddiası değildir. Eksik/reddedilen TF, eski fiyat, bağlantı kopması,
 geçmiş revizyonu ve kuyruk taşması görünür `unknown`/devamlılık sıfırlaması
 üretir; aşırı yük sessizce güncel veri gibi gösterilmez. Kaynak zamanı, işleme

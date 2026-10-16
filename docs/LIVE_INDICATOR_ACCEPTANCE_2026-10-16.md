@@ -3,8 +3,49 @@
 Kullanıcının **“Çalışmana devam et”** talimatıyla manuel kabul sürdürüldü.
 Otomatik takip/timer kurulmaz; kullanıcıya ait kural, liste ve bildirim ayarı
 korunur. Bu kayıt kaynak düzeltmesini, izole sağlayıcı denemesini ve üretim
-kabulünü ayrı tutar. **Bu kaynak aşamasında 16 Ekim düzeltmesi henüz
-yayımlanmadı; üretim `e11d3d3d` üzerindedir.**
+kabulünü ayrı tutar. **İlk düzeltme `2ea4ea31` ile yayımlandı; tam 805 üyeli
+canlı kabul başarısızdır. İkinci kapasite koruması kaynak aşamasındadır.**
+
+## İlk yayın ve bulunan ikinci sınır
+
+`2ea4ea31e68c07f6aec44f359546833d8d4665f8` API/frontend/Compose/current
+yayını **08:24:52 UTC**, bağımsız kabul **08:25:20–08:25:48 UTC** tamamlandı.
+15 tablo şeması, 12 statik tablo, kullanıcının etkin kuralı/revizyonu ve 805
+üyeli listesi, üç eski olay korundu; yeni olay oluşmadı. Dört servis healthy/
+restart0; middleware/PG ve özel dosyalar değişmedi. 13 SSR, 33 statik dosya,
+iki yönlendirme, 18 anonim401, v2/5/289 katalog ve 422 doğrulandı. Tam kaynak
+beş CI işi ve temiz imaj yayını geçti. Taze **1.342.660.608 bayt** yedek,
+sunucu dışında bağımsız restore ve bütün tablo karşılaştırmasıyla doğrulandı.
+İlk snapshot denemesi aktif yazıcılar nedeniyle ilerleyemedi; salt okunur
+sabit transaction düzeltmesiyle ikinci deneme yaklaşık 13 saniyede tamamlandı.
+İlk başarısızlık kanıtı saklandı. Kullanıcı kuralı durdurulmadı.
+
+Yayın kabulünde CPU **%96,806/%98,597**, kullanılabilir RAM **293,55–303,28
+MiB** idi; 372 native ret ve 679 bekleyen/eski sonuç vardı. Bu web/veri
+koruma kabulü, canlı alarm kapasite kabulü değildir.
+
+Tek sınırlı izole sağlayıcı tanısı **08:30:05 UTC** tamamlandı. İlk 500 seri
+tamamlandı ve hata vermedi. Sonraki 16 seri eklenince `critical_error:
+session_start_error — max charts per connection reached` geldi. Kesin 512
+sınırı varsayılmıyor; güvenli yerel sınır **bağlantı başına doğrulanmış 500**
+seçildi. RAM 278,6 → 196,9 MiB, süre 51,1 saniye; tanı bağlantısı kapatıldı.
+Üretim dört bağlantıyla 8.050 fiziksel seri taşımaya devam edemez.
+
+Salt okunur altı örnek **08:34:31–08:35:21 UTC** boyunca kullanıcı kuralı ve
+liste hash'lerini değişmez doğruladı. Native abonelik sayısı 32→512→320→0
+gibi tekrar başladı; derlenmiş hesap/sonuç sıfır, canlı işlenen sayaç 2.944'te
+donuktu. Ana fiyat taze sayısı da sıfırdı. RAM 276,855–291,785 MiB, CPU yaklaşık
+%38–51. Önceki gözlem aracının değişken sağlık alanlarını kural tanımına katması
+yanlış `rule_changed_guard` üretmişti; açık statik alan listesiyle düzeltildi,
+19 çevrimdışı kontrol geçti. Önceki kanıt silinmedi.
+
+İkinci kaynak koruması her sembolün bütün TF'lerini tek bağlantıda atomik
+planlar, bağlantı başına 500 fiziksel seriyi aşmaz ve çalışan sembolü başka
+sokete taşımaz. Dört soket/10 TF örneğinde 200 sembol kabul edilir; diğer
+605 sembol görünür kapasite durumuna geçer. Kullanıcının 805 üyeli tanımı
+değişmez. Bu koruma tam kapsam çözümü değildir; uzun periyot native tanıklarını
+paylaşan düzen ayrıca geliştirilecektir. 107 ilgili servis ve 26 akış testi
+geçti; ikinci kaynak yayını ayrıca kaydedilecektir.
 
 ## Gerçek kullanıcı alarmında bulunan sorun
 

@@ -18,10 +18,14 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
   ağ gönderiminde serbest alıcı kilidi, native tanık sonrası geçmiş başlangıcı,
   30–1.800 saniyelik hata geri çekilmesi ve Close değişimlerine bağlı gereksiz
   native olayların azaltılmasını ekler. Kullanıcının kuralı ve bildirim ayarı
-  korunur. İki ayrı 500 seri canlı protokol denemesi geçti; **bugünkü yeni
-  kaynağın yayını ve 8.050 serilik üretim kabulü henüz bekliyor**. Sonraki adım
-  tam test/yedek/yayın ve kullanıcının mevcut kuralında hazır hesap/tazelik/
-  kuyruk kabulüdür. Otomatik takip kurulmaz. [16 Ekim kayıt ve sınırları](LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md).
+  korunur. **`2ea4ea31`, 08:24:52 UTC yayını ve 08:25:20–48 UTC bağımsız kabul
+  geçti**; taze 1.342.660.608 bayt yedek restore edildi. Ancak 500'den 516
+  seriye ayrı tanı `max charts per connection reached` verdi; altı üretim
+  örneğinde yeniden bağlantı döngüsü sürdü. Yeni kaynak bağlantı başına 500
+  fiziksel seri sınırını atomik sembol kabulüyle korur, fazlasını açıkça engeller.
+  Bu ikinci korumanın yayını bekliyor; 805 üyeli tam kapsam henüz çalışmıyor.
+  Sonraki adım korumalı yayın ve uzun periyot tanıklarını paylaşan kaynak
+  düzenidir. Otomatik takip kurulmaz. [16 Ekim kayıt ve sınırları](LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md).
 
 - **14 Ekim — manuel canlı gösterge kabulü:** Kullanıcı piyasanın açık olduğunu
   bildirdi; kontrol 07:10:40 UTC'de başladı. Native WS ikinci fiyat serisini aynı
