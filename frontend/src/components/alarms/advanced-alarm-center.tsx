@@ -208,7 +208,9 @@ export function AdvancedAlarmCenter() {
                         <p>Akış taşması: <strong>{statistic(customStatus.live_overflow_count)}</strong></p>
                         <p>Son canlı alarm değerlendirmesi: <strong>{statistic(runtime?.live_evaluation?.last_duration_ms)} ms</strong></p>
                         <p>Canlı kural karşılaştırmaları: <strong>{statistic(runtime?.live_evaluation?.checked)}</strong></p>
-                        <p>Native seri: <strong>{statistic(customStatus.native_subscriptions_admitted)} / {statistic(customStatus.native_subscriptions_requested)}</strong></p>
+                        <p>Planlanan / istenen seri: <strong>{statistic(customStatus.native_subscriptions_admitted)} / {statistic(customStatus.native_subscriptions_requested)}</strong></p>
+                        <p>Açılan / bekleyen abonelik: <strong>{statistic(customStatus.native_subscriptions_registered)} / {statistic(customStatus.native_subscriptions_pending)}</strong></p>
+                        <p>Canlı hesap başlangıcı hazır: <strong>{statistic(customStatus.compiled_configurations)}</strong></p>
                         <p>Native bağlantı: <strong>{statistic(customStatus.native_streams_connected)}</strong></p>
                         <p>Canlı kapasiteyi aşan hesap: <strong>{statistic(customStatus.blocked_rule_symbols)}</strong></p>
                         <p>Sağlayıcının reddettiği seri: <strong>{statistic(customStatus.refused_native_series)}</strong></p>

@@ -33,6 +33,8 @@ MAX_HISTORY_SUMMARIES = 8192
 PREVIEW_SECONDS = 120
 REFRESH_SECONDS = 21600  # History reconciliation only; live prices are event driven.
 STALE_SECONDS = 180
+HISTORY_RETRY_SECONDS = 30
+MAX_HISTORY_RETRY_SECONDS = 1800
 
 
 def custom_configuration_ids(condition, timeframe):
@@ -303,6 +305,8 @@ class CustomIndicatorData:
         self._seed_queued = set()
         self._closed_configs = set()
         self._history_last_error = None
+        self._history_failures = {}
+        self._history_retries = {}
 
     def _sync_live(self):
         with self._lock:
@@ -331,6 +335,12 @@ class CustomIndicatorData:
         with self._lock:
             self._job_order = tuple(sorted(key for key in jobs if self.live.admitted(key)))
             retained_jobs = set(self._job_order)
+            self._history_failures = {
+                key: value for key, value in self._history_failures.items() if key in retained_jobs
+            }
+            self._history_retries = {
+                key: value for key, value in self._history_retries.items() if key in retained_jobs
+            }
             self._seed_due.intersection_update(retained_jobs)
             self._seed_queue = deque(key for key in self._seed_queue if key in retained_jobs)
             self._seed_queued = set(self._seed_queue)
@@ -462,6 +472,8 @@ class CustomIndicatorData:
             self._results.clear()
             self._live_cells = 0
             self._preview_results.clear()
+            self._history_failures.clear()
+            self._history_retries.clear()
 
     def invalidate(self):
         with self._lock:
@@ -474,9 +486,38 @@ class CustomIndicatorData:
             self._errors.clear()
             self._symbol_epochs.clear()
             self._history_summaries.clear()
+            self._history_failures.clear()
+            self._history_retries.clear()
             self._live_cells = 0
         self.live.invalidate()
         self._wake.set()
+
+    def _history_transport_ready(self, key, config):
+        # Historical/closed-bar replay does not depend on a live transport.
+        # Running intrabar jobs first require actual native witnesses: a socket
+        # being open alone does not prove an unavailable list symbol resolved.
+        if not self._running or key[2] in self._closed_configs:
+            return True
+        connection = self.live._connection
+        if connection is None:
+            return False
+        member_ready = getattr(connection, "member_ready", None)
+        if not (member_ready(key[:2]) if member_ready else connection.connected):
+            return False
+        needed = {row["timeframe"] for row in config["requirements"]} | {config["chart_timeframe"]}
+        if key[0] == "BIST":
+            needed.add("1D")
+        with self.live._lock:
+            return all(
+                (*key[:2], timeframe) in self.live._buckets
+                and (*key[:2], timeframe) not in self.live._refused
+                for timeframe in needed
+            )
+
+    def _history_job_ready(self, key, config, now):
+        return now >= self._history_retries.get(key, 0) and self._history_transport_ready(
+            key, config
+        )
 
     def _next_job(self):
         now = self._clock()
@@ -493,17 +534,16 @@ class CustomIndicatorData:
                 self._live_cells = 0
                 self._history_summaries.clear()
                 self._symbol_epochs.clear()
+                self._history_failures.clear()
+                self._history_retries.clear()
                 return None
             self._turn += 1
-            while self._seed_queue:
-                key = self._seed_queue.popleft()
-                self._seed_queued.discard(key)
-                if self.live.admitted(key):
-                    return key, self.live._configs[key], self._generation
             preview_job = None
             for key, (_, config) in self._previews.items():
                 cached = self._preview_results.get(key)
                 if not self.live.admitted(key):
+                    continue
+                if not self._history_job_ready(key, config, now):
                     continue
                 if cached and now < cached.get("history_retry_at", 0):
                     continue
@@ -518,7 +558,23 @@ class CustomIndicatorData:
                     preview_job = key, config, self._generation
                     break
             if preview_job and (not self._memberships or self._turn % 4 == 0):
+                # Preserve the preview share during a large initial bootstrap,
+                # not only after its entire seed queue has drained.
+                key = preview_job[0]
+                if key in self._seed_queued:
+                    self._seed_queue.remove(key)
+                    self._seed_queued.discard(key)
                 return preview_job
+            # Rotate deferred seeds once. A bad symbol or disconnected shard
+            # must not starve already witnessed members or bypass retry bounds.
+            for _ in range(len(self._seed_queue)):
+                key = self._seed_queue.popleft()
+                self._seed_queued.discard(key)
+                if self.live.admitted(key):
+                    config = self.live._configs[key]
+                    if self._history_job_ready(key, config, now):
+                        return key, config, self._generation
+                    self._queue_seed(key)
             if not self._memberships:
                 return preview_job
             for _ in range(min(64, len(self._job_order))):
@@ -526,6 +582,8 @@ class CustomIndicatorData:
                 key = self._job_order[self._job_cursor]
                 self._job_cursor += 1
                 if not self.live.admitted(key):
+                    continue
+                if not self._history_job_ready(key, self.live._configs[key], now):
                     continue
                 cached = self._results.get(key)
                 if cached and now < cached.get("history_retry_at", 0):
@@ -708,6 +766,16 @@ class CustomIndicatorData:
             ):
                 return
             self._seed_due.discard(key)
+            if result["error"]:
+                failures = min(self._history_failures.get(key, 0) + 1, 7)
+                self._history_failures[key] = failures
+                retry_at = self._clock() + min(
+                    MAX_HISTORY_RETRY_SECONDS, HISTORY_RETRY_SECONDS * 2 ** (failures - 1)
+                )
+                self._history_retries[key] = result["history_retry_at"] = retry_at
+            else:
+                self._history_failures.pop(key, None)
+                self._history_retries.pop(key, None)
             live_result = self._results.get(key)
             if (
                 result["error"]
@@ -718,7 +786,7 @@ class CustomIndicatorData:
                 # A history HTTP failure is not a live transport gap. Retain
                 # current quote/range/edge state and retry history at a bound.
                 self._history_last_error = result["error"]
-                live_result["history_retry_at"] = self._clock() + 30
+                live_result["history_retry_at"] = retry_at
                 if key in self._preview_results:
                     self._preview_results[key]["history_retry_at"] = live_result["history_retry_at"]
                 return
@@ -963,6 +1031,23 @@ class CustomIndicatorData:
 
     def _read(self, key, now, *, require_latest=True):
         result = self._results.get(key)
+        if require_latest or result is None:
+            config = self.live._configs.get(key)
+            needed = (
+                {row["timeframe"] for row in config["requirements"]}
+                | {config["chart_timeframe"]}
+                | ({"1D"} if key[0] == "BIST" else set())
+                if config
+                else set()
+            )
+            with self.live._lock:
+                refused = any((*key[:2], timeframe) in self.live._refused for timeframe in needed)
+            if refused:
+                return (
+                    result,
+                    "unknown",
+                    "Sağlayıcı bu sembolün gerekli native mum verisini reddetti.",
+                )
         if result is None:
             return None, "waiting", "Gösterge için native mum verisi sırada."
         memory_epoch = self.provider.memory_epoch()
@@ -1173,6 +1258,9 @@ class CustomIndicatorData:
                 ),
                 "last_error": self._last_error,
                 "history_last_error": self._history_last_error,
+                "history_retry_waiting": sum(
+                    due > self._clock() for due in self._history_retries.values()
+                ),
                 "worker_count": 3,
                 "history_worker_count": 1,
                 "calculation_worker_count": 1,
@@ -1185,6 +1273,8 @@ class CustomIndicatorData:
                     "result_cells": MAX_RESULT_CELLS,
                     "configurations": MAX_CONFIGS,
                     "preview_leases": MAX_PREVIEWS,
+                    "history_retry_seconds": HISTORY_RETRY_SECONDS,
+                    "history_retry_max_seconds": MAX_HISTORY_RETRY_SECONDS,
                 },
                 "one_second_coverage_guaranteed": False,
             }

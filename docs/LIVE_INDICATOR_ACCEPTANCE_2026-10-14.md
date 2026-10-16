@@ -60,8 +60,56 @@ Bu ekranla henüz beş özel göstergenin aynı anda sayısal eşitliği doğrul
 Bağımsız TradingView bağlayıcısının günlük THYAO mumları da hacmi `null`
 döndürdü; tarayıcıdaki toplam hacim alanı, mum hacmi erişiminin kanıtı değildir.
 
+## Tamamlanan yayın ve bağımsız uygulama kabulü
+
+`e11d3d3dadddabf92aba9421b540868984b0ac01`, **07:49:26 UTC / 10:49:26 TSİ**'de
+API/frontend/Compose/current'e yayımlandı; bağımsız kabul **07:50:01 UTC**'de
+tamamlandı. [Beş CI işi](https://github.com/Rapto0/Rapot/actions/runs/38529725630)
+ve [temiz imaj yayını](https://github.com/Rapto0/Rapot/actions/runs/38529762879)
+geçti; additive/delta imaj kullanılmadı.
+
+| Kanıt | Değer |
+|---|---|
+| API imajı | `sha256:4624f9f40afcbe6b4314d6081f1c87cb3e1418f6276d0c830bf16eaa96a41749` |
+| Frontend imajı | `sha256:5306c5440faebeaebab319bc2fba25096d47ddcc31072ffa07f0fe955cfb3e08` |
+| Yayın makbuzu SHA-256 | `d380034810004e08a9133618d7ca9f3a4dfd1981b0c436f0f66955e4df9dcc01` |
+| Bağımsız kabul SHA-256 | `cef5cf45127f30cece29b09d820c4d3a18a7525ca1784a66d85e92e3f2946aaf` |
+| Yedek / bağımsız restore | 1.342.660.608 bayt; doğrulama `b540a08fcd9af4f06b1bb9dfc2704c83fbd16982f7207e4e500aebd2c3bd45d8` |
+
+Dört servis sağlıklı/restart0; middleware ve PostgreSQL container kimlikleri
+korundu. 15 tablonun bütün satırları ve şeması, tek kullanıcı listesi, üç eski
+olay ve özel ortam/şifreli kimlik dosyaları aynı kaldı. Migration, üretime
+restore veya yeni geçmiş temizliği yapılmadı. 13 SSR sayfası, 33 statik dosya,
+iki yönlendirme, 18 anonim 401, katalog v2 / beş gösterge / 289 input ve iş
+oluşturmayan 422 önizleme kabulü geçti. DRY_RUN/trading/live kapalı kaldı.
+
+Yayın kabulü sırasında etkin kural sıfırdı. Normal mum işi/kuyruk **0/0**,
+805 fiyat aboneliği ve 550 taze sembol görüldü. Kısa örneklerde kullanılabilir
+RAM **292,102–322,527 MiB**, CPU **%33,868 / %13,972**; son boş alan
+**4.886.237.184 bayt**. Bu kontroller özel göstergelerde etkin bir kullanıcı
+alarmının canlı başarısını kanıtlamaz. Kabul aracı yeni sağlayıcı isteği,
+etkin kural, Telegram, AI veya emir üretmedi; otomatik takip kurulmadı.
+
+## Takvim örneklerinin sınırlı doğrulaması
+
+07:38 UTC tarihli tek takvim GET'i 22 olay döndürdü. Tarihi ve saat dilimi
+resmî kaynakta açık iki olay ailesi karşılaştırıldı: ABD TÜFE için
+[BLS takvimi](https://www.bls.gov/schedule/2026/10_sched_list.htm) 08:30 New York
+= 15:30 İstanbul; Huw Pill için [BoE takvimi](https://www.bankofengland.co.uk/events/upcoming-events)
+07:00 BST = 09:00 İstanbul. Uygulamanın kaynak saatleri bu iki örnekle eşleşti.
+TÜFE'nin altı metriği altı bağımsız saat dilimi testi sayılmaz.
+
+Doviz.com yanıtında olay saat dilimi metadata'sı yoktur; API `source_timezone`
+alanı `null`, saatler değişmeden `source_time` olarak gösterilir. Bu iki
+eşleşme bütün olayların saat dilimini, yaz/kış saati geçişlerini veya açıklama
+anındaki veri gecikmesini doğrulamaz. Fed Bej Kitap ve gilt ihalesinin saatleri
+yalnız kaynak dilimi varsayılırsa uyumluydu; ek kesin kabul sayılmadı. Kaynak
+önbelleği bir saattir; yeni HTTP alınma zamanı yeni veri anlamına gelmez.
+
 Özel yerel kanıtlar `runtime-data/20261014-live-market/` altında tutulur;
 oturum sırları, gerçek veritabanı veya hesap kimlikleri Git'e eklenmez.
-Yayın ve uygulama içindeki canlı kabul sonuçları tamamlandıkça bu kayıt
-güncellenir. **Tam BIST saniyelik kapsamı, 3.000 canlı kural ve tam seans
-kesintisizliği bu aşamada doğrulanmış değildir.**
+Yayın kanıtları `runtime-data/20261014-live-fix-deploy/` içindedir. **Tam BIST
+saniyelik kapsamı, 3.000 canlı kural, TradingView derleyicisiyle aynı an
+eşitliği ve tam seans kesintisizliği bu kabulde doğrulanmadı.** Kullanıcının
+sonradan oluşturduğu büyük listedeki gerçek sorun ve sonraki kaynak düzeltmesi
+[16 Ekim kaydında](LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md) ayrıca izlenir.

@@ -1,6 +1,6 @@
 # Rapot Devam Planı
 
-**Güncel özet: 14 Ekim 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
+**Güncel özet: 16 Ekim 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
 Çalışma kuralı: **incele → düzelt → doğrula → belgeyi güncelle**.
 Teknik ayrıntılar [belge indeksinde](README.md), çalışma kuralları
 [AGENTS.md](../AGENTS.md), önceki planın eksiksiz metni
@@ -9,14 +9,33 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
 
 ## Kaldığımız nokta
 
+- **16 Ekim — büyük liste canlı akış düzeltmesi:** Kullanıcının devam talimatıyla
+  manuel çalışma sürüyor. Üretimde artık kullanıcıya ait bir etkin liste alarmı
+  ve 805 sembol/8.050 native seri talebi var. 07:55:28 UTC örneğinde canlı
+  bağlantı, derlenmiş hesap ve işlenen fiyat sıfır; 601 eski sonuç başarı sayılmaz.
+  Gerçek tanıda 100 seriden 250'ye ani artış `max sessions rate reached`
+  protokol hatası verdi. Kaynak bağlantı başına turda 16 seriyle kademeli kabul,
+  ağ gönderiminde serbest alıcı kilidi, native tanık sonrası geçmiş başlangıcı,
+  30–1.800 saniyelik hata geri çekilmesi ve Close değişimlerine bağlı gereksiz
+  native olayların azaltılmasını ekler. Kullanıcının kuralı ve bildirim ayarı
+  korunur. İki ayrı 500 seri canlı protokol denemesi geçti; **bugünkü yeni
+  kaynağın yayını ve 8.050 serilik üretim kabulü henüz bekliyor**. Sonraki adım
+  tam test/yedek/yayın ve kullanıcının mevcut kuralında hazır hesap/tazelik/
+  kuyruk kabulüdür. Otomatik takip kurulmaz. [16 Ekim kayıt ve sınırları](LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md).
+
 - **14 Ekim — manuel canlı gösterge kabulü:** Kullanıcı piyasanın açık olduğunu
   bildirdi; kontrol 07:10:40 UTC'de başladı. Native WS ikinci fiyat serisini aynı
   chart session'da reddediyordu. Her native TF ayrı session'a taşındı; sembol
   başına tek quote ve aynı sıralı soket korunur. İzole gerçek bağlantıda 11 TF,
   15 fiyat/226 mum olayı ve sıfır hata görüldü. Dashboard liste fiyatları mevcut
   alarm akışını güvenli hesap/revizyon/epoch kontrolüyle paylaşır. 1.995 Python/
-  bir atlama, 307 frontend, typecheck/lint ve Ruff geçti. Bu kaynak aşamasında
-  taze yedek, yayın ve uygulama içi kabul sürüyor; tamamlanmış sayılmaz.
+  bir atlama, 307 frontend, typecheck/lint ve Ruff geçti. **`e11d3d3d`,
+  07:49:26 UTC API/frontend/Compose/current yayını ve 07:50:01 UTC bağımsız
+  kabul geçti.** Beş CI/temiz imaj yayını; 13 SSR/33 statik/18 anonim401,
+  15 tablonun bütün satırları/şema, özel dosyalar ve middleware/PG korundu.
+  1.342.660.608 bayt taze yedek bağımsız restore edildi. Gerçek veride beş
+  gösterge × beş quote için 25/25 bağımsız formül karşılaştırması geçti;
+  TradingView derleyicisiyle eşitlik ve üretim alarm kabulü değildir.
   [Canlı kabul kaydı](LIVE_INDICATOR_ACCEPTANCE_2026-10-14.md) ölçümleri ve açık
   sınırları tutar. Yeni otomatik takip veya emir yok; gerçek testler kontrollü
   manuel kabul kapsamındadır.
@@ -823,15 +842,16 @@ repodan kaldırıldı. Dağıtım ve geri dönüş adımları [DEPLOY.md](DEPLOY
 | Alan | Son kayıt |
 |---|---|
 | Sunucu / erişim | `root@138.68.71.27`, IP üzerinden HTTPS |
-| API / frontend / Compose / current kaynak | `4b739835d3cd12485b50422028a3cb1134dd8ac7` |
-| API imaj referansı | `ghcr.io/rapto0/rapot/backend@sha256:23c65e711ead2528bd0c7a089dd60846b527027d14408b865b1a292eb463b771` |
-| Frontend imaj referansı | `ghcr.io/rapto0/rapot/frontend@sha256:f4ce5d8494379e2db425f555972739bb78138e15f70453345cd7bf1bbe5ee059` |
+| API / frontend / Compose / current kaynak | `e11d3d3dadddabf92aba9421b540868984b0ac01` |
+| API imaj referansı | `ghcr.io/rapto0/rapot/backend@sha256:4624f9f40afcbe6b4314d6081f1c87cb3e1418f6276d0c830bf16eaa96a41749` |
+| Frontend imaj referansı | `ghcr.io/rapto0/rapot/frontend@sha256:5306c5440faebeaebab319bc2fba25096d47ddcc31072ffa07f0fe955cfb3e08` |
 | Bot | 12 Ekim kaldırıldı; Compose servisi/5000 dinleyicisi yok |
 | Middleware kaynak | `279aa9fea99b520e661b43f104a2bf4791893ac3`; container kimliği korunuyor |
 | Middleware imajı | `sha256:9be0fdb6097f52bf97730f44c86d28c24e2c0cea1fe181e7e8fd668177fdb034` |
 | Veri / kaynak pointer | `/var/lib/rapot/main` ve `/opt/rapot/current`; operator kaynak kopyası bunlardan ayrıdır |
 | Çalışma modu | `MW_EXECUTION_MODE=DRY_RUN`, `MW_TRADING_ENABLED=false`, `MW_BINANCE_LIVE_ENABLED=false`; otomatik Telegram AI kaldırıldı, site AI korunur; API `BORSAPY_USE_FOR_BIST=true` |
-| Son uzak kabul | 13 Ekim 19:57:15 UTC: dört servis healthy/restart0; 15 tablonun bütün satırları/şema ve özel dosyalar aynı. 13 SSR/33 statik/iki yönlendirme/18 anonim401, v2 / 5 / 289 katalog, iş oluşturmayan 422 ve emekli 410/4410 yolları geçti. Boş alan 5.057.884.160 bayt. [Canlı gösterge yayını](CUSTOM_PINE_INDICATORS.md). |
+| Son uzak yayın kabulü | 14 Ekim 07:50:01 UTC: dört servis healthy/restart0; 15 tablonun bütün satırları/şema ve özel dosyalar aynı. 13 SSR/33 statik/iki yönlendirme/18 anonim401, v2 / 5 / 289 katalog, iş oluşturmayan 422 ve emekli 410/4410 yolları geçti. Boş alan 4.886.237.184 bayt. [14 Ekim kaydı](LIVE_INDICATOR_ACCEPTANCE_2026-10-14.md). |
+| Son canlı tanı | 16 Ekim 07:55:28 UTC: API sağlıklı/restart0; kullanıcıya ait bir etkin 805 üyeli liste alarmında 8.050 native seri talebi fakat bağlantı/derlenmiş hesap/işlenen fiyat sıfır. Yeni kaynak düzeltmesi henüz yayımlanmadı; yayın sağlığı canlı alarm kabulü değildir. [16 Ekim kaydı](LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md). |
 | TradingView bağlantısı | Şifreli kimlik korundu; 7 Ekim dar canlı kabulü mevcut. Tam evren/hacim/bölünme/tam seans kabulü açık, `realtime_verified=false` |
 
 Son kayıtlar:

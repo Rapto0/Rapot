@@ -4,7 +4,7 @@ Güncel iş sırası, kullanıcı yetkileri ve tarihli kabul kanıtları
 [devam planında](RAPOT_DEVAM_PLANI.md) tutulur. Kod tabanıyla çalışma kuralları
 [AGENTS.md](../AGENTS.md), ilk kurulum ise [kök README](../README.md) içindedir.
 
-13 Ekim güncel kaynak düzeni: API, frontend, middleware ve PostgreSQL sürekli
+16 Ekim güncel kaynak düzeni: API, frontend, middleware ve PostgreSQL sürekli
 servislerdir; init/migrate işleri tek seferliktir. Eski otomatik COMBO/HUNTER
 Telegram tarayıcısı, Telegram komutları ve tarayıcıya bağlı AI kaldırılmıştır.
 Site Borsapy taraması, indikatörler, backtest, `/ai` ve kullanıcı alarmlarının
@@ -16,6 +16,12 @@ etrafında düzenlendi. `8b4e1bab` 14:46:08 UTC'de yayımlandı; üretim temizli
 15:01:12 UTC'de, bağımsız kabul 15:11:48 UTC'de tamamlandı.
 [Güncel geçiş ve veri temizliği kaydı](INDICATOR_ALARM_TRANSITION_2026-10-12.md)
 kaynak, üretim kabulü ve açık kalan piyasa testlerini ayırır.
+
+14 Ekim `e11d3d3d` bağlantı düzeltmesi yayımlandı ve bağımsız uygulama kabulü
+geçti. 16 Ekim kullanıcının büyük liste alarmında görülen oturum açma hızı
+sorunu için kaynak düzeltmesi ve izole 500 seri denemesi hazırdır; yeni yayın
+ve büyük listenin üretim canlı kabulü [güncel kayıtta](LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md)
+ayrıca izlenir.
 
 ## Mimari ve geliştirme
 
@@ -58,6 +64,7 @@ middleware/emir kabulünü tamamlamaz.
 - [21 Eylül Pine derleme/grafik kabulü](PINE_RUNTIME_ACCEPTANCE.md)
 - [7 Ekim canlı BIST, Telegram ve veri kalitesi kabulü](LIVE_MARKET_ACCEPTANCE_2026-10-07.md)
 - [14 Ekim özel gösterge canlı kabulü ve bağlantı düzeltmeleri](LIVE_INDICATOR_ACCEPTANCE_2026-10-14.md)
+- [16 Ekim büyük liste abonelik hızı, kaynak tüketimi ve canlı kabul](LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md)
 - [8 Ekim tam seans ve 3.000 alarm kabulü; hacim/takvim bulguları](FULL_SESSION_ACCEPTANCE_2026-10-08.md)
 - [12 Ekim izleme listeleri, CPU/RAM ve ihtiyaç temelli mum kuyruğu](WATCHLIST_EFFICIENCY_2026-10-12.md)
 - [Backup branch karşılaştırması ve aktarım yapmama kararı](BACKUP_BRANCH_REVIEW.md)

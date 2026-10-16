@@ -41,6 +41,21 @@ def quote(service, clock, price, source=None):
     )
 
 
+def test_provider_failure_diagnostics_survive_pool_replacement_without_raw_payloads():
+    from types import SimpleNamespace
+
+    _, _, service, _, _, _ = ready_service()
+    service.live._remember_transport_failure(
+        SimpleNamespace(
+            status=lambda: {
+                "failure_codes": ["session_rate_limited", "untrusted provider session identifier"]
+            }
+        )
+    )
+    service.live._remember_transport_failure(SimpleNamespace(status=lambda: {}))
+    assert service.live.status()["last_native_failure_codes"] == ["session_rate_limited"]
+
+
 def observation(service, selected, ref, clock):
     return service.observation(ref, selected["symbols"][0], "intrabar", clock[0])
 
@@ -143,6 +158,34 @@ def test_expired_preview_releases_live_demand_without_another_browser_request():
     clock[0] += 121
     service.live.control_step()
     assert not service.live._wanted
+
+
+def test_control_continues_paced_subscriptions_without_resetting_existing_seed():
+    from types import SimpleNamespace
+
+    clock, provider, service, _, key, _ = ready_service()
+    prepared = service.live._compiled[key]
+    batches = []
+    connection = SimpleNamespace(
+        connected=True,
+        epoch=provider.data_epoch(),
+        needs_reconcile=True,
+        close=lambda: pytest.fail("A healthy paced connection must stay open"),
+    )
+
+    def configure(wanted):
+        batches.append(wanted.copy())
+        connection.needs_reconcile = len(batches) < 3
+
+    connection.configure = configure
+    service.live._connection = connection
+    service.live._subscribed = service.live._wanted.copy()
+    for _ in range(4):
+        clock[0] += 1
+        service.live.control_step()
+    assert len(batches) == 3
+    assert service.live._compiled[key] is prepared
+    assert service.live._failures == 0
 
 
 def test_callback_failure_is_not_counted_as_completed_observation():

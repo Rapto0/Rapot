@@ -520,3 +520,154 @@ def test_all_five_ohlc_only_ports_accept_missing_volume_without_inventing_zero(i
 def test_native_request_rejects_unsupported_resolution_or_unbounded_history(timeframe, bars):
     with pytest.raises(ValueError):
         validate_native_request("THYAO", "BIST", timeframe, bars)
+
+
+def test_running_intrabar_history_waits_for_its_own_complete_native_witnesses():
+    provider = Provider()
+    service = CustomIndicatorData(provider=provider, clock=lambda: NOW)
+    selected = rule()
+    selected["trigger"] = "intrabar"
+    selected["condition"]["left"]["inputs"].update(en2=True)
+    service.configure([selected])
+    service._running = True
+    assert service._next_job() is None
+    connection = SimpleNamespace(connected=False, member_ready=lambda _member: True)
+    service.live._connection = connection
+    service.live._buckets[("BIST", "THYAO", "1D")] = object()
+    assert service._next_job() is None
+    service.live._buckets[("BIST", "THYAO", "2D")] = object()
+    # Another shard being unavailable must not block this witnessed member.
+    job = service._next_job()
+    assert job[0][:2] == ("BIST", "THYAO")
+    assert provider.calls == []
+    connection.member_ready = lambda _member: False
+    service._queue_seed(job[0])
+    assert service._next_job() is None
+
+
+def test_unavailable_member_does_not_starve_resolved_member_or_fetch_history():
+    provider = Provider()
+    service = CustomIndicatorData(provider=provider, clock=lambda: NOW)
+    selected = rule()
+    selected["trigger"] = "intrabar"
+    selected["symbols"].insert(0, {"symbol": "AAINVALID", "market_type": "BIST"})
+    service.configure([selected])
+    service._running = True
+    service.live._connection = SimpleNamespace(member_ready=lambda _member: True)
+    service.live._buckets[("BIST", "THYAO", "1D")] = object()
+    service.live._refused.add(("BIST", "AAINVALID", "1D"))
+    job = service._next_job()
+    assert job[0][:2] == ("BIST", "THYAO")
+    assert provider.calls == []
+    ref = condition_fields(selected["condition"], "1d")[0]
+    unavailable = service.observation(ref, selected["symbols"][0], "intrabar", NOW)
+    assert unavailable["ready"] is False
+    assert "reddetti" in unavailable["reason"]
+    assert service._jobs_requested == 2
+
+
+def test_closed_bar_history_does_not_require_a_live_socket():
+    provider = Provider()
+    service = CustomIndicatorData(provider=provider, clock=lambda: NOW)
+    service.configure([rule()])
+    service._running = True
+    assert service.live._connection is None
+    service.process(*service._next_job())
+    assert len(provider.calls) == 1
+    ref = condition_fields(rule()["condition"], "1d")[0]
+    assert service.observation(ref, rule()["symbols"][0], "bar_close", NOW)["ready"]
+
+
+def test_failed_history_backoff_survives_gap_queue_and_resets_on_success(monkeypatch):
+    clock = [NOW]
+    provider = Provider()
+    service = CustomIndicatorData(provider=provider, clock=lambda: clock[0])
+    service.configure([rule()])
+    original = provider.custom_indicator_history
+    attempts = []
+
+    def fail(*_args, **_kwargs):
+        attempts.append(clock[0])
+        raise ValueError("Synthetic unavailable symbol")
+
+    monkeypatch.setattr(provider, "custom_indicator_history", fail)
+    key = service._next_job()[0]
+    for seconds in (30, 60, 120, 240, 480, 960, 1800, 1800):
+        service.process(key, service.live._configs[key], service._generation)
+        assert service._history_retries[key] == clock[0] + seconds
+        service.live_gap("Synthetic connection gap", key[:2])
+        assert service._next_job() is None
+        assert service.status()["history_retry_waiting"] == 1
+        clock[0] += seconds
+        assert service._next_job()[0] == key
+    assert len(attempts) == 8
+    monkeypatch.setattr(provider, "custom_indicator_history", original)
+    service.process(key, service.live._configs[key], service._generation)
+    assert key not in service._history_retries
+    assert key not in service._history_failures
+    assert service._results[key]["error"] is None
+
+
+def test_failed_history_retry_does_not_block_another_member_and_is_bounded_to_demand(monkeypatch):
+    provider = Provider()
+    service = CustomIndicatorData(provider=provider, clock=lambda: NOW)
+    selected = rule()
+    selected["symbols"].insert(0, {"symbol": "AAINVALID", "market_type": "BIST"})
+    service.configure([selected])
+    original = provider.custom_indicator_history
+
+    def history(symbol, **kwargs):
+        if symbol == "AAINVALID":
+            raise ValueError("Synthetic unavailable symbol")
+        return original(symbol, **kwargs)
+
+    monkeypatch.setattr(provider, "custom_indicator_history", history)
+    failed = service._next_job()
+    assert failed[0][1] == "AAINVALID"
+    service.process(*failed)
+    service.live_gap("Synthetic connection gap")
+    available = service._next_job()
+    assert available[0][1] == "THYAO"
+    service.process(*available)
+    assert service._next_job() is None
+    service.configure([selected])
+    assert failed[0] in service._history_retries
+    service.invalidate()
+    assert not service._history_retries and not service._history_failures
+    service.process(*service._next_job())
+    service.configure([])
+    assert not service._history_retries and not service._history_failures
+
+
+def test_preview_share_survives_805_member_bootstrap_without_duplicate_seed_fetch():
+    clock = [NOW]
+    provider = Provider()
+    service = CustomIndicatorData(provider=provider, clock=lambda: clock[0])
+    selected = rule()
+    selected["symbols"] = [
+        {"market_type": "BIST", "symbol": f"SYM{index:04d}"} for index in range(805)
+    ]
+    service.configure([selected])
+    service.preview("rsi_votes", inputs(), "ZZZFIRST")
+    service.preview("rsi_votes", inputs(), "ZZZSECOND")
+    observed = []
+    for _ in range(8):
+        job = service._next_job()
+        observed.append(job[0][1])
+        service.process(*job)
+        clock[0] += 10
+    assert observed == [
+        "SYM0000",
+        "SYM0001",
+        "SYM0002",
+        "ZZZFIRST",
+        "SYM0003",
+        "SYM0004",
+        "SYM0005",
+        "ZZZSECOND",
+    ]
+    assert len(provider.calls) == len(observed)
+    assert service.preview("rsi_votes", inputs(), "ZZZFIRST")["state"] == "ready"
+    assert service.preview("rsi_votes", inputs(), "ZZZSECOND")["state"] == "ready"
+    assert not any(key[1].startswith("ZZZ") for key in service._seed_queued)
+    assert len(service._seed_queue) == 799

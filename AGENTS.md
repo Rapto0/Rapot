@@ -1,19 +1,39 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-Kaynaklarla son karşılaştırma: **14 Ekim 2026 / canlı gösterge kabulü**. İş sırası, kullanıcı
+Kaynaklarla son karşılaştırma: **16 Ekim 2026 / büyük liste canlı akış düzeltmesi**. İş sırası, kullanıcı
 yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DEVAM_PLANI.md)
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 Teknik rehberler [docs dizininde](docs/README.md) listelenir.
 
-**14 Ekim canlı kabul başladı:** Kullanıcının “Piyasa şuan açık” mesajıyla
+**16 Ekim manuel devam:** Üretimde kullanıcıya ait bir etkin izleme listesi
+alarmı, 805 sembol ve 8.050 native seri talebi var. 07:55:28 UTC tanısında
+native bağlantı/derlenmiş hesap/işlenen fiyat sıfır; eski 601 sonuç hazır veri
+değildir. İzole gerçek sağlayıcı tanısı büyük abonelik patlamasında
+`protocol_error: max sessions rate reached` gösterdi. Kaynak artık bağlantı
+başına kontrol turunda 16 seri açar; ağ gönderimi alıcı kilidini tutmaz.
+Geçmiş başlangıcı gerçek native tanıkları bekler, hatalı istekler 30–1.800 saniye
+arasında artan gecikmeyle yinelenir. Açık mumun yalnız Close değişimi gereksiz
+mum olayını çoğaltmaz; fiyat olayları, kapanış/rollover, O/H/L, metadata ve yeni
+gün tanıkları korunur. 500 serilik iki izole canlı deneme geçti; bu 8.050 seri
+üretim kabulü değildir. **Bu yeni düzeltmenin yayını ve üretim canlı kabulü
+bekliyor.** Kullanıcının kuralı/listesi/bildirim ayarı değiştirilmedi; yeni
+otomatik takip yok. [16 Ekim kanıtı](docs/LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md).
+
+**14 Ekim canlı bağlantı yayını tamamlandı:** Kullanıcının “Piyasa şuan açık” mesajıyla
 07:10:40 UTC'de manuel kontrol açıldı; otomatik takip yok. Beş özel gösterge
 akışındaki gerçek `exceed limit of series in the session` hatası ayrı native
 periyot chart session'larıyla düzeltilir; sembolün tek fiyat aboneliği ve bütün
 periyotları aynı WS üzerinde kalır. 11 periyotlu izole canlı protokol kabulü
 geçti. Dashboard BIST listesi mevcut sunucu fiyat akışını hesap/revizyon/epoch
 kontrolüyle paylaşır. 1.995 Python/bir atlama, 307 frontend ve Ruff geçti.
-Üretim yayını ve uygulama içi canlı kabul henüz bu kaynak aşamasında bekler;
-sonuçlar [14 Ekim kaydında](docs/LIVE_INDICATOR_ACCEPTANCE_2026-10-14.md) tutulur.
+**`e11d3d3d`, 07:49:26 UTC API/frontend/Compose/current yayını ve 07:50:01 UTC
+bağımsız kabul geçti.** Beş kaynak CI işi ve temiz imaj yayını, 13 SSR/33 statik/
+18 anonim401; 15 tablonun bütün satırları/şema, özel dosyalar ve middleware/PG
+korundu. 1.342.660.608 bayt taze yedek bağımsız restore edildi. Gerçek THYAO
+verisinde beş gösterge × beş quote = 25/25 bağımsız formül karşılaştırması
+geçti; TradingView derleyicisiyle aynı an eşitliği değildir. Üretim özel alarm
+canlı kabulü bu yayın kontrolüne dahil değildi. Sonuçlar
+[14 Ekim kaydında](docs/LIVE_INDICATOR_ACCEPTANCE_2026-10-14.md) tutulur.
 631 resmî payın tamamı abonelikte; 07:16 örneği 565 taze/66 eski/0 eksik,
 tam seans veya gecikmesiz tüm evren kanıtı değildir. Mum hacmi hâlâ eksiktir.
 

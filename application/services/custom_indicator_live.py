@@ -54,6 +54,7 @@ class LiveIndicatorData:
         self._admitted_cells = 0
         self._daily_witness_after = {}
         self._native_advances = 0
+        self._last_transport_failures = ()
 
     def admitted(self, key):
         return key in self._configs
@@ -189,6 +190,18 @@ class LiveIndicatorData:
             self.control_step()
             self._stop.wait(1)
 
+    def _remember_transport_failure(self, connection):
+        status = getattr(connection, "status", lambda: {})()
+        allowed = {
+            "authentication_failed",
+            "session_rate_limited",
+            "provider_critical_error",
+            "provider_protocol_error",
+        }
+        codes = tuple(code for code in status.get("failure_codes", ()) if code in allowed)
+        if codes:
+            self._last_transport_failures = codes
+
     def control_step(self):
         self.owner._sync_live()
         now = self.owner._clock()
@@ -204,6 +217,7 @@ class LiveIndicatorData:
         try:
             epoch = self.owner.provider.data_epoch()
             if connection and (connection.epoch != epoch or not connection.connected):
+                self._remember_transport_failure(connection)
                 connection.close()
                 self._connection = None
                 self._subscribed.clear()
@@ -222,7 +236,7 @@ class LiveIndicatorData:
                     lambda event: self.enqueue(event, generation)
                 )
                 self._connection = connection
-            if wanted != self._subscribed:
+            if wanted != self._subscribed or getattr(connection, "needs_reconcile", False):
                 connection.configure(wanted)
                 self._subscribed = wanted
             if not connection.connected:
@@ -230,6 +244,7 @@ class LiveIndicatorData:
             self._failures = 0
         except Exception:
             if self._connection:
+                self._remember_transport_failure(self._connection)
                 self._connection.close()
             self._connection = None
             self._subscribed.clear()
@@ -650,6 +665,9 @@ class LiveIndicatorData:
                 "native_subscriptions_admitted": len(self._wanted),
                 "native_subscriptions_blocked": max(0, self._requested - len(self._wanted)),
                 "native_streams_connected": transport.get("connected", 0),
+                "native_subscriptions_registered": transport.get("subscriptions", 0),
+                "native_subscriptions_pending": transport.get("subscriptions_pending", 0),
+                "last_native_failure_codes": list(self._last_transport_failures),
                 "compiled_configurations": len(self._compiled),
                 "blocked_rule_symbols": max(
                     0, self.owner._jobs_requested - self._admitted_rule_jobs

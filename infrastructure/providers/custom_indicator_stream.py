@@ -19,6 +19,7 @@ from infrastructure.providers.custom_indicator_history import SESSION_KEYS, vali
 
 MAX_LIVE_SERIES = 8192
 MAX_LIVE_CONNECTIONS = 4
+MAX_SERIES_PER_RECONCILE = 16
 MAX_PACKET_BYTES = 2 * 1024 * 1024
 TRANSPORT_TIMEOUT = 90
 
@@ -43,8 +44,11 @@ def stream_class(base):
             self.sessions, self.series, self.quotes = {}, {}, {}
             self.sessions_by_id = {}
             self.members_by_full = {}
+            self.daily_identity = {}
             self.counter = 0
             self.failed = self.auth_failed = self.closed = False
+            self.failure_code = None
+            self.protocol_errors = 0
             self.last_message = clock()
             self._should_reconnect = False
 
@@ -126,14 +130,15 @@ def stream_class(base):
             if not self.closed and not self.failed:
                 self.callback(event)
 
-        def reconcile(self, wanted):
+        def reconcile(self, wanted, *, additions_limit=None):
             """Called by the single control worker, never from a socket callback."""
+            wanted = set(wanted)
+            removed = []
+            removed_quotes = []
             with self._lock:
-                wanted = set(wanted)
                 for sid, item in list(self.series.items()):
                     if item["key"] not in wanted:
-                        self._send(self._create_message("remove_series", [item["session"], sid]))
-                        self._send(self._create_message("chart_delete_session", [item["session"]]))
+                        removed.append((sid, item["session"]))
                         self.sessions.pop(item["key"], None)
                         self.sessions_by_id.pop(item["session"], None)
                         del self.series[sid]
@@ -141,46 +146,54 @@ def stream_class(base):
                 active_symbols = {key[:2] for key in wanted}
                 for full, member in list(self.members_by_full.items()):
                     if member not in active_symbols:
-                        self._send(
-                            self._create_message(
-                                "quote_remove_symbols", [self._quote_session, full]
-                            )
-                        )
+                        removed_quotes.append(full)
                         self.members_by_full.pop(full)
                         self.quotes.pop(full, None)
-                for market, symbol, timeframe in sorted(wanted - present):
-                    exchange = "BIST" if market == "BIST" else "BINANCE"
-                    member = market, symbol
-                    full = f"{exchange}:{symbol}"
+                        self.daily_identity.pop(member, None)
+            # Sending can block on the network. Never retain the receiver lock
+            # across I/O: otherwise a large watchlist prevents native metadata,
+            # quotes and heartbeat-following packets from being consumed.
+            for sid, session in removed:
+                self._send(self._create_message("remove_series", [session, sid]))
+                self._send(self._create_message("chart_delete_session", [session]))
+            for full in removed_quotes:
+                self._send(
+                    self._create_message("quote_remove_symbols", [self._quote_session, full])
+                )
+            additions = sorted(wanted - present)
+            if additions_limit is not None:
+                additions = additions[:additions_limit]
+            for market, symbol, timeframe in additions:
+                exchange = "BIST" if market == "BIST" else "BINANCE"
+                member = market, symbol
+                full = f"{exchange}:{symbol}"
+                with self._lock:
                     session = self._generate_session_id("cs")
                     item = {"id": session, "full": full, "metadata": {}}
                     self.sessions[(market, symbol, timeframe)] = item
                     self.sessions_by_id[session] = item
-                    self._send(self._create_message("chart_create_session", [session, ""]))
-                    config = json.dumps(
-                        {"symbol": full, "adjustment": "splits", "session": "regular"}
-                    )
-                    self._send(
-                        self._create_message("resolve_symbol", [session, "sym", f"={config}"])
-                    )
-                    if full not in self.members_by_full:
+                    add_quote = full not in self.members_by_full
+                    if add_quote:
                         self.members_by_full[full] = member
-                        self._send(
-                            self._create_message("quote_add_symbols", [self._quote_session, full])
-                        )
                     self.counter += 1
                     sid = f"r{self.counter}"
+                    item["series_id"] = sid
                     self.series[sid] = {
                         "key": (market, symbol, timeframe),
                         "session": item["id"],
                         "rows": {},
                         "complete": False,
                     }
+                self._send(self._create_message("chart_create_session", [session, ""]))
+                config = json.dumps({"symbol": full, "adjustment": "splits", "session": "regular"})
+                self._send(self._create_message("resolve_symbol", [session, "sym", f"={config}"]))
+                if add_quote:
                     self._send(
-                        self._create_message(
-                            "create_series", [item["id"], sid, "s1", "sym", timeframe, 2]
-                        )
+                        self._create_message("quote_add_symbols", [self._quote_session, full])
                     )
+                self._send(
+                    self._create_message("create_series", [session, sid, "s1", "sym", timeframe, 2])
+                )
 
         def _on_message(self, ws, message):
             if self.closed or self.failed:
@@ -201,8 +214,9 @@ def stream_class(base):
                 method, params = packet.get("m"), packet.get("p", [])
                 if not isinstance(params, list):
                     continue
-                if method == "critical_error":
+                if method in {"critical_error", "protocol_error"}:
                     self.failed = True
+                    self.protocol_errors += 1
                     self.auth_failed = any(
                         isinstance(value, str)
                         and any(
@@ -216,6 +230,18 @@ def stream_class(base):
                         )
                         for value in params
                     )
+                    # Only fixed categories cross the provider boundary. Error
+                    # arguments can contain session IDs or other private data.
+                    if self.auth_failed:
+                        self.failure_code = "authentication_failed"
+                    elif any(
+                        isinstance(value, str) and "max sessions rate reached" in value.lower()
+                        for value in params
+                    ):
+                        self.failure_code = "session_rate_limited"
+                    else:
+                        self.failure_code = f"provider_{method}"
+                    self._connected.clear()
                     return
                 events = []
                 with self._lock:
@@ -243,6 +269,11 @@ def stream_class(base):
                                 if isinstance((value := params[2].get(key)), str)
                                 and len(value) <= 32768
                             }
+                            series = self.series.get(item["series_id"])
+                            if series and series["complete"]:
+                                event = self._bar_event(series)
+                                if event is not None:
+                                    events.append(event)
                     elif (
                         method in {"timescale_update", "du"}
                         and len(params) >= 2
@@ -278,12 +309,16 @@ def stream_class(base):
                                 stamp: item["rows"][stamp] for stamp in sorted(item["rows"])[-2:]
                             }
                             if item["complete"]:
-                                events.append(self._bar_event(item))
+                                event = self._bar_event(item)
+                                if event is not None:
+                                    events.append(event)
                     elif method == "series_completed" and len(params) >= 2:
                         item = self.series.get(params[1])
                         if item and item["session"] == params[0]:
                             item["complete"] = True
-                            events.append(self._bar_event(item))
+                            event = self._bar_event(item)
+                            if event is not None:
+                                events.append(event)
                     elif method == "qsd" and len(params) >= 2 and isinstance(params[1], dict):
                         data = params[1]
                         full, values = data.get("n"), data.get("v")
@@ -313,11 +348,32 @@ def stream_class(base):
                     self._emit(event)
 
         def _bar_event(self, item):
+            rows = tuple(item["rows"].values())
+            metadata = self.sessions[item["key"]]["metadata"].copy()
+            member = item["key"][:2]
+            if item["key"][0] == "BIST" and item["key"][2] == "1D" and rows:
+                self.daily_identity[member] = rows[-1][0]
+            # Current prices arrive through the ordered quote subscription.
+            # Native witnesses need the full closed predecessor plus the open
+            # bar's identity/O/H/L, not every change of its developing Close.
+            # Keep all wire rows above so a later rollover uses the last close.
+            signature = (
+                rows[:-1],
+                rows[-1][:4] if rows else (),
+                tuple(sorted(metadata.items())),
+                # After an observed native 1D rollover, a real new HTF packet
+                # must witness that its open bucket still applies. Do not emit
+                # cached HTF rows merely because the daily identity changed.
+                self.daily_identity.get(member),
+            )
+            if item.get("emitted_signature") == signature:
+                return None
+            item["emitted_signature"] = signature
             return {
                 "kind": "bars",
                 "key": item["key"],
-                "rows": tuple(item["rows"].values()),
-                "metadata": self.sessions[item["key"]]["metadata"].copy(),
+                "rows": rows,
+                "metadata": metadata,
                 "received_at": self.clock(),
             }
 
@@ -336,6 +392,8 @@ class NativeStreamPool:
         self._token, self.epoch, self._callback = token, epoch, callback
         self._clock = clock or time.time
         self._streams = {}
+        self._wanted_by_slot = {}
+        self._wanted_by_member = {}
         self.closed = False
         self._lock = threading.Lock()
 
@@ -351,21 +409,53 @@ class NativeStreamPool:
     def auth_failed(self):
         return any(stream.auth_failed for stream in tuple(self._streams.values()))
 
+    @staticmethod
+    def _slot(member):
+        market, symbol = member
+        return (
+            int.from_bytes(hashlib.sha256(f"{market}:{symbol}".encode()).digest()[:4])
+            % MAX_LIVE_CONNECTIONS
+        )
+
+    @property
+    def needs_reconcile(self):
+        if self.closed:
+            return False
+        for slot, wanted in tuple(self._wanted_by_slot.items()):
+            stream = self._streams.get(slot)
+            if stream is None:
+                return True
+            with stream._lock:
+                if set(stream.sessions) != wanted:
+                    return True
+        return False
+
+    def member_ready(self, member):
+        """Transport admission only; callers must also verify native bar witnesses."""
+        member = tuple(member)
+        slot = self._slot(member)
+        stream = self._streams.get(slot)
+        if self.closed or stream is None or not stream.healthy:
+            return False
+        wanted = self._wanted_by_member.get(member, set())
+        with stream._lock:
+            return bool(wanted) and all(key in stream.sessions for key in wanted)
+
     def configure(self, requested):
         requested = sorted(set(requested))
         if len(requested) > MAX_LIVE_SERIES:
             raise ValueError("Native canlı gösterge abonelik sınırı aşıldı.")
-        groups = {}
+        groups, members = {}, {}
         for market, symbol, timeframe in requested:
             exchange = "BIST" if market == "BIST" else "BINANCE"
             validate_native_request(symbol, exchange, timeframe, 2)
             # Stable symbol ownership keeps all its native bars and quote packets
             # on the same ordered transport, even when a watchlist is edited.
-            slot = (
-                int.from_bytes(hashlib.sha256(f"{market}:{symbol}".encode()).digest()[:4])
-                % MAX_LIVE_CONNECTIONS
-            )
+            slot = self._slot((market, symbol))
             groups.setdefault(slot, set()).add((market, symbol, timeframe))
+            members.setdefault((market, symbol), set()).add((market, symbol, timeframe))
+        self._wanted_by_slot = groups
+        self._wanted_by_member = members
         for slot in list(self._streams):
             if slot not in groups:
                 self._streams.pop(slot).disconnect()
@@ -378,13 +468,28 @@ class NativeStreamPool:
                 stream._should_reconnect = False
             if not stream.healthy:
                 raise ValueError("Native canlı gösterge bağlantısı kesildi.")
-            stream.reconcile(wanted)
+            # A control turn starts only a bounded number of chart sessions per
+            # socket. Existing quotes and series keep flowing while a large
+            # watchlist is admitted over subsequent turns.
+            stream.reconcile(wanted, additions_limit=MAX_SERIES_PER_RECONCILE)
 
     def status(self):
         return {
             "connections": len(self._streams),
             "connected": sum(stream.healthy for stream in tuple(self._streams.values())),
             "subscriptions": sum(len(stream.series) for stream in tuple(self._streams.values())),
+            "subscriptions_pending": sum(map(len, self._wanted_by_slot.values()))
+            - sum(len(stream.series) for stream in tuple(self._streams.values())),
+            "protocol_errors": sum(
+                stream.protocol_errors for stream in tuple(self._streams.values())
+            ),
+            "failure_codes": sorted(
+                {
+                    stream.failure_code
+                    for stream in tuple(self._streams.values())
+                    if stream.failure_code
+                }
+            ),
         }
 
     def close(self):
@@ -393,3 +498,5 @@ class NativeStreamPool:
             with suppress(Exception):
                 stream.disconnect()
         self._streams.clear()
+        self._wanted_by_slot.clear()
+        self._wanted_by_member.clear()

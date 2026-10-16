@@ -147,6 +147,22 @@ bütün periyotları ve tek fiyat aboneliği aynı sıralı WebSocket üzerinde 
 eklenmesi sağlayıcı tarafından reddedildi; bu protokol sınırı yerel testlere
 de eklendi. Önizlemedeki `observation_price`, kaynak zamanı ve hesap çıktısıyla
 aynı fiyat gözlemidir; ayrı grafik fiyatı kullanılarak aynı an varsayılmaz.
+16 Ekim kaynak düzeltmesinde büyük listelerin ilk aboneliği bağlantı başına
+kontrol turunda 16 yeni seriyle kademeli açılır. Bu sağlayıcının oturum açma
+hızı hatasına karşı uygulama sınırıdır; toplam desteklenen seri garantisi
+değildir. Bekleyen kayıtlar görünür; aynı talep sonraki turlarda devam eder.
+Ağ gönderimi alıcı kilidini tutmaz. Mum içi geçmiş başlangıcı ilgili sembolün
+gereken native tanıklarını bekler; başarısız geçmiş işi 30–1.800 saniye artan
+gecikmeyle yinelenir. Bağlantı kopması bu beklemeyi atlatmaz.
+
+Akış bütün fiyat olaylarını korur. Native açık mumun yalnız Close değişimi,
+gösterge fiyatını ayrıca taşıyan quote bulunduğu için yeni mum işi üretmez;
+son Close dahili satırda saklanır ve sonraki rollover'a aktarılır. İlk veri,
+geçmiş mum düzeltmesi, O/H/L ve metadata değişimleri işlenir. BIST günlük
+native kimliği değişince üst periyodun ilk gerçek yeni paketi tanık olarak
+yeniden işlenir; takvim günü hesabından veya önbellekten tanık üretilmez.
+Bu yeni kaynak davranışının yayın durumu [16 Ekim kabulünde](LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md)
+izlenir; bu paragraf tek başına üretim kabulü değildir.
 Sembol-kural ilişkisi bitset ile indekslenir; her tick bütün evreni taramaz.
 Değişmeyen gözlem durumları SQLite yazısı üretmez. Olaylar hemen kalıcılaştırılır;
 olay üretmeyen durum değişimleri sınırlı gruplarla birleştirilir. Telegram
@@ -277,6 +293,18 @@ piyasa açık kabulünde ölçülmelidir.
 Yerel kanıtlar `runtime-data/20261013-live-indicators/` altında, özel taze
 yedek `C:/Users/memet/RapotBackups/20261013-live-indicators-binary-aa0ed6063230482b/`
 altında saklanır; Git'e alınmaz.
+
+## 14 Ekim 2026 bağlantı düzeltmesi yayını
+
+`e11d3d3d` API/frontend/Compose/current yayını **07:49:26 UTC**, bağımsız
+uygulama kabulü **07:50:01 UTC**'de tamamlandı. 1.995 Python/bir atlama,
+307 frontend, beş CI işi ve temiz imaj yayını geçti. 15 tablonun bütün
+satırları/şema, özel dosyalar ve middleware/PG korundu. Gerçek THYAO native
+geçmişi ve beş quote üzerinde beş göstergenin bağımsız tam geçmiş hesabı
+**25/25** eşleşti. Bu TradingView derleyicisiyle aynı an karşılaştırması
+değildir. Yayın kabulünde etkin kural sıfırdı; sonradan oluşan büyük liste
+yükü ayrıca test edilir. İmajlar, yedek, uygulama kabulü, hacim ve takvim
+sınırları [14 Ekim kaydındadır](LIVE_INDICATOR_ACCEPTANCE_2026-10-14.md).
 
 ## 13 Ekim 2026 önceki gösterge yayını ve bağımsız kabul
 
