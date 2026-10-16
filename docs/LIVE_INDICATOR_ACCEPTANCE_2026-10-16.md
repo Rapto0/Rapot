@@ -45,7 +45,75 @@ sokete taşımaz. Dört soket/10 TF örneğinde 200 sembol kabul edilir; diğer
 605 sembol görünür kapasite durumuna geçer. Kullanıcının 805 üyeli tanımı
 değişmez. Bu koruma tam kapsam çözümü değildir; uzun periyot native tanıklarını
 paylaşan düzen ayrıca geliştirilecektir. 107 ilgili servis ve 26 akış testi
-geçti; ikinci kaynak yayını ayrıca kaydedilecektir.
+geçti. **`e290604b895c416285adae0c95152b25963d3613` yalnız API/Compose/current
+yayını 08:54:16 UTC'de, bağımsız kabul 08:54:31–08:55:01 UTC'de geçti.**
+Frontend `2ea4ea31`, middleware ve PostgreSQL korundu. Beş kaynak CI işi ve
+temiz imaj yayını geçti; backend digest'i
+`sha256:2905ec95017df78c4e32044b5258c090f38e91d89ef1b51fbaf43b029167b4b1`.
+Taze 1.342.660.608 bayt SQLite yedeği sunucu dışında bağımsız restore edildi;
+SHA-256 `ee225fba6e89111ad770dd8c364f5735123a69ea6350eab64da301131d4de3e5`.
+15 tablo şeması, 12 statik tablo, kullanıcının kuralı/listesi ve olaylar korundu.
+Dört servis healthy/restart0; 13 SSR, 33 statik, iki yönlendirme ve 18 anonim401
+kabulü geçti. Ayrı kabul kaydı
+`runtime-data/20261016-native-capacity-guard-deploy/acceptance.json`.
+
+08:55:17–08:56:07 UTC altı kısa örneğin ilk beşinde 2.000 seri açık ve
+4 bağlantı sağlıklıydı; sonuncusunda genel `provider_protocol_error` ile
+yeniden bağlantı görüldü. Tek 500-seri bağlantının daha uzun izole denemesi
+13:39:28–13:42:24 UTC'de yapıldı: 43,698 saniyede bütün seriler açıldı,
+ardından 130,199 saniye sağlıklı kaldı; 815 fiyat, 632 mum, 11.285 `du` paketi
+ve 16 alınmış/yanıtlanmış heartbeat görüldü. Sağlayıcı/callback hatası sıfırdı.
+Bu sonuç üretimdeki genel protokol hatasının nedenini açıklamaz. Başlangıç
+RAM'i 312,83 MiB, en düşük örnek 183,70 MiB'dı; süreç sınırlar içinde kapandı.
+
+13:43:40 UTC ayrı salt okunur örnekte 805 üye tanımı korundu, 2.000 seri
+açıktı; 49 derlenmiş hesap ve 162 önbellek sonucu vardı. Son geçmiş tamamlanması
+11:05:20 UTC'deydi; bu zaman farkı ayrıca inceleniyor. Taze fiyat sayısı
+506/805, normal mum işi/kuyruk 0/0, mevcut alarmın gönderilmiş olay sayısı
+altı (önceki üçe ek üç normal olay), başarısız/bekleyen teslim sıfırdı.
+Beş saatlik sınırlı günlük taramasında traceback görülmedi. Ara verilen
+08:56–13:38 aralığı kesintisiz gözlenmiş sayılmaz; 805 üyeli tam canlı kabul yoktur.
+
+## Süreli native tanık düzeninin izole kabulü
+
+13:48:12–13:51:17 UTC'de aday kaynak yalnız ayrı tanı sürecinin belleğine
+yüklendi; üretim dosyası/servisi değişmedi. Aynı sokette 50 resmî BIST sembolü
+× 10 TF için önce 50 güncel native günlük mum doğrulandı. Sonra 450 uzun
+periyot iki gerçek native mum ve aynı günlük nesille uygulama doğrulamasından
+geçirildi. 450 geçici chart `remove_series`/`chart_delete_session` ile kapandı;
+54,57 saniyede yalnız 50 sürekli günlük chart kaldı.
+
+Bundan sonra **130,045 saniye** boyunca 50 üyenin 450 uzun periyot sertifikası
+geçerli kaldı; 772 fiyat olayı (754 taze işlenen), 17 yanıtlanmış heartbeat,
+sıfır protokol/callback/doğrulama/ret ve sıfır kuyruk taşması görüldü. Son
+örnekte taze fiyatlı üye 32/50'ydi (ara örneklerde 25–38); sessiz semboller
+gecikmesiz güncel kabul edilmez. Başlangıç RAM'i 288,77 MiB, en düşük örnek
+194,79 MiB, son örnek 201,30 MiB'dı. Bütün tanı bağlantıları kapatıldı.
+
+Akış kaynağı SHA-256 `353ed92421fb88651e36f7364d78276e7eb14dfb3a668f66a4c61c7e1585402e`,
+tanık defteri SHA-256 `b373f14921a4b2603ea8cf7d357c8524f7c9122701cde726bfc1d5c06db9c409`.
+Kanıt `runtime-data/20261016-live-market/lease-protocol-50x10-live.json`.
+Bu kabul gerçek abonelik açma/kapatma ve native tanık yolunu doğrular;
+805 üyeli uygulama, tam geçmiş hazırlığı, sayısal TradingView veya tam seans
+kabulü değildir. Gün geçişinde kapalı hesap durumunu koruyan sonraki kaynak
+düzeltmesi ayrı sentetik regresyonlarla doğrulanır; bu denemede gerçek gün
+geçişi gözlenmedi.
+
+Bu düzende güncel ama `ready=false` bir fiyat kaydının eksik hesap başlangıcını
+altı saat gizleyebilmesi de düzeltildi. Hazırlık işçisi, gerçek native tanık
+ve retry sınırlarını geçtikten sonra eksik derlenmiş durumu yeniden hazırlar.
+Hazır sayaçları hesaplanmamış fiyatları hazır saymaz; üç işçinin gerçek thread
+canlılığı ayrı raporlanır. Normal günlük rollover kapalı Wilder/EMA durumunu
+ve geçmiş önbelleğini korur, karşılaştırma devamlılığını keser ve yeni native
+HTF paketlerinden sonra artımlı ilerler. Gerçek revizyon yine geçmişi yeniler.
+Mum içi başlangıç yalnız kompakt hesap durumunu kurar; 500 satırlık tam geçmiş
+replay'i önizleme veya kapanış kuralı istendiğinde hazırlanır.
+
+Son kaynakta **2.095 Python testi / bir atlama**, **310 frontend testi**,
+frontend üretim derlemesi ve standalone HTTP/WS kabulü geçti. Gerçek pool
+regresyonu normal gün geçişinde ek geçmiş sorgusu olmadan toparlanmayı,
+geçersiz tanıkta sinyal verilmemesini ve ilk hazır gözlemde sahte eşik girişi
+oluşmamasını doğrular. Bunlar üretimde tam evren kabulünün yerine geçmez.
 
 ## Gerçek kullanıcı alarmında bulunan sorun
 
@@ -119,9 +187,10 @@ yinelenmez. Kalan üç iş alarm hazırlığına ayrılır.
 
 ## Açık kalan kabul ve korunan sınırlar
 
-Yeni sürümün yedekli yayını, kullanıcının mevcut 805 üyeli alarmında 8.050
-native seri kabulü, hazır hesap sayısı, uçtan uca gecikme ve kaynak tüketimi
-henüz doğrulanmadı. 500 serilik protokol denemesi 3.000 canlı alarmı veya tam
+Süreli native tanık düzeninin yedekli yayını, kullanıcının mevcut 805 üyeli
+alarmında 8.050 mantıksal TF talebinin kabulü, bütün hazır hesaplar, uçtan uca
+gecikme ve kaynak tüketimi henüz doğrulanmadı. Önceki iki yayın yukarıda ayrı
+kayıtlıdır. 500 serilik protokol denemesi 3.000 canlı alarmı veya tam
 seans kesintisizliğini kanıtlamaz. Yeni test alarmı/bildirim bu tanıda
 oluşturulmadı; kullanıcının mevcut etkin Telegram tercihi değiştirilmedi.
 

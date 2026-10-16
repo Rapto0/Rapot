@@ -63,7 +63,9 @@ Sonraki native mumun varlığı geçmiş mumun kapanmışlığına tanıktır. S
 HTF'nin gelecekteki kapanışı bilinmese bile önceki kapanmış durumdan gözlem
 anına kadar gelişen RSI/RMI hesaplanabilir; sahte bir kapanış saati atanmaz.
 Canlı SMI, sağlayıcının ilgili native mumunun yüksek/düşük aralığını ve bundan
-sonra gözlenen fiyat uçlarını kullanır; ana periyottan HTF aralığı türetmez.
+sonra gözlenen fiyat uçlarını kullanır. Güncel native günlük mumun yüksek/düşük
+değerleri, aynı gün için doğrulanmış üst periyodun mevcut aralığını yalnız
+genişletebilir; geçmiş HTF aralığı günlük veriden yeniden oluşturulmaz.
 Geçmiş önizlemesinin özgün politika hesabında sınırı kesen veya eksik ana mum
 hazır sayılmaz.
 
@@ -143,6 +145,22 @@ ilgili alarmlar eşzamanlı çağrıyla değerlendirilir; bu işlem bitmeden son
 fiyat gözlemi onun yerini alamaz. Kısa eşik aşımı/geri dönüş böyle korunur.
 Her native periyot ayrı TradingView chart session kullanır; aynı sembolün
 bütün periyotları ve tek fiyat aboneliği aynı sıralı WebSocket üzerinde kalır.
+16 Ekim kaynak düzeninde günlük ve gün içi periyotlar sürekli bağlıdır;
+1D dışındaki D/W/M periyotları iki native mumla doğrulanan süreli aboneliklerdir.
+Native günlük mum önce uygulamanın seans/saat doğrulamasından geçer. Uzun periyot
+paketi de aynı doğrulamayı geçip tüketici tarafından onaylanınca aboneliği
+kapatılır; gerçek mum başlangıcı, önceki mum ve kapalı hesap durumu korunur.
+Her fiyat güncellemesi bütün etkin satırlara aynı fiyatı uygular.
+
+Her bağlantıda en fazla 32 geçici abonelik için yer ayrılır. 805 sembol ×
+10 uzun/günlük TF örneği 805 sürekli günlük ve en fazla 128 geçici chart ile
+planlanır; 8.050 mantıksal TF talebi sürekli 8.050 açık chart değildir.
+Sertifika bağlantı, hesap, sembol ve native gün nesline bağlıdır. Günlük mumun
+değişmesi/düzeltilmesi, geçmiş revizyonu, bağlantı kaybı veya kaldırılıp yeniden
+eklenen sembol eski sertifikayı geçersiz kılar. Yeni gerçek native paketler
+gelmeden eski mum kimliğiyle sinyal verilmez. Uzun periyotların bağımsız tarihsel
+düzeltmeleri, günlük mumda görünmüyorsa bir sonraki uzlaştırmaya kadar fark
+edilemeyebilir; bu yol her eski mumun anlık revizyonunu izleme garantisi değildir.
 14 Ekim canlı denemesinde aynı chart session'a ikinci fiyat serisinin
 eklenmesi sağlayıcı tarafından reddedildi; bu protokol sınırı yerel testlere
 de eklendi. Önizlemedeki `observation_price`, kaynak zamanı ve hesap çıktısıyla
@@ -189,8 +207,9 @@ karşılaştırma durumunu geçersiz kılar.
 Bağlantı sayısı, native seri, derlenmiş satırlar ve sıralı olay kuyruğu yerel
 üst sınırlarla korunur. 16 Ekim'de 500'den 516 chart session'a büyüme gerçek
 sağlayıcı kapasite hatası verdi. Sonraki kaynak koruması dört bağlantının her
-birinde en fazla 500 fiziksel seri kabul eder; sembolün bütün gerekli TF'leri
-tek bağlantıya birlikte sığmazsa sembol kapasite nedeniyle hazır sayılmaz.
+birinde en fazla 500 fiziksel seri kabul eder. Süreli tanık düzeninde sürekli
+günlük/gün içi maliyet ile geçici abonelik rezervi bu sınıra birlikte sığmalıdır;
+sembolün gereken verisi tek bağlantıda güvenle izlenemiyorsa hazır sayılmaz.
 8.192 yerel istek bütçesi 8.192 fiziksel abonelik kabulü değildir. Kararlı
 yerleşim çalışan sembolleri liste değiştiğinde başka bağlantıya taşımaz.
 Bunlar TradingView hesabının kabul edeceği abonelik
@@ -203,7 +222,7 @@ Aktif alarm ve önizleme talebi yokken özel veri işi başlatılmaz. Tam BIST,
 
 Canlı yolun yerel üst sınırları: 256 farklı etkin ayar, 4.096 sembol/ayar
 hesabı, 40.960 derlenmiş satır, 2.000.000 başlangıç durumu hücresi, dört native
-bağlantı, 8.192 native seri ve 8.192 sıralı olay. Native geçmiş LRU'su en fazla
+bağlantı, 8.192 mantıksal native seri ve 8.192 sıralı olay. Native geçmiş LRU'su en fazla
 64 seri / 60.000 mum, kısa alarm sonuçları 262.144 hücre tutar. Bunlar ayrı
 bütçelerdir; uzun momentum/pencere ayarları daha erken kapasite sınırına
 ulaşabilir. Kabul sırası kararlıdır; fazla işlerin derlenip sonra sürekli

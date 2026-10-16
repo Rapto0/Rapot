@@ -22,9 +22,16 @@ korundu. 500'den 516 seriye ayrı deneme `max charts per connection reached`
 verdi. 08:34:31–08:35:21 UTC altı örnekte özel hesap sıfır ve yeniden bağlantı
 döngüsü sürüyordu. Yeni kaynak koruması bağlantı başına 500, dört bağlantıda
 2.000 fiziksel seriyle bütün sembolleri atomik kabul eder; fazla iş görünür
-kapasite durumudur. **Bu ikinci koruma henüz yayımlanmadı; 805 üyeli tam canlı
-kapsam çalışmıyor.** Uzun periyotların native tanıklarını paylaşan düzen ayrıca
-geliştirilecektir. Kullanıcının kuralı/listesi/bildirim ayarı değiştirilmedi; yeni
+kapasite durumudur. **`e290604b`, 08:54:16 UTC yalnız API/Compose/current yayını;
+08:54:31–08:55:01 UTC bağımsız kabul geçti.** Frontend `2ea4ea31` kaldı;
+taze 1.342.660.608 bayt yedek restore edildi, mevcut kural/liste ve veriler korundu.
+13:43 UTC örneğinde 2.000 seri açık, 49 hesap derlenmiş, 605 sembol kapasite
+dışındadır; 805 üyeli tam canlı kapsam henüz çalışmıyor. Kullanıcının normal
+alarmı toplam gönderilmiş olay sayısını üçten altıya çıkardı; yeni test alarmı
+kurulmadı. Tek 500-seri bağlantı 13:39–13:42 UTC denemesinde 130 saniye sağlıklı
+kaldı; üretimdeki genel protokol hatasının nedeni bu denemede tekrarlanmadı.
+Uzun periyotların native tanıklarını paylaşan düzen kaynakta geliştirilir;
+henüz üretim kabulü değildir. Kullanıcının kuralı/listesi/bildirim ayarı değiştirilmedi; yeni
 otomatik takip yok. [16 Ekim kanıtı](docs/LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md).
 
 **14 Ekim canlı bağlantı yayını tamamlandı:** Kullanıcının “Piyasa şuan açık” mesajıyla

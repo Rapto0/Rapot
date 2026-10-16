@@ -16,6 +16,12 @@ import time
 from contextlib import suppress
 
 from infrastructure.providers.custom_indicator_history import SESSION_KEYS, validate_native_request
+from infrastructure.providers.custom_indicator_leases import (
+    LEASE_SLOTS_PER_CONNECTION,
+    NativeLeaseBook,
+    is_leased_timeframe,
+    persistent_keys,
+)
 
 MAX_LIVE_SERIES = 8192
 MAX_LIVE_CONNECTIONS = 4
@@ -34,18 +40,26 @@ def _preferred_slot(member):
     )
 
 
-def plan_native_subscriptions(requested, previous_slots=None):
+def plan_native_subscriptions(requested, previous_slots=None, *, lease_long_timeframes=True):
     """Plan whole symbols within verified per-socket capacity, without moving incumbents.
 
     The local 8,192 request budget is distinct from the provider's measured
     500 chart-session boundary on each of four sockets. A refused member is
     never partially subscribed or represented as admitted.
     """
+    requested = set(requested)
     members = {}
-    for key in set(requested):
+    for key in requested:
         members.setdefault(key[:2], set()).add(key)
+    leased = lease_long_timeframes and any(is_leased_timeframe(key[2]) for key in requested)
+    limit = MAX_CHARTS_PER_CONNECTION - (LEASE_SLOTS_PER_CONNECTION if leased else 0)
+    costs = {
+        member: len(persistent_keys(keys)) if leased else len(keys)
+        for member, keys in members.items()
+    }
     previous = previous_slots or {}
     groups, slots, refused = {}, {}, set()
+    used = {}
     for member in sorted(members):
         if member not in previous:
             continue
@@ -53,17 +67,18 @@ def plan_native_subscriptions(requested, previous_slots=None):
         if type(slot) is not int or not 0 <= slot < MAX_LIVE_CONNECTIONS:
             raise ValueError("Native bağlantı yerleşimi geçersiz.")
         keys = members[member]
-        if len(groups.get(slot, ())) + len(keys) > MAX_CHARTS_PER_CONNECTION:
+        if used.get(slot, 0) + costs[member] > limit:
             refused.add(member)
             continue
         groups.setdefault(slot, set()).update(keys)
         slots[member] = slot
+        used[slot] = used.get(slot, 0) + costs[member]
     for member in sorted(set(members) - set(previous)):
         keys = members[member]
         candidates = [
             slot
             for slot in range(MAX_LIVE_CONNECTIONS)
-            if len(groups.get(slot, ())) + len(keys) <= MAX_CHARTS_PER_CONNECTION
+            if used.get(slot, 0) + costs[member] <= limit
         ]
         if not candidates:
             refused.add(member)
@@ -72,12 +87,13 @@ def plan_native_subscriptions(requested, previous_slots=None):
         slot = min(
             candidates,
             key=lambda value: (
-                len(groups.get(value, ())),
+                used.get(value, 0),
                 (value - preferred) % MAX_LIVE_CONNECTIONS,
             ),
         )
         groups.setdefault(slot, set()).update(keys)
         slots[member] = slot
+        used[slot] = used.get(slot, 0) + costs[member]
     return groups, slots, refused
 
 
@@ -187,16 +203,19 @@ def stream_class(base):
             if not self.closed and not self.failed:
                 self.callback(event)
 
-        def reconcile(self, wanted, *, additions_limit=None):
+        def reconcile(self, wanted, *, additions_limit=None, contexts=None):
             """Called by the single control worker, never from a socket callback."""
             wanted = set(wanted)
+            contexts = contexts or {}
             if len(wanted) > MAX_CHARTS_PER_CONNECTION:
                 raise ValueError("Native bağlantı başına doğrulanmış mum kapasitesi aşıldı.")
             removed = []
             removed_quotes = []
             with self._lock:
                 for sid, item in list(self.series.items()):
-                    if item["key"] not in wanted:
+                    if item["key"] not in wanted or item.get("context", {}) != contexts.get(
+                        item["key"], {}
+                    ):
                         removed.append((sid, item["session"]))
                         self.sessions.pop(item["key"], None)
                         self.sessions_by_id.pop(item["session"], None)
@@ -219,7 +238,10 @@ def stream_class(base):
                 self._send(
                     self._create_message("quote_remove_symbols", [self._quote_session, full])
                 )
-            additions = sorted(wanted - present)
+            additions = sorted(
+                wanted - present,
+                key=lambda key: (contexts.get(key, {}).get("native_lease_id") is not None, key),
+            )
             if additions_limit is not None:
                 additions = additions[:additions_limit]
             for market, symbol, timeframe in additions:
@@ -242,6 +264,7 @@ def stream_class(base):
                         "session": item["id"],
                         "rows": {},
                         "complete": False,
+                        "context": dict(contexts.get((market, symbol, timeframe), {})),
                     }
                 self._send(self._create_message("chart_create_session", [session, ""]))
                 config = json.dumps({"symbol": full, "adjustment": "splits", "session": "regular"})
@@ -320,7 +343,9 @@ def stream_class(base):
                         ]
                         for item in rejected:
                             item["rejected"] = True
-                            events.append({"kind": "rejected", "key": item["key"]})
+                            events.append(
+                                {"kind": "rejected", "key": item["key"], **item["context"]}
+                            )
                     elif (
                         method == "symbol_resolved"
                         and len(params) >= 3
@@ -416,7 +441,7 @@ def stream_class(base):
             rows = tuple(item["rows"].values())
             metadata = self.sessions[item["key"]]["metadata"].copy()
             member = item["key"][:2]
-            if item["key"][0] == "BIST" and item["key"][2] == "1D" and rows:
+            if item["key"][2] == "1D" and rows:
                 self.daily_identity[member] = rows[-1][0]
             # Current prices arrive through the ordered quote subscription.
             # Native witnesses need the full closed predecessor plus the open
@@ -440,6 +465,7 @@ def stream_class(base):
                 "rows": rows,
                 "metadata": metadata,
                 "received_at": self.clock(),
+                **item["context"],
             }
 
         def disconnect(self):
@@ -452,14 +478,17 @@ def stream_class(base):
 class NativeStreamPool:
     """Fixed connection ceiling, dynamic subscriptions and no hidden reconnect."""
 
-    def __init__(self, base, token, epoch, callback, *, clock=None):
+    def __init__(self, base, token, epoch, callback, *, clock=None, lease_long_timeframes=True):
         self._class = stream_class(base)
         self._token, self.epoch, self._callback = token, epoch, callback
         self._clock = clock or time.time
+        self._leases = NativeLeaseBook(self._clock) if lease_long_timeframes else None
         self._streams = {}
         self._wanted_by_slot = {}
         self._wanted_by_member = {}
         self._member_slots = {}
+        self._wire_by_slot = {}
+        self._needs_refresh = False
         self.closed = False
         self._lock = threading.Lock()
 
@@ -483,25 +512,80 @@ class NativeStreamPool:
     def needs_reconcile(self):
         if self.closed:
             return False
-        for slot, wanted in tuple(self._wanted_by_slot.items()):
+        if self._needs_refresh:
+            return True
+        if self._leases is not None and self._leases.status()["lease_pending"]:
+            return True
+        for slot, wanted in tuple(self._wire_by_slot.items()):
             stream = self._streams.get(slot)
             if stream is None:
                 return True
             with stream._lock:
                 if set(stream.sessions) != wanted:
                     return True
+        if self._leases is not None:
+            # ACKed temporary charts must be retired even when no work remains.
+            return any(
+                is_leased_timeframe(key[2])
+                for stream in tuple(self._streams.values())
+                for key in tuple(stream.sessions)
+            )
         return False
 
     def member_ready(self, member):
-        """Transport admission only; callers must also verify native bar witnesses."""
+        """Persistent transport and current daily generation's ACKed witnesses."""
         member = tuple(member)
         slot = self._member_slots.get(member)
         stream = self._streams.get(slot)
         if self.closed or stream is None or not stream.healthy:
             return False
         wanted = self._wanted_by_member.get(member, set())
+        persistent = persistent_keys(wanted) if self._leases is not None else wanted
         with stream._lock:
-            return bool(wanted) and all(key in stream.sessions for key in wanted)
+            registered = bool(wanted) and all(key in stream.sessions for key in persistent)
+        return registered and (self._leases is None or self._leases.ready(member, wanted))
+
+    def confirm_native_witness(self, event):
+        if self.closed:
+            return {"accepted": False, "invalidated": False}
+        if self._leases is None:
+            return {"accepted": True, "invalidated": False}
+        stream = self._streams.get(self._member_slots.get(tuple(event.get("key", ()))[:2]))
+        if stream is None or not stream.healthy:
+            return {"accepted": False, "invalidated": False}
+        return self._leases.confirm(event)
+
+    def witness_valid(self, key, certificate):
+        key = tuple(key)
+        stream = self._streams.get(self._member_slots.get(key[:2]))
+        return bool(
+            not self.closed
+            and stream is not None
+            and stream.healthy
+            and self._leases is not None
+            and self._leases.witness_valid(key, certificate)
+        )
+
+    def invalidate_native_member(self, member):
+        if self._leases is not None:
+            self._leases.invalidate_member(tuple(member))
+            self._needs_refresh = True
+
+    def history_ready(self, member, needed):
+        return self.member_ready(member) and (
+            self._leases is None
+            or self._leases.ready(tuple(member), {(*member, timeframe) for timeframe in needed})
+        )
+
+    def _on_event(self, event):
+        if (
+            self._leases is not None
+            and event.get("kind") == "rejected"
+            and not self._leases.reject(event)
+        ):
+            return
+        # The application may acquire its own lock. No book/pool lock is held.
+        self._callback(event)
 
     def configure(self, requested, *, member_slots=None):
         requested = sorted(set(requested))
@@ -513,7 +597,9 @@ class NativeStreamPool:
             validate_native_request(symbol, exchange, timeframe, 2)
             members.setdefault((market, symbol), set()).add((market, symbol, timeframe))
         if member_slots is None:
-            groups, member_slots, refused = plan_native_subscriptions(requested, self._member_slots)
+            groups, member_slots, refused = plan_native_subscriptions(
+                requested, self._member_slots, lease_long_timeframes=self._leases is not None
+            )
             if refused:
                 raise ValueError("Native sağlayıcı kapasitesi aşıldı; semboller planlanamadı.")
         else:
@@ -528,19 +614,34 @@ class NativeStreamPool:
                         "Native sembol bağlantısı devamlılık sıfırlanmadan değiştirilemez."
                     )
                 groups.setdefault(slot, set()).update(members[member])
-            if any(len(wanted) > MAX_CHARTS_PER_CONNECTION for wanted in groups.values()):
+            leased = self._leases is not None and any(
+                is_leased_timeframe(key[2]) for key in requested
+            )
+            limit = MAX_CHARTS_PER_CONNECTION - (LEASE_SLOTS_PER_CONNECTION if leased else 0)
+            if any(
+                (len(persistent_keys(wanted)) if leased else len(wanted)) > limit
+                for wanted in groups.values()
+            ):
                 raise ValueError("Native bağlantı başına doğrulanmış mum kapasitesi aşıldı.")
         # Every plan is validated before transport creation/removal or writes.
         self._wanted_by_slot = groups
         self._wanted_by_member = members
         self._member_slots = dict(member_slots)
+        contexts = {}
+        if self._leases is not None:
+            self._leases.configure(requested, member_slots)
+            wire_groups, contexts = self._leases.desired()
+        else:
+            wire_groups = groups
+        self._wire_by_slot = wire_groups
+        self._needs_refresh = False
         for slot in list(self._streams):
             if slot not in groups:
                 self._streams.pop(slot).disconnect()
-        for slot, wanted in groups.items():
+        for slot, wanted in wire_groups.items():
             stream = self._streams.get(slot)
             if stream is None:
-                stream = self._class(self._token, self._callback, self._clock)
+                stream = self._class(self._token, self._on_event, self._clock)
                 self._streams[slot] = stream
                 stream.connect(timeout=5)
                 stream._should_reconnect = False
@@ -549,15 +650,22 @@ class NativeStreamPool:
             # A control turn starts only a bounded number of chart sessions per
             # socket. Existing quotes and series keep flowing while a large
             # watchlist is admitted over subsequent turns.
-            stream.reconcile(wanted, additions_limit=MAX_SERIES_PER_RECONCILE)
+            stream.reconcile(wanted, additions_limit=MAX_SERIES_PER_RECONCILE, contexts=contexts)
+            if self._leases is not None:
+                with stream._lock:
+                    registered = tuple(stream.sessions)
+                self._leases.mark_started(registered)
 
     def status(self):
-        return {
+        opened = {slot: set(stream.sessions) for slot, stream in tuple(self._streams.items())}
+        result = {
             "connections": len(self._streams),
             "connected": sum(stream.healthy for stream in tuple(self._streams.values())),
             "subscriptions": sum(len(stream.series) for stream in tuple(self._streams.values())),
-            "subscriptions_pending": sum(map(len, self._wanted_by_slot.values()))
-            - sum(len(stream.series) for stream in tuple(self._streams.values())),
+            "subscriptions_pending": sum(
+                len(wanted - opened.get(slot, set()))
+                for slot, wanted in tuple(self._wire_by_slot.items())
+            ),
             "protocol_errors": sum(
                 stream.protocol_errors for stream in tuple(self._streams.values())
             ),
@@ -569,6 +677,11 @@ class NativeStreamPool:
                 }
             ),
         }
+        if self._leases is not None:
+            result.update(self._leases.status())
+            result["physical_capacity"] = MAX_PROVIDER_SERIES
+            result["lease_reserve_per_connection"] = LEASE_SLOTS_PER_CONNECTION
+        return result
 
     def close(self):
         self.closed = True
@@ -579,3 +692,4 @@ class NativeStreamPool:
         self._wanted_by_slot.clear()
         self._wanted_by_member.clear()
         self._member_slots.clear()
+        self._wire_by_slot.clear()

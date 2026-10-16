@@ -14,12 +14,14 @@ import re
 import threading
 import time
 import uuid
+from bisect import bisect_left
 from collections import OrderedDict, deque
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from application.services.custom_indicators.core import Bar
+from infrastructure.providers.custom_indicator_leases import is_leased_timeframe
 
 MAX_NATIVE_SERIES = 64
 MAX_NATIVE_ROWS = 60000
@@ -174,11 +176,14 @@ def with_native_ends(bars, daily, timeframe, market, now):
     if market != "BIST" or not timeframe.endswith(("D", "W", "M")) or timeframe == "1D":
         return bars
     result = []
+    daily_times = tuple(day.time for day in daily)
     for index, bar in enumerate(bars):
         following = bars[index + 1].time if index + 1 < len(bars) else None
         # Only a following provider bucket witnesses the historical boundary.
-        eligible = [day for day in daily if following and bar.time <= day.time < following]
-        end = eligible[-1].end if eligible else None
+        # Both native inputs are already sorted. Find the last supplied daily
+        # candle inside this bucket without rescanning the full daily history.
+        last = bisect_left(daily_times, following) - 1 if following else -1
+        end = daily[last].end if last >= 0 and daily[last].time >= bar.time else None
         result.append(replace(bar, end=end, confirmed=bool(following and following <= now)))
     return tuple(result)
 
@@ -350,7 +355,9 @@ class CustomIndicatorData:
             }
             self._job_cursor = 0
             for key in self._job_order:
-                if key not in self._results:
+                if key not in self._results or not self.live.has_seed(
+                    key, self.provider.memory_epoch()
+                ):
                     self._queue_seed(key)
 
     def _queue_seed(self, key):
@@ -413,6 +420,7 @@ class CustomIndicatorData:
                     (item["market_type"], item["symbol"]) for item in rule.get("symbols", [])
                 )
         with self._lock:
+            newly_closed = closed_configs - self._closed_configs
             self._configs = configs
             self._closed_configs = closed_configs
             self._blocked_configurations = len(blocked)
@@ -434,6 +442,14 @@ class CustomIndicatorData:
                 self._preview_results.clear()
         self._wake.set()
         self._sync_live()
+        with self._lock:
+            # An existing intrabar seed has no historical signal replay. A
+            # newly added close-only rule must not wait for the six-hour
+            # reconciliation to obtain its confirmed observations.
+            for key in self._job_order:
+                if key[2] in newly_closed:
+                    self._seed_due.add(key)
+                    self._queue_seed(key)
 
     def set_universe(self, universe):
         with self._lock:
@@ -498,21 +514,10 @@ class CustomIndicatorData:
         # being open alone does not prove an unavailable list symbol resolved.
         if not self._running or key[2] in self._closed_configs:
             return True
-        connection = self.live._connection
-        if connection is None:
-            return False
-        member_ready = getattr(connection, "member_ready", None)
-        if not (member_ready(key[:2]) if member_ready else connection.connected):
-            return False
         needed = {row["timeframe"] for row in config["requirements"]} | {config["chart_timeframe"]}
-        if key[0] == "BIST":
+        if key[0] == "BIST" or any(is_leased_timeframe(tf) for tf in needed):
             needed.add("1D")
-        with self.live._lock:
-            return all(
-                (*key[:2], timeframe) in self.live._buckets
-                and (*key[:2], timeframe) not in self.live._refused
-                for timeframe in needed
-            )
+        return self.live.history_ready(key[:2], needed)
 
     def _history_job_ready(self, key, config, now):
         return now >= self._history_retries.get(key, 0) and self._history_transport_ready(
@@ -550,8 +555,11 @@ class CustomIndicatorData:
                 if (
                     key in self._seed_due
                     or not cached
+                    or not self.live.has_seed(key, self.provider.memory_epoch())
+                    or not cached.get("history_replayed")
                     or bool(cached.get("history_retry_at"))
                     or cached.get("error")
+                    and not cached.get("native_witness_wait")
                     and now - cached["received"] >= 30
                     or now - cached.get("seed_received", cached["received"]) >= REFRESH_SECONDS
                 ):
@@ -591,8 +599,14 @@ class CustomIndicatorData:
                 if (
                     key in self._seed_due
                     or not cached
+                    # A quote can publish a fresh unknown observation before
+                    # bootstrap, or after a preparation loses its publication
+                    # token. That result must not hide an absent compact seed
+                    # until the periodic history reconciliation six hours later.
+                    or not self.live.has_seed(key, self.provider.memory_epoch())
                     or bool(cached.get("history_retry_at"))
                     or cached.get("error")
+                    and not cached.get("native_witness_wait")
                     and now - cached["received"] >= 30
                     or now - cached.get("seed_received", cached["received"]) >= REFRESH_SECONDS
                 ):
@@ -657,6 +671,7 @@ class CustomIndicatorData:
                 )
             if revision:
                 member = (market, symbol)
+                self.live.invalidate_witnesses(member)
                 self.live_gap(
                     "Native geçmiş düzeltildi; canlı gösterge yeniden hazırlanıyor.", member
                 )
@@ -700,7 +715,7 @@ class CustomIndicatorData:
             demand = {row["timeframe"]: row["bars"] for row in config["requirements"]}
             primary_tf = config["chart_timeframe"]
             demand[primary_tf] = max(demand.get(primary_tf, 0), 500)
-            if market == "BIST":
+            if market == "BIST" or any(is_leased_timeframe(tf) for tf in demand):
                 demand["1D"] = max(demand.get("1D", 0), 500)
             entries = {
                 tf: self._native_frame(market, symbol, tf, count, epoch)
@@ -714,23 +729,34 @@ class CustomIndicatorData:
                 for tf, entry in entries.items()
             }
             primary = frames[primary_tf]
-            values = evaluate(
-                config["indicator"],
-                config["inputs"],
-                primary,
-                frames,
-                chart_timeframe=primary_tf,
-                as_of=self._clock(),
-            )
+            with self._lock:
+                preview_active = self._previews.get(key, (0, None))[0] > self._clock()
+                replay = (
+                    key[2] in self._closed_configs or preview_active or key[2] not in self._configs
+                )
+            # Live rule bootstrap needs only closed recursive seeds. Replaying
+            # every primary candle is reserved for charts and close-only rules;
+            # no historical observation can stand in for the first real quote.
+            points = []
+            if replay:
+                values = evaluate(
+                    config["indicator"],
+                    config["inputs"],
+                    primary,
+                    frames,
+                    chart_timeframe=primary_tf,
+                    as_of=self._clock(),
+                )
+                if len(values) != len(primary):
+                    raise ValueError("Gösterge sonucu native mumlarla eşleşmiyor.")
+                points = [
+                    {"time": bar.time, "end": bar.end, "confirmed": bar.confirmed, **value}
+                    for bar, value in zip(primary, values, strict=True)
+                ][-MAX_RESULT_POINTS:]
             prepared_seed = self.live.prepare_seed(config, frames, epoch)
-            if len(values) != len(primary):
-                raise ValueError("Gösterge sonucu native mumlarla eşleşmiyor.")
-            points = [
-                {"time": bar.time, "end": bar.end, "confirmed": bar.confirmed, **value}
-                for bar, value in zip(primary, values, strict=True)
-            ][-MAX_RESULT_POINTS:]
             result = {
                 "points": points,
+                "history_replayed": replay,
                 "received": self._clock(),
                 "seed_received": self._clock(),
                 "source_time": primary[-1].time,
@@ -802,14 +828,15 @@ class CustomIndicatorData:
                 # Native rollover already advances the compact closed seeds;
                 # genuine revisions clear them before reaching this branch.
                 before = self._result_cells(live_result)
-                live_result["closed_points"] = [
-                    {**point, "rows": []} for point in result["points"] if point["confirmed"]
-                ][-4:]
+                if replay:
+                    live_result["closed_points"] = [
+                        {**point, "rows": []} for point in result["points"] if point["confirmed"]
+                    ][-4:]
                 live_result["seed_received"] = result["received"]
                 live_result.pop("history_retry_at", None)
                 live_result.pop("native_wait", None)
                 self._live_cells += self._result_cells(live_result) - before
-                if key in self._previews:
+                if replay and self._previews.get(key, (0, None))[0] > self._clock():
                     current = self._preview_results.get(key, live_result)["points"][-1:]
                     history = [
                         point
@@ -819,12 +846,16 @@ class CustomIndicatorData:
                     self._preview_results[key] = {
                         **live_result,
                         "points": [*history[-MAX_RESULT_POINTS + 1 :], *current],
+                        "history_replayed": True,
                     }
                 self._last_error = None
                 self._last_completed_at = result["received"]
                 self._last_cycle_seconds = max(0, result["received"] - now)
                 return
-            if key in self._previews:
+            if (
+                result.get("history_replayed")
+                and self._previews.get(key, (0, None))[0] > self._clock()
+            ):
                 self._preview_results[key] = {
                     **result,
                     "continuity": f"{self._process_epoch}:{self._symbol_epochs.get(key[:2], 0)}",
@@ -913,6 +944,27 @@ class CustomIndicatorData:
                 self._process_epoch = uuid.uuid4().hex
             else:
                 self._symbol_epochs[member] = self._symbol_epochs.get(member, 0) + 1
+            self._last_error = reason
+        self._wake.set()
+
+    def native_witness_wait(self, member, reason):
+        """Break observation continuity while retaining a proven rollover's seeds."""
+        with self._publication_lock, self._lock:
+            self._publication_members[member] = self._publication_members.get(member, 0) + 1
+            self._symbol_epochs[member] = self._symbol_epochs.get(member, 0) + 1
+            for key, result in self._results.items():
+                if key[:2] == member:
+                    before = self._result_cells(result) if result.get("live") else 0
+                    result["error"] = reason
+                    result["native_witness_wait"] = True
+                    result.pop("previous", None)
+                    if result.get("live"):
+                        self._live_cells += self._result_cells(result) - before
+            for key, result in self._preview_results.items():
+                if key[:2] == member:
+                    result["error"] = reason
+                    result["native_witness_wait"] = True
+                    result.pop("previous", None)
             self._last_error = reason
         self._wake.set()
 
@@ -1019,6 +1071,7 @@ class CustomIndicatorData:
                     self._preview_results[key] = {
                         **result,
                         "points": [*history[-MAX_RESULT_POINTS + 1 :], point],
+                        "history_replayed": bool((old_preview or {}).get("history_replayed")),
                     }
                     self._preview_results.move_to_end(key)
             while len(self._results) > MAX_RESULTS or self._live_cells > MAX_RESULT_CELLS:
@@ -1031,15 +1084,18 @@ class CustomIndicatorData:
 
     def _read(self, key, now, *, require_latest=True):
         result = self._results.get(key)
+        config = self.live._configs.get(key)
+        needed = (
+            {row["timeframe"] for row in config["requirements"]}
+            | {config["chart_timeframe"]}
+            | ({"1D"} if key[0] == "BIST" else set())
+            if config
+            else set()
+        )
+        leased = any(is_leased_timeframe(tf) for tf in needed)
+        if leased:
+            needed.add("1D")
         if require_latest or result is None:
-            config = self.live._configs.get(key)
-            needed = (
-                {row["timeframe"] for row in config["requirements"]}
-                | {config["chart_timeframe"]}
-                | ({"1D"} if key[0] == "BIST" else set())
-                if config
-                else set()
-            )
             with self.live._lock:
                 refused = any((*key[:2], timeframe) in self.live._refused for timeframe in needed)
             if refused:
@@ -1055,6 +1111,18 @@ class CustomIndicatorData:
             return result, "unknown", "TradingView bağlantısı değişti; yeni veri bekleniyor."
         if result["error"]:
             return result, "unknown", result["error"]
+        if (
+            result.get("live")
+            and self.live._enabled
+            and leased
+            and callable(getattr(self.live._connection, "witness_valid", None))
+            and not self.live.history_ready(key[:2], needed)
+        ):
+            return (
+                result,
+                "unknown",
+                "Native zaman dilimlerinin güncel günlük mumla doğrulanması bekleniyor.",
+            )
         if require_latest and self.live._enabled and not result.get("live"):
             return (
                 result,
@@ -1218,23 +1286,36 @@ class CustomIndicatorData:
 
     def status(self):
         with self._lock:
+            now = self._clock()
             memberships = {
                 identity: (set(symbols), all_bist)
                 for identity, symbols, all_bist in self._memberships
             }
             universe = set(self._universe)
             fresh_configured = sum(
-                self._clock() - result["native_received"] <= STALE_SECONDS
-                and not result["error"]
-                and key[2] in memberships
+                key[2] in memberships
                 and (
                     key[:2] in memberships[key[2]][0]
                     or (memberships[key[2]][1] and key[:2] in universe)
                 )
+                and self.live.admitted(key)
+                and (not self.live._enabled or self.live.has_seed(key, result["epoch"]))
+                and self._read(key, now)[1] == "ready"
                 for key, result in self._results.items()
             )
+            workers = {thread.name: thread.is_alive() for thread in tuple(self.live._threads)}
+            history_alive = bool(self._thread and self._thread.is_alive())
+            calculation_alive = workers.get("custom-live-events", False)
+            connection_alive = workers.get("custom-native-stream", False)
             return {
-                "running": self._running,
+                "running": self._running
+                and history_alive
+                and calculation_alive
+                and connection_alive,
+                "requested_running": self._running,
+                "history_worker_alive": history_alive,
+                "calculation_worker_alive": calculation_alive,
+                "connection_worker_alive": connection_alive,
                 "configured": len(self._configs),
                 "blocked_configurations": self._blocked_configurations,
                 "requested_rule_symbols": self._jobs_requested,

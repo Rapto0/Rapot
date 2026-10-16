@@ -12,6 +12,7 @@ import threading
 from collections import OrderedDict, deque
 from dataclasses import replace
 
+from infrastructure.providers.custom_indicator_leases import is_leased_timeframe
 from infrastructure.providers.custom_indicator_stream import (
     MAX_LIVE_SERIES,
     plan_native_subscriptions,
@@ -36,10 +37,12 @@ class LiveIndicatorData:
         self._configs = {}
         self._members = {}
         self._wanted = set()
+        self._native_keys_by_member = {}
         self._member_slots = {}
         self._requested = 0
         self._compiled = OrderedDict()
         self._buckets = {}
+        self._witness_certificates = {}
         self._previous_quotes = {}
         self._connection = None
         self._subscribed = set()
@@ -81,7 +84,7 @@ class LiveIndicatorData:
             required = {(*key[:2], row["timeframe"]) for row in config["requirements"]} | {
                 (*key[:2], config["chart_timeframe"])
             }
-            if key[0] == "BIST":
+            if key[0] == "BIST" or any(is_leased_timeframe(row[2]) for row in required):
                 required.add((*key[:2], "1D"))
             requested.update(required)
             if (
@@ -94,11 +97,7 @@ class LiveIndicatorData:
             configs[key] = config
             cells += cost
             members.setdefault(key[:2], []).append(key)
-            for row in config["requirements"]:
-                wanted.add((*key[:2], row["timeframe"]))
-            wanted.add((*key[:2], config["chart_timeframe"]))
-            if key[0] == "BIST":
-                wanted.add((*key[:2], "1D"))
+            wanted.update(required)
         _, member_slots, refused_members = plan_native_subscriptions(wanted, self._member_slots)
         if refused_members:
             blocked += sum(key[:2] in refused_members for key in configs)
@@ -121,12 +120,16 @@ class LiveIndicatorData:
             self._refused.intersection_update(wanted)
             self._requested = len(requested)
             self._wanted = set(sorted(wanted)[:MAX_LIVE_SERIES])
+            self._native_keys_by_member = {}
+            for native_key in self._wanted:
+                self._native_keys_by_member.setdefault(native_key[:2], set()).add(native_key)
             for key in list(self._compiled):
                 if key not in configs:
                     self._compiled.pop(key)
             for key in list(self._buckets):
                 if key not in self._wanted:
                     self._buckets.pop(key)
+                    self._witness_certificates.pop(key, None)
             if not configs:
                 self._queue.clear()
                 self._compiled.clear()
@@ -165,6 +168,7 @@ class LiveIndicatorData:
             self._queue.clear()
             self._compiled.clear()
             self._buckets.clear()
+            self._witness_certificates.clear()
             self._previous_quotes.clear()
             self._refused.clear()
             self._daily_witness_after.clear()
@@ -181,6 +185,41 @@ class LiveIndicatorData:
                     self._compiled.pop(key, None)
                 self._previous_quotes.pop(member, None)
 
+    def history_ready(self, member, needed_timeframes):
+        """Only validated native witnesses from this transport/day may seed a job."""
+        connection = self._connection
+        if connection is None:
+            return False
+        member_ready = getattr(connection, "member_ready", None)
+        if not (member_ready(member) if member_ready else connection.connected):
+            return False
+        with self._lock:
+            return all(
+                (*member, timeframe) in self._buckets
+                and (*member, timeframe) not in self._refused
+                and self._certificate_valid((*member, timeframe))
+                for timeframe in needed_timeframes
+            )
+
+    def _certificate_valid(self, key):
+        validate = getattr(self._connection, "witness_valid", None)
+        return (
+            not is_leased_timeframe(key[2])
+            or validate is None
+            or validate(key, self._witness_certificates.get(key))
+        )
+
+    def invalidate_witnesses(self, member):
+        """A historical adjustment needs new native ranges, not an old day certificate."""
+        invalidate = getattr(self._connection, "invalidate_native_member", None)
+        if invalidate is not None:
+            invalidate(member)
+        with self._lock:
+            for native_key in self._native_keys_by_member.get(member, ()):
+                self._buckets.pop(native_key, None)
+                self._witness_certificates.pop(native_key, None)
+        self._wake.set()
+
     def enqueue(self, event, generation=None):
         with self._lock:
             if self._stop.is_set() or generation is not None and generation != self._generation:
@@ -190,6 +229,7 @@ class LiveIndicatorData:
                 self._queue.clear()
                 self._compiled.clear()
                 self._buckets.clear()
+                self._witness_certificates.clear()
                 self._previous_quotes.clear()
                 # The next worker turn discards every observation and rebuilds
                 # native seeds; no missed edge is silently treated as continuous.
@@ -330,6 +370,31 @@ class LiveIndicatorData:
         except Exception:
             self.owner.live_gap("Native canlı mum paketi doğrulanamadı.", key[:2])
             return
+        acknowledge = getattr(self._connection, "confirm_native_witness", None)
+        if acknowledge is not None:
+            acknowledgement = acknowledge(event)
+            if not acknowledgement["accepted"]:
+                return
+            if acknowledgement["invalidated"]:
+                # A witnessed next day needs new long-period identities, but
+                # its closed Wilder/EMA states can advance incrementally.
+                # Actual revisions still discard those states and rebootstrap.
+                continuous_rollover = acknowledgement.get("rollover", False)
+                with self._lock:
+                    for old_key in self._native_keys_by_member.get(key[:2], ()):
+                        if is_leased_timeframe(old_key[2]):
+                            if not continuous_rollover:
+                                self._buckets.pop(old_key, None)
+                            self._witness_certificates.pop(old_key, None)
+                    if continuous_rollover:
+                        for item in self._members.get(key[:2], ()):
+                            if (compiled := self._compiled.get(item)) is not None:
+                                compiled["evaluator"].pause_signal_baseline()
+                reason = "Native günlük tanık değişti; üst periyotlar yeniden doğrulanıyor."
+                if continuous_rollover:
+                    self.owner.native_witness_wait(key[:2], reason)
+                else:
+                    self.owner.live_gap(reason, key[:2])
         dirty = rollover = False
         refresh = set()
         with self._lock:
@@ -354,8 +419,17 @@ class LiveIndicatorData:
             ):
                 dirty = True
             self._buckets[key] = (points, event["received_at"])
+            if is_leased_timeframe(key[2]) and acknowledge is not None:
+                self._witness_certificates[key] = tuple(
+                    event.get(field)
+                    for field in (
+                        "native_stream_generation",
+                        "native_day_generation",
+                        "native_lease_id",
+                    )
+                )
             if rollover:
-                if key[0] == "BIST" and key[2] == "1D":
+                if key[2] == "1D":
                     self._daily_witness_after[key[:2]] = event["received_at"]
                 for item in self._members.get(key[:2], ()):
                     compiled = self._compiled.get(item)
@@ -385,6 +459,8 @@ class LiveIndicatorData:
                         self._compiled.pop(item, None)
             else:
                 self._stage_extremes(key, points[-1], event["received_at"])
+            if key[2] == "1D":
+                self._stage_daily_extremes(key[:2], points[-1], event["received_at"])
         if dirty:
             if rollover:
                 self.owner.native_advanced(key, points[-2], points[-1])
@@ -397,6 +473,16 @@ class LiveIndicatorData:
                     native_key=key,
                 )
         self.owner._wake.set()
+
+    def _stage_daily_extremes(self, member, daily, received):
+        """A current native day is contained in its certified native long bars."""
+        for native_key in self._native_keys_by_member.get(member, ()):
+            if not is_leased_timeframe(native_key[2]) or not self._certificate_valid(native_key):
+                continue
+            witness = self._buckets.get(native_key)
+            if witness is None or daily.time < witness[0][-1].time:
+                continue
+            self._stage_extremes(native_key, daily, received)
 
     def prepare_seed(self, config, frames, epoch):
         from application.services.custom_indicators.catalog import compile_live
@@ -433,6 +519,14 @@ class LiveIndicatorData:
             if not mismatches:
                 self._compiled[key] = prepared
                 self._compiled.move_to_end(key)
+                # Native range packets may precede the slower full-history
+                # bootstrap. Reconcile them using the same source-time fence.
+                for timeframe in prepared["buckets"]:
+                    native_key = (*key[:2], timeframe)
+                    if (witness := self._buckets.get(native_key)) is not None:
+                        self._stage_extremes(native_key, witness[0][-1], witness[1])
+                if (daily := self._buckets.get((*key[:2], "1D"))) is not None:
+                    self._stage_daily_extremes(key[:2], daily[0][-1], daily[1])
         # Never acquire the owner's lock while retaining the live-state lock.
         for native_key in mismatches:
             self.owner.native_refresh(native_key, jobs={key})
@@ -561,11 +655,12 @@ class LiveIndicatorData:
                         needed = set(compiled["evaluator"].required_timeframes) | {
                             config["chart_timeframe"]
                         }
-                        if member[0] == "BIST":
+                        if member[0] == "BIST" or any(is_leased_timeframe(tf) for tf in needed):
                             needed.add("1D")
                         witnessed = {tf: self._buckets.get((*member, tf)) for tf in needed}
                         if all(
                             (*member, tf) not in self._refused
+                            and self._certificate_valid((*member, tf))
                             and value is not None
                             and value[0][-1].time == compiled["buckets"][tf].time
                             and source >= value[0][-1].time
@@ -621,6 +716,8 @@ class LiveIndicatorData:
                             )
                     base = compiled["buckets"].get(config["chart_timeframe"]) if compiled else None
                     if point is None:
+                        if compiled:
+                            compiled["evaluator"].pause_signal_baseline()
                         point = {"outputs": {}, "rows": [], "ready": False, "reason": reason}
                     point = {
                         "time": base.time if base else None,
@@ -681,6 +778,14 @@ class LiveIndicatorData:
                 "native_streams_connected": transport.get("connected", 0),
                 "native_subscriptions_registered": transport.get("subscriptions", 0),
                 "native_subscriptions_pending": transport.get("subscriptions_pending", 0),
+                "native_subscription_policy": "daily_anchor_native_leases",
+                "native_persistent_subscriptions": transport.get("persistent_subscriptions", 0),
+                "native_lease_active": transport.get("lease_active", 0),
+                "native_lease_certified": transport.get("lease_certified", 0),
+                "native_lease_pending": transport.get("lease_pending", 0),
+                "native_lease_refused": transport.get("lease_refused", 0),
+                "native_lease_retry_waiting": transport.get("lease_retry_waiting", 0),
+                "native_physical_capacity": transport.get("physical_capacity", 2000),
                 "last_native_failure_codes": list(self._last_transport_failures),
                 "compiled_configurations": len(self._compiled),
                 "blocked_rule_symbols": max(

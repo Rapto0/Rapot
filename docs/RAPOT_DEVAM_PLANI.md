@@ -23,9 +23,16 @@ Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi deği
   seriye ayrı tanı `max charts per connection reached` verdi; altı üretim
   örneğinde yeniden bağlantı döngüsü sürdü. Yeni kaynak bağlantı başına 500
   fiziksel seri sınırını atomik sembol kabulüyle korur, fazlasını açıkça engeller.
-  Bu ikinci korumanın yayını bekliyor; 805 üyeli tam kapsam henüz çalışmıyor.
-  Sonraki adım korumalı yayın ve uzun periyot tanıklarını paylaşan kaynak
-  düzenidir. Otomatik takip kurulmaz. [16 Ekim kayıt ve sınırları](LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md).
+  **`e290604b`, 08:54:16 UTC yalnız API/Compose/current yayını ve
+  08:54:31–08:55:01 UTC bağımsız kabul geçti.** Frontend `2ea4ea31` kaldı;
+  taze 1.342.660.608 bayt yedek restore edildi. 13:43 UTC örneğinde 2.000
+  fiziksel seri açık, 49 hesap derlenmiş, 605 sembol kapasite dışındadır.
+  Kullanıcının normal alarmı üç yeni olay gönderdi (toplam altı); test alarmı
+  kurulmadı. Tek 500-seri bağlantı 130 saniyelik tutma denemesini geçti;
+  üretimde görülen genel protokol hatası burada tekrarlanmadı. Uzun periyot
+  tanıklarını süreli native aboneliklerle doğrulayan kaynak düzeni geliştiriliyor;
+  henüz üretimde değildir. Otomatik takip kurulmaz.
+  [16 Ekim kayıt ve sınırları](LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md).
 
 - **14 Ekim — manuel canlı gösterge kabulü:** Kullanıcı piyasanın açık olduğunu
   bildirdi; kontrol 07:10:40 UTC'de başladı. Native WS ikinci fiyat serisini aynı
@@ -846,16 +853,17 @@ repodan kaldırıldı. Dağıtım ve geri dönüş adımları [DEPLOY.md](DEPLOY
 | Alan | Son kayıt |
 |---|---|
 | Sunucu / erişim | `root@138.68.71.27`, IP üzerinden HTTPS |
-| API / frontend / Compose / current kaynak | `e11d3d3dadddabf92aba9421b540868984b0ac01` |
-| API imaj referansı | `ghcr.io/rapto0/rapot/backend@sha256:4624f9f40afcbe6b4314d6081f1c87cb3e1418f6276d0c830bf16eaa96a41749` |
-| Frontend imaj referansı | `ghcr.io/rapto0/rapot/frontend@sha256:5306c5440faebeaebab319bc2fba25096d47ddcc31072ffa07f0fe955cfb3e08` |
+| API / Compose / current kaynak | `e290604b895c416285adae0c95152b25963d3613` |
+| Frontend kaynak | `2ea4ea31` |
+| API imaj referansı | `ghcr.io/rapto0/rapot/backend@sha256:2905ec95017df78c4e32044b5258c090f38e91d89ef1b51fbaf43b029167b4b1` |
+| Frontend imaj referansı | `ghcr.io/rapto0/rapot/frontend@sha256:720fc10792d48bb321153ceba86cb1d4ca96e3ffdc28ba1ee0b39cd160e2431b` |
 | Bot | 12 Ekim kaldırıldı; Compose servisi/5000 dinleyicisi yok |
 | Middleware kaynak | `279aa9fea99b520e661b43f104a2bf4791893ac3`; container kimliği korunuyor |
 | Middleware imajı | `sha256:9be0fdb6097f52bf97730f44c86d28c24e2c0cea1fe181e7e8fd668177fdb034` |
 | Veri / kaynak pointer | `/var/lib/rapot/main` ve `/opt/rapot/current`; operator kaynak kopyası bunlardan ayrıdır |
 | Çalışma modu | `MW_EXECUTION_MODE=DRY_RUN`, `MW_TRADING_ENABLED=false`, `MW_BINANCE_LIVE_ENABLED=false`; otomatik Telegram AI kaldırıldı, site AI korunur; API `BORSAPY_USE_FOR_BIST=true` |
-| Son uzak yayın kabulü | 14 Ekim 07:50:01 UTC: dört servis healthy/restart0; 15 tablonun bütün satırları/şema ve özel dosyalar aynı. 13 SSR/33 statik/iki yönlendirme/18 anonim401, v2 / 5 / 289 katalog, iş oluşturmayan 422 ve emekli 410/4410 yolları geçti. Boş alan 4.886.237.184 bayt. [14 Ekim kaydı](LIVE_INDICATOR_ACCEPTANCE_2026-10-14.md). |
-| Son canlı tanı | 16 Ekim 07:55:28 UTC: API sağlıklı/restart0; kullanıcıya ait bir etkin 805 üyeli liste alarmında 8.050 native seri talebi fakat bağlantı/derlenmiş hesap/işlenen fiyat sıfır. Yeni kaynak düzeltmesi henüz yayımlanmadı; yayın sağlığı canlı alarm kabulü değildir. [16 Ekim kaydı](LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md). |
+| Son uzak yayın kabulü | 16 Ekim 08:54:31–08:55:01 UTC: dört servis healthy/restart0; 15 şema, 12 statik tablo, kullanıcı kuralı/listesi/olayları ve özel dosyalar korundu. 13 SSR/33 statik/iki yönlendirme/18 anonim401, v2 / 5 / 289 katalog ve iş oluşturmayan 422 geçti. [16 Ekim kaydı](LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md). |
+| Son canlı tanı | 16 Ekim 13:43:40 UTC: 805 üyeli alarm korunuyor; 2.000 fiziksel seri açık, 49 hesap derlenmiş, 605 üye kapasite dışı. Toplam altı normal olay gönderilmiş, bekleyen/başarısız teslim sıfır. Tam liste henüz canlı hazır değil. [16 Ekim kaydı](LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md). |
 | TradingView bağlantısı | Şifreli kimlik korundu; 7 Ekim dar canlı kabulü mevcut. Tam evren/hacim/bölünme/tam seans kabulü açık, `realtime_verified=false` |
 
 Son kayıtlar:

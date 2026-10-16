@@ -295,7 +295,14 @@ def test_daily_rollover_requires_and_emits_first_real_unchanged_htf_witness():
     ],
 )
 def test_protocol_failure_is_latched_and_only_safe_category_is_exposed(message, expected, caplog):
-    pool = NativeStreamPool(Transport, "isolated-test-token", 1, lambda _: None, clock=lambda: 100)
+    pool = NativeStreamPool(
+        Transport,
+        "isolated-test-token",
+        1,
+        lambda _: None,
+        clock=lambda: 100,
+        lease_long_timeframes=False,
+    )
     pool.configure({("BIST", "THYAO", "1D")})
     stream = next(iter(pool._streams.values()))
     private_marker = "PRIVATE_PROVIDER_SESSION_MARKER"
@@ -350,7 +357,14 @@ def test_slow_subscription_send_does_not_block_receiver_metadata_or_quotes():
 
 def test_large_pool_admission_is_incremental_and_resumes_without_dropping_quotes():
     events = []
-    pool = NativeStreamPool(Transport, "isolated-test-token", 1, events.append, clock=lambda: 100)
+    pool = NativeStreamPool(
+        Transport,
+        "isolated-test-token",
+        1,
+        events.append,
+        clock=lambda: 100,
+        lease_long_timeframes=False,
+    )
     wanted = {
         ("BIST", f"SYM{index}", timeframe)
         for index in range(80)
@@ -392,7 +406,14 @@ def test_large_pool_admission_is_incremental_and_resumes_without_dropping_quotes
 
 
 def test_partial_pool_reconfiguration_removes_old_members_without_admitting_cancelled_demand():
-    pool = NativeStreamPool(Transport, "isolated-test-token", 1, lambda _: None, clock=lambda: 100)
+    pool = NativeStreamPool(
+        Transport,
+        "isolated-test-token",
+        1,
+        lambda _: None,
+        clock=lambda: 100,
+        lease_long_timeframes=False,
+    )
     initial = {("BIST", f"SYM{index}", "1D") for index in range(100)}
     pool.configure(initial)
     assert pool.needs_reconcile
@@ -415,7 +436,14 @@ def test_partial_pool_reconfiguration_removes_old_members_without_admitting_canc
 
 
 def test_member_readiness_checks_only_its_indexed_native_series():
-    pool = NativeStreamPool(Transport, "isolated-test-token", 1, lambda _: None, clock=lambda: 100)
+    pool = NativeStreamPool(
+        Transport,
+        "isolated-test-token",
+        1,
+        lambda _: None,
+        clock=lambda: 100,
+        lease_long_timeframes=False,
+    )
     member = ("BIST", "THYAO")
     wanted = {(*member, timeframe) for timeframe in ("1D", "2D", "3W")}
     pool.configure(wanted)
@@ -443,7 +471,7 @@ def test_member_readiness_checks_only_its_indexed_native_series():
 def test_verified_chart_capacity_plans_whole_members_across_balanced_sockets():
     timeframes = ("1D", "2D", "3D", "4D", "5D", "6D", "1W", "2W", "3W", "1M")
     requested = {("BIST", f"SYM{index:04}", tf) for index in range(805) for tf in timeframes}
-    groups, slots, refused = plan_native_subscriptions(requested)
+    groups, slots, refused = plan_native_subscriptions(requested, lease_long_timeframes=False)
     assert len(groups) == MAX_LIVE_CONNECTIONS
     assert all(len(keys) == MAX_CHARTS_PER_CONNECTION for keys in groups.values())
     assert sum(map(len, groups.values())) == MAX_PROVIDER_SERIES == 2000
@@ -451,24 +479,33 @@ def test_verified_chart_capacity_plans_whole_members_across_balanced_sockets():
     assert not (set(slots) & refused)
     for member, slot in slots.items():
         assert {key[2] for key in groups[slot] if key[:2] == member} == set(timeframes)
-    assert plan_native_subscriptions(sorted(requested, reverse=True)) == (groups, slots, refused)
+    assert plan_native_subscriptions(
+        sorted(requested, reverse=True), lease_long_timeframes=False
+    ) == (groups, slots, refused)
     # An added lexically earlier symbol cannot move existing ordered streams.
     extended = requested | {("BIST", "A", "1D")}
-    _, new_slots, _ = plan_native_subscriptions(extended, slots)
+    _, new_slots, _ = plan_native_subscriptions(extended, slots, lease_long_timeframes=False)
     assert all(new_slots[member] == slot for member, slot in slots.items())
 
 
 def test_oversized_member_is_refused_atomically_and_does_not_consume_other_capacity():
     requested = {("BIST", "HUGE", str(value)) for value in range(1, 502)}
     requested.add(("BIST", "THYAO", "1D"))
-    groups, slots, refused = plan_native_subscriptions(requested)
+    groups, slots, refused = plan_native_subscriptions(requested, lease_long_timeframes=False)
     assert refused == {("BIST", "HUGE")}
     assert set(slots) == {("BIST", "THYAO")}
     assert sum(map(len, groups.values())) == 1
 
 
 def test_invalid_or_overloaded_pool_plan_is_rejected_before_any_transport_change():
-    pool = NativeStreamPool(Transport, "isolated-test-token", 1, lambda _: None, clock=lambda: 100)
+    pool = NativeStreamPool(
+        Transport,
+        "isolated-test-token",
+        1,
+        lambda _: None,
+        clock=lambda: 100,
+        lease_long_timeframes=False,
+    )
     requested = {("BIST", f"SYM{index:04}", "1D") for index in range(501)}
     with pytest.raises(ValueError, match="kapasitesi"):
         pool.configure(requested, member_slots={key[:2]: 0 for key in requested})
@@ -487,7 +524,14 @@ def test_invalid_or_overloaded_pool_plan_is_rejected_before_any_transport_change
 
 
 def test_unplanned_pool_demand_over_provider_capacity_is_never_silently_truncated():
-    pool = NativeStreamPool(Transport, "isolated-test-token", 1, lambda _: None, clock=lambda: 100)
+    pool = NativeStreamPool(
+        Transport,
+        "isolated-test-token",
+        1,
+        lambda _: None,
+        clock=lambda: 100,
+        lease_long_timeframes=False,
+    )
     requested = {("BIST", f"SYM{index:04}", "1D") for index in range(MAX_PROVIDER_SERIES + 1)}
     with pytest.raises(ValueError, match="planlanamadı"):
         pool.configure(requested)

@@ -7,7 +7,7 @@ from tests.test_custom_indicator_data import NOW, Provider, rule
 
 
 @pytest.mark.parametrize("all_timeframes", [False, True])
-def test_five_indicators_for_631_symbols_report_actual_provider_capacity(all_timeframes):
+def test_five_indicators_for_631_symbols_share_daily_anchors_and_native_witnesses(all_timeframes):
     provider = Provider()
     service = CustomIndicatorData(provider=provider, clock=lambda: NOW)
     rules = []
@@ -24,11 +24,11 @@ def test_five_indicators_for_631_symbols_report_actual_provider_capacity(all_tim
     service.configure(rules, universe=universe)
     status = service.status()
     assert status["requested_rule_symbols"] == 3155
-    assert len(service.live._configs) == 180 * 5
+    assert len(service.live._configs) == 3155
     # The union includes Snapshot's distinct 7D plus the ten default frames.
-    assert len(service.live._wanted) == 180 * 11
+    assert len(service.live._wanted) == 631 * 11
     assert status["native_subscriptions_requested"] == 631 * 11
-    assert status["blocked_rule_symbols"] == (631 - 180) * 5
+    assert status["blocked_rule_symbols"] == 0
     assert 0 < service.live._admitted_cells <= 2_000_000
     assert not service.live._compiled and not service.live._threads
     assert provider.calls == []
@@ -46,18 +46,20 @@ def test_large_watchlist_admits_whole_symbols_without_resetting_existing_members
     slots = service.live._member_slots.copy()
     original = service.live._wanted.copy()
     status = service.status()
-    assert len(slots) == 200
+    assert len(slots) == 805
     assert status["native_subscriptions_requested"] == 8050
-    assert status["native_subscriptions_admitted"] == 2000
-    assert status["native_subscriptions_blocked"] == 6050
-    assert status["blocked_rule_symbols"] == 605
-    assert all(sum(slots[key[:2]] == slot for key in original) == 500 for slot in range(4))
+    assert status["native_subscriptions_admitted"] == 8050
+    assert status["native_subscriptions_blocked"] == 0
+    assert status["blocked_rule_symbols"] == 0
+    # One persistent native daily anchor per symbol, plus a fixed 32 temporary
+    # long-period charts per socket, stays below the verified 500 limit.
+    assert all(sum(value == slot for value in slots.values()) + 32 <= 500 for slot in range(4))
     # A new earlier-sorting symbol cannot displace a running member or move its
     # bars away from the socket carrying its ordered price observations.
     service.configure([selected], universe=[{"symbol": "AAAA"}, *universe])
-    assert service.live._member_slots == slots
-    assert service.live._wanted == original
-    assert service.status()["blocked_rule_symbols"] == 606
+    assert all(service.live._member_slots[member] == slot for member, slot in slots.items())
+    assert original < service.live._wanted
+    assert service.status()["blocked_rule_symbols"] == 0
     assert not service.live._threads and not service.provider.calls
 
 

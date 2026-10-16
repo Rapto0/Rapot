@@ -158,6 +158,63 @@ test('reported zero blocked configurations is visible without an inactive-alarm 
   assert.doesNotMatch(text(card), /bu çıktıları kullanan alarmlar çalışmaz/);
 });
 
+test('leased native coverage separates required periods from physical charts and fresh signals', () => {
+  const view = harness({ marketStatus: { custom_indicators: {
+    native_subscription_policy: 'daily_anchor_native_leases',
+    native_subscriptions_admitted: 8050, native_subscriptions_requested: 8050,
+    native_subscriptions_registered: 933, native_subscriptions_pending: 16,
+    native_persistent_subscriptions: 805, native_physical_capacity: 2000,
+    native_lease_active: 128, native_lease_certified: 6000, native_lease_pending: 1117,
+    native_lease_refused: 128, native_lease_retry_waiting: 20, compiled_configurations: 701,
+  } } });
+  const card = view.elements().find(element => element.props['aria-label'] === 'Günlük ve uzun periyot takibi');
+  assert.ok(card);
+  assert.match(text(card), /Planlanan \/ istenen sembol-periyot: 8.050 \/ 8.050/);
+  assert.match(text(card), /Sürekli takip için günlük \/ gün içi seri: 805/);
+  assert.match(text(card), /Açık mum aboneliği \/ sınır: 933 \/ 2.000/);
+  assert.match(text(card), /Abonelik açılışı bekleyen: 16/);
+  assert.match(text(card), /Geçici uzun periyot kontrolü: 128/);
+  assert.match(text(card), /Güncel günlük mumla doğrulanan uzun periyot: 6.000/);
+  assert.match(text(card), /Doğrulama bekleyen uzun periyot: 1.117/);
+  assert.match(text(card), /Reddedilen uzun periyot: 128/);
+  assert.match(text(card), /Yeniden deneme bekleyen uzun periyot: 20/);
+  assert.match(text(card), /Planlanan sembol-periyot sayısı açık abonelik sayısı değildir/);
+  assert.match(view.text(), /Canlı hesap başlangıcı hazır: 701/);
+  assert.match(view.text(), /Başlangıç hesabının hazır olması taze bir sinyal olduğu anlamına gelmez/);
+  assert.doesNotMatch(view.text(), /Açılan \/ bekleyen abonelik/);
+  assert.equal(view.requests.length, 0);
+});
+
+test('lease status appears only for the explicit policy and retains older backend counters', () => {
+  for (const policy of [undefined, null, 'unknown_future_policy']) {
+    const view = harness({ marketStatus: { custom_indicators: {
+      native_subscription_policy: policy, native_lease_active: 128,
+      native_subscriptions_admitted: 100, native_subscriptions_requested: 120,
+      native_subscriptions_registered: 80, native_subscriptions_pending: 20,
+    } } });
+    assert.ok(!view.elements().some(element => element.props['aria-label'] === 'Günlük ve uzun periyot takibi'));
+    assert.match(view.text(), /Planlanan \/ istenen seri: 100 \/ 120/);
+    assert.match(view.text(), /Açılan \/ bekleyen abonelik: 80 \/ 20/);
+  }
+});
+
+test('missing lease counters remain unknown while explicitly reported zero stays visible', () => {
+  const view = harness({ marketStatus: { custom_indicators: {
+    native_subscription_policy: 'daily_anchor_native_leases',
+    native_lease_active: 0, native_lease_certified: NaN, native_lease_pending: '0',
+    native_lease_refused: 0, native_physical_capacity: Infinity,
+  } } });
+  const card = view.elements().find(element => element.props['aria-label'] === 'Günlük ve uzun periyot takibi');
+  assert.match(text(card), /Açık mum aboneliği \/ sınır: — \/ —/);
+  assert.match(text(card), /Sürekli takip için günlük \/ gün içi seri: —/);
+  assert.match(text(card), /Geçici uzun periyot kontrolü: 0/);
+  assert.match(text(card), /Güncel günlük mumla doğrulanan uzun periyot: —/);
+  assert.match(text(card), /Doğrulama bekleyen uzun periyot: —/);
+  assert.match(text(card), /Reddedilen uzun periyot: 0/);
+  assert.match(text(card), /Yeniden deneme bekleyen uzun periyot: —/);
+  assert.doesNotMatch(text(card), /NaN|Infinity/);
+});
+
 test('logged-out alarm center does not request private feeds or create rules', () => {
   const view = harness({ allowed: false });
   assert.ok(view.queries.every(q => q.enabled === false));

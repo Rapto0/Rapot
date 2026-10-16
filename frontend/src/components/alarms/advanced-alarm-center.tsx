@@ -56,6 +56,7 @@ export function AdvancedAlarmCenter() {
     const runtime = status.data ?? rules.data?.runtime
     const market = runtime?.market ?? {}
     const customStatus = market.custom_indicators !== null && typeof market.custom_indicators === "object" && !Array.isArray(market.custom_indicators) ? market.custom_indicators as Record<string, unknown> : {}
+    const nativeLeases = customStatus.native_subscription_policy === "daily_anchor_native_leases"
     const delayed = Boolean(runtime?.last_cycle_at && Date.now() - Date.parse(runtime.last_cycle_at) > 15_000)
     const serviceLabel = status.isError ? "Durum doğrulanamadı" : !runtime ? "Durum yükleniyor" : !runtime.running ? "Alarm motoru çalışmıyor" : runtime.last_error ? "Alarm motoru uyarı veriyor" : delayed ? "Son kontrol gecikti" : "Alarm motoru çalışıyor"
 
@@ -208,16 +209,32 @@ export function AdvancedAlarmCenter() {
                         <p>Akış taşması: <strong>{statistic(customStatus.live_overflow_count)}</strong></p>
                         <p>Son canlı alarm değerlendirmesi: <strong>{statistic(runtime?.live_evaluation?.last_duration_ms)} ms</strong></p>
                         <p>Canlı kural karşılaştırmaları: <strong>{statistic(runtime?.live_evaluation?.checked)}</strong></p>
-                        <p>Planlanan / istenen seri: <strong>{statistic(customStatus.native_subscriptions_admitted)} / {statistic(customStatus.native_subscriptions_requested)}</strong></p>
-                        <p>Açılan / bekleyen abonelik: <strong>{statistic(customStatus.native_subscriptions_registered)} / {statistic(customStatus.native_subscriptions_pending)}</strong></p>
+                        {!nativeLeases && <p>Planlanan / istenen seri: <strong>{statistic(customStatus.native_subscriptions_admitted)} / {statistic(customStatus.native_subscriptions_requested)}</strong></p>}
+                        {!nativeLeases && <p>Açılan / bekleyen abonelik: <strong>{statistic(customStatus.native_subscriptions_registered)} / {statistic(customStatus.native_subscriptions_pending)}</strong></p>}
                         <p>Canlı hesap başlangıcı hazır: <strong>{statistic(customStatus.compiled_configurations)}</strong></p>
                         <p>Native bağlantı: <strong>{statistic(customStatus.native_streams_connected)}</strong></p>
                         <p>Canlı kapasiteyi aşan hesap: <strong>{statistic(customStatus.blocked_rule_symbols)}</strong></p>
                         <p>Sağlayıcının reddettiği seri: <strong>{statistic(customStatus.refused_native_series)}</strong></p>
                     </div>
+                    {nativeLeases && <section aria-label="Günlük ve uzun periyot takibi" className="space-y-3 rounded border border-border p-3">
+                        <h3 className="font-semibold text-foreground">Günlük ve uzun periyot takibi</h3>
+                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                            <p>Planlanan / istenen sembol-periyot: <strong>{statistic(customStatus.native_subscriptions_admitted)} / {statistic(customStatus.native_subscriptions_requested)}</strong></p>
+                            <p>Sürekli takip için günlük / gün içi seri: <strong>{statistic(customStatus.native_persistent_subscriptions)}</strong></p>
+                            <p>Açık mum aboneliği / sınır: <strong>{statistic(customStatus.native_subscriptions_registered)} / {statistic(customStatus.native_physical_capacity)}</strong></p>
+                            <p>Abonelik açılışı bekleyen: <strong>{statistic(customStatus.native_subscriptions_pending)}</strong></p>
+                            <p>Geçici uzun periyot kontrolü: <strong>{statistic(customStatus.native_lease_active)}</strong></p>
+                            <p>Güncel günlük mumla doğrulanan uzun periyot: <strong>{statistic(customStatus.native_lease_certified)}</strong></p>
+                            <p>Doğrulama bekleyen uzun periyot: <strong>{statistic(customStatus.native_lease_pending)}</strong></p>
+                            <p>Reddedilen uzun periyot: <strong>{statistic(customStatus.native_lease_refused)}</strong></p>
+                            <p>Yeniden deneme bekleyen uzun periyot: <strong>{statistic(customStatus.native_lease_retry_waiting)}</strong></p>
+                        </div>
+                        <p className="leading-relaxed text-muted-foreground">Günlük ve gün içi mumlar için sürekli akış kullanılır. Uzun periyotlar kaynağın gerçek mumlarıyla sırayla doğrulanır; ardından açık bir mum aboneliği tutmaları gerekmez. Günlük mum değiştiğinde veya veri devamlılığı bozulduğunda yeniden doğrulanır. Planlanan sembol-periyot sayısı açık abonelik sayısı değildir.</p>
+                    </section>}
                     <p className="leading-relaxed text-muted-foreground">En fazla 256 farklı etkin hesap ayarı izlenir. Aynı gösterge, periyot ve hesaplama ayarlarını kullanan kurallar ortak hesabı paylaşır.</p>
                     {typeof customStatus.blocked_configurations === "number" && customStatus.blocked_configurations > 0 && <p role="alert" className="text-warning">Kapasite sınırına takılan {statistic(customStatus.blocked_configurations)} ayar kümesi hesaplanmıyor; bu çıktıları kullanan alarmlar çalışmaz. Kullanılmayan alarmları duraklatın veya aynı hesaplama ayarlarını paylaşın.</p>}
                     <p className="leading-relaxed text-muted-foreground">Özel göstergeler gelen canlı fiyatlarla değerlendirilir; sabit 30 saniye aralığı veya mum kapanışı beklenmez. Her fiyat güncellemesinde etkin periyotlar aynı gözlem anını kullanır. Veri kaynağı, bağlantı ve işlem kuyruğu gecikmesi aşağıdaki ölçümlerde izlenir. Önbellek sayısı güncel veya hazır hesap sayısı değildir.</p>
+                    <p className="leading-relaxed text-muted-foreground">Başlangıç hesabının hazır olması taze bir sinyal olduğu anlamına gelmez. Alarm için yeni fiyatın ve gerekli periyot verilerinin doğrulanması gerekir.</p>
                     {typeof customStatus.live_overflow_count === "number" && customStatus.live_overflow_count > 0 && <p role="alert" className="text-warning">Akış kuyruğunda veri kaybı oldu; etkilenen hesapların devamlılığı sıfırlanır ve güvenilir veriyle yeniden hazırlanır.</p>}
                     {typeof customStatus.blocked_rule_symbols === "number" && customStatus.blocked_rule_symbols > 0 && <p role="alert" className="text-warning">Bazı sembol/gösterge hesapları canlı kapasiteye sığmadı; bu hesapların alarmları veri bekler. Aynı ayarları paylaşın veya etkin kapsamı azaltın.</p>}
                     {typeof customStatus.refused_native_series === "number" && customStatus.refused_native_series > 0 && <p role="alert" className="text-warning">Sağlayıcının reddettiği sembol/periyotlarda alarm üretilemez; diğer hesaplar izlenmeye devam eder.</p>}
