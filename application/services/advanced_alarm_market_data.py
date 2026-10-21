@@ -1271,6 +1271,8 @@ class AdvancedMarketData:
                 "prices_included": False,
                 "continuous_tick_capture": False,
                 "realtime_entitlement_verified": False,
+                "quote_freshness_policy_seconds": self.settings.advanced_alarm_quote_stale_seconds,
+                "custom_indicators": self._custom.coverage() if self._custom is not None else None,
             }
 
     def status(self) -> dict:

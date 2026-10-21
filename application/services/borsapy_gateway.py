@@ -1,5 +1,6 @@
 """Bounded, authenticated access to borsapy without exposing its global credentials."""
 
+import base64
 import importlib
 import importlib.metadata
 import json
@@ -26,6 +27,9 @@ INTERVALS = {"1m", "5m", "15m", "30m", "1h", "4h", "1d", "1wk", "1mo"}
 PERIODS = {"1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max"}
 SECRET_FIELDS = {"session", "session_sign", "evds_key", "twitter_auth_token", "twitter_ct0"}
 ALARM_TRANSPORT_SILENCE_SECONDS = 90
+CUSTOM_AUTH_REFRESH_SECONDS = 1800
+CUSTOM_AUTH_ERROR_REFRESH_SECONDS = 300
+CUSTOM_AUTH_RETRY_MAX_SECONDS = 1800
 _AUTH_LOCK = threading.RLock()
 
 
@@ -144,6 +148,13 @@ class BorsapyGateway:
         self._quotes: dict | None = None
         self._alarm_quotes: list[AlarmQuoteConnection] = []
         self._custom_streams = []
+        self._custom_history = None
+        self._token_refresh_at = float("inf")
+        self._token_error_refresh_at = 0.0
+        self._token_refresh_retry_at = 0.0
+        self._token_refresh_failures = 0
+        self._token_refresh_error = False
+        self._token_refresh_count = 0
         self._alarm_history_slots = threading.BoundedSemaphore(2)
         self._quote_retry_after = 0.0
         self._data_epoch = 0
@@ -177,6 +188,10 @@ class BorsapyGateway:
                 raise SecretStoreError("Bağlantı bilgileri güncelleniyor; yeniden deneyin.")
             self._credentials, self._credentials_revision = values, revision
             self._blocked = False
+            self._token_refresh_at = float("inf")
+            self._token_refresh_retry_at = 0.0
+            self._token_refresh_failures = 0
+            self._token_refresh_error = False
             self._state, self._message = (
                 ("auth_needed", "Kayıtlı oturum henüz doğrulanmadı.")
                 if values.get("session")
@@ -270,6 +285,11 @@ class BorsapyGateway:
             if not isinstance(token, str) or not token or token == "unauthorized_user_token":
                 raise ValueError
             self._token = token
+            self._token_refresh_at = self._clock() + self._token_refresh_delay(token)
+            self._token_error_refresh_at = self._clock() + CUSTOM_AUTH_ERROR_REFRESH_SECONDS
+            self._token_refresh_retry_at = 0.0
+            self._token_refresh_failures = 0
+            self._token_refresh_error = False
             self._authenticated, self._blocked = True, False
             self._state = "authenticated"
             self._message = "Oturum doğrulandı; gerçek zamanlı veri henüz ölçülmedi."
@@ -279,6 +299,91 @@ class BorsapyGateway:
             self._blocked = True
             self._state, self._message = "auth_needed", "TradingView oturumu doğrulanamadı."
             raise BorsapyGatewayError(self._message, 409) from None
+
+    @staticmethod
+    def _token_refresh_delay(token):
+        """JWT expiry is only a conservative scheduling hint, never authentication."""
+        delay = CUSTOM_AUTH_REFRESH_SECONDS
+        try:
+            parts = token.split(".")
+            if len(parts) == 3 and len(parts[1]) <= 8192:
+                payload = json.loads(
+                    base64.urlsafe_b64decode(parts[1] + "=" * (-len(parts[1]) % 4))
+                )
+                expires = payload.get("exp") if isinstance(payload, dict) else None
+                if (
+                    isinstance(expires, (int, float))
+                    and not isinstance(expires, bool)
+                    and math.isfinite(expires)
+                ):
+                    remaining = expires - time.time() - 60
+                    if remaining <= 0:
+                        raise BorsapyGatewayError(
+                            "TradingView erişim anahtarı süresi doğrulanamadı.", 409
+                        )
+                    delay = min(delay, remaining)
+        except BorsapyGatewayError:
+            raise
+        except (ValueError, TypeError, KeyError, UnicodeError, OverflowError):
+            pass
+        return delay
+
+    def custom_indicator_auth_status(self):
+        """Local diagnostics only: no token, expiry timestamp, account or network IO."""
+        return {
+            "refresh_count": self._token_refresh_count,
+            "refresh_error": self._token_refresh_error,
+            "retry_waiting": self._token_refresh_retry_at > self._clock(),
+            "retry_after_seconds": max(0, math.ceil(self._token_refresh_retry_at - self._clock())),
+        }
+
+    def refresh_custom_indicator_auth(self):
+        """Control-worker refresh; keep healthy native charts and seeds in place.
+
+        Account revision changes still close all transports and increment epoch.
+        A failed refresh is visible and fail-closed with bounded retry, rather
+        than silently continuing to create charts with an expired token.
+        """
+        now = self._clock()
+        pools = tuple(pool for pool in self._custom_streams if not pool.closed)
+        forced = any(getattr(pool, "auth_refresh_required", False) for pool in pools)
+        due = (
+            self._token_refresh_error
+            or now >= self._token_refresh_at
+            or (forced and now >= self._token_error_refresh_at)
+        )
+        if not due:
+            return
+        if now < self._token_refresh_retry_at:
+            raise BorsapyGatewayError("TradingView erişim yenilemesi yeniden deneme bekliyor.", 409)
+        with self._account_lock():
+            self._reload_credentials()
+            if not self._credentials.get("session"):
+                raise BorsapyGatewayError("Kayıtlı TradingView oturumu yok.", 409)
+            epoch = self._data_epoch
+            revision = self._credentials_revision
+            failures = self._token_refresh_failures
+            try:
+                self._authenticate(self._load())
+                if self._store.revision() != revision:
+                    self._reload_credentials()
+                    raise BorsapyGatewayError("Hesap değişti; yeni canlı bağlantı bekleniyor.", 409)
+            except BorsapyGatewayError:
+                self._token_refresh_error = True
+                self._token_refresh_failures = min(failures + 1, 7)
+                self._token_refresh_retry_at = self._clock() + min(
+                    CUSTOM_AUTH_RETRY_MAX_SECONDS, 30 * 2 ** (self._token_refresh_failures - 1)
+                )
+                raise
+            token = self._token
+            self._token_refresh_count += 1
+            pools = tuple(pool for pool in self._custom_streams if not pool.closed)
+        # Network sends must not retain the account lock or socket receiver lock.
+        for pool in pools:
+            if self._data_epoch != epoch:
+                raise BorsapyGatewayError("Hesap değişti; yeni canlı bağlantı bekleniyor.", 409)
+            if not pool.closed:
+                pool.refresh_auth_token(token)
 
     def _prepare(self, *, require_auth: bool = False, tradingview: bool = True):
         self._reload_credentials()
@@ -530,6 +635,11 @@ class BorsapyGateway:
                     provider.close()
             self._alarm_history_slots.release()
 
+    def custom_indicator_history_status(self):
+        """Read dedicated transport counters without auth, connection or request IO."""
+        provider = self._custom_history
+        return provider.status() if provider is not None else {}
+
     def custom_indicator_history(self, symbol, *, exchange, timeframe, bars):
         """Exact native resolution and account boundary for the custom Pine ports.
 
@@ -537,9 +647,9 @@ class BorsapyGateway:
         site's normal Binance REST candle adapter. No provider fallback occurs.
         """
         from infrastructure.providers.custom_indicator_history import (
-            history_provider,
             validate_native_request,
         )
+        from infrastructure.providers.native_indicator_history import NativeIndicatorHistory
 
         try:
             validate_native_request(symbol, exchange, timeframe, bars)
@@ -547,16 +657,17 @@ class BorsapyGateway:
             raise BorsapyGatewayError(str(exc), 422) from None
         if not self._alarm_history_slots.acquire(timeout=1):
             raise BorsapyGatewayError("Özel gösterge geçmişi iş kuyruğu dolu.", 429)
-        provider = None
         try:
             with self._account_lock():
                 self._prepare(require_auth=True)
                 token, epoch, revision = self._token, self._data_epoch, self._credentials_revision
                 if not token or token == "unauthorized_user_token":
                     raise BorsapyGatewayError("TradingView hesabı doğrulanmalı.", 409)
-            provider = history_provider(token, timeframe, bars)
+                if self._custom_history is None:
+                    self._custom_history = NativeIndicatorHistory()
+                provider = self._custom_history
             frame = provider.get_history(
-                symbol, exchange=exchange, interval=timeframe, period="max"
+                symbol, exchange=exchange, timeframe=timeframe, bars=bars, token=token, epoch=epoch
             )
             with self._account_lock():
                 if (
@@ -581,9 +692,6 @@ class BorsapyGateway:
                 "Özel göstergenin native mum verisi alınamadı.", 502
             ) from None
         finally:
-            if provider is not None:
-                with suppress(Exception):
-                    provider.close()
             self._alarm_history_slots.release()
 
     def create_custom_indicator_stream(self, callback):
@@ -688,6 +796,10 @@ class BorsapyGateway:
 
     def _close_streams(self) -> None:
         self._data_epoch += 1
+        history, self._custom_history = self._custom_history, None
+        if history is not None:
+            with suppress(Exception):
+                history.close()
         for pool in self._custom_streams:
             pool.close()
         self._custom_streams.clear()

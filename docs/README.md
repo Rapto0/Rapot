@@ -4,6 +4,10 @@ Güncel iş sırası, kullanıcı yetkileri ve tarihli kabul kanıtları
 [devam planında](RAPOT_DEVAM_PLANI.md) tutulur. Kod tabanıyla çalışma kuralları
 [AGENTS.md](../AGENTS.md), ilk kurulum ise [kök README](../README.md) içindedir.
 
+[21 Ekim canlı kapsam ve kapasite çalışması](LIVE_MARKET_CAPACITY_2026-10-21.md)
+631 payın veri tazeliğini, gösterge hazırlığındaki kalıcı ret arızasını ve
+CPU/RAM düzeltmelerinin kaynak/yayın/kabul durumunu ayrı tutar.
+
 16 Ekim güncel kaynak düzeni: API, frontend, middleware ve PostgreSQL sürekli
 servislerdir; init/migrate işleri tek seferliktir. Eski otomatik COMBO/HUNTER
 Telegram tarayıcısı, Telegram komutları ve tarayıcıya bağlı AI kaldırılmıştır.

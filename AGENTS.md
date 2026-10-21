@@ -1,5 +1,17 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
+**21 Ekim elle canlı doğrulama başladı:** Kullanıcı piyasa açıkken 631 payın
+canlı verisini/liste alarmlarını ve kalıcı CPU/RAM düzeltmesini istedi.
+07:24–07:30 UTC üretim `c801e275` üzerinde fiyat callback'leri sürerken
+**0/631 özel hesap hazır**, 4.417 native ret, 1.262 sertifika, sıfır retry ve
+son geçmiş hazırlığı 16 Ekim23:59 UTC görüldü. 07:31–07:32 ayrı THYAO10TF
+denemesi yeni oturumla hatasız geçti; eski ret nedeni kaydedilmediğinden
+kesin nedeni varsayma. Kalıcı ret toparlanması, süreli token yenileme,
+tekrarlı eski fiyatın geçmişi silmesini önleme ve geçmiş bağlantı/SMI
+verimliliği üzerinde çalışılır. 631/174 listeleri, kural ayarları ve altı
+olay korunur; otomatik takip yok. Yeni yayın ve 631 hazır hesap kabulü
+başlangıç bulgularından çıkarılmaz. [21 Ekim kaydı](docs/LIVE_MARKET_CAPACITY_2026-10-21.md).
+
 **16 Ekim onaylı liste ayrımı tamamlandı:** Gönderilen 12 Ekim denetimindeki 805 benzersiz
 kodun yalnız 631'i KAP pay pazarlarıyla eşleşir. Kullanıcı hem sistemin “BIST
 Tümü” evreninin 631 paya indirilmesini hem mevcut SMI alarmı listesindeki 174

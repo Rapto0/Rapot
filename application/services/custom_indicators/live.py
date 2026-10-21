@@ -6,6 +6,7 @@ replaced on every observation, never appended once per quote. The provider owns
 all candle identities (including multi-day/week boundaries).
 """
 
+from collections import deque
 from dataclasses import dataclass, replace
 
 from .core import Bar, finite, pine_rsi, rsi_values
@@ -61,6 +62,43 @@ def _valid_bars(bars: tuple[Bar, ...]) -> bool:
     return bool(bars)
 
 
+def _smi_seed_states(bars, length, smooth_a, smooth_b):
+    """Retain only the final EMA state; replay arrays are unnecessary for live.
+
+    ``_valid_bars`` has already checked every OHLC observation and its native
+    ordering. Monotonic windows match Pine's available-prefix highest/lowest;
+    EMA samples still pass through ``finite`` exactly as in the replay path.
+    """
+    highs, lows = deque(), deque()
+    num1 = num2 = den1 = den2 = None
+    for index, bar in enumerate(bars):
+        high, low = float(bar.high), float(bar.low)
+        while highs and highs[0][0] <= index - length:
+            highs.popleft()
+        while lows and lows[0][0] <= index - length:
+            lows.popleft()
+        while highs and highs[-1][1] <= high:
+            highs.pop()
+        while lows and lows[-1][1] >= low:
+            lows.pop()
+        highs.append((index, high))
+        lows.append((index, low))
+        high, low = highs[0][1], lows[0][1]
+        num1 = _ema_step(num1, finite(bar.close - (high + low) / 2), smooth_a)
+        den1 = _ema_step(den1, finite(high - low), smooth_a)
+        num2 = _ema_step(num2, finite(num1), smooth_b)
+        den2 = _ema_step(den2, finite(den1), smooth_b)
+    tail = bars[-max(length - 1, 1) :]
+    return (
+        num1,
+        num2,
+        den1,
+        den2,
+        max(float(bar.high) for bar in tail),
+        min(float(bar.low) for bar in tail),
+    )
+
+
 def _compile_seed(family, bars, length, momentum=1, smooth_a=1, smooth_b=1):
     bucket = bars[-1] if bars else None
     invalid = _Seed(bucket, family, length, reason="insufficient_native_history")
@@ -90,9 +128,8 @@ def _compile_seed(family, bars, length, momentum=1, smooth_a=1, smooth_b=1):
             streak_loss=streak_loss,
             reason=None if gain is not None and loss is not None else "insufficient_native_history",
         )
-    prepared = _series(family, closed, length, momentum, smooth_a, smooth_b)
     if family == "smi":
-        num1, num2, den1, den2, high, low = (state[-1] for state in prepared.states)
+        num1, num2, den1, den2, high, low = _smi_seed_states(closed, length, smooth_a, smooth_b)
         return _Seed(
             bucket,
             family,
@@ -109,6 +146,7 @@ def _compile_seed(family, bars, length, momentum=1, smooth_a=1, smooth_b=1):
             if length > 1
             else (),
         )
+    prepared = _series(family, closed, length, momentum, smooth_a, smooth_b)
     reference_index = len(closed) - momentum
     gain, loss = (state[-1] for state in prepared.states)
     gain, loss = _live_averages(closed, length, momentum, gain, loss)

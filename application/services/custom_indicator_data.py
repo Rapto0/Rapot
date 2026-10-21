@@ -38,6 +38,8 @@ STALE_SECONDS = 180
 HISTORY_RETRY_SECONDS = 30
 MAX_HISTORY_RETRY_SECONDS = 1800
 MAX_SEED_CHECKS_PER_TURN = 64
+MAX_COVERAGE_SYMBOLS = 4000
+MAX_COVERAGE_PAIRS = 4096
 
 
 def custom_configuration_ids(condition, timeframe):
@@ -297,6 +299,9 @@ class CustomIndicatorData:
         self._configs = {}
         self._blocked_configurations = 0
         self._memberships = []
+        self._coverage_scopes = ()
+        self._coverage_demands = {}
+        self._coverage_truncated_configs = frozenset()
         self._universe = ()
         self._cursor = (0, 0)
         self._previews = OrderedDict()
@@ -422,6 +427,8 @@ class CustomIndicatorData:
         from application.services.advanced_alarm_conditions import condition_fields
 
         configs, memberships, blocked, closed_configs = {}, {}, set(), set()
+        scopes, demands, truncated = {}, {}, set()
+        scope_cells = demand_count = 0
         for rule in rules:
             if not rule.get("enabled", True):
                 continue
@@ -433,6 +440,29 @@ class CustomIndicatorData:
                     blocked.add(identity)
                     continue
                 configs[identity] = config
+                # Share membership sets between every output/trigger that uses
+                # the same list. Diagnostic metadata has its own finite budget.
+                scope = (
+                    frozenset(
+                        (item["market_type"], item["symbol"]) for item in rule.get("symbols", [])
+                    ),
+                    rule.get("scope") == "all_bist",
+                )
+                if scope not in scopes:
+                    if scope_cells + len(scope[0]) > MAX_COVERAGE_PAIRS:
+                        truncated.add(identity)
+                    else:
+                        scopes[scope] = len(scopes)
+                        scope_cells += len(scope[0])
+                if scope in scopes:
+                    demand = (rule.get("trigger", "bar_close"), ref["output"], scopes[scope])
+                    selected = demands.setdefault(identity, set())
+                    if demand not in selected:
+                        if demand_count >= MAX_COVERAGE_PAIRS:
+                            truncated.add(identity)
+                        else:
+                            selected.add(demand)
+                            demand_count += 1
                 if rule.get("trigger") == "bar_close":
                     closed_configs.add(identity)
                 target = memberships.setdefault(identity, {"symbols": set(), "all_bist": False})
@@ -443,6 +473,11 @@ class CustomIndicatorData:
         with self._lock:
             newly_closed = closed_configs - self._closed_configs
             self._configs = configs
+            self._coverage_scopes = tuple(scopes)
+            self._coverage_demands = {
+                identity: tuple(sorted(values)) for identity, values in demands.items()
+            }
+            self._coverage_truncated_configs = frozenset(truncated)
             self._closed_configs = closed_configs
             self._blocked_configurations = len(blocked)
             self._memberships = [
@@ -1264,6 +1299,11 @@ class CustomIndicatorData:
 
         identity = config_key(ref["indicator"], dict(ref["inputs"]), ref["timeframe"])
         key = (symbol["market_type"], symbol["symbol"], identity)
+        return self._observation(key, ref, trigger, now)
+
+    def _observation(self, key, ref, trigger, now):
+        """Read an already identified operand; diagnostic reads reuse the same guards."""
+        identity = key[2]
         with self._lock:
             if self._blocked_configurations and identity not in self._configs:
                 # Preview work has its own lease. It must never let a rule
@@ -1339,6 +1379,184 @@ class CustomIndicatorData:
                 "live_price": result.get("live_price"),
                 "previous_live_price": (result.get("previous") or {}).get("live_price"),
             }
+
+    def coverage(self):
+        """Read bounded, configured-rule operand readiness without registering work.
+
+        This reports selected inputs, not condition matches or notification
+        delivery. Preview-only members are excluded. Missing metadata/budget
+        never turns an uninspected operand into a ready result.
+        """
+        with self._lock:
+            now = self._clock()
+            universe = set(self._universe)
+            members = set()
+            symbol_truncated = False
+            for _, explicit, all_bist in self._memberships:
+                for source in (explicit, self._universe if all_bist else ()):
+                    for member in source:
+                        if member not in members and len(members) >= MAX_COVERAGE_SYMBOLS:
+                            symbol_truncated = True
+                            break
+                        members.add(member)
+                    if symbol_truncated:
+                        break
+                if symbol_truncated:
+                    break
+            rows = {
+                member: {
+                    "market_type": member[0],
+                    "symbol": member[1],
+                    "configured": True,
+                    "ready": False,
+                    "state": "not_inspected",
+                    "inspected_configurations": 0,
+                    "ready_configurations": 0,
+                    "pending_configurations": 0,
+                    "reasons": set(),
+                    "requested_timeframes": set(),
+                    "refused_timeframes": set(),
+                    "source_timestamp": None,
+                    "received_at": None,
+                }
+                for member in sorted(members)
+            }
+            pairs = 0
+            pairs_truncated = False
+            for identity, explicit, all_bist in self._memberships:
+                config = self._configs[identity]
+                needed_by_market = {
+                    market: set(self._native_demand(config, market))
+                    for market in ("BIST", "Kripto")
+                }
+                for member in sorted(set(explicit) | (universe if all_bist else set())):
+                    if member not in rows:
+                        continue
+                    if pairs >= MAX_COVERAGE_PAIRS:
+                        pairs_truncated = True
+                        break
+                    pairs += 1
+                    row = rows[member]
+                    row["inspected_configurations"] += 1
+                    key = (*member, identity)
+                    needed = needed_by_market[member[0]]
+                    row["requested_timeframes"].update(needed)
+                    with self.live._lock:
+                        refused = {tf for tf in needed if (*member, tf) in self.live._refused}
+                    row["refused_timeframes"].update(refused)
+                    selected = {
+                        (trigger, output)
+                        for trigger, output, index in self._coverage_demands.get(identity, ())
+                        if member in self._coverage_scopes[index][0]
+                        or self._coverage_scopes[index][1]
+                        and member in universe
+                    }
+                    result = self._results.get(key)
+                    reason = None
+                    if identity in self._coverage_truncated_configs or not selected:
+                        reason = "metadata_capacity"
+                    elif not self.live.admitted(key):
+                        reason = "runtime_capacity"
+                    else:
+                        for trigger, output in sorted(selected):
+                            if (
+                                self.live._enabled
+                                and trigger != "bar_close"
+                                and not self.live.has_seed(key, self.provider.memory_epoch())
+                            ):
+                                reason = "native_refused" if refused else "seed_wait"
+                                break
+                            observed = self._observation(key, {"output": output}, trigger, now)
+                            value = observed.get("current")
+                            finite = isinstance(value, (int, float)) and math.isfinite(value)
+                            if not observed.get("ready") or not finite:
+                                reason = self._coverage_reason(key, result, refused, now)
+                                if observed.get("ready") and not finite:
+                                    reason = "output_unavailable"
+                                break
+                    row["ready_configurations" if reason is None else "pending_configurations"] += 1
+                    if reason is not None:
+                        row["reasons"].add(reason)
+                    if result:
+                        # Oldest contributing configuration is conservative;
+                        # no average hides a stale operand in a mixed rule.
+                        for target, source in (
+                            ("source_timestamp", "source_time"),
+                            ("received_at", "native_received"),
+                        ):
+                            value = result.get(source)
+                            if isinstance(value, (int, float)) and math.isfinite(value):
+                                previous = row[target]
+                                row[target] = value if previous is None else min(previous, value)
+                if pairs_truncated:
+                    break
+            incomplete = symbol_truncated or pairs_truncated or bool(self._blocked_configurations)
+            for row in rows.values():
+                inspected = row["inspected_configurations"]
+                if incomplete:
+                    row["reasons"].add("inspection_capacity")
+                complete = not incomplete and "metadata_capacity" not in row["reasons"]
+                row["configured_configurations"] = inspected if complete else None
+                row["ready"] = complete and inspected > 0 and row["pending_configurations"] == 0
+                row["state"] = (
+                    "ready"
+                    if row["ready"]
+                    else "pending"
+                    if complete and inspected
+                    else "not_inspected"
+                )
+                for field in ("reasons", "requested_timeframes", "refused_timeframes"):
+                    row[field] = sorted(row[field])
+                for field in ("source_timestamp", "received_at"):
+                    row[field] = _iso(row[field])
+            return {
+                "observed_at": _iso(now),
+                "scope": "configured_rule_selected_outputs",
+                "provider_calls": False,
+                "work_registered": False,
+                "values_included": False,
+                "intrabar_source_and_receipt_stale_seconds": 30,
+                "condition_matches_or_delivery_verified": False,
+                "rows": list(rows.values()),
+                "row_count": len(rows),
+                "ready_members": sum(row["ready"] for row in rows.values()),
+                "pending_members": sum(row["state"] == "pending" for row in rows.values()),
+                "uninspected_members": sum(
+                    row["state"] == "not_inspected" for row in rows.values()
+                ),
+                "inspected_config_member_pairs": pairs,
+                "requested_config_member_pairs": self._jobs_requested,
+                "rows_truncated": symbol_truncated,
+                "pairs_truncated": pairs_truncated,
+                "metadata_truncated": bool(self._coverage_truncated_configs),
+                "blocked_configurations": self._blocked_configurations,
+                "limits": {
+                    "symbols": MAX_COVERAGE_SYMBOLS,
+                    "config_member_pairs": MAX_COVERAGE_PAIRS,
+                },
+            }
+
+    def _coverage_reason(self, key, result, refused, now):
+        if refused:
+            return "native_refused"
+        if result is None:
+            return "seed_wait"
+        if self._stop.is_set() or result["epoch"] != self.provider.memory_epoch():
+            return "account_or_transport_changed"
+        if result.get("error"):
+            return "history_or_continuity_error"
+        if result.get("native_wait") or result.get("native_witness_wait"):
+            return "native_witness_wait"
+        if self.live._enabled and not result.get("live"):
+            return "live_quote_wait"
+        if (
+            result.get("live")
+            and max(now - result["source_time"], now - result["native_received"]) > 30
+        ):
+            return "quote_stale"
+        if now - result["native_received"] > STALE_SECONDS:
+            return "history_stale"
+        return "output_or_native_witness_unavailable"
 
     def status(self):
         with self._lock:

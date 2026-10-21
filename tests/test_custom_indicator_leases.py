@@ -202,16 +202,24 @@ def test_removed_then_readded_member_rejects_every_old_anchor_and_lease_context(
     assert book.confirm(event(book, LONG))["accepted"]
 
 
-def test_rejected_long_series_is_not_retried_on_daily_rollover_or_reconfigure():
+def test_unsupported_long_series_retries_only_once_after_a_new_native_day():
     book, _ = setup_book()
     book.confirm(event(book, DAY))
     rejected = event(book, LONG)
-    assert book.reject(rejected)
+    assert book.reject({**rejected, "reason": "unsupported_resolution"})
     book.configure({DAY, LONG}, {MEMBER: 0})
-    book.confirm(event(book, DAY, (ROWS[-1], (1_799_172_800, 120, 150, 100, 140))))
     assert LONG not in book.desired()[1]
     assert not book.ready(MEMBER, {DAY, LONG})
     assert book.status()["lease_refused"] == 1
+    next_rows = (ROWS[-1], (1_799_345_600, 120, 150, 100, 140))  # Weekend gap is native.
+    book.confirm(event(book, DAY, next_rows))
+    retry = event(book, LONG, next_rows)
+    assert retry["native_day_generation"] != rejected["native_day_generation"]
+    assert book.reject({**retry, "reason": "unsupported_resolution"})
+    for _ in range(3):
+        book.confirm(event(book, DAY, next_rows))
+        assert LONG not in book.desired()[1]
+    assert book.status()["rejection_reasons"] == {"unsupported_resolution": 1}
 
 
 def test_rejected_anchor_cannot_leave_long_certificates_ready_or_create_retry_storm():
@@ -294,7 +302,7 @@ def test_reconcile_waits_for_native_ack_and_real_timeout_or_retry_deadline():
     assert not book.scheduling_due
 
 
-def test_rejected_anchor_removes_its_retry_deadline_and_exposes_blocked_witnesses():
+def test_unknown_anchor_removes_long_retry_deadline_and_exposes_blocked_witnesses():
     book, clock = setup_book()
     anchor = event(book, DAY)
     book.confirm(anchor)
@@ -303,7 +311,7 @@ def test_rejected_anchor_removes_its_retry_deadline_and_exposes_blocked_witnesse
     clock[0] += 30
     book.desired()
     assert book.status()["lease_retry_waiting"] == 1
-    assert book.reject(anchor)
+    assert book.reject({**anchor, "reason": "unknown_symbol"})
     assert book.scheduling_due
     book.desired()
     status = book.status()
@@ -356,7 +364,7 @@ def test_anchor_and_direct_refusal_counts_do_not_double_count_the_same_long_seri
     assert status["lease_refused"] == 1 and status["lease_pending"] == 0
 
 
-def test_full_list_with_173_refused_anchors_settles_without_dropping_virtual_demand():
+def test_full_list_with_173_unknown_anchors_settles_without_dropping_virtual_demand():
     timeframes = ("1D", "2D", "3D", "4D", "5D", "6D", "1W", "2W", "3W", "1M")
     wanted = {("BIST", f"SYM{i:04}", tf) for i in range(805) for tf in timeframes}
     _, slots, refused = plan_native_subscriptions(wanted)
@@ -368,7 +376,7 @@ def test_full_list_with_173_refused_anchors_settles_without_dropping_virtual_dem
     for index, (key, context) in enumerate(sorted(anchors.items())):
         value = {"key": key, "rows": ROWS, "metadata": META, **context}
         if index < 173:
-            assert book.reject(value)
+            assert book.reject({**value, "reason": "unknown_symbol"})
         else:
             assert book.confirm(value)["accepted"]
     for _ in range(70):

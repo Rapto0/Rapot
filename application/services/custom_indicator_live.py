@@ -44,9 +44,11 @@ class LiveIndicatorData:
         self._buckets = {}
         self._witness_certificates = {}
         self._previous_quotes = {}
+        self._invalid_quote_members = set()
         self._connection = None
         self._subscribed = set()
         self._retry = 0
+        self._retry_epoch = None
         self._failures = 0
         self._serial = 0
         self._generation = 0
@@ -114,6 +116,7 @@ class LiveIndicatorData:
             self._previous_quotes = {
                 key: value for key, value in self._previous_quotes.items() if key in members
             }
+            self._invalid_quote_members.intersection_update(members)
             self._daily_witness_after = {
                 key: value for key, value in self._daily_witness_after.items() if key in members
             }
@@ -170,6 +173,7 @@ class LiveIndicatorData:
             self._buckets.clear()
             self._witness_certificates.clear()
             self._previous_quotes.clear()
+            self._invalid_quote_members.clear()
             self._refused.clear()
             self._daily_witness_after.clear()
         self._wake.set()
@@ -273,7 +277,22 @@ class LiveIndicatorData:
                 self._connection = None
                 self._subscribed.clear()
             return
+        epoch = None
+        if connection is None and now < self._retry:
+            # Checking a local credential revision is cheap. Repeated failed auth
+            # must not invalidate every member again during provider backoff.
+            try:
+                epoch = self.owner.provider.data_epoch()
+            except Exception:
+                return
+            if self._retry_epoch is None or epoch == self._retry_epoch:
+                return
+            self._retry = 0
         try:
+            epoch = self.owner.provider.data_epoch() if epoch is None else epoch
+            refresh_auth = getattr(self.owner.provider, "refresh_custom_indicator_auth", None)
+            if refresh_auth is not None:
+                refresh_auth()
             epoch = self.owner.provider.data_epoch()
             if connection and (connection.epoch != epoch or not connection.connected):
                 self._remember_transport_failure(connection)
@@ -286,6 +305,7 @@ class LiveIndicatorData:
                 )
                 self._failures += 1
                 self._retry = now + min(60, 2 ** min(self._failures, 5))
+                self._retry_epoch = epoch
                 connection = None
             if connection is None:
                 if now < self._retry:
@@ -301,6 +321,7 @@ class LiveIndicatorData:
             if not connection.connected:
                 raise ValueError("Native stream is not connected")
             self._failures = 0
+            self._retry_epoch = None
         except Exception:
             if self._connection:
                 self._remember_transport_failure(self._connection)
@@ -312,7 +333,11 @@ class LiveIndicatorData:
                 "Native canlı gösterge akışı hazır değil; yeniden bağlantı bekleniyor."
             )
             self._failures += 1
-            self._retry = now + min(60, 2 ** min(self._failures, 5))
+            self._retry_epoch = getattr(self.owner.provider, "memory_epoch", lambda: epoch)()
+            auth_status = getattr(self.owner.provider, "custom_indicator_auth_status", lambda: {})()
+            self._retry = now + max(
+                min(60, 2 ** min(self._failures, 5)), auth_status.get("retry_after_seconds", 0)
+            )
 
     def _event_loop(self):
         while not self._stop.is_set():
@@ -403,6 +428,9 @@ class LiveIndicatorData:
         dirty = rollover = False
         refresh = set()
         with self._lock:
+            # Only a validated bar with an accepted current-generation witness
+            # can recover a previously rejected subscription.
+            self._refused.discard(key)
             old = self._buckets.get(key)
             if old and (
                 points[-1].time < old[0][-1].time
@@ -624,7 +652,16 @@ class LiveIndicatorData:
                 raise ValueError
         except (ValueError, KeyError, TypeError, OverflowError):
             self._rejected += 1
-            self.owner.live_gap("Canlı fiyat eski veya geçersiz; yeni gözlem bekleniyor.", member)
+            with self._lock:
+                first_invalid = member not in self._invalid_quote_members
+                if member in self._members:
+                    self._invalid_quote_members.add(member)
+                else:
+                    first_invalid = False
+            if first_invalid:
+                self.owner.live_gap(
+                    "Canlı fiyat eski veya geçersiz; yeni gözlem bekleniyor.", member
+                )
             return
         updates = []
         with self._lock:
@@ -632,6 +669,7 @@ class LiveIndicatorData:
             keys = self._members.get(member, ())
             if not keys:
                 return
+            self._invalid_quote_members.discard(member)
             previous = self._previous_quotes.get(member)
             if previous and source == previous[0] and price == previous[1]:
                 return
@@ -767,6 +805,8 @@ class LiveIndicatorData:
     def status(self):
         with self._lock:
             transport = self._connection.status() if self._connection else {}
+            auth_status = getattr(self.owner._provider, "custom_indicator_auth_status", None)
+            history_status = getattr(self.owner._provider, "custom_indicator_history_status", None)
             return {
                 "update_mode": "live_price_events",
                 "live_queue_pending": len(self._queue),
@@ -792,6 +832,9 @@ class LiveIndicatorData:
                 "native_lease_direct_refused": transport.get("lease_direct_refused", 0),
                 "native_lease_anchor_blocked": transport.get("lease_anchor_blocked", 0),
                 "native_lease_retry_waiting": transport.get("lease_retry_waiting", 0),
+                "native_rejection_reasons": transport.get("rejection_reasons", {}),
+                "native_auth": auth_status() if auth_status is not None else {},
+                "native_history": history_status() if history_status is not None else {},
                 "native_physical_capacity": transport.get("physical_capacity", 2000),
                 "last_native_failure_codes": list(self._last_transport_failures),
                 "compiled_configurations": len(self._compiled),

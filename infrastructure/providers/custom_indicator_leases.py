@@ -15,6 +15,19 @@ LEASE_SLOTS_PER_CONNECTION = 32
 LEASE_TIMEOUT_SECONDS = 30
 LEASE_RETRY_BASE_SECONDS = 30
 LEASE_RETRY_MAX_SECONDS = 1800
+REJECTION_REASONS = frozenset(
+    {
+        "authentication_failed",
+        "permission_denied",
+        "rate_limited",
+        "unknown_symbol",
+        "unsupported_resolution",
+        "temporary_unavailable",
+        "provider_series_error",
+        "provider_symbol_error",
+    }
+)
+RETRYABLE_REJECTIONS = REJECTION_REASONS - {"unknown_symbol", "unsupported_resolution"}
 
 
 def is_leased_timeframe(timeframe):
@@ -42,9 +55,11 @@ class NativeLeaseBook:
         self._days = {}
         self._day_counters = {}
         self._member_versions = {}
+        self._persistent_versions = {}
         self._certificates = {}
         self._inflight = {}
         self._refused = set()
+        self._rejection_reasons = {}
         self._retry = {}
         self._sequence = 0
         self._dirty = True
@@ -70,10 +85,19 @@ class NativeLeaseBook:
             for mapping in (self._days, self._day_counters, self._member_versions):
                 for member in set(mapping) - present:
                     del mapping[member]
-            for mapping in (self._certificates, self._inflight, self._retry):
+            for mapping in (self._certificates, self._inflight):
                 for key in set(mapping) - self.wanted:
                     del mapping[key]
+            for key in set(self._retry) - (self.wanted | self.persistent):
+                del self._retry[key]
+            for key in set(self._persistent_versions) - self.persistent:
+                del self._persistent_versions[key]
             self._refused.intersection_update(self.wanted | self.persistent)
+            self._rejection_reasons = {
+                key: reason
+                for key, reason in self._rejection_reasons.items()
+                if key in self.wanted | self.persistent
+            }
 
     def _context(self, member, day=None, lease=None):
         return {
@@ -99,6 +123,17 @@ class NativeLeaseBook:
             if member in self.slots:
                 self._invalidate(member, fresh_anchor=True)
 
+    def auth_refreshed(self):
+        """Re-resolve failed requests with fresh context after entitlement refresh."""
+        with self._lock:
+            for key in tuple(self._refused):
+                if self._rejection_reasons.get(key) != "unknown_symbol":
+                    if key in self.persistent:
+                        self._persistent_versions[key] = self._persistent_versions.get(key, 0) + 1
+                    self._refused.discard(key)
+                    self._retry.pop(key, None)
+                    self._dirty = True
+
     @property
     def scheduling_due(self):
         """Pending-but-impossible demand is status, not a reason to rebuild a plan."""
@@ -110,13 +145,18 @@ class NativeLeaseBook:
             key[:2] in self._days
             and (*key[:2], "1D") not in self._refused
             and key not in self._certificates
-            and key not in self._refused
+            and (key not in self._refused or key in self._retry)
         )
 
     def desired(self):
         """Return bounded actual subscriptions plus their immutable wire context."""
         with self._lock:
             now = self.clock()
+            for key in self.persistent & self._refused:
+                retry = self._retry.get(key)
+                if retry is not None and retry[1] <= now:
+                    self._refused.discard(key)
+                    self._persistent_versions[key] = self._persistent_versions.get(key, 0) + 1
             for key, lease in list(self._inflight.items()):
                 if lease["started"] is not None and now - lease["started"] >= LEASE_TIMEOUT_SECONDS:
                     del self._inflight[key]
@@ -142,9 +182,16 @@ class NativeLeaseBook:
                     continue
                 self._sequence += 1
                 context = self._context(member, self._day_counters[member], self._sequence)
+                self._refused.discard(key)
                 self._inflight[key] = {"context": context, "started": None}
                 counts[slot] = counts.get(slot, 0) + 1
-            contexts = {key: self._context(key[:2]) for key in self.persistent}
+            contexts = {
+                key: {
+                    **self._context(key[:2]),
+                    "native_request_generation": self._persistent_versions.get(key, 0),
+                }
+                for key in self.persistent
+            }
             contexts.update({key: lease["context"].copy() for key, lease in self._inflight.items()})
             groups = {}
             for key in contexts:
@@ -159,8 +206,11 @@ class NativeLeaseBook:
                 for key, (_, retry_at) in self._retry.items()
                 if retry_at > now
                 and key not in self._inflight
-                and self._eligible(key)
-                and counts.get(self.slots[key[:2]], 0) < LEASE_SLOTS_PER_CONNECTION
+                and (
+                    key in self.persistent
+                    or self._eligible(key)
+                    and counts.get(self.slots[key[:2]], 0) < LEASE_SLOTS_PER_CONNECTION
+                )
             )
             self._next_due = min(deadlines, default=float("inf"))
             # ACK/rejection can only change this latch after releasing this
@@ -178,11 +228,17 @@ class NativeLeaseBook:
                     self._next_due = min(self._next_due, lease["started"] + LEASE_TIMEOUT_SECONDS)
 
     def _current_context(self, event):
-        member = tuple(event.get("key", ()))[:2]
+        key = tuple(event.get("key", ()))
+        member = key[:2]
         return (
             member in self.slots
             and event.get("native_stream_generation") == self.generation
             and event.get("native_member_generation") == self._member_versions.get(member, 0)
+            and (
+                key not in self.persistent
+                or event.get("native_request_generation", 0)
+                == self._persistent_versions.get(key, 0)
+            )
         )
 
     def reject(self, event):
@@ -196,6 +252,19 @@ class NativeLeaseBook:
                     return False
                 del self._inflight[key]
                 self._certificates.pop(key, None)
+            reason = event.get("reason", "provider_series_error")
+            if reason not in REJECTION_REASONS:
+                reason = "provider_series_error"
+            self._rejection_reasons[key] = reason
+            if reason in RETRYABLE_REJECTIONS:
+                attempts = self._retry.get(key, (0, 0))[0] + 1
+                delay = min(
+                    LEASE_RETRY_MAX_SECONDS,
+                    LEASE_RETRY_BASE_SECONDS * 2 ** min(attempts - 1, 6),
+                )
+                self._retry[key] = attempts, self.clock() + delay
+            else:
+                self._retry.pop(key, None)
             self._refused.add(key)
             self._dirty = True
             if key[2] == "1D":
@@ -237,6 +306,16 @@ class NativeLeaseBook:
                     )
                     if old is None or changed:
                         self._invalidate(member)
+                    if old is not None and current[0] > old[1][0]:
+                        # A typed unsupported long period is rechecked at most
+                        # once per new provider-native day. Intraday packets or
+                        # reconfiguration cannot create a retry loop.
+                        for refused in self._members.get(member, ()):
+                            if (
+                                is_leased_timeframe(refused[2])
+                                and self._rejection_reasons.get(refused) == "unsupported_resolution"
+                            ):
+                                self._refused.discard(refused)
                     self._days[member] = previous, current, metadata
                     answer["invalidated"] = changed
                     # A genuine next daily bar closes the exact native bucket
@@ -253,6 +332,8 @@ class NativeLeaseBook:
                         and metadata == old[2]
                     ):
                         answer["rollover"] = True
+                self._retry.pop(key, None)
+                self._rejection_reasons.pop(key, None)
                 answer["accepted"] = True
                 return answer
             lease = self._inflight.get(key)
@@ -274,6 +355,7 @@ class NativeLeaseBook:
             ):
                 return answer
             self._certificates[key] = certificate
+            self._rejection_reasons.pop(key, None)
             del self._inflight[key]
             self._retry.pop(key, None)
             self._dirty = True
@@ -305,6 +387,9 @@ class NativeLeaseBook:
             anchor_blocked = {key for key in leased if (*key[:2], "1D") in self._refused}
             refused = (leased & self._refused) | anchor_blocked
             pending = leased - self._certificates.keys() - refused
+            reasons = {}
+            for reason in self._rejection_reasons.values():
+                reasons[reason] = reasons.get(reason, 0) + 1
             return {
                 "virtual_subscriptions": len(self.wanted),
                 "persistent_subscriptions": len(self.persistent),
@@ -318,7 +403,8 @@ class NativeLeaseBook:
                 "lease_direct_refused": len(leased & self._refused),
                 "lease_anchor_blocked": len(anchor_blocked),
                 "lease_retry_waiting": sum(
-                    retry_at > self.clock() and self._eligible(key)
+                    retry_at > self.clock() and (key in self.persistent or self._eligible(key))
                     for key, (_, retry_at) in self._retry.items()
                 ),
+                "rejection_reasons": reasons,
             }

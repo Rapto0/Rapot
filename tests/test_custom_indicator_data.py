@@ -278,9 +278,12 @@ def test_gateway_custom_native_path_preserves_metadata_and_rejects_account_chang
     class NativeProvider:
         change_account = False
 
+        def status(self):
+            return {"requests_completed": len(captured)}
+
         def get_history(self, symbol, **kwargs):
             captured.append((symbol, kwargs))
-            result = frame(kwargs["interval"])
+            result = frame(kwargs["timeframe"])
             if self.change_account:
                 gateway.clear()
             return result
@@ -290,17 +293,30 @@ def test_gateway_custom_native_path_preserves_metadata_and_rejects_account_chang
 
     provider = NativeProvider()
     monkeypatch.setattr(
-        "infrastructure.providers.custom_indicator_history.history_provider",
+        "infrastructure.providers.native_indicator_history.NativeIndicatorHistory",
         lambda *_args: provider,
     )
     try:
+        assert gateway.custom_indicator_history_status() == {}
         result = gateway.custom_indicator_history(
             "BTCUSDT", exchange="BINANCE", timeframe="3D", bars=515
         )
-        assert captured == [("BTCUSDT", {"exchange": "BINANCE", "interval": "3D", "period": "max"})]
+        assert captured == [
+            (
+                "BTCUSDT",
+                {
+                    "exchange": "BINANCE",
+                    "timeframe": "3D",
+                    "bars": 515,
+                    "token": gateway._token,
+                    "epoch": gateway._data_epoch,
+                },
+            )
+        ]
         assert result.attrs["native_timeframe"] == "3D"
         assert result.attrs["session_metadata"] == SESSION
         assert result.attrs["source"] == "borsapy_tradingview:BINANCE"
+        assert gateway.custom_indicator_history_status() == {"requests_completed": 1}
         provider.change_account = True
         with pytest.raises(BorsapyGatewayError) as error:
             gateway.custom_indicator_history("THYAO", exchange="BIST", timeframe="2D", bars=515)

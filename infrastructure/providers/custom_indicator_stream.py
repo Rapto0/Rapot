@@ -107,6 +107,49 @@ def _number(value):
         return None
 
 
+def rejection_reason(method, params):
+    """Map provider text to fixed public categories; never retain raw arguments."""
+    detail = " ".join(
+        value[:4096].lower().replace("_", " ") for value in params[2:5] if isinstance(value, str)
+    )
+    if any(
+        value in detail
+        for value in ("invalid auth", "auth token", "authentication", "unauthorized")
+    ):
+        return "authentication_failed"
+    if any(
+        value in detail
+        for value in (
+            "permission",
+            "not entitled",
+            "subscription",
+            "premium",
+            "upgrade",
+            "access denied",
+        )
+    ):
+        return "permission_denied"
+    if any(value in detail for value in ("rate limit", "too many", "max sessions", "max charts")):
+        return "rate_limited"
+    if any(
+        value in detail
+        for value in ("invalid symbol", "unknown symbol", "symbol not found", "no such symbol")
+    ):
+        return "unknown_symbol"
+    if any(value in detail for value in ("resolution", "timeframe", "time frame")) and any(
+        value in detail for value in ("invalid", "unsupported", "not supported", "unavailable")
+    ):
+        return "unsupported_resolution"
+    if detail.strip() == "unsupported":
+        return "unsupported_resolution" if method == "series_error" else "unknown_symbol"
+    if any(
+        value in detail
+        for value in ("timeout", "temporary", "temporarily", "internal error", "unavailable")
+    ):
+        return "temporary_unavailable"
+    return "provider_series_error" if method == "series_error" else "provider_symbol_error"
+
+
 def stream_class(base):
     class NativeStream(base):
         WS_URL = "wss://data.tradingview.com/socket.io/websocket"
@@ -344,7 +387,12 @@ def stream_class(base):
                         for item in rejected:
                             item["rejected"] = True
                             events.append(
-                                {"kind": "rejected", "key": item["key"], **item["context"]}
+                                {
+                                    "kind": "rejected",
+                                    "key": item["key"],
+                                    "reason": rejection_reason(method, params),
+                                    **item["context"],
+                                }
                             )
                     elif (
                         method == "symbol_resolved"
@@ -489,6 +537,7 @@ class NativeStreamPool:
         self._member_slots = {}
         self._wire_by_slot = {}
         self._needs_refresh = False
+        self._auth_refresh_required = False
         self.closed = False
         self._lock = threading.Lock()
 
@@ -503,6 +552,26 @@ class NativeStreamPool:
     @property
     def auth_failed(self):
         return any(stream.auth_failed for stream in tuple(self._streams.values()))
+
+    @property
+    def auth_refresh_required(self):
+        return self._auth_refresh_required or self.auth_failed
+
+    def refresh_auth_token(self, token):
+        """Refresh existing sockets in place; source/account epochs remain separate."""
+        if self.closed:
+            return
+        if not isinstance(token, str) or not token or token == "unauthorized_user_token":
+            raise ValueError("Native bağlantı erişim yenilemesi doğrulanamadı.")
+        changed = token != self._token
+        self._token = token
+        for stream in tuple(self._streams.values()):
+            with stream._lock:
+                stream._auth_token = token
+            stream._send(stream._create_message("set_auth_token", [token]))
+        self._auth_refresh_required = False
+        if changed and self._leases is not None:
+            self._leases.auth_refreshed()
 
     @staticmethod
     def _slot(member):
@@ -584,6 +653,11 @@ class NativeStreamPool:
             and not self._leases.reject(event)
         ):
             return
+        if event.get("kind") == "rejected" and event.get("reason") in {
+            "authentication_failed",
+            "permission_denied",
+        }:
+            self._auth_refresh_required = True
         # The application may acquire its own lock. No book/pool lock is held.
         self._callback(event)
 

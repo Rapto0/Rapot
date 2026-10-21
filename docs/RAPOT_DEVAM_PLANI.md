@@ -1,6 +1,15 @@
 # Rapot Devam Planı
 
-**Güncel özet: 16 Ekim 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
+**Güncel özet: 21 Ekim 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
+
+Kullanıcı piyasa açıkken elle devamı başlattı. `c801e275` üzerinde 631 pay
+abonelikte olduğu halde özel gösterge hazırlığı **0/631** kaldı; 4.417 ret
+yeniden denenmiyordu. Yeni oturumlu THYAO10TF denemesi başarılıdır.
+Ret toparlanması, süreli erişim yenilemesi ve başlangıç kaynak maliyeti
+düzeltilir; yeni yayın/kapsam kabulü ayrı doğrulanır.
+[21 Ekim canlı kapsam ve kapasite kaydı](LIVE_MARKET_CAPACITY_2026-10-21.md)
+bu çalışmanın güncel kanıtıdır. Alttaki 16 Ekim kayıtları tarihsel kabulü
+anlatır. Otomatik takip kurulmaz; kullanıcının iki listesi ve etkin kuralı korunur.
 
 Önceki kaynak düzeltmesi, `fe9e7e63` canlı kabulünde görülen reddedilmiş günlük
 verilerin sürekli planlanmasını ve farklı gösterge geçmiş uzunluklarının

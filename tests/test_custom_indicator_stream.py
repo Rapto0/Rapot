@@ -110,7 +110,11 @@ def test_rejected_native_series_does_not_disconnect_other_symbols_or_quotes():
     stream.reconcile({("BIST", "INVALID", "2D"), ("BIST", "THYAO", "1D")})
     bad = next((sid, item) for sid, item in stream.series.items() if item["key"][1] == "INVALID")
     packet(stream, "series_error", [bad[1]["session"], bad[0], "unsupported"])
-    assert events[-1] == {"kind": "rejected", "key": ("BIST", "INVALID", "2D")}
+    assert events[-1] == {
+        "kind": "rejected",
+        "key": ("BIST", "INVALID", "2D"),
+        "reason": "unsupported_resolution",
+    }
     assert stream.healthy
     good = next(sid for sid, item in stream.series.items() if item["key"][1] == "THYAO")
     fill(stream, good, 125)

@@ -89,6 +89,24 @@ geçmişiyle sayısal eşitliği henüz ölçülmemiştir.
 
 ## Kullanım ve alarmlar
 
+21 Ekim toparlanma sözleşmesi: native bağlantının hesap token'ı süreli
+yenilenir; sağlıklı yenileme mevcut hesap başlangıçlarını silmez. Geçici
+sağlayıcı retleri artan beklemeyle yeniden denenir; eski istek kuşağının
+gecikmiş cevabı yeni talebi doğrulayamaz. Bilinmeyen sembol sürekli sorgu
+döngüsüne alınmaz. Desteklenmeyen uzun periyot yeni native gün veya yeni
+token sonrasında tekrar sınanabilir. Ret kalksa bile yeni geçerli native
+tanık ve gereken geçmiş olmadan gösterge hazır sayılmaz.
+
+Tek geçmiş işçisi aynı özel WebSocket'i kullanır; aynı anda bir sınırlı
+chart talebi yürür ve tamamlanınca kapatılır. Kısmi geçmiş yayınlanmaz.
+İlk geçersiz fiyat devamlılığı keser; aynı geçersiz dönemin tekrarları
+yeniden hazırlanan başlangıcı sürekli silmez. Geçerli fiyat gelmeden alarm
+üretilemez. `/advanced-alarms/coverage` yöneticiye her yapılandırılmış sembolün
+seçili çıktılarının hazırlığını ve bekleme nedenini verir; bu GET yeni veri
+işi başlatmaz. Hazır çıktı, alarm koşulunun gerçekleştiği veya bildirimin
+teslim edildiği anlamına gelmez. Canlı kabul ve kaynak ölçümleri
+[21 Ekim kaydında](LIVE_MARKET_CAPACITY_2026-10-21.md) ayrı tutulur.
+
 Grafikte **Özel sunucu göstergeleri** panelini aç, göstergeyi ve ayarlarını seç,
 önizlemeyi başlat. Ana periyot göstergenin sözleşmesine uymalıdır. Satır tablosu,
 skor/oy çıktıları, kaynak ve hazır olma durumu aynı sunucu hesaplamasından gelir.
