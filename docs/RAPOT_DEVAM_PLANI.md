@@ -2,6 +2,22 @@
 
 **Güncel özet: 21 Ekim 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
 
+**Son üretim kaynağı `a5c14b75413e7f246bb579f28cf6dd4b61dd7a93`:**
+09:46:19 UTC yayını ve 09:46:35–09:47:07 UTC ayrı kabul geçti. Canlı alarm
+okumasında aynı ayarı tekrar doğrulama/hash üretme işi kaldırıldı; tazelik,
+oturum ve native sınır kontrolleri korunur. 2.335 Python/bir atlama, 310
+frontend, beş CI ve temiz imaj başarılı; yeni yedek bütün 15 tabloyla
+bağımsız restore edildi. Yayın öncesi 12 olay ve kullanıcı tanımları korundu.
+09:47:41–09:50:07 UTC THYAO/BTCUSDT beşli önizleme geçti. İlk normal alarm ve
+ikinci önizleme süre sınırında kaldı; başarısız kayıtlar korunur. 10:13:25–
+10:14:17 UTC631 hesap derlenmiş, ret/retry0, CPU%31,441–44,853 ve taşma0 idi.
+Son anda348 çıktı hazır,246 eski fiyat,37 canlı fiyat bekleyen vardı. 10:14:55–
+10:16:37 yeniden beşli önizleme ve10:16:57–10:17:05 normal karma liste alarmı
+geçti; iki bildirimsiz olay15/16 korundu, geçici nesneler temizlendi. Token
+yenileme1/hata0, hesaplar korundu. Yerel yeniden önizleme maliyeti11tur/100
+istekten iki tur/10isteğe indirilir; sonraki yayın ayrıca kabul edilecektir.
+Aşağıdaki iki önceki yayın tarihsel sonuçları ayrı tutulur.
+
 Kullanıcı piyasa açıkken elle devamı başlattı. `c801e275` üzerinde 631 pay
 abonelikte olduğu halde özel gösterge hazırlığı **0/631** kaldı; 4.417 ret
 yeniden denenmiyordu. Yeni oturumlu THYAO10TF denemesi başarılıdır.

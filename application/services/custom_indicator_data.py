@@ -735,11 +735,7 @@ class CustomIndicatorData:
                 timeframe=timeframe,
                 bars=bars,
             )
-        points = native_bars(frame, timeframe, market, self._clock())
-        digest = _digest(
-            [[bar.time, bar.end, bar.open, bar.high, bar.low, bar.close] for bar in points]
-        )
-        entry = Native(points, self._clock(), bars, digest, epoch)
+        entry = self._validated_native(frame, timeframe, market, bars, epoch)
         with self._publication_lock, self._lock:
             if (
                 self._stop.is_set()
@@ -750,51 +746,70 @@ class CustomIndicatorData:
                 raise ValueError("Hesap değişti; yeni native geçmiş bekleniyor.")
             if publication_epoch != self.publication_token(key[:2]):
                 raise ValueError("Geçmiş isteği sırasında native kaynak değişti.")
-            summary = self._history_summaries.get(key)
-            comparison_time = (
-                summary.received
-                if summary and self.live.native_continuity(key, epoch)
-                else entry.received
-            )
-            revision = bool(summary and not summary.continues(points, comparison_time))
-            if summary and market == "BIST" and not timeframe.endswith(("D", "W", "M")):
-                revision |= any(
-                    right.time > summary.last
-                    and datetime.fromtimestamp(left.time, ZoneInfo("Europe/Istanbul")).date()
-                    == datetime.fromtimestamp(right.time, ZoneInfo("Europe/Istanbul")).date()
-                    and right.time - left.time != _duration(timeframe)
-                    for left, right in zip(points, points[1:])
-                )
-            if revision:
+            if self._history_revision(key, entry):
                 member = (market, symbol)
                 self.live.invalidate_witnesses(member)
                 self.live_gap(
                     "Native geçmiş düzeltildi; canlı gösterge yeniden hazırlanıyor.", member
                 )
-            self._native[key] = entry
-            self._history_summaries[key] = HistorySummary.build(
-                points, entry.received, requested=entry.requested
-            )
-            self._history_summaries.move_to_end(key)
-            while len(self._history_summaries) > MAX_HISTORY_SUMMARIES:
-                forgotten, _ = self._history_summaries.popitem(last=False)
-                self.live_gap("Native geçmiş karşılaştırma belleği yenileniyor.", forgotten[:2])
-            if len(self._symbol_epochs) > MAX_HISTORY_SUMMARIES:
-                self._symbol_epochs.clear()
-                self._process_epoch = uuid.uuid4().hex
-                self._results.clear()
-                self._live_cells = 0
-                self._preview_results.clear()
-            self._native.move_to_end(key)
-            while (
-                len(self._native) > MAX_NATIVE_SERIES
-                or sum(len(item.bars) for item in self._native.values()) > MAX_NATIVE_ROWS
-            ):
-                self._native.popitem(last=False)
+            self._store_native_entries({key: entry})
         return entry
 
-    def _native_entries(self, market, symbol, demand, epoch, publication_epoch, *, generation=None):
-        """Prefetch only cache misses, then use the ordinary native validation path."""
+    def _validated_native(self, frame, timeframe, market, bars, epoch):
+        points = native_bars(frame, timeframe, market, self._clock())
+        digest = _digest(
+            [[bar.time, bar.end, bar.open, bar.high, bar.low, bar.close] for bar in points]
+        )
+        return Native(points, self._clock(), bars, digest, epoch)
+
+    def _history_revision(self, key, entry):
+        """Caller holds the publication/owner locks; inspect without mutating state."""
+        market, _, timeframe = key
+        summary = self._history_summaries.get(key)
+        comparison_time = (
+            summary.received
+            if summary and self.live.native_continuity(key, entry.epoch)
+            else entry.received
+        )
+        revision = bool(summary and not summary.continues(entry.bars, comparison_time))
+        if summary and market == "BIST" and not timeframe.endswith(("D", "W", "M")):
+            revision |= any(
+                right.time > summary.last
+                and datetime.fromtimestamp(left.time, ZoneInfo("Europe/Istanbul")).date()
+                == datetime.fromtimestamp(right.time, ZoneInfo("Europe/Istanbul")).date()
+                and right.time - left.time != _duration(timeframe)
+                for left, right in zip(entry.bars, entry.bars[1:])
+            )
+        return revision
+
+    def _store_native_entries(self, entries):
+        """Commit already validated entries while holding publication/owner locks."""
+        for key, entry in entries.items():
+            self._native[key] = entry
+            self._history_summaries[key] = HistorySummary.build(
+                entry.bars, entry.received, requested=entry.requested
+            )
+            self._history_summaries.move_to_end(key)
+            self._native.move_to_end(key)
+        while len(self._history_summaries) > MAX_HISTORY_SUMMARIES:
+            forgotten, _ = self._history_summaries.popitem(last=False)
+            self.live_gap("Native geçmiş karşılaştırma belleği yenileniyor.", forgotten[:2])
+        if len(self._symbol_epochs) > MAX_HISTORY_SUMMARIES:
+            self._symbol_epochs.clear()
+            self._process_epoch = uuid.uuid4().hex
+            self._results.clear()
+            self._live_cells = 0
+            self._preview_results.clear()
+        while (
+            len(self._native) > MAX_NATIVE_SERIES
+            or sum(len(item.bars) for item in self._native.values()) > MAX_NATIVE_ROWS
+        ):
+            self._native.popitem(last=False)
+
+    def _native_entries(
+        self, market, symbol, demand, epoch, publication_epoch, *, generation=None, job_key=None
+    ):
+        """Validate the complete demand before one atomic history revision decision."""
         fetch = getattr(self.provider, "custom_indicator_histories", None)
         if not callable(fetch):
             return {
@@ -806,62 +821,95 @@ class CustomIndicatorData:
             MAX_BATCH_CHARTS,
         )
 
-        entries, pending = {}, {}
+        entries, cached, staged = {}, {}, {}
         generation = self._generation if generation is None else generation
 
-        def flush():
-            if not pending:
-                return
-            with self._lock:
-                if (
-                    self._stop.is_set()
-                    or generation != self._generation
-                    or self.provider.memory_epoch() != epoch
-                    or self.publication_token((market, symbol)) != publication_epoch
-                ):
-                    raise ValueError("Native geçmiş talebi artık güncel değil.")
-            frames = fetch(
-                symbol,
-                exchange="BIST" if market == "BIST" else "BINANCE",
-                requests=pending.copy(),
-            )
-            if not isinstance(frames, dict) or frames.keys() != pending.keys():
-                raise ValueError("Native geçmiş grubu eksik.")
-            for tf, count in pending.items():
-                entries[tf] = self._native_frame(
-                    market,
-                    symbol,
-                    tf,
-                    count,
-                    epoch,
-                    prefetched_frame=frames.pop(tf),
-                    expected_publication_epoch=publication_epoch,
-                    expected_generation=generation,
-                )
-            pending.clear()
+        def guard():
+            if (
+                self._stop.is_set()
+                or generation != self._generation
+                or job_key is not None
+                and not self.live.admitted(job_key)
+                or self.provider.memory_epoch() != epoch
+                or self.publication_token((market, symbol)) != publication_epoch
+            ):
+                raise ValueError("Native geçmiş talebi artık güncel değil.")
 
-        for tf, count in demand.items():
-            with self._lock:
-                old = self._native.get((market, symbol, tf))
-                summary = self._history_summaries.get((market, symbol, tf))
-                count = max(count, summary.requested if summary else 0)
-                cached = (
-                    old is not None
-                    and old.epoch == epoch
-                    and old.requested >= count
-                    and self._clock() - old.received < REFRESH_SECONDS
+        def fetch_requests(requests):
+            pending = {}
+
+            def flush():
+                if not pending:
+                    return
+                with self._lock:
+                    guard()
+                frames = fetch(
+                    symbol,
+                    exchange="BIST" if market == "BIST" else "BINANCE",
+                    requests=pending.copy(),
                 )
-            if cached:
-                entries[tf] = self._native_frame(market, symbol, tf, count, epoch)
-            else:
+                if not isinstance(frames, dict) or frames.keys() != pending.keys():
+                    raise ValueError("Native geçmiş grubu eksik.")
+                for tf, count in pending.items():
+                    staged[tf] = self._validated_native(frames.pop(tf), tf, market, count, epoch)
+                pending.clear()
+
+            for tf, count in requests.items():
                 if (
                     len(pending) >= MAX_BATCH_CHARTS
                     or sum(pending.values()) + count > MAX_BATCH_BARS
                 ):
                     flush()
                 pending[tf] = count
-        flush()
-        return entries
+            flush()
+
+        missing = {}
+        for tf, count in demand.items():
+            with self._lock:
+                old = self._native.get((market, symbol, tf))
+                summary = self._history_summaries.get((market, symbol, tf))
+                count = max(count, summary.requested if summary else 0)
+                reusable = (
+                    old is not None
+                    and old.epoch == epoch
+                    and old.requested >= count
+                    and self._clock() - old.received < REFRESH_SECONDS
+                )
+            if reusable:
+                entries[tf] = old
+                cached[tf] = count
+            else:
+                missing[tf] = count
+        fetch_requests(missing)
+        while True:
+            with self._publication_lock, self._lock:
+                guard()
+                revision = any(
+                    self._history_revision((market, symbol, tf), entry)
+                    for tf, entry in staged.items()
+                )
+                if not revision or not cached:
+                    if revision:
+                        member = (market, symbol)
+                        self.live.invalidate_witnesses(member)
+                        self.live_gap(
+                            "Native geçmiş düzeltildi; canlı gösterge yeniden hazırlanıyor.", member
+                        )
+                    # Own revision intentionally changes the publication token:
+                    # this turn cannot publish a seed. The next turn consumes
+                    # the complete fresh batch after native witnesses recover.
+                    self._store_native_entries(
+                        {(market, symbol, tf): entry for tf, entry in staged.items()}
+                    )
+                    for tf in cached:
+                        if (key := (market, symbol, tf)) in self._native:
+                            self._native.move_to_end(key)
+                    entries.update(staged)
+                    return entries
+            # A real revision may also affect cached sibling timeframes. Fetch
+            # those before committing anything; never revive pre-revision raws.
+            fetch_requests(cached)
+            cached.clear()
 
     @staticmethod
     def _native_demand(config, market):
@@ -902,10 +950,18 @@ class CustomIndicatorData:
                     if tf in demand:
                         demand[tf] = max(demand[tf], count)
             entries = self._native_entries(
-                market, symbol, demand, epoch, publication_epoch, generation=generation
+                market,
+                symbol,
+                demand,
+                epoch,
+                publication_epoch,
+                generation=generation,
+                job_key=key,
             )
             if self.provider.memory_epoch() != epoch:
                 raise ValueError("Hesap değişti; yeni native geçmiş bekleniyor.")
+            if publication_epoch != self.publication_token(key[:2]):
+                raise ValueError("Native geçmiş yenilendi; yeni tanıklarla hazırlık bekleniyor.")
             daily = entries["1D"].bars if market == "BIST" else ()
             frames = {
                 tf: with_native_ends(entry.bars, daily, tf, market, self._clock())

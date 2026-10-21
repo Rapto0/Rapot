@@ -1,6 +1,28 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-**21 Ekim güncel yayın:** `85feb159968e6a6094e14660b9e278749bc6294c`,
+**21 Ekim güncel yayın:** `a5c14b75413e7f246bb579f28cf6dd4b61dd7a93`,
+**09:46:19 UTC / 12:46:19 TSİ** API/frontend/Compose/current yayını;
+**09:46:35–09:47:07 UTC** ayrı kabul geçti. Aynı alarm ayarının her canlı
+fiyatta tekrar doğrulanması/hash üretmesi kaldırılır; değiştirilemez
+hazırlanmış kimlik kullanılır. Fiyat, oturum, native sınır ve tazelik
+korumaları her okumada sürer. 2.335 Python/bir atlama, 310 frontend, beş
+CI ve temiz imaj yayını geçti. Yeni 1.342.660.608 bayt yedek 15 tabloyla
+bağımsız restore edildi; kanıt `21b57c366544eacaf12c62fcf4ac5b4f0b6b55c85ea80057e6439e93d9810457`.
+Dört servis healthy/restart0, listeler/kural ve yayın öncesindeki 12 olay
+(10 gönderilmiş + iki bildirimsiz test) korundu. 09:47:41–09:50:07 UTC
+THYAO/BTCUSDT beşli canlı önizleme geçti. İlk normal alarm ve ikinci önizleme
+denemeleri süre sınırında kaldı; başarısız kayıtlar korunur. 10:13:25–10:14:17
+UTC'de631 hesap derlenmiş,5679 tanık hazır ve ret/retry0 idi. CPU%31,441–44,853,
+kullanılabilir RAM206,570–220,691 MiB, API230,266–231,582 MiB; taşma0. Son anda
+348 çıktı hazır,246 eski fiyat,37 canlı fiyat bekleyen vardı; tam seans değildir.
+10:14:55–10:16:37 yeniden beşli önizleme ve10:16:57–10:17:05 normal karma liste
+alarmı geçti; iki bildirimsiz olay15/16 korundu, geçici liste/kural temizlendi.
+Token yenileme1/hata0,631+10 önizleme hesabı korundu. Süresi dolmuş önizlemeyi
+yeniden açmada yerel11tur/100istek maliyeti bulundu; sonraki kaynak bunu
+iki tur/10isteğe indirir, yayın kabulü ayrıca kaydedilir. Alttaki ikinci
+kaynak sonuçları yeni kaynakla birleştirilmez. [21 Ekim kaydı](docs/LIVE_MARKET_CAPACITY_2026-10-21.md).
+
+**21 Ekim ikinci yayın:** `85feb159968e6a6094e14660b9e278749bc6294c`,
 **08:59:54 UTC / 11:59:54 TSİ** API/frontend/Compose/current yayını;
 **09:00:35–09:01:09 UTC** bağımsız kabul geçti. Geçmiş aynı WS üzerinde
 10 chart/12.000 mum/12 MiB gruplarla hazırlanır. Önizleme geçmişinin çıktıları

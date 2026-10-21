@@ -101,6 +101,13 @@ Tek geçmiş işçisi aynı özel WebSocket'i kullanır; tek sembolün eksik
 periyotları en fazla 10 chart, toplam 12.000 mum ve 12 MiB gruplarla alınır.
 Chart açma aralığı en az 0,1 saniyedir. Grup tamamlanınca chart'lar kapatılır;
 tek periyodun hatası veya hesap değişimi kısmi gösterge başlangıcı yayımlamaz.
+Süresi dolan önizleme yeniden açıldığında gereken bütün native periyotlar
+önce doğrulanır, ardından tek geçmiş revizyon kararıyla birlikte önbelleğe
+alınır. Bir periyodun geçmişi değişmişse elde kalan diğer gerekli periyotlar
+da yeniden alınır; eski ve yeni geçmiş birleştirilmez. Revizyon turu sinyal
+başlangıcı yayımlamaz; sonraki tur güncel native tanıkları bekler. Böylece
+aynı eski tarih özetinin periyot başına bütün hazırlığı yeniden başlatması
+önlenirken gerçek geçmiş düzeltmesi ve kopma kontrolleri korunur.
 İlk geçersiz fiyat devamlılığı keser; aynı geçersiz dönemin tekrarları
 yeniden hazırlanan başlangıcı sürekli silmez. Geçerli fiyat gelmeden alarm
 üretilemez. `/advanced-alarms/coverage` yöneticiye her yapılandırılmış sembolün
