@@ -164,6 +164,12 @@ ve uzlaştırma işinde hazırlanır; her fiyat güncellemesinde bütün geçmi�
 hesaplanmaz. Canlı hesaplayıcı en fazla on satırlık kapalı durum özeti tutar.
 Önizleme/alarm okuması bellek sonucunu kullanır.
 
+Alarm planı hazırlanırken özel operandın doğrulanmış ayar kimliği ve alan
+anahtarı değiştirilemez bir kopyada tutulur. Her fiyat güncellemesinde aynı
+ayarlar tekrar doğrulanıp hashlenmez. Bu yalnız hesap kimliğinin paylaşımıdır;
+fiyat gözlemi, hesap/epoch, veri tazeliği ve native hazırlık her okumada
+kontrol edilir. Kural girdisi değişirse eski hazırlık yeniden kullanılamaz.
+
 Bir sembolün bütün ayarları aynı fiyat ve kaynak zamanıyla yayımlandıktan sonra
 ilgili alarmlar eşzamanlı çağrıyla değerlendirilir; bu işlem bitmeden sonraki
 fiyat gözlemi onun yerini alamaz. Kısa eşik aşımı/geri dönüş böyle korunur.

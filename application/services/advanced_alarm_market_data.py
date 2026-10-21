@@ -18,6 +18,7 @@ import threading
 import time
 import uuid
 from collections import OrderedDict
+from copy import deepcopy
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
@@ -28,6 +29,7 @@ import pandas as pd
 from application.services.advanced_alarm_conditions import (
     TIMEFRAMES,
     PreparedCondition,
+    PreparedCustomReference,
     evaluate_prepared_condition,
     field_key,
     prepare_condition,
@@ -163,15 +165,19 @@ class AdvancedMarketData:
                 continue
             condition_id = (rule["timeframe"], json.dumps(rule["condition"], sort_keys=True))
             if condition_id not in prepared_plans:
-                prepared_plans[condition_id] = prepare_condition(
-                    rule["condition"], rule["timeframe"]
+                prepared_plans[condition_id] = (
+                    prepare_condition(rule["condition"], rule["timeframe"]),
+                    deepcopy(rule["condition"]),
                 )
-            prepared = prepared_plans[condition_id]
-            refs = [dict(ref) for ref in prepared.fields]
-            signature = tuple(field_key(ref, rule["timeframe"]) for ref in refs)
+            prepared, condition_snapshot = prepared_plans[condition_id]
+            refs = [
+                ref if isinstance(ref, PreparedCustomReference) else dict(ref)
+                for ref in prepared.fields
+            ]
+            signature = prepared.keys
             intern_refs.setdefault(signature, refs.copy())
             plans[(str(rule["id"]), rule.get("revision", 0))] = (
-                rule["condition"],
+                condition_snapshot,
                 intern_refs[signature],
                 prepared,
             )
@@ -825,7 +831,7 @@ class AdvancedMarketData:
             if plan and plan[0] == rule["condition"]
             else prepare_condition(rule["condition"], timeframe)
         )
-        refs = plan[1] if plan and plan[2] is prepared else prepared.fields
+        refs = prepared.fields
         closed = rule["trigger"] == "bar_close"
         custom_data = {}
         for ref in refs:

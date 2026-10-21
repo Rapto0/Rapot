@@ -9,7 +9,22 @@ Ret toparlanması, süreli erişim yenilemesi ve başlangıç kaynak maliyeti
 `1d36efec` ile **08:18:27 UTC**'de üretime alındı; **08:18:47–08:19:17 UTC**
 bağımsız kabul geçti. 2.298 Python/bir atlama, 310 frontend, beş CI ve temiz
 imaj yayını başarılıdır. Kişisel listeler/kural, 15 tablo ve dört servis korundu.
-631 payın canlı hazırlığı ve sürekli kaynak kazanımı ayrıca ölçülüyor.
+İlk kaynakta otomatik token yenilemesi hatasız görüldü; değişmeyen SMI kuralı
+üç yeni gönderilmiş olay üretti. İki beşli önizleme denemesinde bellek bütçesi
+yüzünden tekrar replay döngüsü bulundu. Bunun ve sıralı geçmiş beklemesinin
+düzeltmesi `85feb159` ile **08:59:54 UTC**'de yayımlandı; **09:00:35–09:01:09 UTC**
+bağımsız kabul geçti. 2.324 Python/bir atlama, 310 frontend, beş CI/temiz imaj;
+ayrı taze yedeğin 15 tablo restore kabulü geçti. İki liste, etkin kural ve
+dokuz olay korundu. Yeni kaynakta THYAO/BTCUSDT beşli önizleme ve normal
+motor/listede beş koşullu bildirimsiz kabul geçti; geçici kural/liste kaldırıldı,
+iki kanıt olayı korundu. **09:31:05–09:31:57 UTC** 631/631 hesap derlenmiş,
+native hazırlık/ret beklemesi sıfır; son anda 310 üye seçili çıktısı hazır,
+270 eski fiyat ve 51 canlı fiyat bekleyen vardı. Kısa CPU %45,855–55,692,
+RAM 245,457–267,934 MiB; taşma0, normal mum işi/kuyruk0/0. İkinci kaynağın
+token yenilemesi de hatasız görüldü. Bu tam seans/tüm fiyatlar taze kabulü
+değildir. Sonraki yerel CPU düzeltmesi tekrar operand doğrulama/hash işini
+kaldırır; tam test/yayın ve üretim ölçümü ayrıca gerekir. 3.000 etkin test
+kuralı zorunlu değil.
 [21 Ekim canlı kapsam ve kapasite kaydı](LIVE_MARKET_CAPACITY_2026-10-21.md)
 bu çalışmanın güncel kanıtıdır. Alttaki 16 Ekim kayıtları tarihsel kabulü
 anlatır. Otomatik takip kurulmaz; kullanıcının iki listesi ve etkin kuralı korunur.

@@ -1417,9 +1417,14 @@ class CustomIndicatorData:
         return response
 
     def observation(self, ref, symbol, trigger, now):
+        from application.services.advanced_alarm_conditions import PreparedCustomReference
         from application.services.custom_indicators.catalog import config_key
 
-        identity = config_key(ref["indicator"], dict(ref["inputs"]), ref["timeframe"])
+        identity = (
+            ref.configuration_id
+            if isinstance(ref, PreparedCustomReference)
+            else config_key(ref["indicator"], dict(ref["inputs"]), ref["timeframe"])
+        )
         key = (symbol["market_type"], symbol["symbol"], identity)
         return self._observation(key, ref, trigger, now)
 

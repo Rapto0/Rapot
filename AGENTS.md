@@ -1,6 +1,32 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-**21 Ekim güncel yayın:** `1d36efec58566742a226a7796238b1f82a5cda91`,
+**21 Ekim güncel yayın:** `85feb159968e6a6094e14660b9e278749bc6294c`,
+**08:59:54 UTC / 11:59:54 TSİ** API/frontend/Compose/current yayını;
+**09:00:35–09:01:09 UTC** bağımsız kabul geçti. Geçmiş aynı WS üzerinde
+10 chart/12.000 mum/12 MiB gruplarla hazırlanır. Önizleme geçmişinin çıktıları
+korunarak yinelenen TF satırları inceltilir; son noktanın satırları tamdır,
+32.768 hücre bütçesi artmaz. 2.324 Python/bir atlama, 310 frontend, beş CI ve
+temiz imaj yayını geçti. Taze 1.342.660.608 bayt yedek 15 tabloyla bağımsız
+restore edildi; dört servis sağlıklı, kullanıcı tanımları/özel dosyalar/MW/PG
+korundu. İlk kaynakta token yenilemesi canlıda görüldü ve kullanıcının SMI
+alarmı üç yeni `sent` olay üretti (6→9). İki önceki beşli önizleme denemesi
+başarısız kayıt olarak korunur. Yeni kaynakta **09:07:08–09:08:55 UTC**
+THYAO/BTCUSDT beşli önizleme, **09:09:32–09:09:40 UTC** beş koşullu normal
+liste alarmı kabulü geçti; iki olay `not_requested`/0 deneme, geçici liste
+ve kural kaldırıldı, kullanıcı tanımları aynı. Toplam 9 gönderilmiş +2 test
+olayı korunur. **09:31:05–09:31:57 UTC** 631/631 hesap derlenmiş, bütün
+6.310 TF kabul edilmiş, 5.679 üst periyot tanığı hazır/ret0 idi. Son örnekte
+310 seçili çıktı hazır, 270 eski fiyat ve 51 canlı fiyat bekleyen üye vardı;
+bu pencerede 441 farklı üye hazır görüldü. CPU %45,855–55,692, kullanılabilir
+RAM 245,457–267,934 MiB; kuyruk13/taşma0, normal mum işi/kuyruk0/0.
+Token yenilemesi1/hata0; bunlar tam seans veya sürekli kapasite kanıtı değildir.
+THYAO/GARAN günlük 100 mumda hacim alanı yok/BISTMIXED; ALVES/BARMA yeni
+izole bağlantıda da 06:55:31 UTC eski fiyat zamanını döndürdü. Kaynakta
+sonraki CPU düzeltmesi koşul kimliklerini değiştirilemez hazırlayıp her
+fiyatta beş kez doğrulama/hash işini kaldırır; yayın kabulü ayrıca gerekir.
+[21 Ekim kaydı](docs/LIVE_MARKET_CAPACITY_2026-10-21.md).
+
+**21 Ekim ilk yayın:** `1d36efec58566742a226a7796238b1f82a5cda91`,
 **08:18:27 UTC / 11:18:27 TSİ** API/frontend/Compose/current yayını;
 **08:18:47–08:19:17 UTC** bağımsız kabul geçti. Ret/token toparlanması,
 tek geçmiş WS, SMI son durum hesabı, tekrar eden eski fiyat koruması ve

@@ -140,14 +140,44 @@ def validate_condition(raw: Any) -> dict[str, Any]:
     return visit(raw, 1)
 
 
-def field_key(ref: dict[str, Any], default_timeframe: str) -> str:
-    """Stable cache/message key including the full indicator identity."""
-    if ref.get("field") == "custom":
-        from application.services.custom_indicators.catalog import canonical_timeframe, config_key
+@dataclass(frozen=True, slots=True)
+class PreparedCustomReference(Mapping[str, Any]):
+    """Validated immutable operand identity; never caches a market observation."""
 
-        timeframe = canonical_timeframe(ref.get("timeframe", default_timeframe))
-        key = config_key(ref["indicator"], dict(ref["inputs"]), timeframe)
-        return f"custom:{ref['indicator']}:{timeframe}:{key}:{ref['output']}"
+    _values: Mapping[str, Any]
+    cache_key: str
+    configuration_id: str
+
+    def __post_init__(self):
+        # Do not retain caller-owned dictionaries, including the input settings.
+        values = dict(self._values)
+        values["inputs"] = MappingProxyType(dict(values["inputs"]))
+        object.__setattr__(self, "_values", MappingProxyType(values))
+
+    def __getitem__(self, key):
+        return self._values[key]
+
+    def __iter__(self):
+        return iter(self._values)
+
+    def __len__(self):
+        return len(self._values)
+
+
+def _custom_field_key(ref, default_timeframe):
+    from application.services.custom_indicators.catalog import canonical_timeframe, config_key
+
+    timeframe = canonical_timeframe(ref.get("timeframe", default_timeframe))
+    identity = config_key(ref["indicator"], dict(ref["inputs"]), timeframe)
+    return f"custom:{ref['indicator']}:{timeframe}:{identity}:{ref['output']}", identity
+
+
+def field_key(ref: Mapping[str, Any], default_timeframe: str) -> str:
+    """Stable cache/message key including the full indicator identity."""
+    if isinstance(ref, PreparedCustomReference):
+        return ref.cache_key
+    if ref.get("field") == "custom":
+        return _custom_field_key(ref, default_timeframe)[0]
     return ":".join(
         str(value)
         for value in (
@@ -194,12 +224,17 @@ def prepare_condition(condition: dict, default_timeframe: str) -> PreparedCondit
             requirements(ref["indicator"], ref["inputs"], ref["timeframe"])
         elif ref["timeframe"] not in TIMEFRAMES:
             raise ValueError("Standart gösterge için desteklenen bir periyot seçin.")
-        key = field_key(ref, default_timeframe)
+        custom = ref["field"] == "custom"
+        key, identity = (
+            _custom_field_key(ref, default_timeframe)
+            if custom
+            else (field_key(ref, default_timeframe), None)
+        )
         if key not in indices:
             indices[key] = len(fields)
-            if "inputs" in ref:
-                ref["inputs"] = MappingProxyType(ref["inputs"])
-            fields.append(MappingProxyType(ref))
+            fields.append(
+                PreparedCustomReference(ref, key, identity) if custom else MappingProxyType(ref)
+            )
         return indices[key]
 
     def visit(node: dict) -> tuple:
