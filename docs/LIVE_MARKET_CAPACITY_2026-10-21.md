@@ -671,7 +671,8 @@ iki akış birbirinin yerine kullanılmadı.
 Sekiz pencere başlangıç/önizleme/geçmiş işi içerir. Yalnız üç pencerede bütün
 631 hesap derlenmiş, önizleme ve geçmiş işi sıfırdır. Bu üç pencerede
 64,80198 CPU-saniye / 147,66879 ölçüm-saniye = **%43,8833 API CPU**;
-4.000 işlenen canlı gözlem başına toplam 16,200495 ms API CPU düşer.
+4.000 işlenen canlı gözlemde toplam 64,80198 CPU-saniye;
+gözlem başına 16,200495 ms API CPU düşer.
 Bu oran HTTP, normal alarm ve diğer API işlerini de içerir; tek gösterge
 hesabının maliyeti veya aynı trafikte neden-sonuç karşılaştırması değildir.
 Kesikli örnekler uzun süreli bellek/CPU kararlılığı veya eksiksiz tick
