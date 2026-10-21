@@ -58,6 +58,11 @@ saklanmadığı için kesin tarihsel neden belirlenemedi.
 - Her geçmiş periyodu ayrı WS/TLS bağlantısı kuruyordu. Özel geçmiş
   işçisine ait sınırlandırılmış bağlantı paylaşımı ayrıca doğrulanır;
   canlı chart tanıkları ve geçmiş oturumları birbirine karıştırılmaz.
+- İlk geçmiş hazırlığı sonuç kaydı oluşmadan iptal edilirse iş FIFO'ya
+  geri konmuyordu. Yerel gerçek planlayıcı denemesinde diğer iki üyenin
+  tekrar hazırlıkları 60 tur boyunca bu üyeyi bekletti. İptal edilen,
+  hâlâ talep edilen iş artık kuyruğun sonuna tek kez döner. Kaldırılmış
+  liste üyesi, durmuş servis veya süresi bitmiş önizleme yeniden iş üretmez.
 
 **07:47:45–07:48:02 UTC** yeni geçmiş adaptörünün `78608580…` adayı yalnız
 izole işlem belleğinde çalıştırıldı. THYAO'nun 10 periyodunda dokuz 519 ve bir 399
@@ -86,6 +91,10 @@ SHA256 `6612e3d0c48f4e53ced8d4046e61cd9c2bac4173e01133547db3cf5fc558a19b`;
 Snapshot SHA256 `488f90a6a05d84270d156eceacbe163ef34589760c8e459dd5db07162d64f50d`.
 Yalnız bu yedeğin sunucudaki geçici kopyası, doğrulamadan sonra kaldırıldı.
 Yerel 310 frontend testi, lint/types, üretim build ve standalone smoke geçti.
+İlk `294a3b5` adayında 2.290 Python testi/bir atlama ve 309 Python dosyasında
+Ruff geçti. Bu adayın imajı yayımlandı ancak sunucuya alınmadı; son FIFO
+düzeltmesi için yeni kaynak doğrulanır. Yerel venv'de pip bulunmadığından
+ayrı `pip check` çalışmadı; tam kaynak CI bağımlılık kontrolü ayrıca gereklidir.
 
 Yerel özel kanıt yolları (kimlik bilgisi veya veritabanı Git'e alınmaz):
 

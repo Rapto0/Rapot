@@ -874,11 +874,24 @@ class CustomIndicatorData:
                 "error": "Native gösterge geçmişi alınamadı veya gerekli seans/kapanış bilgisi doğrulanamadı.",
             }
         with self._publication_lock, self._lock:
-            if (
-                generation != self._generation
-                or self._stop.is_set()
-                or publication_epoch != self.publication_token(key[:2])
-            ):
+            if generation != self._generation or self._stop.is_set() or not self.live.admitted(key):
+                return
+            if publication_epoch != self.publication_token(key[:2]):
+                # An initial preparation can lose continuity before any result
+                # exists, so live_gap has nothing to requeue. Preserve its FIFO
+                # demand even while other members keep requesting new seeds.
+                # A removed rule or expired preview must not regain work here.
+                requested = (
+                    any(
+                        identity == key[2]
+                        and (key[:2] in symbols or all_bist and key[:2] in self._universe)
+                        for identity, symbols, all_bist in self._memberships
+                    )
+                    or self._previews.get(key, (0, None))[0] > self._clock()
+                )
+                if requested and self.live.admitted(key):
+                    self._seed_due.add(key)
+                    self._queue_seed(key)
                 return
             self._seed_due.discard(key)
             if result["error"]:
