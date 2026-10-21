@@ -2,7 +2,42 @@
 
 **Güncel özet: 21 Ekim 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
 
-**Son üretim kaynağı `a5c14b75413e7f246bb579f28cf6dd4b61dd7a93`:**
+**Son üretim kaynağı `e28ef616a3155b09b62fa699513d948dc8d5d528`:**
+10:37:39 UTC yayını ve 10:37:49–10:38:19 UTC ayrı kabul geçti. Süresi dolan
+önizlemeyi yeniden açmadaki periyot başına geçmiş tekrarı tek, birlikte
+doğrulanan hazırlığa döner; gerçek revizyon ve tazelik korumaları sürer.
+Yerel on TF örneği 11 tur/100 istekten iki tur/10 isteğe indi. 2.346 Python/
+bir atlama, 310 frontend, beş CI/temiz imaj geçti; taze yedek 15 tabloyla
+bağımsız restore edildi. Dört servis healthy/restart0, kullanıcı tanımları
+ve 16 olay korundu. 10:48:19–10:51:06 UTC süresi dolmuş THYAO/BTCUSDT
+beşli önizlemeyi yeniden açma, ardından 10:51:20–10:51:26 UTC normal karma
+liste alarmı geçti. İki bildirimsiz olay 17/18 korundu; geçici kural/liste
+silindi, kullanıcı tanımları değişmedi. 11:03:50 UTC'de 631 üyeli etkin
+SMI kuralının bütün hesapları derlenmiş, 5.679 tanık hazır ve seed/ret/retry
+beklemesi sıfırdı. İlk bütün-liste hazırlığı yayından yaklaşık 26 dakika
+sonra tamamlandı. 11:04:58–11:05:49 UTC kısa penceresinde CPU
+%37,010–52,328, API belleği 235,570–235,641 MiB, kullanılabilir sunucu
+RAM'i 199,723–216,254 MiB; taşma sıfır. 40 başarısız TF talebi sayacı
+sonraki örneklerde artmadı; 631 üyenin geçmiş hazırlığı müdahalesiz tamamlandı. Bütün üyelerin
+aynı anda taze fiyatı veya tam seans/3.000 kural kapasitesi kabulü değildir.
+Ayrıntılar [21 Ekim kaydındadır](LIVE_MARKET_CAPACITY_2026-10-21.md).
+
+**Son elle gözlem 11:09:26 UTC / 14:09:26 TSİ:** Oturum yenileme bir/hata
+sıfır; 631 hesap ve 5.679 tanık korundu, geçmiş yeniden hazırlanmadı.
+11 kesikli pencere/66 örnekte 573 üyede hazır çıktı ve 584 üyede normal
+taze fiyat görüldü. Hazır çıktı görülmeyen 58 üyenin son nedenleri 33 eski
+fiyat, 25 yeni fiyat bekleme. Geçmiş hazırlığı bitmiş üç kısa pencerede
+ağırlıklı API CPU %43,883; API belleği 235,570–244,996 MiB, kullanılabilir
+RAM 199,723–224,098 MiB. Swap hareketi sürdü. Son teslim sayacı 13 başarılı,
+altı bildirimsiz test; bekleyen/hata sıfır. Birleşik kanıt
+`45caf109d3d018e83aec24371fd63c6db2ea72f55512bfff93350d4b06e28346`.
+Bu kısa kabul tam seans, sürekli tüm fiyat tazeliği, 3.000 canlı kural veya
+kalıcı kaynak kazanımı değildir. Hacim ve genel takvim kaynak saat dilimi
+sınırlamaları kabul belgesindedir. Otomatik takip kurulmadı; sonraki canlı
+kabul kullanıcının elle talebiyle yürür. Son belge kaydı için üretim yeniden
+başlatılmaz; çalışan kaynak `e28ef616` kalır.
+
+**Önceki üçüncü kaynak `a5c14b75413e7f246bb579f28cf6dd4b61dd7a93`:**
 09:46:19 UTC yayını ve 09:46:35–09:47:07 UTC ayrı kabul geçti. Canlı alarm
 okumasında aynı ayarı tekrar doğrulama/hash üretme işi kaldırıldı; tazelik,
 oturum ve native sınır kontrolleri korunur. 2.335 Python/bir atlama, 310
@@ -62,7 +97,7 @@ atlama ve 310 frontend testi başarılıydı. 15:36:26 UTC ayrı API kabulü ort
 gelmez. **15:39:45–15:40:56 UTC BTCUSDT beşli canlı önizleme kabulü geçti.**
 Bu sınırlı sonuç normal motor alarmı/Telegram, TradingView sayısal eşitliği,
 tam 631 pay hazırlığı veya sürekli kapasite kabulü değildir.
-Güncel ayrıntılar
+Bu tarihsel adımın ayrıntıları
 [16 Ekim kabul kaydındadır](LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md).
 Çalışma kuralı: **incele → düzelt → doğrula → belgeyi güncelle**.
 Teknik ayrıntılar [belge indeksinde](README.md), çalışma kuralları
@@ -70,7 +105,10 @@ Teknik ayrıntılar [belge indeksinde](README.md), çalışma kuralları
 [tarihsel arşivde](archive/RAPOT_DEVAM_GECMISI_2026-09-21.md) bulunur.
 Arşivdeki eski “bekliyor” ifadeleri güncel iş veya yeni onay talebi değildir.
 
-## Kaldığımız nokta
+## Önceki kabul adımları — 16 Ekim ve öncesi
+
+Güncel 21 Ekim durumu belgenin başındadır. Aşağıdaki açık iş ve kapasite
+ifadeleri, kaydın ait olduğu tarihteki sonucu anlatır.
 
 - **16 Ekim — BTCUSDT beşli canlı önizleme geçti:** `c801e275` üzerinde
   **15:39:45–15:40:56 UTC**, 71,177 saniye/110 POST/22 aşama sonunda beş
@@ -1027,19 +1065,19 @@ repodan kaldırıldı. Dağıtım ve geri dönüş adımları [DEPLOY.md](DEPLOY
 | Alan | Son kayıt |
 |---|---|
 | Sunucu / erişim | `root@138.68.71.27`, IP üzerinden HTTPS |
-| API / Compose / current kaynak | `c801e275a2848c03c2a0f1b2f29c19329955f52f` |
-| Frontend kaynak | `c801e275a2848c03c2a0f1b2f29c19329955f52f` |
-| API imaj referansı | `ghcr.io/rapto0/rapot/backend@sha256:f5f0b92333bed5d29b309c938a1bace2db0d5b7bcfec07e03c01d74549153d77` |
-| Frontend imaj referansı | `ghcr.io/rapto0/rapot/frontend@sha256:3089cdd5af935f8b3848edb8a06431d6579d6f2175973e6d15be86b451bf8251` |
+| API / Compose / current kaynak | `e28ef616a3155b09b62fa699513d948dc8d5d528` |
+| Frontend kaynak | `e28ef616a3155b09b62fa699513d948dc8d5d528` |
+| API imaj referansı | `ghcr.io/rapto0/rapot/backend@sha256:f6cdc77037788d459716789b4ff4cfeeb5f950db63824ddc9c54fc1ec0fb8c0a` |
+| Frontend imaj referansı | `ghcr.io/rapto0/rapot/frontend@sha256:ad7abb180c366d560dfaa8340ac6f2eccadde713cfcf4791bdd07aa02490c920` |
 | Bot | 12 Ekim kaldırıldı; Compose servisi/5000 dinleyicisi yok |
 | Middleware kaynak | `279aa9fea99b520e661b43f104a2bf4791893ac3`; container kimliği korunuyor |
 | Middleware imajı | `sha256:9be0fdb6097f52bf97730f44c86d28c24e2c0cea1fe181e7e8fd668177fdb034` |
 | Veri / kaynak pointer | `/var/lib/rapot/main` ve `/opt/rapot/current`; operator kaynak kopyası bunlardan ayrıdır |
 | Çalışma modu | `MW_EXECUTION_MODE=DRY_RUN`, `MW_TRADING_ENABLED=false`, `MW_BINANCE_LIVE_ENABLED=false`; otomatik Telegram AI kaldırıldı, site AI korunur; API `BORSAPY_USE_FOR_BIST=true` |
-| Son uzak yayın kabulü | 16 Ekim 15:35:24–15:35:56 UTC: dört servis healthy/restart0; 15 şema, 12 statik tablo, dört kural satırı (biri etkin), 631/174 üyeli iki liste, altı olay ve özel dosyalar korundu. Kural revizyon2, etkin liste revizyon3, ayrı liste revizyon1. 13 SSR/33 statik/iki yönlendirme/18 anonim401, v2 / 5 / 289 katalog ve 422 doğrulandı. Taze yedek 15 tabloyla bağımsız restore edildi; canlı durum ilerlemesine izin verilir. [16 Ekim kaydı](LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md). |
-| Son yayın başlangıç örneği | 16 Ekim 15:35 UTC: 6.310 mantıksal TF kabulü, 631 sürekli chart, dört bağlantı, 545 sertifika, bir derlenmiş hesap; 631 kural üyesi bekleyen/eski. Native ret0, normal mum işi/kuyruk0/0. Kısa CPU %96,6/%100; tam liste hazırlığı veya kalıcı kaynak kazancı kabulü değildir. 15:36:26 UTC ayrı API kontrolü yalnız ortak631 pay üyeliği/kapsamını doğruladı. [16 Ekim belgesi](LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md). |
-| Son sınırlı canlı kabul/gözlem | 16 Ekim 15:39:45–15:40:56 UTC: BTCUSDT beşli önizleme geçti; etkin TF 10/10/2/2/2, normal motor alarmı veya TradingView sayısal eşitliği değildir. 15:41:38–15:42:28 UTC altı örnekte RAM 232,105–251,027 MiB, CPU %40,100–69,339; son 42 derlenmiş hesap/5.689 sertifika, kuyruk 0/taşma 0. İki liste/kural/altı olay korundu. 631 BIST üyesi hâlâ bekleyen/eski; kısa örnek tam seans/kalıcı kaynak kazancı değildir. [16 Ekim belgesi](LIVE_INDICATOR_ACCEPTANCE_2026-10-16.md). |
-| TradingView bağlantısı | Şifreli kimlik korundu; 7 Ekim dar canlı kabulü mevcut. Tam evren/hacim/bölünme/tam seans kabulü açık, `realtime_verified=false` |
+| Son uzak yayın kabulü | 21 Ekim 10:37:49–10:38:19 UTC: dört servis healthy/restart0; 15 şema/12 statik tablo, 631/174 üyeli listeler, etkin kural ve 16 olay korundu. 13 SSR/33 statik/iki yönlendirme/18 anonim401, v2 / 5 / 289 katalog ve 422 geçti. Taze yedek bütün 15 tabloyla bağımsız restore edildi. [21 Ekim kaydı](LIVE_MARKET_CAPACITY_2026-10-21.md). |
+| Son yayın başlangıç örneği | 21 Ekim e28 kaynağının 10:39:47–10:40:38 UTC penceresi başlangıç/önizleme yüküdür: son 58 derlenmiş hesap, 5.690 tanık/ret0, önizleme10, canlı kuyruk0/taşma0. CPU %57,494–82,555, kullanılabilir RAM243,250–271,996 MiB. Tam liste veya kalıcı kaynak kazanımı kabulü değildir. [21 Ekim kaydı](LIVE_MARKET_CAPACITY_2026-10-21.md). |
+| Son sınırlı canlı kabul/gözlem | 21 Ekim e28: süresi dolmuş THYAO/BTCUSDT beşli önizlemeyi yeniden açma ve normal karma liste alarmı geçti; iki bildirimsiz olay 17/18 korundu. 11:03:50 UTC'de 631 SMI hesabının ilk hazırlığı tamamlandı. 11:08:34–11:09:26 UTC son pencerede 631 hesap/5.679 tanık, geçmiş/önizleme sıfır; CPU %34,913–56,526, API 242,262–244,996 MiB, kullanılabilir RAM 200,363–216,922 MiB. Son 285 çıktı hazır, 321 eski fiyat, 25 yeni fiyat bekleyen; taşma sıfır. Kısa örnek tam seans değildir. [21 Ekim kaydı](LIVE_MARKET_CAPACITY_2026-10-21.md). |
+| TradingView bağlantısı | Şifreli kimlik korundu. 21 Ekim e28 üzerinde 11:07:34 UTC örneğinde oturum yenileme bir/hata sıfır; 631 hesap ve 5.679 tanık korundu, geçmiş yeniden yüklenmedi. Dar normal alarm kabulü geçti. THYAO/GARAN günlük 100 mumda hacim alanı yok/BISTMIXED; hacim, bölünme, bütün fiyatların tazeliği ve tam seans kabulü açık, `realtime_verified=false`. |
 
 Son kayıtlar:
 

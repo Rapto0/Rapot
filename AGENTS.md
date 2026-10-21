@@ -1,6 +1,41 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-**21 Ekim güncel yayın:** `a5c14b75413e7f246bb579f28cf6dd4b61dd7a93`,
+**21 Ekim güncel yayın:** `e28ef616a3155b09b62fa699513d948dc8d5d528`,
+**10:37:39 UTC / 13:37:39 TSİ** API/frontend/Compose/current yayını;
+**10:37:49–10:38:19 UTC** ayrı kabul geçti. Süresi dolan önizlemenin eski
+tarih özetleri periyot başına yeniden başlatma yaratıyordu; on TF yerel
+örneği 11 tur/100 istekten iki tur/10 isteğe indi. Native talebin tamamı
+doğrulanıp tek revizyon kararıyla kaydedilir; gerçek revizyon, hesap ve
+kopma korumaları aynıdır. 2.346 Python/bir atlama, 310 frontend, beş CI ve
+temiz imaj yayını geçti. Taze 1.342.660.608 bayt yedek 15 tabloyla bağımsız
+restore edildi; kanıt `b3e148139b04262ded40bcaf3994c80e123105acdb223456d025e73579fff9e2`.
+Dört servis healthy/restart0, 15 şema/12 statik tablo, kullanıcı listeleri/
+kuralı ve 16 olay (12 gönderilmiş + dört bildirimsiz test) korundu.
+10:48:19–10:51:06 UTC süresi dolmuş THYAO/BTCUSDT beşli önizlemeyi yeniden
+açma kabulü geçti; her birleşimde en az iki farklı canlı gözlem vardı.
+10:51:20–10:51:26 UTC normal karma liste alarmı iki bildirimsiz olay
+üretti (17/18); geçici kural/liste silindi ve kullanıcı tanımları korundu.
+Motor girdisi→olay kaydı 10,572/23,730 ms; borsa→bildirim gecikmesi değildir.
+11:03:50 UTC'de 631 üyeli etkin SMI kuralının bütün hesapları derlenmiş,
+5.679 tanık hazır; seed/ret/retry beklemesi sıfır oldu. Yayın sonrası ilk
+bütün-liste hazırlığı yaklaşık 26 dakika sürdü. 11:04:58–11:05:49 UTC'de
+CPU %37,010–52,328; API belleği 235,570–235,641 MiB, kullanılabilir sunucu
+RAM'i 199,723–216,254 MiB, taşma sıfırdı. Geçmişteki başarısız TF talebi
+sayacı 40'ta sabit kaldı; 631 üyenin geçmiş hazırlığı müdahalesiz tamamlandı. Bu kısa
+ölçüm tüm fiyatların tazeliği veya tam seans/3.000 kural kapasitesi değildir.
+11:07:34 UTC örneğinde oturum yenileme bir/hata sıfır oldu; 631 hesap ve
+tanıklar korundu, geçmiş yeniden yüklenmedi. Son kaynağın 11 kesikli
+penceresi/66 örneğinde 573 üyede hazır çıktı, 584 üyede normal taze fiyat
+görüldü. Hazır çıktı görülmeyen 58 üyenin son nedenleri 33 eski fiyat ve
+25 yeni fiyat beklemedir. Geçmiş hazırlığı bitmiş üç kısa pencerede
+ağırlıklı API CPU %43,883; API belleği 235,570–244,996 MiB, kullanılabilir
+RAM 199,723–224,098 MiB. Swap hareketi sürdü; kalıcı kaynak kazanımı ve
+tam seans henüz kanıtlanmadı. Son teslim sayacı 13 sent/6 not_requested,
+bekleyen/hata sıfır. Birleşik kanıt
+`45caf109d3d018e83aec24371fd63c6db2ea72f55512bfff93350d4b06e28346`.
+Tam liste ve kaynak ölçümleri [21 Ekim kaydında](docs/LIVE_MARKET_CAPACITY_2026-10-21.md) tutulur.
+
+**21 Ekim üçüncü yayın:** `a5c14b75413e7f246bb579f28cf6dd4b61dd7a93`,
 **09:46:19 UTC / 12:46:19 TSİ** API/frontend/Compose/current yayını;
 **09:46:35–09:47:07 UTC** ayrı kabul geçti. Aynı alarm ayarının her canlı
 fiyatta tekrar doğrulanması/hash üretmesi kaldırılır; değiştirilemez
@@ -82,7 +117,8 @@ işlemiyle asıl liste 631 üye/revizyon3, bağlı etkin kural revizyon2 oldu;
 174 kod yeni alarmsız listede korunur. Kural semantiği ve altı eski olay
 değişmedi; yeni olay sıfır. Gerçek receipt 16 Ekim kabul kaydındadır.
 
-Kaynaklarla son karşılaştırma: **16 Ekim 2026 / büyük liste canlı akış düzeltmesi**. İş sırası, kullanıcı
+Tarihsel karşılaştırma: **16 Ekim 2026 / büyük liste canlı akış düzeltmesi**. Güncel 21 Ekim
+sonuçları yukarıdadır. İş sırası, kullanıcı
 yetkileri, kabul kanıtları ve ertelenen işler [devam planında](docs/RAPOT_DEVAM_PLANI.md)
 tutulur. Eski backlog'lardaki boş kutular tek başına eksiklik kanıtı değildir.
 Teknik rehberler [docs dizininde](docs/README.md) listelenir.

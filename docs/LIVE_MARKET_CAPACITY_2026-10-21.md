@@ -5,6 +5,40 @@ Otomatik takip, timer, emir veya AI işi kurulmaz. 631 üyeli kişisel liste,
 bağlı SMI N OY kuralının koşulu/bildirim tercihi ve ayrı 174 üyeli alarmsız
 liste korunur. 3.000 üretim test alarmı bu çalışmanın gereği değildir.
 
+## Sonuç — son üretim kaynağı e28ef616
+
+- Retlerin yeniden denenmesi, süreli oturum yenilemesi, ortak/sınırlı geçmiş
+  bağlantısı, yinelenen önizleme hesabı ve her fiyatta ayar doğrulama maliyeti
+  düzeltildi; dört aşamalı kaynak yayını bağımsız kabul edildi.
+- Etkin 631 üyeli SMI kuralının bütün geçmiş hesapları hazır; 6.310 mantıksal
+  periyot, 631 sürekli günlük abonelik ve 5.679 üst periyot tanığı mevcut.
+  Yayın sonrası ilk bütün-liste hazırlığı yaklaşık 26 dakika sürdü.
+- THYAO/BTCUSDT beşli önizleme, süre dolduktan sonra yeniden açılış ve normal
+  karma liste alarmı geçti. Son iki testte motor girdisi→olay kaydı
+  10,572/23,730 ms; bildirimsiz test nesneleri temizlendi. Bu borsa→Telegram
+  gecikmesi değildir. Mevcut teslim sayacı son pencerede 13 başarılı, sıfır
+  bekleyen/hata gösterdi; altı bildirimsiz test olayı ayrı kaldı.
+- Son kaynağın 11 kesikli penceresi/66 örneğinde **584/631 farklı üyede taze
+  normal fiyat**, **573/631 üyede hazır seçili gösterge çıktısı** görüldü.
+  Hazır çıktı görülmeyen 58 üyenin son nedenleri 33 eski fiyat ve 25 yeni
+  fiyat beklemesidir. Aynı anda 631 taze fiyat kabulü yapılmadı.
+- Geçmiş hazırlığı bitmiş üç kısa pencerenin ağırlıklı API CPU'su **%43,883**;
+  API belleği 235,570–244,996 MiB, kullanılabilir sunucu RAM'i
+  199,723–224,098 MiB. Normal mum işi/kuyruğu ve taşma sıfır; canlı işleme
+  kuyruğunda kısa beklemeler var. Oturum yenilemesi 631 hesabı korudu.
+  Swap hareketi sürdüğünden bellek baskısının tamamen bittiği iddia edilmez.
+- 2.346 Python/bir atlama, 310 frontend testi, beş CI işi ve temiz imaj
+  yayını geçti. Son kayıt yalnız belge güncellemesidir; çalışan kaynak
+  `e28ef616a3155b09b62fa699513d948dc8d5d528` korunur.
+
+Tam seans kesintisizlik, aynı anda 3.000 canlı kural, TradingView Pine
+derleyicisiyle sayısal eşitlik, tüm BIST üyelerinde sürekli taze fiyat ve
+kalıcı kaynak kazanımı henüz kanıtlanmadı. THYAO/GARAN günlük mumlarında
+hacim yok; takvimde üç etkinlik grubu sınırlı kontrol edildi, genel kaynak
+saat dilimi açık. Kullanıcı listeleri/koşulları değişmedi; otomatik takip
+kurulmadı. Aşağıdaki kayıtlar her kaynak sürümünü ve başarısız denemeyi
+ayrı tutar.
+
 ## Başlangıçta doğrulanan arıza
 
 Üretim kaynağı `c801e275a2848c03c2a0f1b2f29c19329955f52f`.
@@ -448,6 +482,25 @@ için bu pencere yalnız kalıcı kullanıcı işi yükü değildir. Son örnekt
 hesapları korudu; tüm fiyatlar aynı anda taze veya her üye kesintisiz hazır
 iddiası yapılmaz.
 
+10:28:37–10:29:28 UTC son üçüncü-kaynak penceresinde631 hesap/5679 tanık,
+geçmiş işi0, önizleme0 ve taşma0 korundu. CPU %31,351–38,904, API
+cgroup205,379–227,082 MiB, kullanılabilir RAM288,699–317,945 MiB idi.
+Bu pencere geçici SQLite yedeğinin tam hedefli temizliğiyle çakıştı;
+host CPU tepe değeri%98,075 ve swap+8,832 MiB görüldü. Bu yüzden host RAM
+artışı veya bu pencere tek başına kalıcı kaynak kazanımı sayılmaz.
+
+Üçüncü kaynağın dokuz penceresi/44 örneği ayrı birleştirildi:
+09:49:35–10:29:27 UTC aralığında toplam350,168 saniyelik gözlem;
+**582/631 farklı üyede seçili çıktı hazır**,583 üyede normal fiyat≤30 saniye
+tazeydi. Hiç hazır görülmeyen49 üyenin son nedenleri30 canlı fiyat bekleyen,
+19 eski fiyat; yalnız OZATD daha önce normal taze fiyat örneğine sahipti.
+Normal kaynak zamanı627, özel native fiyat zamanı588 üyede ilerledi; bu iki
+ayrı akış birbirinin canlı kabulü değildir. Yedi pencere başlangıç/önizleme
+işi içerir; iki pencere631 hesap ve geçmiş işi0 koşulunu sağlar. İkinci
+kaynağın örnekleri veya sonraki yayın bu toplama dahil edilmedi. Kanıt SHA:
+`ef98401c700a05afcbd7848e0d980c7540bb3118631ddfd5a9bbf15004b4e0bc`.
+Kesintili örnekler arasındaki süreler ve gün boyu kesintisizlik doğrulanmadı.
+
 ## Önizlemeyi yeniden açma maliyetinin düzeltmesi
 
 İki zaman aşımı ayrı incelendi. Gerçek `process` ve batch provider yoluyla
@@ -471,3 +524,162 @@ kısmi geçmiş/hesap yayımlamaz. Yeni11 regresyon ve150 farklı ilgili test,
 Ruff ve bağımsız inceleme geçti. Son tam tur2.346 başarılı/bir atlama,
 üç bağımlılık uyarısıyla215,35 saniyede tamamlandı;315 Python kaynağında
 Ruff geçti. Üretim yayını ve canlı yeniden açılış kabulü ayrıca kaydedilir.
+
+## Dördüncü kaynak yayını — birlikte geçmiş doğrulaması
+
+`e28ef616a3155b09b62fa699513d948dc8d5d528`, **10:37:39 UTC / 13:37:39 TSİ**
+API/frontend/Compose/current yayını tamamlandı. **10:37:49–10:38:19 UTC**
+ayrı kabul geçti. Aynı kaynakta2.346 Python/bir atlama,315 kaynakta Ruff,
+310 frontend testini içeren beş CI işi ve temiz imaj yayını başarılıdır.
+56 yerel yayın kontrolü ve iki ayrı inceleme geçti;320 kaynak/bağımlılık
+dosyası,111 dağıtım ve temiz imaj eşdeğerliği doğrulandı.
+
+- CI: [39584723388](https://github.com/Rapto0/Rapot/actions/runs/39584723388).
+- Temiz imaj: [39584742410](https://github.com/Rapto0/Rapot/actions/runs/39584742410).
+- API: `ghcr.io/rapto0/rapot/backend@sha256:f6cdc77037788d459716789b4ff4cfeeb5f950db63824ddc9c54fc1ec0fb8c0a`.
+- Frontend: `ghcr.io/rapto0/rapot/frontend@sha256:ad7abb180c366d560dfaa8340ac6f2eccadde713cfcf4791bdd07aa02490c920`.
+- Yayın receipt: `710f644e2bf8ae51e7248e9934edecf4b214a4172ed08c7caae1b2e8f99a8b8e`.
+- Ayrı kabul SHA: `1ba8b654824b1f544257836916dc6d80391427953cb98f8adf6ee3bbf3d72475`.
+- Taze1.342.660.608 bayt yedek SHA: `af35910419dae3bc96b184ead9b9480453a7fa47648648bfe1008352aaf01d1f`.
+- Bağımsız15 tablo restore kanıtı: `b3e148139b04262ded40bcaf3994c80e123105acdb223456d025e73579fff9e2`.
+- 563 dosyalık kaynak arşivi SHA: `619374f6f875a9378cca46a68be57da3ae2164cbb863d16ac0e178bceb0b678d`.
+
+10:23:51–10:24:07 UTC taze snapshot alındı, sunucu dışında bütün tablo/şema
+ve aktif alarm durumuyla bağımsız restore edildi. Yalnız tam bu yayının
+sunucu snapshot'ı doğrulamadan sonra temizlendi; sunucu dışı kopyalar korundu.
+Yedekte 16 olay vardı: 12 gönderilmiş olay ve dört bildirimsiz test.
+Gönderilmiş olaylar arasında önceki kabul testleri de bulunduğundan tümü
+doğal kullanıcı sinyali olarak sınıflandırılmaz.
+Son iki normal olay13/14, önceki kaynağın değişmeyen kullanıcı kuralına
+aittir ve `sent`/bir deneme olarak korunur. Yayın/kabulde yeni olay0;
+628 durum satırı, iki liste, etkin kural, bütün15 şema/12 statik tablo,
+özel dosyalar ve middleware/PG korundu. Dört servis healthy/restart0,
+13 SSR/33 statik/iki yönlendirme/18 anonim401 kabulü geçti.
+İmaj ek gereksinimi11.468.876 bayt, korumalı toplam boş alan
+gereksinimi3.386.753.100 bayt; yayın sonunda3.970.867.200 bayt boştu.
+İmaj silinmedi. Bu kurulum kabulü canlı yeniden açılış/tam liste/kaynak
+kabulünün yerine geçmez; sonraki ölçümler ayrı tutulur.
+
+## Dördüncü kaynak canlı kabulü
+
+İlk soğuk önizleme **10:38:34–10:41:34 UTC** aralığında 273 POST ile
+180 saniye sınırına ulaştı. On sembol/gösterge birleşiminin tümünde en az
+bir hazır canlı gözlem vardı; THYAO HTF RSI Score yalnız bir gözlemle
+iki farklı gözlem ölçütünü sağlayamadı. Diğer dokuz birleşim geçti.
+Başarısız kayıt korunur. **10:42:07–10:42:20 UTC** ayrı devam denemesi
+13,042 saniye/20 POST ile on birleşimin tümünde iki farklı hazır gözlem
+üretti. Etkin periyot sayıları 10/10/2/2/2 idi; her göstergenin etkin
+periyotları kendi aynı fiyat gözlemiyle doğrulandı. Bu TradingView Pine
+derleyicisiyle sayısal eşitlik kabulü değildir.
+
+10:39:47–10:40:38 UTC ilk ölçüm başlangıç/önizleme yükü içeriyordu:
+son örnekte 58 derlenmiş hesap, 5.690 tanık, on önizleme talebi ve
+578 başlangıç bekleyen üye vardı. CPU %57,494–82,555, kullanılabilir RAM
+243,250–271,996 MiB, API cgroup 207,395–210,141 MiB idi. Önizleme
+bittikten sonra 120 saniyelik talep süresinin dolması ve ham önbelleğin
+diğer semboller için kullanılması beklendi; yeniden açılış ayrı sınanır.
+
+**10:47:13–10:48:04 UTC** salt okunur pencerede önizleme talebi sıfır,
+5.679 üst periyot tanığı hazır, ret/retry beklemesi sıfırdı. Son derlenmiş
+hesap 259, başlangıç bekleyen üye 372 idi. CPU %52,567–65,418,
+kullanılabilir RAM 262,805–275,746 MiB, API cgroup 215,305–219,277 MiB;
+taşma sıfır. Bu hâlâ ilk hazırlık ölçümüdür.
+
+**10:48:19–10:51:06 UTC** süresi dolmuş önizlemeyi yeniden açma kabulü
+250 POST ile geçti. THYAO farklı hazır gözlemleri 3/5/8/2/2, BTCUSDT
+10/4/2/18/16 idi; on birleşimin hepsi en az iki farklı canlı gözlem verdi.
+Başlangıç hazırlığıyla aynı zamandaki bu sonuç, yerel iki tur/10 istek
+ölçümünün üretimde birebir süresi veya bütün listede anlık açılma garantisi
+değildir. Kabul SHA:
+`0ebf488b1d3cef206c8e543a7dcc407826eabfae0df69cb40adc31f8bd6f05c6`.
+
+**10:51:20–10:51:26 UTC** hemen ardından normal motor üzerinden karma
+izleme listesi alarmı geçti. Beş göstergenin `active_count > 0` koşulları
+AND ile bağlıydı; intrabar, bildirim kapalı, iki üyeyle sınırlıydı.
+THYAO ID17 ve BTCUSDT ID18 olayları `not_requested`/sıfır teslim denemesi
+olarak kaydedildi. Motor girdisi alınma zamanından olay kaydına süre
+sırasıyla **10,572 / 23,730 ms**; borsa→sunucu veya Telegram gecikmesi
+değildir. Bu hazır hesap/çok koşullu motor yolunu doğrular; kullanıcının
+AL/SAT koşulunun her hissede gerçekleşmesi testi değildir. Geçici kural
+ve liste silindi; kullanıcı nesneleri değişmedi. Olay kanıtları korundu.
+Kabul SHA:
+`156436c845ecda7884bcb198b31694d32ef5e6e08cfa8fa2a4cccf1c53b5282e`.
+
+**11:03:50 UTC** örneğinde son kaynakta **631/631 hesap derlenmiş** oldu;
+11:04:01 örneği bunu korudu. 5.679 üst periyot tanığı hazır, başlangıç,
+native ret, yeniden deneme ve kapasite beklemesi sıfırdı. Bu, yayından
+yaklaşık **26 dakika sonra** ilk bütün-liste hazırlığıdır; yeniden başlatma
+sonrası bütün göstergelerin hemen hazır olduğu iddia edilmez. Son örnekte
+290 seçili çıktı hazır, 301 eski fiyat ve 40 yeni canlı fiyat bekleyen
+üye vardı. Aynı anda 631 taze fiyat veya 631 gerçekleşmiş alarm değildir.
+
+Son hazırlık bölümünde geçmiş bağlantısı ikinci kez açıldı ve başarısız
+talep sayacı 40 oldu. Bu sayaç, başarısız gruptaki bütün TF taleplerini
+sayar; 40 ayrı sağlayıcı hatası anlamına gelmez. Tek bir TF hatası da grubu
+başarısız sayabilir. Timeout, bağlantı ve bozuk/ret yanıt ayrımı bu kayıtla
+yapılamaz. Sonraki örneklerde sayaç 40'ta sabit, tamamlanan talep 6.591,
+etkin geçmiş isteği ve retry sıfırdı; 631 üyenin geçmiş hazırlığı müdahalesiz tamamlandı.
+Oluşturulan/silinen chart sayaçlarındaki fark, hata sonrası kapanan socket
+nedeniyle tarihsel kalabilir; açık oturum sayısı olarak yorumlanmadı.
+
+11:04:58–11:05:49 UTC geçmiş hazırlığı tamamlanmış, önizlemesiz pencerede 631 hesap,
+5.679 tanık, önizleme sıfır ve geçmiş isteği sıfır korundu. CPU
+%37,010–52,328; API cgroup 235,570–235,641 MiB, kullanılabilir sunucu RAM'i
+199,723–216,254 MiB idi. Swap-out artışı sıfır; canlı kuyruk son örnekte
+5, taşma sıfırdı. Son anda 303 çıktı hazır, 297 eski fiyat, 31 yeni fiyat
+bekleyen vardı; normal fiyatı taze olduğu halde özel çıktısı bekleyen üye
+sıfırdı. Bunlar kısa örneklerdir, tam seans veya kalıcı kapasite garantisi
+değildir.
+
+**11:07:13–11:08:05 UTC** ikinci pencerede erişim yenileme sayacı sıfırdan
+bire geçti; ilk yenilenmiş örnek 11:07:34 UTC, hata/retry sıfırdı.
+631 hesap ve 5.679 tanık, tamamlanan 6.591 geçmiş talebi ve sıfır etkin
+geçmiş isteği korundu; yenileme bütün geçmişi yeniden yükletmedi.
+CPU %37,070–48,889; API cgroup 236,219–244,910 MiB, kullanılabilir RAM
+209,711–224,098 MiB idi. Swap kullanımı +5,465 MiB, swap-in/out artışı
+242/1.791 sayfa; bu yüzden host üzerinde hiç bellek baskısı olmadığı
+iddia edilmez. Son anda 279 çıktı hazır, 324 eski fiyat, 28 yeni fiyat
+bekleyen; canlı kuyruk 4, taşma sıfırdı. Taze normal fiyatı olup özel
+çıktısı bekleyen iki üye, ayrı akışların aynı anda okunmadığı da dikkate
+alınarak açıkça korunur.
+
+**11:08:34–11:09:26 UTC** son pencerede 631 hesap/5.679 tanık, önizleme ve
+etkin geçmiş isteği sıfır, oturum yenileme bir/hata sıfır korundu.
+CPU %34,913–56,526; API cgroup 242,262–244,996 MiB, kullanılabilir RAM
+200,363–216,922 MiB idi. Swap +2,344 MiB, swap-in/out 202/669 sayfa.
+Normal mum işi/kuyruğu 0/0, son canlı kuyruk 1 ve taşma sıfırdı.
+Son anda 285 seçili çıktı hazır, 321 eski fiyat ve 25 yeni fiyat bekleyen
+üye vardı. Üç üyede normal akışın fiyatı tazeyken özel çıktı bekliyordu.
+Telegram teslim kuyruğu/hatası sıfır; `sent` sayacı 12'den 13'e çıktı,
+bildirimsiz test olayı sayısı altıda kaldı. Son artış burada yalnız teslim
+sayacıyla gözlenmiştir; bu pencere tek tek olay içeriğini sorgulamaz.
+Kullanıcının tek etkin kuralı, iki listesi ve bütün tanım hashleri korundu.
+
+## Son kaynağın birleşik kapsamı
+
+Yalnız `e28ef616` kaynaklı, aynı kullanıcı tanımları ve aynı 631 üyelik
+hash'iyle tamamlanmış **11 pencere/66 örnek** çevrimdışı birleştirildi.
+10:39:48–11:09:24 UTC arasındaki pencerelerin kendi süreleri toplamı
+**546,818 saniye**; aradaki gözlenmeyen süreler kabul kapsamına eklenmedi.
+573 üyede en az bir seçili çıktı hazır, 584 üyede normal fiyatın hem kaynak
+hem alınma yaşı ≤30 saniyeydi. Hazır çıktı görülmeyen 58 üyenin son durumları
+33 eski fiyat ve 25 canlı fiyat bekleme; 11'inde daha önce normal taze fiyat
+görülmüş olması özel native akışın aynı anda hazır olduğunu kanıtlamaz.
+Normal kaynak zamanı 627, özel native kaynak zamanı 613 üyede ilerledi;
+iki akış birbirinin yerine kullanılmadı.
+
+Sekiz pencere başlangıç/önizleme/geçmiş işi içerir. Yalnız üç pencerede bütün
+631 hesap derlenmiş, önizleme ve geçmiş işi sıfırdır. Bu üç pencerede
+64,80198 CPU-saniye / 147,66879 ölçüm-saniye = **%43,8833 API CPU**;
+4.000 işlenen canlı gözlem başına toplam 16,200495 ms API CPU düşer.
+Bu oran HTTP, normal alarm ve diğer API işlerini de içerir; tek gösterge
+hesabının maliyeti veya aynı trafikte neden-sonuç karşılaştırması değildir.
+Kesikli örnekler uzun süreli bellek/CPU kararlılığı veya eksiksiz tick
+yakalama garantisi vermez.
+
+Son örnekte normal fiyatı taze/özel çıktısı bekleyen CIMSA, TKNKA ve YIGIT
+için iki akışın kaynak zamanı aynıydı ve 30 saniye sınırına yakındı.
+Ardışık API okumaları bu sınırı aşabileceğinden tek örnek yeni bir motor
+arızası veya tam eşitlik kanıtı sayılmadı. Üç üye rapordan çıkarılmadı.
+Birleşik kanıt SHA:
+`45caf109d3d018e83aec24371fd63c6db2ea72f55512bfff93350d4b06e28346`.
