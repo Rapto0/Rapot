@@ -281,9 +281,9 @@ def test_gateway_custom_native_path_preserves_metadata_and_rejects_account_chang
         def status(self):
             return {"requests_completed": len(captured)}
 
-        def get_history(self, symbol, **kwargs):
+        def get_histories(self, symbol, **kwargs):
             captured.append((symbol, kwargs))
-            result = frame(kwargs["timeframe"])
+            result = {tf: frame(tf) for tf in kwargs["requests"]}
             if self.change_account:
                 gateway.clear()
             return result
@@ -306,8 +306,7 @@ def test_gateway_custom_native_path_preserves_metadata_and_rejects_account_chang
                 "BTCUSDT",
                 {
                     "exchange": "BINANCE",
-                    "timeframe": "3D",
-                    "bars": 515,
+                    "requests": {"3D": 515},
                     "token": gateway._token,
                     "epoch": gateway._data_epoch,
                 },

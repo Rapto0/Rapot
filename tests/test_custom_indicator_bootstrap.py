@@ -113,7 +113,8 @@ def test_later_preview_replays_history_even_when_live_quotes_already_fill_previe
     service.process(*service._next_job())
     preview = service.preview("rsi_votes", inputs, "THYAO")
     assert len(preview["points"]) == 128
-    assert preview["points"][0]["rows"]
+    assert not preview["points"][0]["rows"]
+    assert preview["latest"]["rows"]
     assert preview["observation_price"] == 20
     assert service._results[key] is before
     assert service.live._compiled[key]["evaluator"] is evaluator

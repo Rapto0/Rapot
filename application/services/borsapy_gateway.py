@@ -641,20 +641,26 @@ class BorsapyGateway:
         return provider.status() if provider is not None else {}
 
     def custom_indicator_history(self, symbol, *, exchange, timeframe, bars):
+        return self.custom_indicator_histories(
+            symbol, exchange=exchange, requests={timeframe: bars}
+        )[timeframe]
+
+    def custom_indicator_histories(self, symbol, *, exchange, requests):
         """Exact native resolution and account boundary for the custom Pine ports.
 
         The BINANCE context is explicitly TradingView's BINANCE feed, not the
         site's normal Binance REST candle adapter. No provider fallback occurs.
         """
-        from infrastructure.providers.custom_indicator_history import (
-            validate_native_request,
+        from infrastructure.providers.native_indicator_history import (
+            NativeIndicatorHistory,
+            validate_history_batch,
         )
-        from infrastructure.providers.native_indicator_history import NativeIndicatorHistory
 
         try:
-            validate_native_request(symbol, exchange, timeframe, bars)
+            validate_history_batch(symbol, exchange, requests)
         except ValueError as exc:
             raise BorsapyGatewayError(str(exc), 422) from None
+        requests = requests.copy()
         if not self._alarm_history_slots.acquire(timeout=1):
             raise BorsapyGatewayError("Özel gösterge geçmişi iş kuyruğu dolu.", 429)
         try:
@@ -666,9 +672,22 @@ class BorsapyGateway:
                 if self._custom_history is None:
                     self._custom_history = NativeIndicatorHistory()
                 provider = self._custom_history
-            frame = provider.get_history(
-                symbol, exchange=exchange, timeframe=timeframe, bars=bars, token=token, epoch=epoch
+            frames = provider.get_histories(
+                symbol, exchange=exchange, requests=requests, token=token, epoch=epoch
             )
+            if not isinstance(frames, dict) or frames.keys() != requests.keys():
+                raise ValueError("Native history batch incomplete")
+            results = {}
+            for timeframe, frame in frames.items():
+                if frame.attrs.get("native_timeframe") != timeframe:
+                    raise ValueError("Native history timeframe mismatch")
+                result = self._validated_custom_history(frame)
+                result.attrs.update(
+                    native_timeframe=timeframe,
+                    session_metadata=frame.attrs.get("session_metadata", {}),
+                    source=f"borsapy_tradingview:{exchange}",
+                )
+                results[timeframe] = result
             with self._account_lock():
                 if (
                     self._data_epoch != epoch
@@ -678,13 +697,7 @@ class BorsapyGateway:
                     or self._blocked
                 ):
                     raise BorsapyGatewayError("Hesap değişti; yeni geçmiş bekleniyor.", 409)
-            result = self._validated_custom_history(frame)
-            result.attrs.update(
-                native_timeframe=frame.attrs.get("native_timeframe"),
-                session_metadata=frame.attrs.get("session_metadata", {}),
-                source=f"borsapy_tradingview:{exchange}",
-            )
-            return result
+            return results
         except BorsapyGatewayError:
             raise
         except Exception:

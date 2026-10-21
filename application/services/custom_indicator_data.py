@@ -688,12 +688,30 @@ class CustomIndicatorData:
                 self._wake.wait(0.5)
                 self._wake.clear()
 
-    def _native_frame(self, market, symbol, timeframe, bars, epoch):
+    def _native_frame(
+        self,
+        market,
+        symbol,
+        timeframe,
+        bars,
+        epoch,
+        *,
+        prefetched_frame=None,
+        expected_publication_epoch=None,
+        expected_generation=None,
+    ):
         key, now = (market, symbol, timeframe), self._clock()
         publication_epoch = self.publication_token(key[:2])
         with self._lock:
-            if self._stop.is_set():
+            if self._stop.is_set() or (
+                expected_generation is not None and expected_generation != self._generation
+            ):
                 raise ValueError("Özel gösterge veri servisi durduruldu.")
+            if (
+                expected_publication_epoch is not None
+                and publication_epoch != expected_publication_epoch
+            ):
+                raise ValueError("Geçmiş isteği sırasında native kaynak değişti.")
             old = self._native.get(key)
             summary = self._history_summaries.get(key)
             # Configuration changes may need a longer prefix once. Preserve
@@ -709,19 +727,26 @@ class CustomIndicatorData:
             ):
                 self._native.move_to_end(key)
                 return old
-        frame = self.provider.custom_indicator_history(
-            symbol,
-            exchange="BIST" if market == "BIST" else "BINANCE",
-            timeframe=timeframe,
-            bars=bars,
-        )
+        frame = prefetched_frame
+        if frame is None:
+            frame = self.provider.custom_indicator_history(
+                symbol,
+                exchange="BIST" if market == "BIST" else "BINANCE",
+                timeframe=timeframe,
+                bars=bars,
+            )
         points = native_bars(frame, timeframe, market, self._clock())
         digest = _digest(
             [[bar.time, bar.end, bar.open, bar.high, bar.low, bar.close] for bar in points]
         )
         entry = Native(points, self._clock(), bars, digest, epoch)
         with self._publication_lock, self._lock:
-            if self._stop.is_set() or self.provider.memory_epoch() != epoch:
+            if (
+                self._stop.is_set()
+                or self.provider.memory_epoch() != epoch
+                or expected_generation is not None
+                and expected_generation != self._generation
+            ):
                 raise ValueError("Hesap değişti; yeni native geçmiş bekleniyor.")
             if publication_epoch != self.publication_token(key[:2]):
                 raise ValueError("Geçmiş isteği sırasında native kaynak değişti.")
@@ -768,6 +793,76 @@ class CustomIndicatorData:
                 self._native.popitem(last=False)
         return entry
 
+    def _native_entries(self, market, symbol, demand, epoch, publication_epoch, *, generation=None):
+        """Prefetch only cache misses, then use the ordinary native validation path."""
+        fetch = getattr(self.provider, "custom_indicator_histories", None)
+        if not callable(fetch):
+            return {
+                tf: self._native_frame(market, symbol, tf, count, epoch)
+                for tf, count in demand.items()
+            }
+        from infrastructure.providers.native_indicator_history import (
+            MAX_BATCH_BARS,
+            MAX_BATCH_CHARTS,
+        )
+
+        entries, pending = {}, {}
+        generation = self._generation if generation is None else generation
+
+        def flush():
+            if not pending:
+                return
+            with self._lock:
+                if (
+                    self._stop.is_set()
+                    or generation != self._generation
+                    or self.provider.memory_epoch() != epoch
+                    or self.publication_token((market, symbol)) != publication_epoch
+                ):
+                    raise ValueError("Native geçmiş talebi artık güncel değil.")
+            frames = fetch(
+                symbol,
+                exchange="BIST" if market == "BIST" else "BINANCE",
+                requests=pending.copy(),
+            )
+            if not isinstance(frames, dict) or frames.keys() != pending.keys():
+                raise ValueError("Native geçmiş grubu eksik.")
+            for tf, count in pending.items():
+                entries[tf] = self._native_frame(
+                    market,
+                    symbol,
+                    tf,
+                    count,
+                    epoch,
+                    prefetched_frame=frames.pop(tf),
+                    expected_publication_epoch=publication_epoch,
+                    expected_generation=generation,
+                )
+            pending.clear()
+
+        for tf, count in demand.items():
+            with self._lock:
+                old = self._native.get((market, symbol, tf))
+                summary = self._history_summaries.get((market, symbol, tf))
+                count = max(count, summary.requested if summary else 0)
+                cached = (
+                    old is not None
+                    and old.epoch == epoch
+                    and old.requested >= count
+                    and self._clock() - old.received < REFRESH_SECONDS
+                )
+            if cached:
+                entries[tf] = self._native_frame(market, symbol, tf, count, epoch)
+            else:
+                if (
+                    len(pending) >= MAX_BATCH_CHARTS
+                    or sum(pending.values()) + count > MAX_BATCH_BARS
+                ):
+                    flush()
+                pending[tf] = count
+        flush()
+        return entries
+
     @staticmethod
     def _native_demand(config, market):
         demand = {row["timeframe"]: row["bars"] for row in config["requirements"]}
@@ -806,10 +901,9 @@ class CustomIndicatorData:
                 for tf, count in self._native_demand(sibling, market).items():
                     if tf in demand:
                         demand[tf] = max(demand[tf], count)
-            entries = {
-                tf: self._native_frame(market, symbol, tf, count, epoch)
-                for tf, count in demand.items()
-            }
+            entries = self._native_entries(
+                market, symbol, demand, epoch, publication_epoch, generation=generation
+            )
             if self.provider.memory_epoch() != epoch:
                 raise ValueError("Hesap değişti; yeni native geçmiş bekleniyor.")
             daily = entries["1D"].bars if market == "BIST" else ()
@@ -947,7 +1041,9 @@ class CustomIndicatorData:
                     ]
                     self._preview_results[key] = {
                         **live_result,
-                        "points": [*history[-MAX_RESULT_POINTS + 1 :], *current],
+                        "points": self._preview_points(
+                            [*history[-MAX_RESULT_POINTS + 1 :], *current]
+                        ),
                         "history_replayed": True,
                     }
                 self._last_error = None
@@ -960,6 +1056,7 @@ class CustomIndicatorData:
             ):
                 self._preview_results[key] = {
                     **result,
+                    "points": self._preview_points(result["points"]),
                     "continuity": f"{self._process_epoch}:{self._symbol_epochs.get(key[:2], 0)}",
                 }
                 self._preview_results.move_to_end(key)
@@ -1001,6 +1098,18 @@ class CustomIndicatorData:
                 self._remove_result(next(iter(self._results)))
             if not result["error"]:
                 self.live.install_seed(key, prepared_seed, generation=generation)
+
+    @staticmethod
+    def _preview_points(points):
+        # Historical charts/signals consume outputs; only the latest point's
+        # per-timeframe details are displayed. Retaining every historical row
+        # evicts active previews and repeatedly schedules the same full replay.
+        # Copy changed point dictionaries, never mutate shared alarm results.
+        if not points:
+            return []
+        return [
+            point if not point.get("rows") else {**point, "rows": []} for point in points[:-1]
+        ] + points[-1:]
 
     @staticmethod
     def _result_cells(result):
@@ -1174,7 +1283,7 @@ class CustomIndicatorData:
                     ]
                     self._preview_results[key] = {
                         **result,
-                        "points": [*history[-MAX_RESULT_POINTS + 1 :], point],
+                        "points": self._preview_points([*history[-MAX_RESULT_POINTS + 1 :], point]),
                         "history_replayed": bool((old_preview or {}).get("history_replayed")),
                     }
                     self._preview_results.move_to_end(key)

@@ -6,7 +6,10 @@ Kullanıcı piyasa açıkken elle devamı başlattı. `c801e275` üzerinde 631 p
 abonelikte olduğu halde özel gösterge hazırlığı **0/631** kaldı; 4.417 ret
 yeniden denenmiyordu. Yeni oturumlu THYAO10TF denemesi başarılıdır.
 Ret toparlanması, süreli erişim yenilemesi ve başlangıç kaynak maliyeti
-düzeltilir; yeni yayın/kapsam kabulü ayrı doğrulanır.
+`1d36efec` ile **08:18:27 UTC**'de üretime alındı; **08:18:47–08:19:17 UTC**
+bağımsız kabul geçti. 2.298 Python/bir atlama, 310 frontend, beş CI ve temiz
+imaj yayını başarılıdır. Kişisel listeler/kural, 15 tablo ve dört servis korundu.
+631 payın canlı hazırlığı ve sürekli kaynak kazanımı ayrıca ölçülüyor.
 [21 Ekim canlı kapsam ve kapasite kaydı](LIVE_MARKET_CAPACITY_2026-10-21.md)
 bu çalışmanın güncel kanıtıdır. Alttaki 16 Ekim kayıtları tarihsel kabulü
 anlatır. Otomatik takip kurulmaz; kullanıcının iki listesi ve etkin kuralı korunur.

@@ -1,10 +1,21 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-**21 Ekim elle canlı doğrulama başladı:** Kullanıcı piyasa açıkken 631 payın
+**21 Ekim güncel yayın:** `1d36efec58566742a226a7796238b1f82a5cda91`,
+**08:18:27 UTC / 11:18:27 TSİ** API/frontend/Compose/current yayını;
+**08:18:47–08:19:17 UTC** bağımsız kabul geçti. Ret/token toparlanması,
+tek geçmiş WS, SMI son durum hesabı, tekrar eden eski fiyat koruması ve
+iptal edilmiş ilk hazırlığın FIFO'ya geri dönmesi yayımlandı. 2.298 Python/
+bir atlama, 310 frontend, beş CI ve temiz imaj yayını geçti. Taze 1.342.660.608
+bayt yedek 15 tabloyla bağımsız restore edildi; dört servis sağlıklı ve
+kullanıcı tanımları/özel dosyalar/MW/PG korundu. Yayın kabulü 631 payın
+hazırlığı veya kalıcı CPU/RAM kapasitesi değildir; piyasa açık ölçümü sürüyor.
+[21 Ekim kaydı](docs/LIVE_MARKET_CAPACITY_2026-10-21.md).
+
+**21 Ekim başlangıç bulguları:** Kullanıcı piyasa açıkken 631 payın
 canlı verisini/liste alarmlarını ve kalıcı CPU/RAM düzeltmesini istedi.
 07:24–07:30 UTC üretim `c801e275` üzerinde fiyat callback'leri sürerken
 **0/631 özel hesap hazır**, 4.417 native ret, 1.262 sertifika, sıfır retry ve
-son geçmiş hazırlığı 16 Ekim23:59 UTC görüldü. 07:31–07:32 ayrı THYAO10TF
+son geçmiş hazırlığı 16 Ekim 23:59 UTC görüldü. 07:31–07:32 ayrı THYAO 10 TF
 denemesi yeni oturumla hatasız geçti; eski ret nedeni kaydedilmediğinden
 kesin nedeni varsayma. Kalıcı ret toparlanması, süreli token yenileme,
 tekrarlı eski fiyatın geçmişi silmesini önleme ve geçmiş bağlantı/SMI

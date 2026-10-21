@@ -108,7 +108,70 @@ Yerel özel kanıt yolları (kimlik bilgisi veya veritabanı Git'e alınmaz):
 
 ## Kabul durumu
 
-Bu kayıt başlangıç bulgularıdır; yeni kaynağın yayını, bütün paylarda
-gösterge hazırlığı, normal motor alarmı ve yayın sonrası kaynak ölçümü
-tamamlandıkça ayrı kanıtla eklenir. Başlangıçta **0/631 hazır özel hesap**
-varken tam canlı kapsam veya kalıcı CPU/RAM çözümü kabul edilmez.
+`1d36efec58566742a226a7796238b1f82a5cda91` API/frontend/Compose/current
+**08:18:27 UTC / 11:18:27 TSİ**'de yayımlandı. **08:18:47–08:19:17 UTC**
+bağımsız yayın kabulü geçti. 2.298 Python testi/bir atlama, 310 frontend,
+310 Python dosyasında Ruff; aynı kaynakta beş CI işi ve temiz imaj yayını geçti.
+
+- CI: [39566987014](https://github.com/Rapto0/Rapot/actions/runs/39566987014).
+- Temiz imaj yayını: [39566991883](https://github.com/Rapto0/Rapot/actions/runs/39566991883).
+- API: `ghcr.io/rapto0/rapot/backend@sha256:803514908db1b2066ebfa20a79eaeaa1455b7f1a0dc1b94d0b95cf6281d63dbc`.
+- Frontend: `ghcr.io/rapto0/rapot/frontend@sha256:9e3375e22e46fded2b93177502ee2cad54a6e206b70bef472896070dae265e1b`.
+- Yayın receipt: `2fad34c67b23dc063cc6ae6158c409dec495d8cd1d20ac61c7cd1b9064604f06`.
+- Bağımsız kabul: `7ec7e2fce583311e58f53bc8b3cac666a702a141867efffbe18821bb72a39c95`.
+
+Dört servis sağlıklı; middleware/PG, özel dosyalar, 15 tablo şeması/statik
+veri ve mevcut kullanıcı tanımları korundu. 13 SSR/33 statik dosya/iki
+yönlendirme/18 anonim 401; 315 kaynak ve bağımlılık dosyası kabulü geçti.
+Yayın için ek imaj gereksinimi 11.339.908 bayttı; imaj temizliği yapılmadı.
+Son kabulde boş alan 4.035.911.680 bayt, kullanılabilir RAM 314.028.032 bayttı.
+
+Bütün paylarda gösterge hazırlığı, normal motor alarmı ve yayın sonrası
+sürekli kaynak ölçümü ayrıca yürür. Bu yayın kabulü, başlangıçta sıfır olan
+631 özel hesabın artık tamamının hazır olduğunu veya kalıcı kapasiteyi kanıtlamaz.
+
+## İlk yayın sonrası canlı kontrol ve ikinci düzeltme
+
+08:19:36–08:20:25 UTC başlangıç örneklerinde bütün 6.310 talep kabul edildi,
+ret sıfırdı; derlenmiş hesap 5'ten 11'e çıktı. Geçmiş bağlantısı bir WS üzerinde
+56'dan 116 tamamlanmış isteğe ilerledi. CPU %67,531–84,357, kullanılabilir
+RAM 263,92–298,10 MiB, son canlı kuyruk 76/taşma 0 idi; bunlar başlangıç yüküdür.
+
+08:29:42–08:30:33 UTC örneklerinde seçili SMI çıktıları hazır pay sayısı
+60/62/72/75/73/62, kaynak ve alınma zamanı 30 saniye içindeki fiyat sayısı
+331/341/364/365/368/346 oldu. Son örnekte 129 toplam derlenmiş ayar,
+5.690 üst periyot tanığı, sıfır native ret/bekleyen tanık, canlı kuyruk 5,
+taşma 0; normal mum kuyruğu 0 vardı. Derlenmiş ayarlar önizlemeleri de içerir.
+İki liste ve etkin kural tanımları aynı, teslimler altı eski olaydı.
+
+İki ayrı 180 saniyelik THYAO/BTCUSDT beşli önizleme denemesi tamamının
+hazırlığını doğrulayamadı; başarısız kayıtlar korundu, test alarmı açılmadı.
+Gerçek varsayılan ayarlarda eski önizleme geçmişi tek sembolde 67.584,
+iki sembolde 135.168 hücre isterken bütçe 32.768 idi. Göstergeler birbirinin
+geçmişini çıkarıyor ve tekrar replay işi oluşturuyordu. Geçmiş noktaların
+çıktıları korunarak yalnız yinelenen TF satırları inceltildi; son noktanın
+satırları tam kalır. On gerçek ayarlı regresyonda üç yeni fiyat turu boyunca
+yeni geçmiş isteği/replay sıfır, aynı başlangıç hesapları ve bütün çıktılar
+korundu. Eski davranış aynı testte önbellek kaybıyla başarısızdır.
+
+İkinci kaynak değişikliği geçmiş taleplerini tek sembolde sınırlı gruplar.
+Kontrollü 0,6 saniyelik yanıt modeliyle 10×519 mum medyanı 6,362→1,921 saniye;
+10/10 veri hashleri aynı, geçici tepe tahsis 0,54–0,85→1,32–1,46 MiB'dir.
+Bu yerel ölçüm üretim CPU/RSS değildir. **08:35:57–08:36:11 UTC** yalnız
+izole işlem belleğindeki gerçek THYAO denemesi 10 periyodu **2,074 saniyede**
+aldı; bir WS, 10 açılan/kapatılan chart, hata sıfır, bütün native/OHLC/seans
+kontrolleri geçti. Dokuz periyot 519, aylık seri 399 mum döndürdü. İşlem sonunda
+alıcı ve kaynak koruma thread'leri kapandı. Bu deneme üretim dosyalarını veya
+alarmları değiştirmedi; 631 pay ve kalıcı kapasite kabulü değildir.
+
+Bu canlı deneme `9e6fb4da…` adaptörüne aittir. Son bağımsız incelemede yavaş
+chart gönderiminin sonraki 0,1 saniyelik aralığı tükettiği görüldü; aralık
+başarılı gönderim sonrasından başlatılarak sıkılaştırıldı. Yeni regresyon
+ilk tam turda tek hata verdi (2.323 başarılı/bir atlama); başarısız log korunur.
+Son `85b8bd93…` adaptöründe 36 transport testi ve iki bağımsız önizleme testi
+geçti. Son kaynağın tam turu ve yayını ayrıca kaydedilir.
+
+08:39:13–08:40:05 UTC'de ilk yayın hâlâ çalışırken derlenmiş hesaplar
+259→272, o anda seçili çıktıları hazır üyeler 127–138 aralığındaydı.
+CPU %52,272–64,966, kullanılabilir RAM 259,598–286,238 MiB; son kuyruk 6,
+taşma 0 ve ret 0. Bu aşamada ikinci kaynak henüz üretimde değildi.

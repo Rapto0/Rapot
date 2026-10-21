@@ -97,8 +97,10 @@ döngüsüne alınmaz. Desteklenmeyen uzun periyot yeni native gün veya yeni
 token sonrasında tekrar sınanabilir. Ret kalksa bile yeni geçerli native
 tanık ve gereken geçmiş olmadan gösterge hazır sayılmaz.
 
-Tek geçmiş işçisi aynı özel WebSocket'i kullanır; aynı anda bir sınırlı
-chart talebi yürür ve tamamlanınca kapatılır. Kısmi geçmiş yayınlanmaz.
+Tek geçmiş işçisi aynı özel WebSocket'i kullanır; tek sembolün eksik
+periyotları en fazla 10 chart, toplam 12.000 mum ve 12 MiB gruplarla alınır.
+Chart açma aralığı en az 0,1 saniyedir. Grup tamamlanınca chart'lar kapatılır;
+tek periyodun hatası veya hesap değişimi kısmi gösterge başlangıcı yayımlamaz.
 İlk geçersiz fiyat devamlılığı keser; aynı geçersiz dönemin tekrarları
 yeniden hazırlanan başlangıcı sürekli silmez. Geçerli fiyat gelmeden alarm
 üretilemez. `/advanced-alarms/coverage` yöneticiye her yapılandırılmış sembolün
@@ -111,6 +113,10 @@ Grafikte **Özel sunucu göstergeleri** panelini aç, göstergeyi ve ayarların�
 önizlemeyi başlat. Ana periyot göstergenin sözleşmesine uymalıdır. Satır tablosu,
 skor/oy çıktıları, kaynak ve hazır olma durumu aynı sunucu hesaplamasından gelir.
 Görseldeki ayarlar alarm taslağına aktarılabilir; aktarım alarmı etkinleştirmez.
+Önizleme geçmişi 128 noktanın zaman, çıktı ve sinyallerini korur; periyot
+satırlarının ayrıntıları yalnız son noktada saklanır. Güncel `latest.rows`
+tablosu tam kalır. 32.768 hücrelik bütçe artırılmaz; geçmişte yinelenen satır
+ayrıntıları yüzünden etkin göstergelerin tekrar replay edilmesi önlenir.
 
 Alarm Merkezi'nde teknik veya izleme listesi alarmında bir özel gösterge
 seçilebilir. AL/SAT sinyali boolean sayısal çıktıdır: **1'e eşit** koşulu kaynak

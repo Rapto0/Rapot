@@ -1,7 +1,7 @@
 """One reusable, bounded WebSocket for the single native-history worker.
 
-This transport is independent of live quote/chart sessions. Each request owns
-one unique chart until ``series_completed``; no partial response is published.
+This transport is independent of live quote/chart sessions. Each batch owns
+at most ten unique charts until ``series_completed``; no partial batch is published.
 The gateway still validates OHLC and account identity before returning a frame.
 """
 
@@ -19,6 +19,17 @@ from infrastructure.providers.custom_indicator_history import (
 
 MIN_REQUEST_INTERVAL = 0.1  # At most ten chart creations/second on this socket.
 HISTORY_TIMEOUT = 10.0
+MAX_BATCH_CHARTS = 10
+MAX_BATCH_BARS = 12000
+
+
+def validate_history_batch(symbol, exchange, requests):
+    if not isinstance(requests, dict) or not 1 <= len(requests) <= MAX_BATCH_CHARTS:
+        raise ValueError("Native history batch chart capacity exceeded")
+    for timeframe, bars in requests.items():
+        validate_native_request(symbol, exchange, timeframe, bars)
+    if sum(requests.values()) > MAX_BATCH_BARS:
+        raise ValueError("Native history batch bar capacity exceeded")
 
 
 def _packet(payload):
@@ -96,17 +107,26 @@ class NativeIndicatorHistory:
         self._next_request = 0.0
         self._opened = self._completed = self._failed = self._heartbeats = 0
         self._created = self._retired = 0
+        self._batches_completed = self._batches_failed = 0
 
     def status(self):
         with self._condition:
             return {
                 "connected": self._connected and not self._failure and not self._closed,
                 "active_requests": int(self._request is not None),
+                "active_charts": sum(
+                    chart["created"] and not chart["retired"]
+                    for chart in (self._request or {}).get("charts", {}).values()
+                ),
                 "connections_opened": self._opened,
                 "requests_completed": self._completed,
                 "requests_failed": self._failed,
                 "charts_created": self._created,
                 "charts_retired": self._retired,
+                "batches_completed": self._batches_completed,
+                "batches_failed": self._batches_failed,
+                "batch_chart_limit": MAX_BATCH_CHARTS,
+                "batch_bar_limit": MAX_BATCH_BARS,
                 "heartbeats": self._heartbeats,
                 "closed": self._closed,
             }
@@ -147,13 +167,9 @@ class NativeIndicatorHistory:
                 with self._condition:
                     if generation != self._generation or self._closed or self._failure:
                         return
-                    request = self._request
-                    if (
-                        request is None
-                        or request["complete"]
-                        or not params
-                        or params[0] != request["session"]
-                    ):
+                    batch = self._request
+                    request = batch["charts"].get(params[0]) if batch and params else None
+                    if request is None or request["complete"] or not request["created"]:
                         continue
                     if method in {"symbol_error", "series_error"}:
                         raise ValueError
@@ -292,7 +308,14 @@ class NativeIndicatorHistory:
         self._wait(lambda: self._connected, deadline)
 
     def get_history(self, symbol, *, exchange, timeframe, bars, token, epoch):
-        validate_native_request(symbol, exchange, timeframe, bars)
+        return self.get_histories(
+            symbol, exchange=exchange, requests={timeframe: bars}, token=token, epoch=epoch
+        )[timeframe]
+
+    def get_histories(self, symbol, *, exchange, requests, token, epoch):
+        """Return every requested native frame together, or discard the whole batch."""
+        validate_history_batch(symbol, exchange, requests)
+        requests = requests.copy()
         if not token or token == "unauthorized_user_token":
             raise ValueError("Native history authentication required")
         if not self._request_lock.acquire(timeout=1):
@@ -300,55 +323,89 @@ class NativeIndicatorHistory:
         try:
             deadline = self._clock() + self._timeout
             self._connect(epoch, deadline)
-            self._wait(lambda: self._clock() >= self._next_request, deadline)
             with self._condition:
                 ws = self._ws
-                request = {
-                    "session": "cs_" + uuid.uuid4().hex,
-                    "series": "s_" + uuid.uuid4().hex,
-                    "bars": bars,
-                    "rows": {},
-                    "metadata": None,
-                    "wire_bytes": 0,
-                    "complete": False,
-                }
-                self._request = request
+                generation = self._generation
+                charts = {}
+                for timeframe, bars in requests.items():
+                    session = "cs_" + uuid.uuid4().hex
+                    charts[session] = {
+                        "session": session,
+                        "series": "s_" + uuid.uuid4().hex,
+                        "timeframe": timeframe,
+                        "bars": bars,
+                        "rows": {},
+                        "metadata": None,
+                        "complete": False,
+                        "created": False,
+                        "retired": False,
+                    }
+                self._request = {"charts": charts, "wire_bytes": 0}
             if token != self._token:
                 self._send(ws, _message("set_auth_token", [token]))
                 self._token = token
-            session, series = request["session"], request["series"]
-            self._next_request = self._clock() + MIN_REQUEST_INTERVAL
-            self._send(ws, _message("chart_create_session", [session, ""]))
-            self._created += 1
             descriptor = json.dumps(
                 {"symbol": f"{exchange}:{symbol}", "adjustment": "splits", "session": "regular"},
                 separators=(",", ":"),
             )
-            self._send(ws, _message("resolve_symbol", [session, "symbol", "=" + descriptor]))
-            self._send(
-                ws,
-                _message("create_series", [session, series, "s1", "symbol", timeframe, bars, ""]),
-            )
-            self._wait(lambda: request["complete"], deadline)
-            self._send(ws, _message("remove_series", [session, series]))
-            self._send(ws, _message("chart_delete_session", [session]))
-            self._retired += 1
+            for request in charts.values():
+                self._wait(lambda: self._clock() >= self._next_request, deadline)
+                session, series = request["session"], request["series"]
+                self._send(ws, _message("chart_create_session", [session, ""]))
+                # A slow write must not spend the next creation's interval:
+                # start spacing only once this chart was actually sent.
+                self._next_request = self._clock() + MIN_REQUEST_INTERVAL
+                with self._condition:
+                    request["created"] = True
+                    self._created += 1
+                self._send(ws, _message("resolve_symbol", [session, "symbol", "=" + descriptor]))
+                self._send(
+                    ws,
+                    _message(
+                        "create_series",
+                        [
+                            session,
+                            series,
+                            "s1",
+                            "symbol",
+                            request["timeframe"],
+                            request["bars"],
+                            "",
+                        ],
+                    ),
+                )
+            self._wait(lambda: all(request["complete"] for request in charts.values()), deadline)
+            for request in charts.values():
+                self._send(ws, _message("remove_series", [request["session"], request["series"]]))
+                self._send(ws, _message("chart_delete_session", [request["session"]]))
+                with self._condition:
+                    request["retired"] = True
+                    self._retired += 1
             import pandas as pd
 
-            items = sorted(request["rows"].items())
-            frame = pd.DataFrame(
-                [values for _, values in items],
-                index=pd.to_datetime([stamp for stamp, _ in items], unit="s", utc=True),
-                columns=["Open", "High", "Low", "Close"],
-            )
-            frame.index = frame.index.tz_convert("Europe/Istanbul")
-            frame.attrs.update(
-                native_timeframe=timeframe, session_metadata=request["metadata"].copy()
-            )
-            self._completed += 1
-            return frame
+            frames = {}
+            for request in charts.values():
+                items = sorted(request["rows"].items())
+                frame = pd.DataFrame(
+                    [values for _, values in items],
+                    index=pd.to_datetime([stamp for stamp, _ in items], unit="s", utc=True),
+                    columns=["Open", "High", "Low", "Close"],
+                )
+                frame.index = frame.index.tz_convert("Europe/Istanbul")
+                frame.attrs.update(
+                    native_timeframe=request["timeframe"],
+                    session_metadata=request["metadata"].copy(),
+                )
+                frames[request["timeframe"]] = frame
+            with self._condition:
+                if self._closed or self._failure or generation != self._generation:
+                    raise ValueError("Native history batch no longer current")
+                self._completed += len(charts)
+                self._batches_completed += 1
+            return frames
         except Exception:
-            self._failed += 1
+            self._failed += len(requests)
+            self._batches_failed += 1
             self._drop_transport()
             raise ValueError("Native indicator history unavailable") from None
         finally:
