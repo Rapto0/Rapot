@@ -11,6 +11,21 @@ kendi tarih/sürümü altında korunur.
 
 ## Kaynak ve ayarlar
 
+**22 Ekim yayın kabulü:** `0c7b266d8e3b6a7885b6f56cf7f3d245e6a79565`
+yalnız frontend'e 08:36:36 UTC / 11:36:36 TSİ'de yayımlandı; ayrı salt okunur
+kabul 08:37:09 UTC'de geçti. API/Compose/current `e28ef616` kaldı; API aynı
+container ve 21 Ekim başlangıcıyla restart0, middleware/PG/özel dosyalar aynı.
+İlgili 55 frontend testi, tip/lint; aynı kaynakta beş CI işi
+`39747468405` ve temiz imaj yayını `39747553384` geçti. İmaj
+`sha256:0ffb8665cc32939d08440ea5b3a24456e05ca6572a9d518c83bd6f40832ae792`.
+Beş SSR, 22 statik varlık, üç anonim401 ve yeni üç çıktı metni doğrulandı.
+Receipt `8ada631c22eab9e39e416ce04d5687c20ca7a1213f84a20fb1bac46264908cb0`;
+ayrı kabul dosyası `817cfa823370cc7232815ad7705e3d4fd5c3f57eed51fb3d080730b98f35ee7b`.
+Kanıt `runtime-data/20261022-alarm-output-frontend-v2/` içindedir; Git'e
+alınmaz. İlk aracın main-init imaj varsayımı değişiklik başlamadan reddedildi;
+başarısız kayıt korunup yeni v2 araçta gerçek ayrı imaj pinleri doğrulandı.
+DB işlemi/yeni alarm/Telegram bildirimi veya otomatik takip yapılmadı.
+
 22 Ekim arayüz açıklaması: alarm çıktılarının başında seçilen göstergenin adı
 gösterilir. AL/SAT sinyali, sayısal oy/puan, eşik bölgesi ve hazırlık sayıları
 ayrıca açıklanır. N OY göstergelerinde `onlyFirst` açık/kapalı açıklaması mevcut

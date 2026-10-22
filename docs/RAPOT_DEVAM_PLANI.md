@@ -1,6 +1,14 @@
 # Rapot Devam Planı
 
-**Güncel özet: 21 Ekim 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
+**Güncel özet: 22 Ekim 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
+
+22 Ekim dar arayüz işi tamamlandı: yalnız frontend `0c7b266` 08:36:36 UTC'de
+yayımlandı; 08:37:09 UTC bağımsız kabul geçti. API/current `e28ef616` ve sıcak
+alarm durumu korundu. Özel çıktı adları göstergeyi, sinyali, oy sayısını ve eşik
+koşulunu açıklar. 58 kodun kayıtlı pazar dağılımı 39 YİP/PÖİP +19 diğer pazar;
+tek fiyat açıklaması tüm 58'in nedeni olarak kabul edilmedi. Önceden geçen
+standart gösterge testleri tekrarlanmadı. Hacim kullanıcı talimatıyla kapsam
+dışında. [Kanıt ve sınırlar](CUSTOM_PINE_INDICATORS.md).
 
 **Son üretim kaynağı `e28ef616a3155b09b62fa699513d948dc8d5d528`:**
 10:37:39 UTC yayını ve 10:37:49–10:38:19 UTC ayrı kabul geçti. Süresi dolan

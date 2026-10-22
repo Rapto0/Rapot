@@ -1,5 +1,16 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
+**22 Ekim yalnız frontend yayını:** `0c7b266d8e3b6a7885b6f56cf7f3d245e6a79565`,
+08:36:36 UTC / 11:36:36 TSİ; 08:37:09 UTC bağımsız kabul geçti. Özel Pine
+alarm çıktıları gösterge adıyla ve sinyal/oy/eşik ayrımıyla açıklanır; ayarlar
+ve hesaplar değişmez. API/Compose/current `e28ef616` kaldı, API yeniden
+başlamadı. 55 ilgili frontend testi, tip/lint, aynı kaynakta beş CI işi ve
+temiz imaj yayını geçti; 5 SSR/22 statik/3 anonim401/yeni metin kabulü geçti.
+58 bekleyen kodun 14 Ekim KAP kaydında 39'u YİP/PÖİP, 19'u diğer pazarlardır;
+tüm beklemeler seans kaynaklı sayılmaz. Önceki standart gösterge testleri
+tekrarlanmadı; kullanıcı hacmi kapsam dışına aldı. Ayrıntı ve yayın kanıtı
+[gösterge sözleşmesinde](docs/CUSTOM_PINE_INDICATORS.md). Yeni otomatik takip yok.
+
 **21 Ekim güncel yayın:** `e28ef616a3155b09b62fa699513d948dc8d5d528`,
 **10:37:39 UTC / 13:37:39 TSİ** API/frontend/Compose/current yayını;
 **10:37:49–10:38:19 UTC** ayrı kabul geçti. Süresi dolan önizlemenin eski
