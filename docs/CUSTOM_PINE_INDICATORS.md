@@ -11,6 +11,32 @@ kendi tarih/sürümü altında korunur.
 
 ## Kaynak ve ayarlar
 
+22 Ekim arayüz açıklaması: alarm çıktılarının başında seçilen göstergenin adı
+gösterilir. AL/SAT sinyali, sayısal oy/puan, eşik bölgesi ve hazırlık sayıları
+ayrıca açıklanır. N OY göstergelerinde `onlyFirst` açık/kapalı açıklaması mevcut
+ayarı izler; HTF yeni bölge girişi ve Snapshot puan hedefi ayrı anlatılır.
+Çıktı anahtarları, hesaplar ve kayıtlı alarm ayarları değişmez. İlgili 55 frontend
+testi geçti; bu arayüz kontrolü yeni canlı piyasa kabulü değildir.
+
+21 Ekim'de hazır çıktısı görülmeyen 58 kodun 14 Ekim kayıtlı KAP pazar listesiyle
+karşılaştırmasında 20 YİP, 19 PÖİP, 8 Ana, 9 Alt ve 2 Yıldız payı bulunur.
+[Borsa İstanbul işlem yöntemi](https://www.borsaistanbul.com/piyasalar/pay-piyasasi/piyasa-isleyisi)
+YİP/PÖİP için tek fiyatı doğrular. Bu 39 payda seyrek fiyat oluşumuyla uyumludur;
+58 payın tamamının bekleme nedenini veya güncel üyeliğini kanıtlamaz.
+Diğer 19 kod: ARTMS, DERIM, OZATD, OZYSR, RALYH, SEGYO, TMPOL, UFUK, DGGYO,
+EUKYO, HUBVC, ISATR, ISBTR, ISKUR, SKYLP, TRHOL, VKFYO, KAYSE, NUHCM.
+Eski fiyatı taze sayma kuralı eklenmez; yeni geçerli fiyat normal akışta
+değerlendirilir. Kullanıcı hacimsiz paketini doğruladığından hacim bu işin
+kapsamı dışındadır.
+
+Standart RSI için [7 Ekim canlı alarm kabulü](LIVE_MARKET_ACCEPTANCE_2026-10-07.md)
+korunur. Williams %R dahil dokuz standart teknik alanın hesap testleri
+`tests/test_advanced_alarm_market_data.py`, negatif Williams eşik karşılaştırması
+`tests/test_advanced_alarm_conditions.py` içinde önceki başarılı 21 Ekim turuna
+dahildir; tekrar çalıştırılmadı. Williams'a özel canlı Telegram kabulü iddia
+edilmez. Standart alanların [30/60 saniye OHLCV yenileme hedefi](SERVER_ALARMS.md)
+beş özel göstergenin her canlı fiyat politikasıyla karıştırılmamalıdır.
+
 Orijinal ekler `indicators/pine/` altında baytları ve lisans açıklamalarıyla
 korunur. `.gitattributes` bu dosyaların satır sonlarını dönüştürmez.
 Whitespace/EOF commit kancaları da yalnız bu özgün Pine dizinini dönüştürmez.
