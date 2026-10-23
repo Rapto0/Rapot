@@ -1,5 +1,23 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
+**23 Ekim hesap koruması yayını tamamlandı:**
+`bf852c75ac54ef2412a126bf40a464951b640417`, **13:36:52 UTC / 16:36:52 TSİ**
+API/frontend/Compose/current yayını; **13:39:38–13:40:02 UTC** ayrı kabul geçti.
+TradingView şüpheli etkinlik engeli nedeniyle otomatik erişim varsayılan kapalı;
+bağlantı kaydetme/doğrulama veya yeniden başlatma bunu açmaz. Dört etkin BIST
+alarmı **veri bekliyor**, canlı çalışıyor sayılmaz. Gerçek geçmiş revizyonları
+korunarak tekrarlı hazırlık sıfırlaması düzeltildi. Next.js16.4.2 yayımlandı;
+PHP host/çalışan container'larda yoktur. 2.373 Python/bir atlama, 311 frontend,
+beş CI/temiz imaj, 469 paket/sıfır audit bulgusu geçti. Taze 1.342.660.608 bayt
+yedek bağımsız restore edildi. Dört servis healthy/restart0; özel dosyalar,
+MW/PG, 15 tablo, 11 kural (dördü etkin), tek liste, 30 olay ve 2.524 durum korundu.
+Yeni olay yok. Yaklaşık 24 saniyelik **TradingView kapalı** ölçümde API CPU
+%29,480, bellek164,535–164,574 MiB, kullanılabilir RAM297,078–311,809 MiB;
+bu canlı piyasa/kalıcı kapasite kabulü değildir. İlk ayrı kabulün Sharp paket
+metadata okuma hatası düzeltildi; tekrar deploy yapılmadan kabul geçti.
+[23 Ekim kaydı](docs/ACCOUNT_PROTECTION_2026-10-23.md) kanıtları tutar.
+Eski API otomatik açılacak rollback hedefi değildir; yeni takip yok.
+
 **22 Ekim yalnız frontend yayını:** `0c7b266d8e3b6a7885b6f56cf7f3d245e6a79565`,
 08:36:36 UTC / 11:36:36 TSİ; 08:37:09 UTC bağımsız kabul geçti. Özel Pine
 alarm çıktıları gösterge adıyla ve sinyal/oy/eşik ayrımıyla açıklanır; ayarlar

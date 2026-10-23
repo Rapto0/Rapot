@@ -15,6 +15,13 @@ audit sıfır bulgudur. Önceki başarısız CI kaydı korunur; denetim atlanmaz
 Advisory koşulları ve üretim kapsamı [23 Ekim olay kaydındadır](ACCOUNT_PROTECTION_2026-10-23.md).
 Temiz imaj ve aynı kaynağın CI kabulü olmadan yayın yapılmaz.
 
+`bf852c75` API/frontend yayını 23 Ekim **13:36:52 UTC**'de tamamlandı;
+**13:39:38–13:40:02 UTC** bağımsız kabul geçti. 311 frontend testi,
+lint/tip/derleme/standalone, beş kaynak CI işi ve temiz imaj yayını başarılı.
+Üretim runtime'ı Next16.4.2/Node20.20.2/Sharp0.35.5/vips8.18.7/rsvg2.63.2
+olarak doğrulandı. İlk kabul aracının dışa açılmayan Sharp package.json
+varsayımı s.versions.sharp ile düzeltildi; imaj yeniden dağıtılmadı.
+
 ## 7 Ekim 2026 — Sharp ve source-map-js güvenlik yamaları
 
 [CI 37642524424](https://github.com/Rapto0/Rapot/actions/runs/37642524424)

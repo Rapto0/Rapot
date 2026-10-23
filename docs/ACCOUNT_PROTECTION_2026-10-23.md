@@ -24,7 +24,7 @@ takvim/araştırma yolları korunur. Eski önbellek taze alarm verisi olarak oku
 Normal BIST mum işleri bu durumda planlanmaz; özel geçmiş ve native akış
 hazırlığı da durur. Üretimde yalnız API kontrollü durdurularak otomatik erişim
 kesildi; frontend/middleware/PostgreSQL korundu. Eski API imajı otomatik olarak
-yeniden başlatılacak rollback hedefi değildir. Yeni yayın kabulü aşağıya eklenir.
+yeniden başlatılacak rollback hedefi değildir. Yayın kabulü aşağıdadır.
 
 ## Dört alarm ve kaynak sorunu
 
@@ -80,7 +80,7 @@ varlıkları veya kapalı eski imajlar bu denetim kapsamında değildir.
 İlk kaynak `45be03c` için CI'nin zorunlu npm denetimi mevcut Next.js 16.3.8
 sürümünde iki kritik ve bir yüksek önem dereceli bildirim buldu. Bu kaynak
 üretime alınmadı. Next.js ve eşleşen ESLint yapılandırması **16.4.2** sürümüne
-yükseltilir; React 19.2.3 ve Sharp 0.35.5 korunur. Tam kilitli bağımlılık
+yükseltildi; React 19.2.3 ve Sharp 0.35.5 korundu. Tam kilitli bağımlılık
 denetimi 469 paket düğümünde sıfır bulgu verdi.
 
 - [Görüntü optimizasyonu RCE](https://github.com/vercel/next.js/security/advisories/GHSA-2464-fhr4-w9xw): duyurudaki glibc koşulu mevcut Alpine/musl imajıyla eşleşmez; Sharp 0.35.5 düzeltmesi de zaten vardır.
@@ -90,3 +90,70 @@ denetimi 469 paket düğümünde sıfır bulgu verdi.
 Bunlar istismar veya bildirilen CPU artışının nedeni olduğuna dair kanıt
 değildir. Yine de savunmasız sürüm tutulmaz; temiz frontend imajı da yayına
 dahil edilir. Kaynak ve üretim kabulü ayrıca kaydedilir.
+
+## Kaynak doğrulaması
+
+Son uygulama kaynağı `bf852c75ac54ef2412a126bf40a464951b640417`:
+2.373 Python testi geçti, bir test atlandı; 311 frontend testi geçti.
+Arayüz lint/tip/üretim derlemesi ve standalone HTML/statik/API/sağlık/WS
+kontrolleri geçti. İlk yerel standalone denemesi başlangıç zaman aşımında
+kaldı; aynı kaynak ve çıktı ile tekrar geçti, kesin neden saptanmadı.
+Başarısız kayıt silinmedi. Alarm merkezindeki koruma uyarısı kapalı ayrıntı
+bölümünün dışında görünür; bu kaynağa bağlı alarmların değerlendirilmediğini
+açıkça belirtir. Bu UI kontrolü alarm koşullarını değiştirmez.
+
+Son kaynak [CI 39961029474](https://github.com/Rapto0/Rapot/actions/runs/39961029474)
+ve [temiz imaj yayını 39961049736](https://github.com/Rapto0/Rapot/actions/runs/39961049736)
+ile izlenir. İlk `45be03c` kaynağının npm bulgusu nedeniyle durduğu
+[CI 39958604964](https://github.com/Rapto0/Rapot/actions/runs/39958604964) korunur;
+o kaynak üretime alınmadı.
+
+## Üretim yayını ve bağımsız kabul
+
+**23 Ekim 13:36:52 UTC / 16:36:52 TSİ** tarihinde son kaynak API/frontend,
+Compose ve current seçimine yayımlandı. **13:39:38–13:40:02 UTC** ayrı kabul
+geçti. Beş CI işi ve temiz imaj yayını başarılıdır. Çalışan imajlar:
+
+- API `sha256:f5198c5daaebdf8f77b3acc084189f38c5801be473655bcddd321c7a4fb3b185`
+- Frontend `sha256:c7f22ca8e505753e4e524e6105f2389fecbd4cc9366432fa0869110e770352f1`
+
+Dört servis healthy/restart0; middleware/PostgreSQL container kimlikleri ve
+özel dosyalar korundu. 15 tablonun şeması/statik verileri, 11 kuralın tanımları
+(dördü etkin), tek kullanıcı listesi, 30 eski olay ve 2.524 durum korundu.
+Yeni olay yoktur. Veri geri yükleme veya migration uygulanmadı. Taze
+1.342.660.608 bayt yedek sunucu dışında 15 tabloyla bağımsız restore edildi.
+Yedek kanıtı `e749a8c6e0841074f0a7d0899fe953a8ec9ab467aaa72c5285b489aae4ef97ba`.
+
+İki kabul örneğinde normal ve özel kaynak `provider_paused`: fiyat aboneliği,
+planlı geçmiş işi, native WS/seri ve oturum yenileme sıfırdır. 1.262 istenen
+geçmiş işi yalnız kullanıcı gereksinimi sayısı olarak tutulur; çalıştırılmaz.
+323 API kaynak dosyası ve beş gösterge kataloğu doğrulandı. Web kontrolleri
+üç 200 ve bir anonim 401 döndürdü. Çalışan frontend Next16.4.2/Node20.20.2,
+Sharp0.35.5/vips8.18.7/rsvg2.63.2 sürümlerini doğruladı.
+
+Yaklaşık **24 saniyelik TradingView kapalı** pencerede API CPU **%29,480**,
+API belleği **164,535 →164,574 MiB**, kullanılabilir sunucu RAM'i
+**311,809 →297,078 MiB** oldu. Bu ölçüm canlı piyasa yükünde kalıcı CPU/RAM
+iyileşmesini, bütün BIST fiyatlarını veya 3.000 alarm kapasitesini doğrulamaz.
+Kaynak döngüsü düzeltmesi sentetik regresyonlarla doğrulandı; hesap korumasını
+kaldıracak bir canlı TradingView denemesi yapılmadı.
+
+İlk ayrı kabul, Sharp0.35.5'in dışa açmadığı `sharp/package.json` yolunu okuyan
+araç varsayımında durdu. Servis arızası değildi. CI ile aynı `s.versions.sharp`
+okumasına geçilerek ikinci kabul başarılı oldu; ilk başarısız kanıt korunur,
+üretim tekrar yayımlanmadı.
+
+Özel kanıt dizini: `runtime-data/20261023-provider-security-final/`.
+
+| Kanıt | SHA256 |
+|---|---|
+| `deployment-receipt.json` | `42cda5a25513da7c67fab2f196158512426a07ffa1e48929682f11bfcf24aefd` |
+| `acceptance-v2.json` | `ac4ace89d827bb7bbf9c459c4d9a77634f81a59b508d8494d0c83c7ee37bb40f` |
+| İlk `acceptance.json` | `aaec153bbfcab20c72e852910438b00fac56fafd5e304bf4c79e3323e1c56b30` |
+
+Yeni sağlayıcı sorgusu, test alarmı, Telegram mesajı, AI üretimi, emir veya
+otomatik takip başlatılmadı. Dört BIST alarmının yeniden canlı çalışması için
+izin verilen bir veri bağlantısı gerekir. Alternatif olarak TradingView'in
+kendi alarm motorundan [resmî webhook](https://www.tradingview.com/support/solutions/43000529348-how-to-configure-webhook-alerts/)
+teslimi ayrı bir entegrasyon olabilir; mevcut emir middleware'ine otomatik
+olarak yönlendirme yapılmadı.

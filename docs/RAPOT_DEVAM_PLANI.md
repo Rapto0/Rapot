@@ -1,6 +1,23 @@
 # Rapot Devam Planı
 
-**Güncel özet: 22 Ekim 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
+**Güncel özet: 23 Ekim 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
+
+23 Ekim güncel üretim kaynağı **`bf852c75ac54ef2412a126bf40a464951b640417`**:
+API/frontend/Compose/current **13:36:52 UTC** yayını, **13:39:38–13:40:02 UTC**
+ayrı kabul geçti. TradingView şüpheli etkinlik engeli sonrasında otomatik
+erişim varsayılan kapalıdır; dört etkin BIST alarmı veri bekler. Bu koşul
+bağlantı kaydetme/doğrulama veya restart ile kalkmaz. Gerçek geçmiş değişimleri
+korunarak tekrarlı hazırlık sıfırlaması giderildi. PHP yoktur; Next.js açıkları
+için 16.4.2 yayımlandı. 2.373 Python/bir atlama, 311 frontend, beş CI/temiz imaj
+ve 469 paket/sıfır audit geçti. Taze yedek bağımsız restore edildi. Dört servis
+healthy/restart0; 15 tablo, dört etkin kuralın koşulları/bildirim ayarları,
+tek liste ve 30 olay korundu. Yeni olay sıfır. TradingView kapalı yaklaşık
+24 saniyede CPU%29,480, API164,535–164,574 MiB; bu canlı kapasite kabulü değildir.
+İlk kabulün Sharp metadata okuma varsayımı düzeltildi; tekrar deploy yapılmadı.
+Kanıt ve sınırlar [23 Ekim kaydındadır](ACCOUNT_PROTECTION_2026-10-23.md).
+Eski API kendiliğinden açılmaz; yeni otomatik takip kurulmaz.
+
+Aşağıdaki 22/21 Ekim sonuçları tarihsel üretim durumudur.
 
 22 Ekim dar arayüz işi tamamlandı: yalnız frontend `0c7b266` 08:36:36 UTC'de
 yayımlandı; 08:37:09 UTC bağımsız kabul geçti. API/current `e28ef616` ve sıcak
