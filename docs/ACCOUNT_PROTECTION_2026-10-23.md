@@ -249,3 +249,94 @@ sırasında durdurma oluşursa sonuç yayınlanmaz. Açık `unauthorized_user_to
 sonucu kalıcı kimlik reddi sayılır; boş token genel doğrulama hatası kalır.
 Sekiz ek çevrimdışı senaryoyla politika testleri 41'e çıktı; bu düzeltmenin
 140 ilgili testi geçti. Canlı sağlayıcı denemesi yapılmadı.
+
+## Kontrollü sürümün üretim yayını ve ilk kabulü
+
+Son uygulama kaynağı **`21e39512e13c2665acb24551248f56d1d4065319`**,
+**23 Ekim 15:20:46 UTC / 18:20:46 TSİ** tarihinde yalnız API'ye yayımlandı.
+Compose/current bu kaynağa geçti; frontend `bf852c75` imajı ve container'ı,
+middleware/PostgreSQL container'ları korundu. Yeni API imajı
+`sha256:e776c5a1d25fb61defc0c8ef7e49739b4b329a6204316ba895f99819043e9afb`.
+`BORSAPY_TRADINGVIEW_ENABLED=true` yalnız API Compose override'ına eklendi;
+özel ortam ve şifreli kimlik dosyaları değişmedi. Sağlayıcı koruma dosyası
+silinmedi veya sıfırlanmadı. Gereken geri dönüş hedefi kapalı `bf852c75` API'si
+ve önceki override'dır; eski korumasız sürüm otomatik açılmaz.
+
+Yerel son tam tur **2.460 Python testi başarılı/bir atlama**; aynı kaynakta
+Linux CI de **2.460 başarılı/bir atlama** verdi. 323 izlenen Python kaynağında
+Ruff geçti. Frontend CI 311 testi, tip/lint/derleme/standalone ve bağımlılık
+kontrolünü geçti; bu tur frontend yeniden yayımlanmadı. Beş kaynak işi
+[CI39974969161](https://github.com/Rapto0/Rapot/actions/runs/39974969161), temiz
+imaj [publication39975043324](https://github.com/Rapto0/Rapot/actions/runs/39975043324)
+başarılı. Önceki tam yerel turdaki bir hata, eski test sağlayıcı fabrikasının
+yeni keyword argümanlarını kabul etmemesiydi; fixture düzeltildikten sonra tam
+tur yeniden geçti. Başarısız kayıt saklandı; ara kaynak üretime alınmadı.
+
+Taze **1.342.660.608 bayt** SQLite yedeği sunucu dışında bağımsız restore edilip
+15 tabloyla doğrulandı. Restore kanıtı
+`2fcb6d1dbfab7e3dfc670880a450e4b7eb8f063b29b364813df62df32c48b1f4`.
+15 tablo şeması/statik veriler, 11 kuralın tanımları, tek631 üyeli liste,
+30 eski olay ve2.524 durum korundu. Veri geri yükleme/migration yapılmadı.
+Dört etkin kuralın koşulları ve Telegram tercihleri aynı kaldı:
+
+| Kural | Mevcut koşul |
+|---|---|
+| SMI Oy | SMI N OY `any_signal=1`; AL/SAT için8 oy |
+| RSI SCORE27 | HTF RSI Score `any_signal=1`;27/70 eşikleri |
+| RSI1HAFTALIK25 | Haftalık standart RSI14≤25 |
+| RSI GÜNLÜK10 | Günlük standart RSI14≤10 |
+
+Hepsi631 üyeli aynı izleme listesinde, intrabar ve `once_per_bar` politikasında
+kaldı. İşlem emri yolu açılmadı. Geçmişte kaçırılmış olabilecek sinyallerden
+geriye dönük Telegram bildirimi üretilmedi.
+
+**15:21:55–15:22:21 UTC** ayrı kabulde dört servis healthy/restart0,328 çalışan
+API kaynak dosyası ve v2/beş gösterge kataloğu doğrulandı. Üç web okuması200,
+anonim özel API401 döndürdü. Bağlantı `authenticated`, koruma `blocked=false`
+idi. Dört native bağlantıda fiziksel abonelik136→191 ilerledi;6.310 mantıksal
+native talep kabul edildi. Ortak kabul sayacı284→385 artışı4/saniye bütçesine
+uydu. Normal yinelenen geçmiş işi/kuyruğu0/0, standart RSI talebi1.262 idi.
+İlk hazırlıkta derlenmiş hesap/RSIseed henüz0'dı; bu durum hazır alarm hesabı
+olarak raporlanmaz. Normal fiyat abonelik sayacı,631 üyenin kademeli eklenmesi
+tamamlanmadan atomik olarak yayımlanmadığından bu erken örneklerde0 görünür.
+
+Yaklaşık25 saniyede API CPU **%38,046**, API belleği **176,586–179,547 MiB**,
+kullanılabilir sunucu RAM'i **298,817–298,906 MiB** oldu. Bunlar soğuk başlangıç
+ve seans dışı ölçümlerdir; gün boyu yük,631 taze fiyat, dört alarmın canlı
+tetiklenmesi veya kalıcı kaynak kazanımı kabulü değildir. `live_rejected`
+sayacı eski/geçersiz/sırası geriye giden ya da yayın sırasında kaynak değişen
+fiyatları içerir; sağlayıcı hesap yasağı sayacı değildir.
+
+Yeni test alarmı, Telegram testi, AI üretimi, emir veya otomatik takip yoktur.
+Mevcut alarm motorunun kullanıcıca yetkilendirilmiş normal veri akışı açıktır;
+bu kabul aracı yalnız yerel durum okur ve ayrı sağlayıcı denemesi başlatmaz.
+
+Özel kanıt dizini: `runtime-data/20261023-controlled-resume-api/`.
+Yayın receipt SHA256:
+`4eb6fa845025297d20bd0928d0bbf533a50f96536424c0511d5f1fcb20a75313`.
+Ayrı kabul SHA256:
+`abf9ea2721ea85653fb5bcca37d0f8859c307a1a5018eb80633f58871aa904bc`.
+
+## Yayın sonrası son pasif hazırlık gözlemi
+
+**15:27:17–15:27:40 UTC / 18:27:17–18:27:40 TSİ** iki kısa yerel durum okumasında
+fiyat aboneliği ve izlenen semboller **631/631** oldu. Oturum doğrulanmış,
+koruma engelsiz kaldı. Native kalıcı günlük abonelik631; mantıksal talep6.310,
+fiziksel chart sayısı681→684'tü. Derlenmiş özel hesaplar **22→30**, standart
+RSI başlangıçları **22→30**, native üst periyot tanıkları **186→238** ilerledi.
+Tek paylaşılan geçmiş bağlantısında tamamlanmış istek110→150, tamamlanmış
+on-chart grup11→15 oldu; başarısız istek/grup, native ret ve bekleyen yeniden
+deneme0. Oturum yenileme hatası yok; bu kısa süre normal1800 saniyelik token
+yenilemesini sınamaz. Bütçe sayacı1.569→1.663 artışı ortak4/saniye sınırına uydu.
+
+Normal mum işi/kuyruğu **0/0**, canlı kuyruk/taşma **0/0**, yeniden bağlantı
+denemesi/kopma **0/0** kaldı. API CPU **%37,828**, API belleği
+**194,836–195,480 MiB**, kullanılabilir RAM **296,703–307,871 MiB** ölçüldü.
+Bu iki kısa ölçüm %95–98 sürekli yükün kalıcı olarak çözüldüğü iddiası değildir.
+
+Seans dışında bütün631 kaynak fiyatı eskilik sınırını aşıyordu. Canlı işlenen
+fiyat/sinyal0; özel kuralların1.262 üye-hesap sonucu hâlâ hazır/eski durumunu
+bekliyordu. Başlangıçlar ilerliyor ancak tam liste hazırlığı bitmiş sayılmaz.
+Normal servis çalışır durumda bırakıldı; yeni takip/timer veya sağlayıcıya
+ayrı test sorgusu açılmadı. Son pasif kanıt `passive-final.json` SHA256:
+`9c740a1ae213c8272a86e47989a1889229cd601cd96036300452ab63a8509732`.

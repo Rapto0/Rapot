@@ -2,7 +2,35 @@
 
 **Güncel özet: 23 Ekim 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
 
-23 Ekim güncel üretim kaynağı **`bf852c75ac54ef2412a126bf40a464951b640417`**:
+23 Ekim güncel API/Compose/current kaynağı
+**`21e39512e13c2665acb24551248f56d1d4065319`**, **15:20:46 UTC** yalnız API yayını;
+**15:21:55–15:22:21 UTC** ayrı kabul geçti. Frontend `bf852c75`, middleware ve
+PostgreSQL değiştirilmedi. Kullanıcının açık talimatıyla TV erişimi API override
+üzerinden yeniden etkinleştirildi; ilk kabulde oturum doğrulandı ve engel yoktu.
+Ortak4 iş/saniye,burst4 veauth300s koruması yeni talepleri sınırlar; gelen fiyat
+hesaplarına gecikme eklemez. Açık hesap/erişim/hız reddi kalıcı kapatma oluşturur;
+restart/çerez düzenleme korumayı kaldırmaz. Bu sağlayıcı izni veya risksizlik
+garantisi değildir. Dört mevcut631 üyeli kuralın ayarları/Telegram tercihi korundu.
+Standart günlük/haftalık RSI, özel göstergelerin native geçmişini ve aynı fiyatı
+paylaşır;1.262 tekrarlı normal geçmiş işi kaldırıldı, kendi `ta` formülü korundu.
+2.460 Python/bir atlama,311 frontend,323 kaynak Ruff,beş CI/temiz imaj geçti.
+Taze1.342.660.608 bayt yedek15 tabloyla bağımsız restore edildi. Dört servis
+healthy/restart0;15 tablo,11 kural/dördü etkin,tek liste,30 olay ve2.524 durum
+korundu. İlk kabulde4 native bağlantı,136→191 fiziksel abonelik,6.310 kabul
+edilmiş native talep,1.262 RSI talebi; hesap/RSIseed0 ve hazırlık sürüyordu.
+Normal mum işi/kuyruk0/0. Yaklaşık25 saniyede API CPU%38,046, API176,586–179,547
+MiB, kullanılabilirRAM298,817–298,906 MiB. Seans kapalı olduğundan gerçek dört
+alarm tetiklenmesi,631 taze fiyat ve kalıcı CPU/RAM kazanımı doğrulanmadı.
+Yeni test alarmı/Telegram testi/emir/otomatik takip yok. Ayrıntı ve son elle
+gözlem [23 Ekim kaydındadır](ACCOUNT_PROTECTION_2026-10-23.md).
+**15:27:17–15:27:40 UTC** son pasif örnekte631 fiyat aboneliği tamamlandı;
+oturum doğrulanmış/koruma engelsiz, derlenmiş hesap ve standartRSIseed22→30,
+geçmiş isteği110→150 ve native tanık186→238 ilerliyordu. Sağlayıcı ret/geçmiş
+hatası/kuyruk taşması/yeniden bağlantı0, normal mum işi/kuyruk0/0. CPU%37,828,
+API194,836–195,480 MiB, kullanılabilirRAM296,703–307,871 MiB. Seans dışında
+631 fiyat eskiydi; canlı sinyal0 ve tüm üyelerin hazırlığı henüz tamamlanmadı.
+
+23 Ekim önceki, erişimi kapatan kaynak **`bf852c75ac54ef2412a126bf40a464951b640417`**:
 API/frontend/Compose/current **13:36:52 UTC** yayını, **13:39:38–13:40:02 UTC**
 ayrı kabul geçti. TradingView şüpheli etkinlik engeli sonrasında otomatik
 erişim varsayılan kapalıdır; dört etkin BIST alarmı veri bekler. Bu koşul

@@ -1,6 +1,34 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-**23 Ekim hesap koruması yayını tamamlandı:**
+**23 Ekim kontrollü yeniden açma yayımlandı:** Kullanıcı borsapy erişiminin
+hesap riski azaltılarak ve mevcut dört alarm korunarak sürmesini açıkça istedi.
+`21e39512e13c2665acb24551248f56d1d4065319`, **15:20:46 UTC / 18:20:46 TSİ**
+yalnız API/Compose/current yayını; **15:21:55–15:22:21 UTC** ayrı kabul geçti.
+Frontend `bf852c75`, MW/PG aynı container'larda kaldı. API'de açık override ile
+TradingView etkin; oturum doğrulandı, ilk kabulde koruma engeli yok. Ortak bütçe
+4 iş kabulü/saniye, burst4, auth aralığı en az300 saniye; ham WS mesajı sayısı
+değildir. Açık hesap/erişim/hız reddi bütün TV yollarını kapatan kalıcı işaret
+oluşturur; çerez değiştirme/restart bunu kaldırmaz. Sıfır ban riski garantisi yok.
+Dört kuralın koşulları/Telegram ayarları, 15 tablo, tek liste, 30 olay ve2.524
+durum korundu. Standart günlük/haftalık RSI mevcut özel native akışı paylaşır;
+1.262 yinelenen normal geçmiş işi kaldırıldı. RSI kendi `ta` EWM/500 mum
+formülünü korur. 2.460 Python/bir atlama,311 frontend,323 kaynak Ruff,beş CI ve
+temiz imaj yayını geçti; taze1.342.660.608 bayt yedek15 tabloyla restore edildi.
+İlk kabulde dört native bağlantıda fiziksel abonelik136→191;6.310 mantıksal
+talep ve1.262 standart RSI talebi kabul edildi, hesap/RSIseed henüz0'dı.
+Normal geçmiş işi/kuyruk0/0; dört servis healthy/restart0. Yaklaşık25 saniyede
+API CPU%38,046, API176,586–179,547 MiB, kullanılabilirRAM298,817–298,906 MiB.
+Bu soğuk başlangıç ve seans dışı kabul;631 taze fiyat/dört canlı tetik veya
+kalıcı CPU/RAM kapasitesi değildir. Yeni test alarmı, Telegram testi, emir veya
+otomatik takip yok. [23 Ekim kaydı](docs/ACCOUNT_PROTECTION_2026-10-23.md).
+**15:27:17–15:27:40 UTC** son pasif örnekte631/631 fiyat aboneliği tamamlandı;
+oturum doğrulanmış/koruma engelsizdi. Derlenmiş hesap ve standartRSIseed22→30,
+tamamlanmış geçmiş isteği110→150, native tanık186→238 ilerledi; sağlayıcı ret,
+geçmiş hatası, kuyruk taşması ve yeniden bağlantı0. Normal mum işi/kuyruk0/0.
+CPU%37,828; API194,836–195,480 MiB, kullanılabilirRAM296,703–307,871 MiB.
+Seans dışında631 fiyat eskiydi; canlı sinyal0, tüm hesapların hazırlığı bitmedi.
+
+**23 Ekim önceki, erişimi kapatan hesap koruması yayını:**
 `bf852c75ac54ef2412a126bf40a464951b640417`, **13:36:52 UTC / 16:36:52 TSİ**
 API/frontend/Compose/current yayını; **13:39:38–13:40:02 UTC** ayrı kabul geçti.
 TradingView şüpheli etkinlik engeli nedeniyle otomatik erişim varsayılan kapalı;
