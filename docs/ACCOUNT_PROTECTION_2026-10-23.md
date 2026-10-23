@@ -157,3 +157,36 @@ izin verilen bir veri bağlantısı gerekir. Alternatif olarak TradingView'in
 kendi alarm motorundan [resmî webhook](https://www.tradingview.com/support/solutions/43000529348-how-to-configure-webhook-alerts/)
 teslimi ayrı bir entegrasyon olabilir; mevcut emir middleware'ine otomatik
 olarak yönlendirme yapılmadı.
+
+## Anlık alarmları hesap riski olmadan yeniden açma talebi
+
+Kullanıcı dört alarmın durmasını istemedi; borsapy ile anlık BIST verisinin
+TradingView hesabını riske atmadan yeniden kullanılmasını istedi. Kurulu
+borsapy0.11.0 kaynakları ve güncel upstream README salt okunur incelendi.
+`Ticker.info/fast_info` fiyatı, `Ticker.history` hisse mumları ve
+`TradingViewStream` akışı TradingView'e bağlıdır. Bu yollar için hazır bir
+TradingView dışı BIST canlı veri sağlayıcısı bulunmadı.
+[Upstream açıklaması](https://github.com/saidsurucu/borsapy#ger%C3%A7ek-zamanl%C4%B1-veri-ak%C4%B1%C5%9F%C4%B1-tradingview-streaming)
+anonim erişimi yaklaşık 15 dakika gecikmeli, gerçek zamanlı yolu hesap/veri
+paketine bağlı tanımlar.
+
+İç `IsYatirimProvider.get_realtime_quote()` yöntemi v0.5.1'den beri deprecated,
+HTTP sorgusu ve 60 saniye önbelleklidir. Eksik kaynak zamanını yerel saatle
+doldurduğundan taze fiyat tanığı olarak kullanılamaz. Diğer eski tarihçe yolu
+endeks/günlük tek fiyat verisidir; dört alarmın gerçek hisse OHLC/native dönem
+gereksinimlerini karşılamaz. [İş Yatırım'ın açıklaması](https://www.isyatirim.com.tr/tr-tr/analiz/Sayfalar/default.aspx)
+BIST verisini en az 15 dakika gecikmeli belirtir. Gecikmeli veriyle anlık alarm
+çalışıyormuş gibi gösterilmez; oturum veya IP değiştirme çözüm kabul edilmedi.
+
+Mevcut ücretli hesabı kullanarak resmî alarm/webhook yolu alternatif olabilir;
+hesaplama TradingView'de çalışır, site bildirim alır. Bu, bütün hesapların
+sunucuda kalması şartını karşılamaz. Güncel [plan tablosunda](https://www.tradingview.com/pricing/)
+Premium iki izleme listesi alarmı sunar: dört koşulun birlikte bir Pine
+göstergesine taşınması, bağımsız günlük/haftalık tekrar sıklıkları ve hesap
+eşitliği ayrıca doğrulanmadan dört hazır alarmın doğrudan taşınacağı söylenmez.
+Sunucuda hesaplamayı koruyan yol ayrı, izinli bir BIST fiyat/mum API'sidir;
+mevcut Osmanlı ekran/veri hakkı tek başına API erişimi kanıtı değildir.
+
+Bu araştırmada üretim yapılandırması değişmedi, yeni piyasa sorgusu veya
+alarm/Telegram gönderimi yapılmadı. Dört kuralın etkin tanımları korunuyor;
+TradingView kaynağı kapalı olduğu için canlı değerlendirme yeniden açılmadı.
