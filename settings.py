@@ -54,6 +54,10 @@ class Settings(BaseSettings):
         True,
         description="Borsapy is the BIST primary source; false explicitly selects legacy providers",
     )
+    borsapy_tradingview_enabled: bool = Field(
+        False,
+        description="Explicit operator opt-in for TradingView automation; disabled for account protection",
+    )
     borsapy_stream_idle_seconds: int = Field(120, ge=30, le=600, description="Chart lease lifetime")
     cors_allow_origins: str = Field(
         "http://localhost:3000,http://127.0.0.1:3000",

@@ -66,6 +66,7 @@ def test_old_candidate_cache_is_filtered_without_restricting_explicit_mixed_rule
     snapshot = registry.share_universe()
     gateway = SimpleNamespace(
         run_public=Mock(side_effect=AssertionError("unexpected network")),
+        tradingview_enabled=True,
         memory_epoch=lambda: 1,
         create_alarm_quote_stream=Mock(return_value=object()),
     )

@@ -92,6 +92,9 @@ class NativeMarketProvider:
     def memory_epoch(self) -> int:
         return self.gateway.memory_epoch()
 
+    def tradingview_paused(self) -> bool:
+        return not self.gateway.tradingview_enabled
+
     def universe(self) -> list[str]:
         return list(self._share_universe.symbols)
 

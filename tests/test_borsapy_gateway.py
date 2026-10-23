@@ -136,6 +136,7 @@ class FakeBorsapy:
 @pytest.fixture
 def gateway(tmp_path):
     settings = SimpleNamespace(
+        borsapy_tradingview_enabled=True,
         borsapy_credentials_path=str(tmp_path / ".borsapy/credentials.enc"),
         jwt_secret_key="synthetic-signing-key-with-more-than-32-characters",
         database_path=str(tmp_path / "main.sqlite3"),
@@ -917,3 +918,107 @@ def test_real_quote_packets_ignore_late_other_exchange_and_clear_symbol_errors(
     packet("BIST:ABC", 888)
     packet("NASDAQ:ABC", 200)
     assert gateway.quote_snapshot([("NASDAQ", "ABC")])["NASDAQ:ABC"]["price"] == 200
+
+
+@pytest.fixture
+def paused_gateway(gateway):
+    # Omitting the new setting must fail closed, including legacy configurations.
+    settings = SimpleNamespace(**vars(gateway.settings))
+    del settings.borsapy_tradingview_enabled
+    item = BorsapyGateway(settings, loader=lambda: gateway.fake, version_reader=lambda: "0.11.0")
+    item.fake = gateway.fake
+    yield item
+    item.close()
+
+
+@pytest.mark.parametrize(
+    "operation",
+    [
+        lambda g: g.run(lambda bp: pytest.fail("TradingView callback executed")),
+        lambda g: g.history("THYAO"),
+        lambda g: g.alarm_history("THYAO"),
+        lambda g: g.custom_indicator_history("THYAO", exchange="BIST", timeframe="1D", bars=20),
+        lambda g: g.custom_indicator_history(
+            "BTCUSDT", exchange="BINANCE", timeframe="1D", bars=20
+        ),
+        lambda g: g.create_custom_indicator_stream(lambda event: None),
+        lambda g: g.create_alarm_quote_stream(["THYAO"], lambda event: None),
+        lambda g: g.quote_snapshot([("BIST", "THYAO")]),
+        lambda g: g.stream_snapshot("THYAO"),
+        lambda g: g.verify(),
+        lambda g: g.refresh_custom_indicator_auth(),
+        lambda g: g._authenticate(g.fake),
+    ],
+)
+def test_default_pause_blocks_every_tradingview_entry_before_auth_or_network(
+    paused_gateway, operation
+):
+    with pytest.raises(BorsapyGatewayError, match="hesap koruması") as error:
+        operation(paused_gateway)
+    assert error.value.status_code == 503
+    assert paused_gateway.fake.auth_calls == 0
+    assert paused_gateway.fake.history_calls == 0
+    assert paused_gateway._module is None
+
+
+def test_default_pause_preserves_credentials_and_cannot_be_lifted_by_save_or_reset(paused_gateway):
+    from settings import Settings
+
+    assert Settings.model_fields["borsapy_tradingview_enabled"].default is False
+    result = paused_gateway.configure({"session": SESSION, "session_sign": SIGN})
+    assert result["state"] == "provider_paused"
+    assert result["configured"] is True
+    assert result["authenticated"] is False
+    assert result["tradingview_enabled"] is False
+    assert "alarmlar" in result["message"]
+    assert paused_gateway._store.load() == {"session": SESSION, "session_sign": SIGN}
+    paused_gateway.reset_alarm_auth(paused_gateway.memory_epoch())
+    paused_gateway._reload_credentials()
+    # UI/input edits cannot turn on this immutable process policy.
+    paused_gateway.settings.borsapy_tradingview_enabled = True
+    assert paused_gateway.tradingview_enabled is False
+    with pytest.raises(BorsapyGatewayError):
+        paused_gateway.verify()
+    assert paused_gateway.fake.auth_calls == 0
+    assert paused_gateway._store.load() == {"session": SESSION, "session_sign": SIGN}
+    assert paused_gateway.custom_indicator_auth_status()["retry_after_seconds"] == 3600
+    assert paused_gateway.custom_indicator_auth_status()["provider_paused"] is True
+    paused_gateway.settings.borsapy_tradingview_enabled = False
+    restarted = BorsapyGateway(
+        paused_gateway.settings,
+        loader=lambda: paused_gateway.fake,
+        version_reader=lambda: "0.11.0",
+    )
+    try:
+        assert restarted.status()["configured"] is True
+        assert restarted.status()["state"] == "provider_paused"
+        assert restarted.tradingview_enabled is False
+        assert paused_gateway.fake.auth_calls == 0
+    finally:
+        restarted.close()
+
+
+def test_pause_keeps_independent_public_and_auxiliary_sources_available(paused_gateway):
+    assert paused_gateway.run_public(lambda bp: "calendar") == "calendar"
+    assert paused_gateway.run(lambda bp: "binance", tradingview=False) == "binance"
+    assert paused_gateway.configure({"evds_key": "synthetic-evds-key"})["evds_configured"]
+    assert paused_gateway.fake.auth_calls == 0
+    assert paused_gateway.status()["state"] == "provider_paused"
+
+
+def test_paused_connection_route_reports_clear_state_without_authentication(
+    paused_gateway, monkeypatch
+):
+    monkeypatch.setattr(routes, "get_borsapy_gateway", lambda: paused_gateway)
+    app = FastAPI()
+    app.include_router(routes.router)
+    app.dependency_overrides[get_current_admin_user] = lambda: User(username="admin", role="admin")
+    with TestClient(app) as client:
+        response = client.get("/borsapy/connection")
+        assert response.status_code == 200
+        assert response.json()["state"] == "provider_paused"
+        response = client.post("/borsapy/connection/verify")
+        assert response.status_code == 503
+        assert "hesap koruması" in response.json()["detail"]
+        assert response.headers["cache-control"] == "private, no-store"
+    assert paused_gateway.fake.auth_calls == 0

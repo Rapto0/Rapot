@@ -265,6 +265,7 @@ def test_gateway_custom_native_path_preserves_metadata_and_rejects_account_chang
     tmp_path, monkeypatch
 ):
     settings = SimpleNamespace(
+        borsapy_tradingview_enabled=True,
         borsapy_credentials_path=str(tmp_path / "credentials.enc"),
         jwt_secret_key="synthetic-key-never-a-real-account-key",
         database_path=str(tmp_path / "main.sqlite3"),

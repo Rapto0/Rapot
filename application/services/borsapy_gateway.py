@@ -30,6 +30,10 @@ ALARM_TRANSPORT_SILENCE_SECONDS = 90
 CUSTOM_AUTH_REFRESH_SECONDS = 1800
 CUSTOM_AUTH_ERROR_REFRESH_SECONDS = 300
 CUSTOM_AUTH_RETRY_MAX_SECONDS = 1800
+TRADINGVIEW_PAUSED_MESSAGE = (
+    "TradingView otomatik erişimi hesap koruması için durduruldu. "
+    "Kayıtlı bağlantı ve alarmlar korunuyor; bu kaynağa bağlı alarmlar canlı veri bekliyor."
+)
 _AUTH_LOCK = threading.RLock()
 
 
@@ -120,6 +124,12 @@ class BorsapyGateway:
         self, settings=None, *, loader=None, version_reader=None, clock=None, session_auth=None
     ):
         self.settings = settings or get_settings()
+        # A deliberate operator configuration and process restart are required to
+        # enable automation. Credential edits, token retries and UI verification
+        # cannot lift this account-protection boundary.
+        self._tradingview_enabled = bool(
+            getattr(self.settings, "borsapy_tradingview_enabled", False)
+        )
         path = self.settings.borsapy_credentials_path
         self._store = BorsapySecretStore(
             Path(path)
@@ -235,16 +245,35 @@ class BorsapyGateway:
         except Exception:
             version = None
         credentials, state = self._credentials, self._state
+        paused = not self._tradingview_enabled
         return {
             "installed": version == VERSION,
             "version": version,
             "configured": bool(credentials.get("session")),
-            "authenticated": self._authenticated and state == "authenticated",
+            "authenticated": not paused and self._authenticated and state == "authenticated",
+            "tradingview_enabled": self._tradingview_enabled,
             "evds_configured": bool(credentials.get("evds_key")),
             "twitter_configured": bool(credentials.get("twitter_auth_token")),
-            "state": state if version == VERSION else "unavailable",
-            "message": self._message if version == VERSION else "borsapy 0.11.0 gerekli.",
+            "state": "provider_paused"
+            if paused
+            else state
+            if version == VERSION
+            else "unavailable",
+            "message": TRADINGVIEW_PAUSED_MESSAGE
+            if paused
+            else self._message
+            if version == VERSION
+            else "borsapy 0.11.0 gerekli.",
         }
+
+    def _require_tradingview(self) -> None:
+        if not self._tradingview_enabled:
+            raise BorsapyGatewayError(TRADINGVIEW_PAUSED_MESSAGE, 503)
+
+    @property
+    def tradingview_enabled(self) -> bool:
+        """Startup policy only; no credentials, filesystem access or provider I/O."""
+        return self._tradingview_enabled
 
     def _load(self):
         if self._module is None:
@@ -271,6 +300,7 @@ class BorsapyGateway:
             bp.clear_twitter_auth()
 
     def _authenticate(self, bp) -> None:
+        self._require_tradingview()
         self._authenticated = False
         self._token = None
         self._protect_logs()
@@ -331,10 +361,14 @@ class BorsapyGateway:
     def custom_indicator_auth_status(self):
         """Local diagnostics only: no token, expiry timestamp, account or network IO."""
         return {
+            "provider_paused": not self._tradingview_enabled,
             "refresh_count": self._token_refresh_count,
             "refresh_error": self._token_refresh_error,
-            "retry_waiting": self._token_refresh_retry_at > self._clock(),
-            "retry_after_seconds": max(0, math.ceil(self._token_refresh_retry_at - self._clock())),
+            "retry_waiting": not self._tradingview_enabled
+            or self._token_refresh_retry_at > self._clock(),
+            "retry_after_seconds": 3600
+            if not self._tradingview_enabled
+            else max(0, math.ceil(self._token_refresh_retry_at - self._clock())),
         }
 
     def refresh_custom_indicator_auth(self):
@@ -344,6 +378,7 @@ class BorsapyGateway:
         A failed refresh is visible and fail-closed with bounded retry, rather
         than silently continuing to create charts with an expired token.
         """
+        self._require_tradingview()
         now = self._clock()
         pools = tuple(pool for pool in self._custom_streams if not pool.closed)
         forced = any(getattr(pool, "auth_refresh_required", False) for pool in pools)
@@ -386,6 +421,8 @@ class BorsapyGateway:
                 pool.refresh_auth_token(token)
 
     def _prepare(self, *, require_auth: bool = False, tradingview: bool = True):
+        if tradingview:
+            self._require_tradingview()
         self._reload_credentials()
         bp = self._load()
         if not tradingview:
@@ -444,7 +481,7 @@ class BorsapyGateway:
                 self._state, self._message = "storage_error", str(exc)
                 raise BorsapyGatewayError(str(exc)) from None
             bp = self._load()
-            if updated.get("session"):
+            if updated.get("session") and self._tradingview_enabled:
                 self._authenticate(bp)
             else:
                 bp.clear_tradingview_auth()
@@ -456,6 +493,7 @@ class BorsapyGateway:
             return self.status()
 
     def verify(self) -> dict:
+        self._require_tradingview()
         with _AUTH_LOCK:
             self._reload_credentials()
             if not self._credentials.get("session"):
@@ -1022,6 +1060,8 @@ class BorsapyGateway:
 
     def reset_alarm_auth(self, expected_epoch: int) -> None:
         """Refresh a rejected stream token once through the existing auth boundary."""
+        if not self._tradingview_enabled:
+            return
         with self._account_lock():
             if self._data_epoch != expected_epoch:
                 return
@@ -1073,6 +1113,7 @@ class BorsapyGateway:
         Existing server BIST subscriptions are shared when the whole batch is
         covered. Other requests use a leased pool separate from chart sessions.
         """
+        self._require_tradingview()
         allowed = {"BIST", "NASDAQ", "NYSE", "SP", "TVC", "CBOE", "FX", "OANDA"}
         if not 1 <= len(symbols) <= 50 or any(
             exchange not in allowed or not re.fullmatch(r"[A-Z0-9.]{1,20}", symbol)
@@ -1379,6 +1420,7 @@ class BorsapyGateway:
         study_inputs: dict | None = None,
         subscriber_id="shared",
     ) -> dict:
+        self._require_tradingview()
         self._validate_subscriber(subscriber_id)
         key = self._stream_key(symbol, interval, study, study_inputs)
         exchange, symbol, interval, study, encoded_inputs = key

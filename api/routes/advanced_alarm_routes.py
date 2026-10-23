@@ -17,6 +17,7 @@ from application.services.advanced_alarm_service import (
     get_advanced_alarm_engine,
     telegram_configured,
 )
+from application.services.borsapy_gateway import BorsapyGatewayError
 from infrastructure.repositories import advanced_alarm_repository as repository
 
 
@@ -222,9 +223,12 @@ def history(
         selected = AlarmSymbol(symbol=symbol, market_type=market_type)
     except ValueError:
         raise HTTPException(422, "Geçersiz sembol.") from None
-    return get_advanced_alarm_engine().hub.history(
-        selected.symbol, market_type=selected.market_type, timeframe=timeframe, limit=limit
-    )
+    try:
+        return get_advanced_alarm_engine().hub.history(
+            selected.symbol, market_type=selected.market_type, timeframe=timeframe, limit=limit
+        )
+    except BorsapyGatewayError as exc:
+        raise HTTPException(exc.status_code, str(exc)) from None
 
 
 @router.post("/watchlists", status_code=201)

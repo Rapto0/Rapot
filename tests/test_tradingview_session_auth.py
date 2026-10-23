@@ -42,6 +42,7 @@ def real_provider(monkeypatch):
 @pytest.fixture
 def gateway(tmp_path):
     settings = SimpleNamespace(
+        borsapy_tradingview_enabled=True,
         borsapy_credentials_path=str(tmp_path / "credentials.enc"),
         jwt_secret_key="synthetic-jwt-for-auth-tests-more-than-32-chars",
         database_path=str(tmp_path / "main.sqlite3"),

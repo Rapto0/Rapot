@@ -265,6 +265,19 @@ class LiveIndicatorData:
             self._last_transport_failures = codes
 
     def control_step(self):
+        if self.owner.provider_paused():
+            # Configuration is local and immutable for this provider instance.
+            # Do not plan the universe, refresh auth, or spin the retry queue
+            # while the account-protection stop is active.
+            if self._connection:
+                self._connection.close()
+                self._connection = None
+                self._subscribed.clear()
+                self.invalidate()
+                self.owner.live_gap(
+                    "TradingView otomatik veri erişimi hesap koruması için duraklatıldı."
+                )
+            return
         self.owner._sync_live()
         now = self.owner._clock()
         with self._lock:

@@ -507,6 +507,17 @@ def test_private_history_is_memory_only(client, engine, monkeypatch):
     assert captured == [("THYAO", {"market_type": "BIST", "timeframe": "1m", "limit": 1000})]
     assert client.get("/advanced-alarms/history?symbol=THYAO&limit=1501").status_code == 422
 
+    def paused(*args, **kwargs):
+        from application.services.borsapy_gateway import BorsapyGatewayError
+
+        raise BorsapyGatewayError("TradingView hesap koruması için duraklatıldı.", 503)
+
+    monkeypatch.setattr(hub, "history", paused)
+    response = client.get("/advanced-alarms/history?symbol=THYAO")
+    assert response.status_code == 503
+    assert response.headers["cache-control"] == "private, no-store"
+    assert "hesap koruması" in response.json()["detail"]
+
 
 def test_once_per_bar_first_false_arms_same_bar_and_invalid_boolean_breaks_continuity():
     now = datetime.now(UTC)

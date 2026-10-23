@@ -137,6 +137,7 @@ def test_bad_batch_cannot_publish_partial_indicator_seed(mode):
 
 def test_gateway_batch_is_atomic_and_checks_account_after_all_frames(tmp_path, monkeypatch):
     settings = SimpleNamespace(
+        borsapy_tradingview_enabled=True,
         borsapy_credentials_path=str(tmp_path / "credentials.enc"),
         jwt_secret_key="synthetic-account-key-never-a-real-key",
         database_path=str(tmp_path / "main.sqlite3"),

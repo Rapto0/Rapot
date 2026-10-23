@@ -74,6 +74,7 @@ def test_periodic_refresh_uses_same_epoch_and_sockets_without_chart_recreation(g
     assert stream.sent[len(before) :] == [{"m": "set_auth_token", "p": [gateway._token]}]
     assert sent_without_locks == [True]
     assert gateway.custom_indicator_auth_status() == {
+        "provider_paused": False,
         "refresh_count": 1,
         "refresh_error": False,
         "retry_waiting": False,

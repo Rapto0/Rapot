@@ -45,6 +45,7 @@ from application.services.advanced_alarm_series import (
     utc,
     validate_frame,
 )
+from application.services.borsapy_gateway import BorsapyGatewayError
 from settings import get_settings
 
 MAX_HOT_SERIES = 128
@@ -278,8 +279,10 @@ class AdvancedMarketData:
         desired = active | set(self._chart_leases)
         self._active = active
         self._requested_total = len(desired)
-        ordered = sorted(active)[:MAX_REQUESTS]
-        ordered.extend(sorted(desired - active)[: max(0, MAX_REQUESTS - len(ordered))])
+        paused = self._tradingview_paused()
+        allowed = {key for key in desired if key[0] != "BIST" or not paused}
+        ordered = sorted(active & allowed)[:MAX_REQUESTS]
+        ordered.extend(sorted(allowed - active)[: max(0, MAX_REQUESTS - len(ordered))])
         self._requests = OrderedDict(
             (key, self._requests[key] if key in self._requests else Work(due=now))
             for key in ordered
@@ -291,6 +294,14 @@ class AdvancedMarketData:
             for key in list(store):
                 if key not in self._requests:
                     store.pop(key, None)
+
+    def _tradingview_paused(self) -> bool:
+        check = getattr(self._provider, "tradingview_paused", None)
+        if check is not None:
+            return check()
+        return self._provider is None and not getattr(
+            self.settings, "borsapy_tradingview_enabled", True
+        )
 
     def _forget_series(self, key: Key) -> None:
         self._series.pop(key, None)
@@ -327,6 +338,7 @@ class AdvancedMarketData:
                 except Exception:
                     self._state, self._message = "error", "Piyasa veri servisi başlatılamadı."
                     raise RuntimeError(self._message) from None
+            self._rebuild_requests()
             self._running = True
             self._stop.clear()
             workers = [self._connection_loop, self._poll_loop] + [
@@ -424,6 +436,7 @@ class AdvancedMarketData:
     def connection_step(self) -> None:
         """One deterministic I/O step; called only by the connection worker in production."""
         now = self._clock()
+        paused = self._tradingview_paused()
         epoch = self._provider.epoch()
         with self._lock:
             if epoch != self._epoch:
@@ -464,6 +477,18 @@ class AdvancedMarketData:
                 )
             )[: self.settings.advanced_alarm_max_symbols]
             connection = self._connection
+        if paused:
+            if connection:
+                connection.close()
+            with self._lock:
+                self._connection = None
+                self._subscriptions = ()
+                self._state = "provider_paused"
+                self._message = (
+                    "Hesap koruması: TradingView veri erişimi kapalı; BIST alarmları veri bekliyor."
+                )
+            connection = None
+            wanted = ()
         if connection and (not connection.connected or wanted != self._subscriptions):
             rejected = connection.auth_failed
             connection.close()
@@ -583,10 +608,15 @@ class AdvancedMarketData:
 
     def _take_work(self) -> tuple[Key, list[dict], int, Work] | None:
         now = self._clock()
+        paused = self._tradingview_paused()
         with self._lock:
             if any(expires <= now for expires in self._chart_leases.values()):
                 self._rebuild_requests()
-            due = [key for key, work in self._requests.items() if not work.busy and work.due <= now]
+            due = [
+                key
+                for key, work in self._requests.items()
+                if not work.busy and work.due <= now and (key[0] != "BIST" or not paused)
+            ]
             if not due:
                 return None
             # Three alarm turns followed by one chart turn; sharing a chart with
@@ -632,6 +662,8 @@ class AdvancedMarketData:
 
         try:
             if obsolete():
+                return
+            if market == "BIST" and self._tradingview_paused():
                 return
             provider_epoch = self._provider.epoch() if market == "BIST" else None
             if key not in self._hot:
@@ -789,6 +821,7 @@ class AdvancedMarketData:
             "warming": "Koşul için yeterli ve kapanışı doğrulanmış veri bekleniyor.",
             "capacity": "Bu periyodun verisi sınırlı iş kuyruğunda bekliyor.",
             "provider": "Sağlayıcı verisi şu anda kullanılamıyor.",
+            "provider_paused": "Hesap koruması: TradingView veri erişimi kapalı; alarm için veri bekleniyor.",
             "invalid_data": "Sağlayıcının mum verisi doğrulanamadı.",
         }
         return {
@@ -818,6 +851,8 @@ class AdvancedMarketData:
     def _snapshot(self, rule: dict, market: str, name: str, timeframe: str, now: float) -> dict:
         if not self.enabled or self._stop.is_set():
             return self._unknown(market, name, "provider")
+        if market == "BIST" and self._tradingview_paused():
+            return self._unknown(market, name, "provider_paused")
         memory_epoch = getattr(self._provider, "memory_epoch", None)
         if market == "BIST" and memory_epoch is not None and memory_epoch() != self._epoch:
             return self._unknown(market, name, "auth")
@@ -1088,6 +1123,10 @@ class AdvancedMarketData:
         ):
             raise ValueError("Geçersiz mum isteği.")
         key = (market_type, symbol, timeframe)
+        if market_type == "BIST" and self._tradingview_paused():
+            raise BorsapyGatewayError(
+                "Hesap koruması: TradingView veri erişimi kapalı; BIST mumları alınmıyor.", 503
+            )
         with self._lock:
             self._chart_leases[key] = self._clock() + CHART_LEASE_SECONDS
             self._chart_leases.move_to_end(key)
@@ -1308,7 +1347,8 @@ class AdvancedMarketData:
             if invalidated:
                 fresh, valid_series = 0, []
             tracked = len(self._subscriptions) + len(self._crypto)
-            state = "ok" if fresh else self._state
+            paused = self._tradingview_paused()
+            state = "provider_paused" if paused else "ok" if fresh else self._state
             if self._storage_error:
                 state = "storage_error"
             return {
@@ -1317,6 +1357,8 @@ class AdvancedMarketData:
                 "state": state,
                 "message": "Piyasa geçmişi diske kaydedilemiyor; kapasite ve disk rezervi kontrol edilmeli."
                 if self._storage_error
+                else "Hesap koruması: TradingView kapalı. Yalnız bağımsız veri kaynakları kullanılabilir."
+                if paused
                 else "Taze gözlemler alınıyor; gecikmesiz piyasa kabulü yapılmadı."
                 if fresh
                 else self._message,

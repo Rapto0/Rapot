@@ -70,6 +70,7 @@ class Module:
 @pytest.fixture
 def gateway(tmp_path):
     settings = SimpleNamespace(
+        borsapy_tradingview_enabled=True,
         borsapy_credentials_path=str(tmp_path / "credentials.enc"),
         jwt_secret_key="synthetic-encryption-key-at-least-32-chars",
         database_path=str(tmp_path / "main.sqlite3"),

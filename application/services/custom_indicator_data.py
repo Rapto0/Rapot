@@ -40,6 +40,7 @@ MAX_HISTORY_RETRY_SECONDS = 1800
 MAX_SEED_CHECKS_PER_TURN = 64
 MAX_COVERAGE_SYMBOLS = 4000
 MAX_COVERAGE_PAIRS = 4096
+PROVIDER_PAUSED_MESSAGE = "TradingView otomatik veri erişimi hesap koruması için duraklatıldı."
 
 
 def custom_configuration_ids(condition, timeframe):
@@ -307,6 +308,7 @@ class CustomIndicatorData:
         self._previews = OrderedDict()
         self._native = OrderedDict()
         self._history_summaries = OrderedDict()
+        self._history_reset_fences = {}
         self._results = OrderedDict()
         self._preview_results = OrderedDict()
         self._errors = {}
@@ -338,6 +340,8 @@ class CustomIndicatorData:
         self._history_retries = {}
 
     def _sync_live(self):
+        if self.provider_paused():
+            return
         with self._lock:
             # Preview reads renew their LRU position, but unchanged membership
             # must not rebuild the whole universe or reset the history cursor.
@@ -379,6 +383,9 @@ class CustomIndicatorData:
             self._publication_members = {
                 key: value for key, value in self._publication_members.items() if key in members
             }
+            self._history_reset_fences = {
+                key: value for key, value in self._history_reset_fences.items() if key in members
+            }
             self._job_cursor = 0
             for key in self._job_order:
                 if key not in self._results or not self.live.has_seed(
@@ -406,6 +413,10 @@ class CustomIndicatorData:
 
             self._provider = get_borsapy_gateway()
         return self._provider
+
+    def provider_paused(self):
+        """Local configuration only; never obtain an auth token or touch the provider."""
+        return getattr(self.provider, "tradingview_enabled", True) is False
 
     @staticmethod
     def _config(indicator, inputs, chart_timeframe):
@@ -546,6 +557,7 @@ class CustomIndicatorData:
             self._preview_results.clear()
             self._history_failures.clear()
             self._history_retries.clear()
+            self._history_reset_fences.clear()
 
     def invalidate(self):
         with self._lock:
@@ -558,6 +570,7 @@ class CustomIndicatorData:
             self._errors.clear()
             self._symbol_epochs.clear()
             self._history_summaries.clear()
+            self._history_reset_fences.clear()
             self._history_failures.clear()
             self._history_retries.clear()
             self._live_cells = 0
@@ -581,6 +594,8 @@ class CustomIndicatorData:
         )
 
     def _next_job(self):
+        if self.provider_paused():
+            return None
         now = self._clock()
         with self._lock:
             self._previews = OrderedDict(
@@ -594,6 +609,7 @@ class CustomIndicatorData:
                 self._results.clear()
                 self._live_cells = 0
                 self._history_summaries.clear()
+                self._history_reset_fences.clear()
                 self._symbol_epochs.clear()
                 self._history_failures.clear()
                 self._history_retries.clear()
@@ -748,10 +764,7 @@ class CustomIndicatorData:
                 raise ValueError("Geçmiş isteği sırasında native kaynak değişti.")
             if self._history_revision(key, entry):
                 member = (market, symbol)
-                self.live.invalidate_witnesses(member)
-                self.live_gap(
-                    "Native geçmiş düzeltildi; canlı gösterge yeniden hazırlanıyor.", member
-                )
+                self._reset_history_continuity(member, entry.epoch)
             self._store_native_entries({key: entry})
         return entry
 
@@ -766,9 +779,19 @@ class CustomIndicatorData:
         """Caller holds the publication/owner locks; inspect without mutating state."""
         market, _, timeframe = key
         summary = self._history_summaries.get(key)
+        # A real reset has already discarded this member's evaluator and native
+        # witnesses. A slow FIFO/cache eviction must not repeatedly reset that
+        # same still-unseeded member merely because 180 seconds elapsed. Fresh
+        # history is still hashed in full, and the worker still waits for new
+        # native witnesses before publishing. Any new gap/day/account token
+        # invalidates this fence, so it cannot bless pre-gap continuity.
+        reset_pending = self._history_reset_fences.get(key[:2]) == (
+            self.publication_token(key[:2]),
+            entry.epoch,
+        )
         comparison_time = (
             summary.received
-            if summary and self.live.native_continuity(key, entry.epoch)
+            if summary and (reset_pending or self.live.native_continuity(key, entry.epoch))
             else entry.received
         )
         revision = bool(summary and not summary.continues(entry.bars, comparison_time))
@@ -781,6 +804,11 @@ class CustomIndicatorData:
                 for left, right in zip(entry.bars, entry.bars[1:])
             )
         return revision
+
+    def _reset_history_continuity(self, member, epoch):
+        self.live.invalidate_witnesses(member)
+        self.live_gap("Native geçmiş düzeltildi; canlı gösterge yeniden hazırlanıyor.", member)
+        self._history_reset_fences[member] = (self.publication_token(member), epoch)
 
     def _store_native_entries(self, entries):
         """Commit already validated entries while holding publication/owner locks."""
@@ -891,10 +919,7 @@ class CustomIndicatorData:
                 if not revision or not cached:
                     if revision:
                         member = (market, symbol)
-                        self.live.invalidate_witnesses(member)
-                        self.live_gap(
-                            "Native geçmiş düzeltildi; canlı gösterge yeniden hazırlanıyor.", member
-                        )
+                        self._reset_history_continuity(member, epoch)
                     # Own revision intentionally changes the publication token:
                     # this turn cannot publish a seed. The next turn consumes
                     # the complete fresh batch after native witnesses recover.
@@ -922,6 +947,8 @@ class CustomIndicatorData:
 
     def process(self, key, config, generation):
         """Worker seam used by isolated tests; never called from a request/snapshot."""
+        if self.provider_paused():
+            return
         from application.services.custom_indicators.catalog import evaluate
 
         market, symbol, _ = key
@@ -1352,6 +1379,8 @@ class CustomIndicatorData:
             return True
 
     def _read(self, key, now, *, require_latest=True):
+        if self.provider_paused():
+            return None, "unknown", PROVIDER_PAUSED_MESSAGE
         result = self._results.get(key)
         config = self.live._configs.get(key)
         needed = (
@@ -1486,6 +1515,13 @@ class CustomIndicatorData:
 
     def _observation(self, key, ref, trigger, now):
         """Read an already identified operand; diagnostic reads reuse the same guards."""
+        if self.provider_paused():
+            return {
+                "ready": False,
+                "reason": PROVIDER_PAUSED_MESSAGE,
+                "current": None,
+                "previous": None,
+            }
         identity = key[2]
         with self._lock:
             if self._blocked_configurations and identity not in self._configs:
@@ -1636,7 +1672,9 @@ class CustomIndicatorData:
                     }
                     result = self._results.get(key)
                     reason = None
-                    if identity in self._coverage_truncated_configs or not selected:
+                    if self.provider_paused():
+                        reason = "provider_paused"
+                    elif identity in self._coverage_truncated_configs or not selected:
                         reason = "metadata_capacity"
                     elif not self.live.admitted(key):
                         reason = "runtime_capacity"
@@ -1794,7 +1832,10 @@ class CustomIndicatorData:
                     0,
                     self._jobs_requested - fresh_configured,
                 ),
-                "last_error": self._last_error,
+                "provider_paused": self.provider_paused(),
+                "last_error": PROVIDER_PAUSED_MESSAGE
+                if self.provider_paused()
+                else self._last_error,
                 "history_last_error": self._history_last_error,
                 "history_retry_waiting": sum(
                     due > self._clock() for due in self._history_retries.values()
