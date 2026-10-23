@@ -118,6 +118,19 @@ function harness({ allowed = true, ruleRows = [], listRows = [], localLists = []
   return { render, requests, queries, elements: () => allElements(tree), text: () => text(tree) };
 }
 
+test('provider pause is visible outside collapsed details and does not alter saved alarms', () => {
+  const view = harness({ marketStatus: { state: 'provider_paused' } });
+  const banner = view.elements().find(element => element.props.role === 'alert' && /hesap koruması/.test(text(element)));
+  assert.ok(banner);
+  assert.match(text(banner), /alarmlar şu anda değerlendirilmez/);
+  assert.match(text(banner), /ayarlarınız korunuyor/);
+  const detailElements = view.elements().filter(element => element.type === 'details').flatMap(allElements);
+  assert.ok(!detailElements.includes(banner));
+  assert.deepEqual(view.requests, []);
+  assert.doesNotMatch(harness().text(), /hesap koruması için duraklatıldı/);
+  assert.doesNotMatch(harness({ allowed: false, marketStatus: { state: 'provider_paused' } }).text(), /hesap koruması için duraklatıldı/);
+});
+
 test('custom worker status separates pending results from standard chart history and cache totals', () => {
   const view = harness({ marketStatus: { history_ready: 99, custom_indicators: {
     running: true, configured: 3, blocked_configurations: 2, requested_rule_symbols: 20, pending_or_stale_rule_symbols: 7,
