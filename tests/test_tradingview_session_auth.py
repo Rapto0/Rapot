@@ -12,6 +12,7 @@ from borsapy.exceptions import AuthenticationError
 
 from application.services.borsapy_gateway import BorsapyGateway, BorsapyGatewayError, _Redact
 from infrastructure.providers import tradingview_session_auth as auth
+from infrastructure.providers.tradingview_policy import TradingViewPolicy
 
 SESSION = "synthetic-session-for-redirect-test"
 SIGN = "synthetic-sign%2Bopaque%3D"
@@ -49,7 +50,10 @@ def gateway(tmp_path):
         borsapy_max_streams=2,
         borsapy_stream_idle_seconds=120,
     )
-    item = BorsapyGateway(settings)
+    item = BorsapyGateway(
+        settings,
+        policy=TradingViewPolicy(tmp_path / "policy.json", rate=1e6, burst=1e6, auth_interval=0),
+    )
     yield item
     item.close()
 
@@ -214,6 +218,42 @@ def test_error_http_response_cannot_authenticate_even_with_token_in_body(
         gateway.configure({"session": SESSION, "session_sign": SIGN})
     assert provider._client is client
     assert bp.get_tradingview_auth() is None
+
+
+@pytest.mark.parametrize("status", [401, 403, 429, 500])
+def test_auth_adapter_preserves_rejection_signal_without_upstream_content(status, real_provider):
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        return httpx.Response(status, text=f"Private response: {SESSION} {SIGN} {TOKEN}")
+
+    provider, client = real_provider(handler)
+    with pytest.raises(auth.SessionAuthError) as failure:
+        auth.authenticate_session(bp, session=SESSION, session_sign=SIGN)
+    assert failure.value.status_code == status
+    assert failure.value.protection_reason == ("http_rejected" if status != 500 else None)
+    assert len(requests) == 1
+    assert provider._client is client
+    assert all(secret not in str(failure.value) for secret in (SESSION, SIGN, TOKEN))
+
+
+def test_explicit_restriction_page_surfaces_safe_account_signal(real_provider):
+    page = "We noticed some suspicious activity on your account, so we've had to ban it."
+    provider, client = real_provider(lambda request: httpx.Response(200, text=page))
+    with pytest.raises(auth.SessionAuthError) as failure:
+        auth.authenticate_session(bp, session=SESSION, session_sign=SIGN)
+    assert failure.value.protection_reason == "account_restricted"
+    assert failure.value.status_code is None  # Do not invent an HTTP status for a 200 page.
+    assert provider._client is client
+    assert bp.get_tradingview_auth() is None
+
+
+def test_authenticated_page_with_restriction_translation_is_not_a_ban(real_provider):
+    page = PAGE + '<script>"suspicious activity on your account"</script>'
+    real_provider(lambda request: httpx.Response(200, text=page))
+    result = auth.authenticate_session(bp, session=SESSION, session_sign=SIGN)
+    assert result["auth_token"] == TOKEN
 
 
 def test_transport_error_restores_client_and_hides_exception_secrets(

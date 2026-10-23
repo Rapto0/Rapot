@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 from api.auth import User, get_current_admin_user
 from api.routes import borsapy_connection_routes as routes
 from application.services.borsapy_gateway import BorsapyGateway, BorsapyGatewayError
+from infrastructure.providers.tradingview_policy import TradingViewPolicy
 
 SESSION = "private-session-fixture-0123456789"
 SIGN = "private-signature-fixture-0123456789"
@@ -146,7 +147,11 @@ def gateway(tmp_path):
     bp = FakeBorsapy()
     clock = [0.0]
     item = BorsapyGateway(
-        settings, loader=lambda: bp, version_reader=lambda: "0.11.0", clock=lambda: clock[0]
+        settings,
+        loader=lambda: bp,
+        version_reader=lambda: "0.11.0",
+        clock=lambda: clock[0],
+        policy=TradingViewPolicy(tmp_path / "policy.json", rate=1e6, burst=1e6, auth_interval=0),
     )
     item.fake, item.clock = bp, clock
     yield item
@@ -193,7 +198,12 @@ def test_token_missing_does_not_fall_back_or_retry_automatically(gateway):
 def test_running_process_reloads_replaced_and_deleted_credentials(gateway):
     other_bp = FakeBorsapy()
     other = BorsapyGateway(
-        gateway.settings, loader=lambda: other_bp, version_reader=lambda: "0.11.0"
+        gateway.settings,
+        loader=lambda: other_bp,
+        version_reader=lambda: "0.11.0",
+        policy=TradingViewPolicy(
+            gateway._provider_policy.path, rate=1e6, burst=1e6, auth_interval=0
+        ),
     )
     try:
         connect(gateway)
@@ -219,7 +229,12 @@ def test_running_process_reloads_replaced_and_deleted_credentials(gateway):
 def test_failed_revision_retries_only_after_external_replacement(gateway):
     other_bp = FakeBorsapy()
     other = BorsapyGateway(
-        gateway.settings, loader=lambda: other_bp, version_reader=lambda: "0.11.0"
+        gateway.settings,
+        loader=lambda: other_bp,
+        version_reader=lambda: "0.11.0",
+        policy=TradingViewPolicy(
+            gateway._provider_policy.path, rate=1e6, burst=1e6, auth_interval=0
+        ),
     )
     try:
         connect(gateway)

@@ -16,6 +16,7 @@ from infrastructure.providers.custom_indicator_history import (
     SESSION_KEYS,
     validate_native_request,
 )
+from infrastructure.providers.tradingview_policy import packet_restriction, restriction_reason
 
 MIN_REQUEST_INTERVAL = 0.1  # At most ten chart creations/second on this socket.
 HISTORY_TIMEOUT = 10.0
@@ -90,10 +91,20 @@ def _packets(raw):
 
 
 class NativeIndicatorHistory:
-    def __init__(self, *, ws_factory=None, timeout=HISTORY_TIMEOUT, clock=time.monotonic):
+    def __init__(
+        self,
+        *,
+        ws_factory=None,
+        timeout=HISTORY_TIMEOUT,
+        clock=time.monotonic,
+        before_request=None,
+        on_restriction=None,
+    ):
         self._factory = ws_factory
         self._timeout = timeout
         self._clock = clock
+        self._before_request, self._on_restriction = before_request, on_restriction
+        self._stop = threading.Event()
         self._condition = threading.Condition(threading.RLock())
         self._request_lock = threading.Lock()
         self._send_lock = threading.Lock()
@@ -160,6 +171,10 @@ class NativeIndicatorHistory:
                         self._heartbeats += 1
                     continue
                 method, params = packet.get("m"), packet.get("p", [])
+                reason = packet_restriction(packet)
+                if reason and self._on_restriction:
+                    self._on_restriction(reason)
+                    raise ValueError
                 if not isinstance(params, list):
                     raise ValueError
                 if method in {"critical_error", "protocol_error"}:
@@ -231,6 +246,7 @@ class NativeIndicatorHistory:
 
     def close(self):
         # May run under the gateway's account lock: never wait for a request.
+        self._stop.set()
         with self._condition:
             self._closed = True
             self._failure = "Native history cancelled"
@@ -254,8 +270,14 @@ class NativeIndicatorHistory:
         with self._condition:
             reconnect = self._epoch != epoch or not self._connected or self._failure
         if not reconnect:
-            return
+            return 0.0
+        admission_wait = 0.0
         self._drop_transport()
+        if self._before_request:
+            started = self._clock()
+            self._before_request("connect", stop=self._stop)
+            admission_wait = self._clock() - started
+            deadline += admission_wait
         with self._condition:
             if self._closed or self._thread is not None:
                 raise ValueError("Native history transport cannot restart")
@@ -283,11 +305,17 @@ class NativeIndicatorHistory:
                 # created socket, not merely ignore its obsolete generation.
                 _stop_socket(_ws)
 
+            def failed(*args):
+                reason = restriction_reason(args[-1]) if args else None
+                if reason and self._on_restriction:
+                    self._on_restriction(reason)
+                self._fail(generation, "Native history transport failed")
+
             ws = factory(
                 "wss://data.tradingview.com/socket.io/websocket?type=chart",
                 on_open=opened,
                 on_message=lambda socket, raw: self._on_message(generation, socket, raw),
-                on_error=lambda *_args: self._fail(generation, "Native history transport failed"),
+                on_error=failed,
                 on_close=lambda *_args: self._fail(generation, "Native history transport closed"),
             )
             self._ws = ws
@@ -306,6 +334,7 @@ class NativeIndicatorHistory:
             self._thread = threading.Thread(target=receive, name="native-history-ws", daemon=True)
             self._thread.start()
         self._wait(lambda: self._connected, deadline)
+        return admission_wait
 
     def get_history(self, symbol, *, exchange, timeframe, bars, token, epoch):
         return self.get_histories(
@@ -322,7 +351,7 @@ class NativeIndicatorHistory:
             raise ValueError("Native history worker busy")
         try:
             deadline = self._clock() + self._timeout
-            self._connect(epoch, deadline)
+            deadline += self._connect(epoch, deadline)
             with self._condition:
                 ws = self._ws
                 generation = self._generation
@@ -349,6 +378,11 @@ class NativeIndicatorHistory:
                 separators=(",", ":"),
             )
             for request in charts.values():
+                if self._before_request:
+                    started = self._clock()
+                    self._before_request("chart", stop=self._stop)
+                    # Admission waiting is local pacing, not provider latency.
+                    deadline += self._clock() - started
                 self._wait(lambda: self._clock() >= self._next_request, deadline)
                 session, series = request["session"], request["series"]
                 self._send(ws, _message("chart_create_session", [session, ""]))

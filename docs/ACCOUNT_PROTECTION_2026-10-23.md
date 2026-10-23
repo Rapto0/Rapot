@@ -190,3 +190,54 @@ mevcut Osmanlı ekran/veri hakkı tek başına API erişimi kanıtı değildir.
 Bu araştırmada üretim yapılandırması değişmedi, yeni piyasa sorgusu veya
 alarm/Telegram gönderimi yapılmadı. Dört kuralın etkin tanımları korunuyor;
 TradingView kaynağı kapalı olduğu için canlı değerlendirme yeniden açılmadı.
+
+## Kontrollü yeniden açma talimatı ve kaynak değişikliği
+
+Kullanıcı daha sonra borsapy ile, hesabını **fazla riske atmadan** anlık BIST
+verisinin ve mevcut dört alarmın sürmesini açıkça istedi. Bu talimat kontrollü
+yeniden açmayı kapsar; sıfır hesap riski garantisi değildir. TradingView'in
+otomatik veri toplama hakkındaki açıklaması geçerliliğini korur. İstek hızını
+düşürmek, erişimin sağlayıcı tarafından onaylandığı anlamına gelmez.
+
+Yeni kaynak varsayılan kapalı ayarı korur; üretimde yalnız API için açık bir
+ayar gerekir. Ortak istek bütçesi geçmiş, bağlantı ve yeni abonelik açılışlarını
+sınırlar; gelen fiyatların hesaplanmasına bekleme süresi eklemez. Açık hesap
+kısıtlaması veya sağlayıcının belirli erişim/hız retleri bütün TradingView
+taşımalarını kapatan bir korumayı tetikler. Ayrı kalıcı işaret süreç yeniden
+başlatıldığında da korunur; çerez düzenleme veya oturum doğrulama bu işareti
+kaldırmaz. Yerel iş kuyruğu doluluğu ya da genel ağ zaman aşımı hesap yasağı
+olarak sınıflandırılmaz. IP/hesap değiştirme veya engel aşma uygulanmaz.
+
+Mevcut özel göstergelerin native 1D/1W geçmişi, aynı üyelerin intrabar standart
+RSI koşullarına da başlangıç sağlar. Standart RSI kendi `ta` EWM başlangıcını
+ve son 500 mumunu korur; Pine RSI değeriyle değiştirilmez. Her yeni fiyat aynı
+native gözlem üzerinde değerlendirilir. Normal günlük/haftalık RSI için
+yinelenen geçmiş işleri kalkar; başka gösterge, kapanış kuralı veya açık grafik
+gereksinimi varsa ilgili geçmiş işi korunur. Desteklenmeyen/karma üyeler normal
+yolda kalır. Native dönem sınırı, gerçek geçmiş revizyonu, kopma, oturum ve
+tazelik kontrolleri devam eder; hazır olmayan girdi alarm üretmez.
+
+Bu bölüm kaynak davranışını açıklar. Yeni kaynağın üretim yayını ve canlı kabulü
+aşağıda ayrı kaydedilmedikçe, önceki `bf852c75` kapalı üretim durumu geçerlidir.
+
+Ortak bütçe saniyede dört **iş kabulü**, en fazla dört birikmiş kabul hakkı ve
+oturum doğrulamaları arasında en az 300 saniyedir. `requests_admitted` sayacı
+bağlantı, abonelik, chart ve geçmiş/araştırma çağrılarının başlangıcını sayar;
+ham WebSocket mesajı veya sağlayıcının iç işlem sayısı değildir. Bir chart
+başlangıcı birkaç protokol mesajı gönderir. Heartbeat yanıtları ve gelen fiyat
+mesajları bu bütçeyle bekletilmez. 631 fiyat aboneliği ilk açılışta hesap kilidi
+tutulmadan kademeli eklenir; diğer işler de aynı bütçeyi paylaşır. Bu nedenle
+ilk hazırlık, kesintisiz hazır durumdaki fiyat değerlendirmesinden daha uzundur.
+
+Kalıcı işaret, şifreli kimlik dosyasıyla aynı dizindeki
+`tradingview-protection.json` dosyasıdır; yalnız sabit neden, sürüm ve UTC tarih
+tutar. Atomik yazma başarısız olursa çalışan süreç yine kapanır ve
+`policy_storage_error` bildirir; dosya hiç yazılamadıysa yeniden başlatmada
+kalıcılık garanti edilmez. Bozuk mevcut dosya güvenli biçimde kapalı kalır.
+Genel `auth_error`, HTTP 401/403/429 ve açık hesap/hız retleri durdurur;
+tek sembolün `permission_denied` yanıtı bütün hesabın yasaklandığı sayılmaz.
+33 yeni çevrimdışı test; kalıcı işareti, yeniden açılmama davranışını, ortak
+bütçeyi, hassas veri taşımayan hata sınıflamasını, tüm gateway taşıma türlerinin
+kapanmasını ve native fiyat/geçmiş callback'lerini doğruladı. Önceki 198 ilgili
+test de geçti. Bunlar gerçek sağlayıcı izni veya canlı seans kapasitesi kanıtı
+değildir; bu doğrulamalarda dış sağlayıcıya bağlanılmadı.

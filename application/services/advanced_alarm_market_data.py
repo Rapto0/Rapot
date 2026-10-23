@@ -127,6 +127,10 @@ class AdvancedMarketData:
         self._state, self._message = "warming", "Sunucu piyasa verisi hazırlanıyor."
         self._custom = None
         self._update_listener = None
+        self._rule_definitions = ()
+        self._standard_rsi_members = set()
+        self._standard_rsi_keys = set()
+        self._standard_live_rule_ids = set()
 
     def set_update_listener(self, callback):
         self._update_listener = callback
@@ -236,6 +240,7 @@ class AdvancedMarketData:
             old_global, old_local = self._global_refs, self._local_refs
             self._rules, self._global_refs, self._local_refs = memberships, global_refs, local_refs
             self._plans = plans
+            self._rule_definitions = tuple(rules)
             self._explicit_bist, self._crypto = explicit, crypto
             desired_symbols = (
                 {("BIST", symbol) for symbol in explicit}
@@ -264,6 +269,67 @@ class AdvancedMarketData:
             ref["field"] == "custom" for _, refs, _ in plans.values() for ref in refs
         ):
             self.custom.configure(rules, universe=self._universe)
+        self._configure_standard_rsi()
+
+    def _configure_standard_rsi(self):
+        """Reuse existing native streams; unsupported rules retain their normal history jobs."""
+        custom = self._custom
+        supports = getattr(custom, "supports_standard_rsi", None)
+        configure = getattr(custom, "configure_standard_rsi", None)
+        pairs, bridged_keys, ordinary_keys, demands, live_rules = set(), set(), set(), {}, set()
+        with self._lock:
+            for rule in self._rule_definitions:
+                if not rule.get("enabled", True):
+                    continue
+                identity = (str(rule["id"]), rule.get("revision", 0))
+                plan = self._plans.get(identity)
+                if plan is None:
+                    continue
+                refs = plan[2].fields
+                timeframe = rule["timeframe"]
+                native_tf = {"1d": "1D", "1wk": "1W"}.get(timeframe)
+                eligible = bool(
+                    callable(supports)
+                    and callable(configure)
+                    and rule.get("trigger") == "intrabar"
+                    and native_tf
+                    and refs
+                    and all(ref["field"] == "rsi" and ref["timeframe"] == timeframe for ref in refs)
+                )
+                members = self.symbols(rule["id"])
+                all_live = bool(members) and eligible
+                for member in members:
+                    key = member["market_type"], member["symbol"]
+                    shared = eligible and key[0] == "BIST" and supports(key, native_tf)
+                    if shared:
+                        pairs.add((*identity, *key))
+                        bridged_keys.add((*key, timeframe))
+                        demands.setdefault((*key, native_tf), set()).update(
+                            ref.get("period", 14) for ref in refs
+                        )
+                    else:
+                        all_live = False
+                        normal = [ref for ref in refs if ref["field"] != "custom"]
+                        ordinary_keys.update(
+                            (*key, ref["timeframe"])
+                            for ref in normal
+                            if ref["field"] != "price" or rule.get("trigger") == "bar_close"
+                        )
+                        if normal and (
+                            rule.get("trigger") == "bar_close" or rule.get("mode") == "once_per_bar"
+                        ):
+                            ordinary_keys.add((*key, timeframe))
+                if all_live:
+                    live_rules.add(identity)
+            if callable(configure):
+                configure(demands)
+            self._standard_rsi_members = pairs
+            self._standard_rsi_keys = bridged_keys - ordinary_keys
+            self._standard_live_rule_ids = live_rules
+            self._rebuild_requests()
+
+    def uses_live_updates(self, rule):
+        return (str(rule["id"]), rule.get("revision", 0)) in self._standard_live_rule_ids
 
     def _rebuild_requests(self) -> None:
         now = self._clock()
@@ -274,6 +340,7 @@ class AdvancedMarketData:
         for member in self._universe:
             for tf in self._global_refs:
                 active.add(("BIST", member["symbol"], tf))
+        active.difference_update(self._standard_rsi_keys)
         # Universe quotes remain continuous. Native candles are needed only by
         # actual conditions and recently viewed charts, not by every price rule.
         desired = active | set(self._chart_leases)
@@ -432,6 +499,7 @@ class AdvancedMarketData:
             self._rebuild_requests()
             if self._custom is not None:
                 self._custom.set_universe(self._universe)
+            self._configure_standard_rsi()
 
     def connection_step(self) -> None:
         """One deterministic I/O step; called only by the connection worker in production."""
@@ -869,17 +937,24 @@ class AdvancedMarketData:
         refs = prepared.fields
         closed = rule["trigger"] == "bar_close"
         custom_data = {}
+        shared_rsi = (
+            str(rule["id"]),
+            rule.get("revision", 0),
+            market,
+            name,
+        ) in self._standard_rsi_members
         for ref in refs:
-            if ref["field"] == "custom":
-                custom = self.custom.observation(
-                    ref, {"market_type": market, "symbol": name}, rule["trigger"], now
+            if ref["field"] == "custom" or shared_rsi:
+                reader = (
+                    self.custom.standard_rsi_observation if shared_rsi else self.custom.observation
                 )
+                custom = reader(ref, {"market_type": market, "symbol": name}, rule["trigger"], now)
                 if not custom["ready"]:
                     result = self._unknown(market, name, "warming")
                     result["reason"] = custom["reason"]
                     return result
                 custom_data[field_key(ref, timeframe)] = custom
-        ordinary_refs = [ref for ref in refs if ref["field"] != "custom"]
+        ordinary_refs = [ref for ref in refs if field_key(ref, timeframe) not in custom_data]
         if custom_data and (
             not ordinary_refs
             or not closed

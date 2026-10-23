@@ -22,6 +22,7 @@ from infrastructure.providers.custom_indicator_leases import (
     is_leased_timeframe,
     persistent_keys,
 )
+from infrastructure.providers.tradingview_policy import packet_restriction, restriction_reason
 
 MAX_LIVE_SERIES = 8192
 MAX_LIVE_CONNECTIONS = 4
@@ -154,9 +155,16 @@ def stream_class(base):
     class NativeStream(base):
         WS_URL = "wss://data.tradingview.com/socket.io/websocket"
 
-        def __init__(self, token, callback, clock):
+        def __init__(
+            self, token, callback, clock, *, before_request=None, on_restriction=None, stop=None
+        ):
             super().__init__(auth_token=token)
             self.callback, self.clock = callback, clock
+            self.before_request, self.on_restriction, self.stop = (
+                before_request,
+                on_restriction,
+                stop,
+            )
             self.sessions, self.series, self.quotes = {}, {}, {}
             self.sessions_by_id = {}
             self.members_by_full = {}
@@ -241,6 +249,9 @@ def stream_class(base):
         def _on_error(self, *_args):
             self.failed = True
             self._connected.clear()
+            reason = restriction_reason(_args[-1]) if _args else None
+            if reason and self.on_restriction:
+                self.on_restriction(reason)
 
         def _emit(self, event):
             if not self.closed and not self.failed:
@@ -288,6 +299,8 @@ def stream_class(base):
             if additions_limit is not None:
                 additions = additions[:additions_limit]
             for market, symbol, timeframe in additions:
+                if self.before_request:
+                    self.before_request("chart", stop=self.stop)
                 exchange = "BIST" if market == "BIST" else "BINANCE"
                 member = market, symbol
                 full = f"{exchange}:{symbol}"
@@ -336,6 +349,13 @@ def stream_class(base):
                     continue
                 if not isinstance(packet, dict):
                     continue
+                reason = packet_restriction(packet)
+                if reason and self.on_restriction:
+                    self.failed = True
+                    self.failure_code = reason
+                    self._connected.clear()
+                    self.on_restriction(reason)
+                    return
                 method, params = packet.get("m"), packet.get("p", [])
                 if not isinstance(params, list):
                     continue
@@ -526,10 +546,23 @@ def stream_class(base):
 class NativeStreamPool:
     """Fixed connection ceiling, dynamic subscriptions and no hidden reconnect."""
 
-    def __init__(self, base, token, epoch, callback, *, clock=None, lease_long_timeframes=True):
+    def __init__(
+        self,
+        base,
+        token,
+        epoch,
+        callback,
+        *,
+        clock=None,
+        lease_long_timeframes=True,
+        before_request=None,
+        on_restriction=None,
+    ):
         self._class = stream_class(base)
         self._token, self.epoch, self._callback = token, epoch, callback
         self._clock = clock or time.time
+        self._before_request, self._on_restriction = before_request, on_restriction
+        self._stop = threading.Event()
         self._leases = NativeLeaseBook(self._clock) if lease_long_timeframes else None
         self._streams = {}
         self._wanted_by_slot = {}
@@ -713,9 +746,20 @@ class NativeStreamPool:
             if slot not in groups:
                 self._streams.pop(slot).disconnect()
         for slot, wanted in wire_groups.items():
+            if self.closed:
+                raise ValueError("Native canlı gösterge bağlantısı durduruldu.")
             stream = self._streams.get(slot)
             if stream is None:
-                stream = self._class(self._token, self._on_event, self._clock)
+                if self._before_request:
+                    self._before_request("connect", stop=self._stop)
+                stream = self._class(
+                    self._token,
+                    self._on_event,
+                    self._clock,
+                    before_request=self._before_request,
+                    on_restriction=self._on_restriction,
+                    stop=self._stop,
+                )
                 self._streams[slot] = stream
                 stream.connect(timeout=5)
                 stream._should_reconnect = False
@@ -759,6 +803,7 @@ class NativeStreamPool:
 
     def close(self):
         self.closed = True
+        self._stop.set()
         for stream in list(self._streams.values()):
             with suppress(Exception):
                 stream.disconnect()

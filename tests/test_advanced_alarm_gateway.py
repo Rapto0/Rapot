@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 
 from application.services.borsapy_gateway import BorsapyGateway, BorsapyGatewayError
+from infrastructure.providers.tradingview_policy import TradingViewPolicy
 
 
 class Stream:
@@ -80,7 +81,11 @@ def gateway(tmp_path):
     module = Module()
     clock = [0.0]
     result = BorsapyGateway(
-        settings, loader=lambda: module, version_reader=lambda: "0.11.0", clock=lambda: clock[0]
+        settings,
+        loader=lambda: module,
+        version_reader=lambda: "0.11.0",
+        clock=lambda: clock[0],
+        policy=TradingViewPolicy(tmp_path / "policy.json", rate=1e6, burst=1e6, auth_interval=0),
     )
     result.monotonic = clock
     yield result
@@ -339,14 +344,14 @@ def test_native_packet_volume_provenance_precedes_upstream_zero_fallback(
     assert result.Close.iloc[0] == 101
 
 
-def test_request_history_never_constructs_http_client_and_rejects_http_paths(monkeypatch):
+def test_request_history_never_constructs_http_client_and_rejects_http_paths(gateway, monkeypatch):
     from borsapy._providers.base import BaseProvider
 
     def forbidden_constructor(*_args, **_kwargs):
         pytest.fail("Request-local WebSocket history must not construct an HTTP provider")
 
     monkeypatch.setattr(BaseProvider, "__init__", forbidden_constructor)
-    provider = BorsapyGateway._new_alarm_history_provider("synthetic-request-token")
+    provider = gateway._new_alarm_history_provider("synthetic-request-token")
     assert not hasattr(provider, "_client") and not hasattr(provider, "_cache")
     assert provider._session_id is None and provider._chart_session_id is None
     for method in (provider.login_user, provider.get_user, provider._get, provider._post):
@@ -359,7 +364,7 @@ def test_request_history_never_constructs_http_client_and_rejects_http_paths(mon
 
 @pytest.mark.parametrize("missing_volume", [False, True])
 def test_real_native_history_websocket_replay_preserves_candles_and_volume_quality(
-    monkeypatch, missing_volume
+    gateway, monkeypatch, missing_volume
 ):
     import websocket
     from borsapy._providers.tradingview import get_tradingview_auth
@@ -398,7 +403,7 @@ def test_real_native_history_websocket_replay_preserves_candles_and_volume_quali
             self.closed = True
 
     monkeypatch.setattr(websocket, "WebSocketApp", ReplayTransport)
-    provider = BorsapyGateway._new_alarm_history_provider("synthetic-request-token")
+    provider = gateway._new_alarm_history_provider("synthetic-request-token")
     try:
         frame = provider.get_history("THYAO", period="5d", interval="1m")
     finally:

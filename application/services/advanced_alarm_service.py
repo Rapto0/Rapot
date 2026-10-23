@@ -141,15 +141,19 @@ class AdvancedAlarmEngine:
         # A symbol's rule membership is one Python integer bitmap, not thousands
         # of (rule, symbol) objects. Shared watchlists are expanded only once.
         memberships = [self.hub.symbols(rule["id"]) for rule in self._rules]
+        shared_live = getattr(self.hub, "uses_live_updates", lambda rule: False)
+        live_rules = [
+            self._has_custom(rule["condition"]) or shared_live(rule) for rule in self._rules
+        ]
         signature = tuple(
-            (rule["id"], rule["revision"], id(members))
-            for rule, members in zip(self._rules, memberships, strict=True)
+            (rule["id"], rule["revision"], id(members), live)
+            for rule, members, live in zip(self._rules, memberships, live_rules, strict=True)
         )
         if signature == self._live_index_signature:
             return
         groups, custom_ids, plan_keys, interned = {}, set(), {}, {}
         for position, (rule, members) in enumerate(zip(self._rules, memberships, strict=True)):
-            if not self._has_custom(rule["condition"]):
+            if not live_rules[position]:
                 continue
             custom_ids.add(rule["id"])
             signature_key = (

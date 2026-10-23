@@ -18,6 +18,13 @@ from typing import Any
 from urllib.parse import quote
 
 from application.services.market_volume_quality import native_volume, volume_quality
+from infrastructure.providers.tradingview_policy import (
+    PAUSED_MESSAGE,
+    TradingViewPolicy,
+    TradingViewPolicyError,
+    packet_restriction,
+    restriction_reason,
+)
 from infrastructure.providers.tradingview_session_auth import authenticate_session
 from infrastructure.repositories.borsapy_secret_store import BorsapySecretStore, SecretStoreError
 from settings import get_settings
@@ -121,7 +128,14 @@ def _number(value: Any) -> float | None:
 
 class BorsapyGateway:
     def __init__(
-        self, settings=None, *, loader=None, version_reader=None, clock=None, session_auth=None
+        self,
+        settings=None,
+        *,
+        loader=None,
+        version_reader=None,
+        clock=None,
+        session_auth=None,
+        policy=None,
     ):
         self.settings = settings or get_settings()
         # A deliberate operator configuration and process restart are required to
@@ -137,6 +151,10 @@ class BorsapyGateway:
             else Path(self.settings.database_path).parent / ".borsapy/credentials.enc",
             self.settings.jwt_secret_key or "",
         )
+        self._provider_policy = policy or TradingViewPolicy(
+            self._store.path.with_name("tradingview-protection.json")
+        )
+        self._protection_close_thread = None
         self._loader = loader or (lambda: importlib.import_module("borsapy"))
         # A custom module loader is an injected provider; it can also inject its
         # auth adapter. The production loader always uses the pinned redirect fix.
@@ -245,13 +263,14 @@ class BorsapyGateway:
         except Exception:
             version = None
         credentials, state = self._credentials, self._state
-        paused = not self._tradingview_enabled
+        paused = not self.tradingview_enabled
         return {
             "installed": version == VERSION,
             "version": version,
             "configured": bool(credentials.get("session")),
             "authenticated": not paused and self._authenticated and state == "authenticated",
-            "tradingview_enabled": self._tradingview_enabled,
+            "tradingview_enabled": self.tradingview_enabled,
+            "provider_protection": self._provider_policy.status(),
             "evds_configured": bool(credentials.get("evds_key")),
             "twitter_configured": bool(credentials.get("twitter_auth_token")),
             "state": "provider_paused"
@@ -259,7 +278,9 @@ class BorsapyGateway:
             else state
             if version == VERSION
             else "unavailable",
-            "message": TRADINGVIEW_PAUSED_MESSAGE
+            "message": (
+                PAUSED_MESSAGE if self._provider_policy.blocked else TRADINGVIEW_PAUSED_MESSAGE
+            )
             if paused
             else self._message
             if version == VERSION
@@ -267,13 +288,43 @@ class BorsapyGateway:
         }
 
     def _require_tradingview(self) -> None:
-        if not self._tradingview_enabled:
-            raise BorsapyGatewayError(TRADINGVIEW_PAUSED_MESSAGE, 503)
+        if not self.tradingview_enabled:
+            message = (
+                PAUSED_MESSAGE if self._provider_policy.blocked else TRADINGVIEW_PAUSED_MESSAGE
+            )
+            raise BorsapyGatewayError(message, 503)
 
     @property
     def tradingview_enabled(self) -> bool:
-        """Startup policy only; no credentials, filesystem access or provider I/O."""
-        return self._tradingview_enabled
+        """Startup permission and live restriction latch, without filesystem/provider I/O."""
+        return self._tradingview_enabled and not self._provider_policy.blocked
+
+    def _trip_tradingview(self, reason):
+        if self._provider_policy.trip(reason):
+            # Callback threads may own a socket lock. Retire every transport on a
+            # separate thread; the policy property rejects all cache reads now.
+            def close_all():
+                with _AUTH_LOCK:
+                    self._authenticated, self._token, self._blocked = False, None, True
+                    self._close_streams()
+
+            self._protection_close_thread = threading.Thread(
+                target=close_all, name="tradingview-protection-close", daemon=True
+            )
+            self._protection_close_thread.start()
+
+    def _provider_failure(self, error):
+        if not isinstance(error, (BorsapyGatewayError, TradingViewPolicyError)):
+            reason = restriction_reason(error)
+            if reason:
+                self._trip_tradingview(reason)
+
+    def _before_provider_request(self, kind, *, stop=None):
+        self._require_tradingview()
+        try:
+            self._provider_policy.before_request(kind, stop=stop)
+        except TradingViewPolicyError as exc:
+            raise BorsapyGatewayError(str(exc), exc.status_code) from None
 
     def _load(self):
         if self._module is None:
@@ -301,6 +352,7 @@ class BorsapyGateway:
 
     def _authenticate(self, bp) -> None:
         self._require_tradingview()
+        self._before_provider_request("auth")
         self._authenticated = False
         self._token = None
         self._protect_logs()
@@ -311,6 +363,7 @@ class BorsapyGateway:
                 session=self._credentials["session"],
                 session_sign=self._credentials["session_sign"],
             )
+            self._require_tradingview()
             token = result.get("auth_token") if isinstance(result, dict) else None
             if not isinstance(token, str) or not token or token == "unauthorized_user_token":
                 raise ValueError
@@ -324,7 +377,8 @@ class BorsapyGateway:
             self._state = "authenticated"
             self._message = "Oturum doğrulandı; gerçek zamanlı veri henüz ölçülmedi."
             self._protect_logs()
-        except Exception:
+        except Exception as exc:
+            self._provider_failure(exc)
             bp.clear_tradingview_auth()
             self._blocked = True
             self._state, self._message = "auth_needed", "TradingView oturumu doğrulanamadı."
@@ -361,13 +415,13 @@ class BorsapyGateway:
     def custom_indicator_auth_status(self):
         """Local diagnostics only: no token, expiry timestamp, account or network IO."""
         return {
-            "provider_paused": not self._tradingview_enabled,
+            "provider_paused": not self.tradingview_enabled,
             "refresh_count": self._token_refresh_count,
             "refresh_error": self._token_refresh_error,
-            "retry_waiting": not self._tradingview_enabled
+            "retry_waiting": not self.tradingview_enabled
             or self._token_refresh_retry_at > self._clock(),
             "retry_after_seconds": 3600
-            if not self._tradingview_enabled
+            if not self.tradingview_enabled
             else max(0, math.ceil(self._token_refresh_retry_at - self._clock())),
         }
 
@@ -481,7 +535,7 @@ class BorsapyGateway:
                 self._state, self._message = "storage_error", str(exc)
                 raise BorsapyGatewayError(str(exc)) from None
             bp = self._load()
-            if updated.get("session") and self._tradingview_enabled:
+            if updated.get("session") and self.tradingview_enabled:
                 self._authenticate(bp)
             else:
                 bp.clear_tradingview_auth()
@@ -534,11 +588,45 @@ class BorsapyGateway:
         with self._account_lock():
             bp = self._prepare(require_auth=require_auth, tradingview=tradingview)
             try:
-                return callback(bp)
+                if tradingview:
+                    self._before_provider_request("request")
+                with self._provider_packets(bp, enabled=tradingview):
+                    result = callback(bp)
+                if tradingview:
+                    self._require_tradingview()
+                return result
             except BorsapyGatewayError:
                 raise
-            except Exception:
+            except Exception as exc:
+                if tradingview:
+                    self._provider_failure(exc)
                 raise BorsapyGatewayError("Veri sağlayıcı isteği tamamlanamadı.", 502) from None
+
+    @contextmanager
+    def _provider_packets(self, bp, *, enabled):
+        """Inspect legacy convenience history packets while its account lock is held."""
+        if not enabled or getattr(bp, "__name__", None) != "borsapy":
+            yield
+            return
+        from borsapy._providers.tradingview import get_tradingview_provider
+
+        provider = get_tradingview_provider()
+        original = provider._parse_packets
+
+        def inspected(raw):
+            packets = original(raw)
+            for packet in packets:
+                reason = packet_restriction(packet)
+                if reason:
+                    self._trip_tradingview(reason)
+                    break
+            return packets
+
+        provider._parse_packets = inspected
+        try:
+            yield
+        finally:
+            provider._parse_packets = original
 
     def run_public(self, callback: Callable):
         """Only stateless public KAP/company and economic-calendar adapters.
@@ -572,11 +660,12 @@ class BorsapyGateway:
         )
         return self._validated_history(frame)
 
-    @staticmethod
-    def _new_alarm_history_provider(token: str):
+    def _new_alarm_history_provider(self, token: str):
         # A request-local provider never consults or changes borsapy's global
         # account while the bounded WebSocket history request is in flight.
         from borsapy._providers.tradingview import TradingViewProvider
+
+        trip = self._trip_tradingview
 
         class AuthenticatedHistory(TradingViewProvider):
             def __init__(self):
@@ -609,6 +698,10 @@ class BorsapyGateway:
             def _parse_packets(self, raw):
                 packets = super()._parse_packets(raw)
                 for packet in packets:
+                    reason = packet_restriction(packet)
+                    if reason:
+                        trip(reason)
+                        raise BorsapyGatewayError(PAUSED_MESSAGE, 503)
                     if not isinstance(packet, dict) or packet.get("m") != "timescale_update":
                         continue
                     params = packet.get("p", [])
@@ -652,12 +745,14 @@ class BorsapyGateway:
                 if not token or token == "unauthorized_user_token":
                     raise BorsapyGatewayError("TradingView hesabı doğrulanmalı.", 409)
             provider = self._new_alarm_history_provider(token)
+            self._before_provider_request("history")
             frame = provider.get_history(symbol, interval=interval, period=period)
             with self._account_lock():
                 if (
                     self._data_epoch != epoch
                     or self._store.revision() != revision
                     or self._token != token
+                    or not self.tradingview_enabled
                     or not self._authenticated
                     or self._blocked
                 ):
@@ -665,7 +760,8 @@ class BorsapyGateway:
             return self._validated_history(frame)
         except BorsapyGatewayError:
             raise
-        except Exception:
+        except Exception as exc:
+            self._provider_failure(exc)
             raise BorsapyGatewayError("Alarm geçmişi alınamadı.", 502) from None
         finally:
             if provider is not None:
@@ -708,7 +804,10 @@ class BorsapyGateway:
                 if not token or token == "unauthorized_user_token":
                     raise BorsapyGatewayError("TradingView hesabı doğrulanmalı.", 409)
                 if self._custom_history is None:
-                    self._custom_history = NativeIndicatorHistory()
+                    self._custom_history = NativeIndicatorHistory(
+                        before_request=self._before_provider_request,
+                        on_restriction=self._trip_tradingview,
+                    )
                 provider = self._custom_history
             frames = provider.get_histories(
                 symbol, exchange=exchange, requests=requests, token=token, epoch=epoch
@@ -731,6 +830,7 @@ class BorsapyGateway:
                     self._data_epoch != epoch
                     or self._store.revision() != revision
                     or self._token != token
+                    or not self.tradingview_enabled
                     or not self._authenticated
                     or self._blocked
                 ):
@@ -738,7 +838,8 @@ class BorsapyGateway:
             return results
         except BorsapyGatewayError:
             raise
-        except Exception:
+        except Exception as exc:
+            self._provider_failure(exc)
             raise BorsapyGatewayError(
                 "Özel göstergenin native mum verisi alınamadı.", 502
             ) from None
@@ -759,10 +860,17 @@ class BorsapyGateway:
             epoch = self._data_epoch
 
             def observed(event):
-                if epoch == self._data_epoch:
+                if epoch == self._data_epoch and self.tradingview_enabled:
                     callback(event)
 
-            pool = NativeStreamPool(bp.TradingViewStream, self._token, epoch, observed)
+            pool = NativeStreamPool(
+                bp.TradingViewStream,
+                self._token,
+                epoch,
+                observed,
+                before_request=self._before_provider_request,
+                on_restriction=self._trip_tradingview,
+            )
             self._custom_streams.append(pool)
             return pool
 
@@ -852,7 +960,8 @@ class BorsapyGateway:
             with suppress(Exception):
                 history.close()
         for pool in self._custom_streams:
-            pool.close()
+            with suppress(Exception):
+                pool.close()
         self._custom_streams.clear()
         self._close_quotes()
         for connection in self._alarm_quotes:
@@ -926,6 +1035,7 @@ class BorsapyGateway:
 
     def _new_quotes(self, bp) -> dict:
         transport_clock = self._clock
+        fail, trip = self._provider_failure, self._trip_tradingview
         entry = {
             "symbols": {},
             "received": {},
@@ -944,6 +1054,7 @@ class BorsapyGateway:
             def _on_error(self, ws, error):
                 entry["error"] = True
                 self._connected.clear()
+                fail(error)
 
             def _on_message(self, ws, message):
                 # Transport health includes heartbeat/control frames, independently
@@ -956,6 +1067,12 @@ class BorsapyGateway:
                     entry["transport_expired"] = True
                 entry["last_message"] = received
                 for packet in self._parse_packets(message):
+                    reason = packet_restriction(packet)
+                    if reason:
+                        entry["error"] = True
+                        self._connected.clear()
+                        trip(reason)
+                        return
                     if isinstance(packet, dict) and packet.get("m") == "critical_error":
                         entry["auth_error"] = True
                         return
@@ -991,14 +1108,17 @@ class BorsapyGateway:
 
         stream.on_any_quote(received)
         try:
+            self._before_provider_request("connect")
             stream.connect(timeout=3)
             stream._should_reconnect = False
             if not stream.is_connected:
                 raise ValueError
             # Allow the full first-heartbeat grace period after connection setup.
             entry["last_message"] = transport_clock()
-        except Exception:
+        except Exception as exc:
+            fail(exc)
             stream.disconnect()
+            self._require_tradingview()
             raise BorsapyGatewayError("Fiyat akışı bağlantısı kurulamadı.", 502) from None
         return entry
 
@@ -1029,7 +1149,8 @@ class BorsapyGateway:
 
             def received(symbol, raw):
                 if (
-                    epoch != self._data_epoch
+                    not self.tradingview_enabled
+                    or epoch != self._data_epoch
                     or entry.get("closed")
                     or entry.get("transport_expired")
                 ):
@@ -1047,20 +1168,31 @@ class BorsapyGateway:
 
             entry["stream"].on_any_quote(received)
             self._alarm_quotes.append(connection)
-            try:
-                for symbol in symbols:
-                    entry["symbols"][symbol] = ("BIST", self._clock())
-                    entry["stream"].subscribe(symbol, exchange="BIST")
-            except Exception:
-                connection.close()
-                raise BorsapyGatewayError("Alarm fiyat abonelikleri kurulamadı.", 502) from None
             return connection
 
-        return self.run(create, require_auth=True)
+        connection = self.run(create, require_auth=True)
+        try:
+            # Pacing must not monopolize the account lock during cold startup.
+            for symbol in symbols:
+                self._before_provider_request("request")
+                if connection.epoch != self._data_epoch or not connection.connected:
+                    raise BorsapyGatewayError("Alarm fiyat bağlantısı değişti.", 409)
+                entry = connection._entry
+                entry["symbols"][symbol] = ("BIST", self._clock())
+                entry["stream"].subscribe(symbol, exchange="BIST")
+            self._require_tradingview()
+            return connection
+        except Exception as exc:
+            connection.close()
+            self._provider_failure(exc)
+            self._require_tradingview()
+            if isinstance(exc, BorsapyGatewayError):
+                raise
+            raise BorsapyGatewayError("Alarm fiyat abonelikleri kurulamadı.", 502) from None
 
     def reset_alarm_auth(self, expected_epoch: int) -> None:
         """Refresh a rejected stream token once through the existing auth boundary."""
-        if not self._tradingview_enabled:
+        if not self.tradingview_enabled:
             return
         with self._account_lock():
             if self._data_epoch != expected_epoch:
@@ -1077,7 +1209,8 @@ class BorsapyGateway:
 
         def matches(connection):
             return (
-                self._authenticated
+                self.tradingview_enabled
+                and self._authenticated
                 and not self._blocked
                 and self._data_epoch == epoch
                 and self._credentials_revision == revision
@@ -1133,6 +1266,7 @@ class BorsapyGateway:
                 same_revision = self._store.revision() == self._credentials_revision
                 if (
                     same_revision
+                    and self.tradingview_enabled
                     and self._authenticated
                     and not self._blocked
                     and entry
@@ -1147,6 +1281,7 @@ class BorsapyGateway:
                     result = self._read_quotes(entry, symbols)
                     if (
                         self._quotes is entry
+                        and self.tradingview_enabled
                         and self._data_epoch == epoch
                         and self._store.revision() == self._credentials_revision
                         and all(
@@ -1194,6 +1329,7 @@ class BorsapyGateway:
                 )
             for exchange, symbol in symbols:
                 if symbol not in entry["symbols"]:
+                    self._before_provider_request("request")
                     entry["symbols"][symbol] = (exchange, self._clock())
                     entry["stream"].subscribe(symbol, exchange=exchange)
                 entry["symbols"][symbol] = (exchange, self._clock())
@@ -1201,6 +1337,7 @@ class BorsapyGateway:
                 self._stop.clear()
                 self._janitor = threading.Thread(target=self._watch_leases, daemon=True)
                 self._janitor.start()
+            self._require_tradingview()
             return self._read_quotes(entry, symbols)
         except BorsapyGatewayError:
             raise
@@ -1259,6 +1396,7 @@ class BorsapyGateway:
     def _new_stream(
         self, bp, symbol: str, interval: str, study: str | None, exchange: str, inputs: dict
     ) -> dict:
+        fail, trip = self._provider_failure, self._trip_tradingview
         entry = {
             "subscribers": {},
             "received": None,
@@ -1277,9 +1415,16 @@ class BorsapyGateway:
             def _on_error(self, ws, error):
                 entry["error"] = True
                 self._connected.clear()
+                fail(error)
 
             def _on_message(self, ws, message):
                 for packet in self._parse_packets(message):
+                    reason = packet_restriction(packet)
+                    if reason:
+                        entry["error"] = True
+                        self._connected.clear()
+                        trip(reason)
+                        return
                     if isinstance(packet, dict) and packet.get("m") in {
                         "critical_error",
                         "symbol_error",
@@ -1346,14 +1491,18 @@ class BorsapyGateway:
         stream.on_quote(symbol, received)
         stream.on_candle(symbol, interval, received)
         try:
+            self._before_provider_request("connect")
             stream.connect(timeout=8)
             stream._should_reconnect = False
+            self._before_provider_request("chart")
             stream.subscribe(symbol, exchange=exchange)
             stream.subscribe_chart(symbol, interval, exchange=exchange)
             if study:
                 stream.add_study(symbol, interval, study, **inputs)
-        except Exception:
+        except Exception as exc:
+            fail(exc)
             stream.disconnect()
+            self._require_tradingview()
             raise BorsapyGatewayError("Akış bağlantısı kurulamadı.", 502) from None
         return entry
 
@@ -1430,6 +1579,7 @@ class BorsapyGateway:
             try:
                 if (
                     self._store.revision() == self._credentials_revision
+                    and self.tradingview_enabled
                     and self._authenticated
                     and not self._blocked
                     and entry
@@ -1441,6 +1591,7 @@ class BorsapyGateway:
                     result = self._read_stream(entry, symbol, interval, study)
                     if (
                         self._streams.get(key) is entry
+                        and self.tradingview_enabled
                         and self._data_epoch == epoch
                         and self._store.revision() == self._credentials_revision
                         and subscriber_id in entry["subscribers"]
@@ -1493,6 +1644,7 @@ class BorsapyGateway:
                     self._janitor = threading.Thread(target=self._watch_leases, daemon=True)
                     self._janitor.start()
             entry["subscribers"][subscriber_id] = self._clock()
+            self._require_tradingview()
             return self._read_stream(entry, symbol, interval, study)
         finally:
             _AUTH_LOCK.release()

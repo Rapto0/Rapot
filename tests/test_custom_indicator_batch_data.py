@@ -150,7 +150,7 @@ def test_gateway_batch_is_atomic_and_checks_account_after_all_frames(tmp_path, m
     transport = SimpleNamespace(get_histories=lambda *_args, **_kw: frames, close=lambda: None)
     monkeypatch.setattr(
         "infrastructure.providers.native_indicator_history.NativeIndicatorHistory",
-        lambda: transport,
+        lambda **_kwargs: transport,
     )
     try:
         result = gateway.custom_indicator_histories(

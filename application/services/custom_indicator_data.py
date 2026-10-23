@@ -338,6 +338,8 @@ class CustomIndicatorData:
         self._history_last_error = None
         self._history_failures = {}
         self._history_retries = {}
+        self._standard_rsi_demands = {}
+        self._standard_rsi = {}
 
     def _sync_live(self):
         if self.provider_paused():
@@ -386,6 +388,16 @@ class CustomIndicatorData:
             self._history_reset_fences = {
                 key: value for key, value in self._history_reset_fences.items() if key in members
             }
+            self._standard_rsi_demands = {
+                key: value
+                for key, value in self._standard_rsi_demands.items()
+                if key in self.live._wanted
+            }
+            self._standard_rsi = {
+                key: value
+                for key, value in self._standard_rsi.items()
+                if key in self._standard_rsi_demands
+            }
             self._job_cursor = 0
             for key in self._job_order:
                 if key not in self._results or not self.live.has_seed(
@@ -417,6 +429,164 @@ class CustomIndicatorData:
     def provider_paused(self):
         """Local configuration only; never obtain an auth token or touch the provider."""
         return getattr(self.provider, "tradingview_enabled", True) is False
+
+    def supports_standard_rsi(self, member, native_tf):
+        return (
+            member[0] == "BIST"
+            and native_tf in {"1D", "1W"}
+            and (*member, native_tf) in self.live._wanted
+        )
+
+    def configure_standard_rsi(self, demands):
+        """Share existing native requests; never expand the provider subscription set."""
+        with self._lock:
+            selected = {}
+            for key, periods in sorted(demands.items()):
+                if len(selected) >= 2048 or not self.supports_standard_rsi(key[:2], key[2]):
+                    continue
+                valid = frozenset(p for p in periods if type(p) is int and 2 <= p <= 500)
+                if valid:
+                    selected[key] = valid
+            old = self._standard_rsi_demands
+            self._standard_rsi_demands = selected
+            self._standard_rsi = {k: v for k, v in self._standard_rsi.items() if k in selected}
+            for key, periods in selected.items():
+                if key in self._standard_rsi and old.get(key) != periods:
+                    self._standard_rsi[key]["seed"]._prepare(periods)
+                    self._standard_rsi[key]["observation"] = None
+                if key not in self._standard_rsi and old.get(key) != periods:
+                    # A newly requested standard field can use an already
+                    # admitted member's next bootstrap, not an independent WS.
+                    for job in self.live._members.get(key[:2], ()):
+                        self._queue_seed(job)
+                        break
+        self._wake.set()
+
+    def _install_standard_rsi(self, member, frames, epoch):
+        from application.services.standard_rsi_native import StandardRsiSeed
+
+        for tf, bars in frames.items():
+            key = (*member, tf)
+            periods = self._standard_rsi_demands.get(key)
+            if periods and key not in self._standard_rsi:
+                self._standard_rsi[key] = {
+                    "seed": StandardRsiSeed.build(bars, periods),
+                    "epoch": epoch,
+                    "observation": None,
+                }
+
+    def standard_rsi_observation(self, ref, symbol, trigger, now):
+        """Read the same atomic native quote used by the custom indicators."""
+        unavailable = {
+            "ready": False,
+            "reason": "Standart RSI için canlı native veri bekleniyor.",
+            "current": None,
+            "previous": None,
+        }
+        if self.provider_paused():
+            return {**unavailable, "reason": PROVIDER_PAUSED_MESSAGE}
+        tf = {"1d": "1D", "1wk": "1W"}.get(ref.get("timeframe"), ref.get("timeframe"))
+        key = (symbol["market_type"], symbol["symbol"], tf)
+        with self._lock:
+            entry = self._standard_rsi.get(key)
+            if trigger != "intrabar" or ref.get("field") not in {"rsi", "close"} or not entry:
+                return unavailable
+            observation = entry.get("observation")
+            if (
+                self._stop.is_set()
+                or entry["epoch"] != self.provider.memory_epoch()
+                or not observation
+                or observation["publication"] != self.publication_token(key[:2])
+                or max(now - observation["source_timestamp"], now - observation["received_at"]) > 30
+            ):
+                return unavailable
+            if not any(
+                self.live.has_seed(job, entry["epoch"])
+                for job in self.live._members.get(key[:2], ())
+            ):
+                return unavailable
+            connection = self.live._connection
+            if connection is not None and not connection.connected:
+                return unavailable
+            if (
+                tf == "1W"
+                and callable(getattr(connection, "witness_valid", None))
+                and not self.live.history_ready(key[:2], {"1D", "1W"})
+            ):
+                return unavailable
+            period = ref.get("period", 14)
+            value = (
+                observation["live_price"]
+                if ref["field"] == "close"
+                else observation["values"].get(period)
+            )
+            previous = (
+                observation["previous_price"]
+                if ref["field"] == "close"
+                else observation["previous_values"].get(period)
+            )
+            return {
+                **{
+                    k: v
+                    for k, v in observation.items()
+                    if k
+                    not in {
+                        "values",
+                        "previous_values",
+                        "publication",
+                        "received_at",
+                        "previous_price",
+                    }
+                },
+                "ready": value is not None,
+                "reason": None if value is not None else unavailable["reason"],
+                "current": value,
+                "previous": previous,
+            }
+
+    def _publish_standard_rsi(self, updates, source, received, serial, price, epoch, now):
+        member = updates[0][0][:2]
+        for tf in ("1D", "1W"):
+            key = (*member, tf)
+            entry = self._standard_rsi.get(key)
+            if entry is None:
+                continue
+            seed = entry["seed"]
+            with self.live._lock:
+                ready = any(
+                    point.get("ready")
+                    and (compiled := self.live._compiled.get(job)) is not None
+                    and (bucket := compiled["buckets"].get(tf)) is not None
+                    and bucket.time == seed.bucket.time
+                    for job, _, point in updates
+                )
+            if (
+                not ready
+                or entry["epoch"] != epoch
+                or source < seed.bucket.time
+                or (seed.bucket.end is not None and source >= seed.bucket.end)
+            ):
+                entry["observation"] = None
+                continue
+            previous = entry.get("observation") or {}
+            continuity = f"{self._process_epoch}:{self._symbol_epochs.get(member, 0)}"
+            entry["observation"] = {
+                "values": {p: seed.value(p, price) for p in self._standard_rsi_demands[key]},
+                "previous_values": previous.get("values", {}),
+                "publication": self.publication_token(member),
+                "received_at": received,
+                "continuity_id": continuity,
+                "observation_id": f"live:{continuity}:{serial}",
+                "bar_time": seed.bucket.time,
+                "bar_end": seed.bucket.end,
+                "previous_bar_time": previous.get("bar_time"),
+                "previous_bar_end": previous.get("bar_end"),
+                "observed_at": now,
+                "source_timestamp": source,
+                "live_price": price,
+                "previous_price": previous.get("live_price"),
+                "previous_live_price": previous.get("live_price"),
+            }
 
     @staticmethod
     def _config(indicator, inputs, chart_timeframe):
@@ -558,6 +728,7 @@ class CustomIndicatorData:
             self._history_failures.clear()
             self._history_retries.clear()
             self._history_reset_fences.clear()
+            self._standard_rsi.clear()
 
     def invalidate(self):
         with self._lock:
@@ -571,6 +742,7 @@ class CustomIndicatorData:
             self._symbol_epochs.clear()
             self._history_summaries.clear()
             self._history_reset_fences.clear()
+            self._standard_rsi.clear()
             self._history_failures.clear()
             self._history_retries.clear()
             self._live_cells = 0
@@ -610,6 +782,7 @@ class CustomIndicatorData:
                 self._live_cells = 0
                 self._history_summaries.clear()
                 self._history_reset_fences.clear()
+                self._standard_rsi.clear()
                 self._symbol_epochs.clear()
                 self._history_failures.clear()
                 self._history_retries.clear()
@@ -1130,6 +1303,7 @@ class CustomIndicatorData:
                         "history_replayed": True,
                     }
                 self._last_error = None
+                self._install_standard_rsi(key[:2], frames, epoch)
                 self._last_completed_at = result["received"]
                 self._last_cycle_seconds = max(0, result["received"] - now)
                 return
@@ -1181,6 +1355,8 @@ class CustomIndicatorData:
                 self._remove_result(next(iter(self._results)))
             if not result["error"]:
                 self.live.install_seed(key, prepared_seed, generation=generation)
+                if self.live.has_seed(key, epoch):
+                    self._install_standard_rsi(key[:2], frames, epoch)
 
     @staticmethod
     def _preview_points(points):
@@ -1213,6 +1389,9 @@ class CustomIndicatorData:
     def live_gap(self, reason, member=None, native_key=None):
         """Invalidate comparison state after a provider gap; never invent a crossing."""
         with self._publication_lock, self._lock:
+            for key in list(self._standard_rsi):
+                if member is None or key[:2] == member:
+                    self._standard_rsi.pop(key)
             self.live.clear_comparisons(member)
             if member is None:
                 self._publication_epoch += 1
@@ -1265,6 +1444,7 @@ class CustomIndicatorData:
     def native_refresh(self, native_key, *, jobs=None, invalidate_native=True):
         """A witnessed next native bar refreshes seeds without fabricating a data gap."""
         with self._publication_lock, self._lock:
+            self._standard_rsi.pop(native_key, None)
             member = native_key[:2]
             self._publication_members[member] = self._publication_members.get(member, 0) + 1
             if invalidate_native:
@@ -1279,6 +1459,11 @@ class CustomIndicatorData:
     def native_advanced(self, native_key, closed, current):
         """Retain a witnessed rollover in the bounded shared bootstrap cache."""
         with self._publication_lock, self._lock:
+            if (standard := self._standard_rsi.get(native_key)) is not None:
+                if not standard["seed"].advance(closed, current):
+                    self._standard_rsi.pop(native_key)
+                else:
+                    standard["observation"] = None
             member = native_key[:2]
             self._publication_members[member] = self._publication_members.get(member, 0) + 1
             old = self._native.get(native_key)
@@ -1376,6 +1561,7 @@ class CustomIndicatorData:
                     self._live_cells -= self._result_cells(forgotten)
             while len(self._preview_results) > MAX_PREVIEWS:
                 self._preview_results.popitem(last=False)
+            self._publish_standard_rsi(updates, source, received, serial, price, epoch, now)
             return True
 
     def _read(self, key, now, *, require_latest=True):
@@ -1818,6 +2004,11 @@ class CustomIndicatorData:
                 "native_series": len(self._native),
                 "native_rows": sum(len(row.bars) for row in self._native.values()),
                 "history_continuity_summaries": len(self._history_summaries),
+                "standard_rsi_requested_series": len(self._standard_rsi_demands),
+                "standard_rsi_seeded_series": len(self._standard_rsi),
+                "standard_rsi_close_cells": sum(
+                    len(value["seed"].closes) for value in self._standard_rsi.values()
+                ),
                 "results": len(self._results),
                 "preview_results": len(self._preview_results),
                 "last_completed_at": _iso(self._last_completed_at),

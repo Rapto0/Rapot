@@ -23,6 +23,13 @@ _MAX_PAGE_BYTES = 8 * 1024 * 1024
 class SessionAuthError(RuntimeError):
     """A fixed, credential-free failure; never include upstream exception text."""
 
+    def __init__(
+        self, message: str, *, status_code: int | None = None, protection_reason: str | None = None
+    ):
+        super().__init__(message)
+        self.status_code = status_code
+        self.protection_reason = protection_reason
+
 
 def _root_url(value: str) -> str:
     if not isinstance(value, str) or any(ord(char) <= 32 or ord(char) == 127 for char in value):
@@ -79,7 +86,13 @@ class _SessionClient:
                         current = _root_url(urljoin(current, location))
                         continue
                     if response.status_code != 200:
-                        raise SessionAuthError("Oturum doğrulama hizmeti yanıt vermedi.")
+                        raise SessionAuthError(
+                            "Oturum doğrulama hizmeti yanıt vermedi.",
+                            status_code=response.status_code,
+                            protection_reason="http_rejected"
+                            if response.status_code in {401, 403, 429}
+                            else None,
+                        )
                     body = bytearray()
                     for chunk in response.iter_bytes(chunk_size=65_536):
                         self._remaining()
@@ -87,6 +100,17 @@ class _SessionClient:
                             raise SessionAuthError("Oturum doğrulama yanıtı çok büyük.")
                         body.extend(chunk)
                     self._remaining()
+                    # Detect an explicit restriction page, without mistaking a
+                    # translated UI string on an authenticated page for a ban.
+                    lowered = bytes(body).lower()
+                    if (
+                        b"suspicious activity on your account" in lowered
+                        and b'"auth_token"' not in lowered
+                    ):
+                        raise SessionAuthError(
+                            "TradingView hesap erişimini kısıtladı.",
+                            protection_reason="account_restricted",
+                        )
                     # iter_bytes has already decoded HTTP content encodings. Retain only
                     # the content type needed by borsapy's existing HTML parser.
                     return httpx.Response(
