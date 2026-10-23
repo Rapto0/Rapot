@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
@@ -25,6 +25,12 @@ function ResultRows({ latest, market }: { latest: CustomPoint; market: Props["ma
 }
 
 function IndicatorWorkspace({ symbol, market, timeframe, identity }: Props & { identity: string }) {
+    const [now, setNow] = useState(0)
+    useEffect(() => {
+        setNow(Date.now())
+        const timer = setInterval(() => setNow(Date.now()), 1000)
+        return () => clearInterval(timer)
+    }, [])
     const router = useRouter()
     const { query: catalog } = useCustomIndicatorCatalog()
     const [indicator, setIndicator] = useState("htf_rsi_score")
@@ -47,7 +53,7 @@ function IndicatorWorkspace({ symbol, market, timeframe, identity }: Props & { i
     const latest = preview.data?.latest
     const receivedTime = customReceivedTime(preview.data?.received_at)
     const sourceTime = customReceivedTime(preview.data?.source_timestamp)
-    const receivedAge = receivedTime === null || receivedTime > Date.now() / 1000 + 5 ? null : Math.max(0, Math.floor(Date.now() / 1000 - receivedTime))
+    const receivedAge = receivedTime === null || !now || receivedTime > now / 1000 + 5 ? null : Math.max(0, Math.floor(now / 1000 - receivedTime))
     const resultReady = !preview.isError && preview.data?.state === "ready" && latest?.ready
     const numeric = spec?.outputs.filter(item => item.kind === "number") ?? []
     const selectedOutput = numeric.some(item => item.key === output) ? output : numeric[0]?.key ?? ""

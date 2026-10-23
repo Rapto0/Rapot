@@ -125,7 +125,7 @@ jobs:
                   assert image["Config"]["Cmd"] == ["python", "-m", "scripts.runtime", "api"]
           native = json.loads((root / "frontend-native.json").read_text())
           assert native["platform"] == "linux" and native["arch"] == "x64"
-          assert native["next"] == "16.3.8" and native["sharp"] == "0.35.5"
+          assert native["next"] == "16.4.2" and native["sharp"] == "0.35.5"
           assert native["vips"] == "8.18.7" and native["rsvg"] == "2.63.2"
           PY
 

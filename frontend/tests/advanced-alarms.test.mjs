@@ -7,7 +7,7 @@ import * as jsxRuntime from 'react/jsx-runtime';
 import ts from 'typescript';
 
 function load(path, imports = {}, globals = {}) {
-  const context = vm.createContext({ exports: {}, structuredClone, URLSearchParams, Error, ...globals,
+  const context = vm.createContext({ exports: {}, structuredClone, URLSearchParams, Error, setInterval: () => 1, clearInterval() {}, ...globals,
     require(name) { assert.ok(Object.hasOwn(imports, name), `Unexpected import ${name}`); return imports[name]; } });
   vm.runInContext(ts.transpileModule(readFileSync(new URL(path, import.meta.url), 'utf8'), {
     compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },

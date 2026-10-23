@@ -74,3 +74,19 @@ düzeltmeleri açıklar. 23 Ekim 12:55:35–12:56:02 UTC denetiminde Ubuntu host
 üç localhost upstream'e proxy yapar, PHP/FastCGI yapılandırması yoktur. Bu
 sunucuda bu iki CVE için PHP güncellemesi gerekmiyor. Başka DigitalOcean
 varlıkları veya kapalı eski imajlar bu denetim kapsamında değildir.
+
+## Yayın kontrolünde bulunan Next.js açıkları
+
+İlk kaynak `45be03c` için CI'nin zorunlu npm denetimi mevcut Next.js 16.3.8
+sürümünde iki kritik ve bir yüksek önem dereceli bildirim buldu. Bu kaynak
+üretime alınmadı. Next.js ve eşleşen ESLint yapılandırması **16.4.2** sürümüne
+yükseltilir; React 19.2.3 ve Sharp 0.35.5 korunur. Tam kilitli bağımlılık
+denetimi 469 paket düğümünde sıfır bulgu verdi.
+
+- [Görüntü optimizasyonu RCE](https://github.com/vercel/next.js/security/advisories/GHSA-2464-fhr4-w9xw): duyurudaki glibc koşulu mevcut Alpine/musl imajıyla eşleşmez; Sharp 0.35.5 düzeltmesi de zaten vardır.
+- [Cache Components RCE](https://github.com/vercel/next.js/security/advisories/GHSA-673q-mjm6-r5xr): mevcut uygulamada Cache Components veya `use cache` kullanımı bulunmadı.
+- [Server Actions DoS](https://github.com/vercel/next.js/security/advisories/GHSA-p3m5-59mp-jv5r): mevcut kaynakta Server Action bulunmadı.
+
+Bunlar istismar veya bildirilen CPU artışının nedeni olduğuna dair kanıt
+değildir. Yine de savunmasız sürüm tutulmaz; temiz frontend imajı da yayına
+dahil edilir. Kaynak ve üretim kabulü ayrıca kaydedilir.

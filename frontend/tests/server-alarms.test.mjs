@@ -8,7 +8,7 @@ import ts from 'typescript';
 
 const source = path => readFileSync(new URL(path, import.meta.url), 'utf8');
 function load(path, imports = {}, globals = {}) {
-  const context = vm.createContext({ exports: {}, URLSearchParams, Error, ...globals, require(name) {
+  const context = vm.createContext({ exports: {}, URLSearchParams, Error, setInterval: () => 1, clearInterval() {}, ...globals, require(name) {
     assert.ok(Object.hasOwn(imports, name), `Unexpected import: ${name}`);
     return imports[name];
   } });

@@ -56,7 +56,7 @@ function ResearchWorkspace({ sessionKey }: { sessionKey: string }) {
     }
     function loadSaved(item: SavedResearch) {
         if (!operations.some(operation => operation.id === item.operation)) { setSavedError("Bu kayıt için gereken özellik güncel katalogda bulunamadı."); return }
-        setSavedError(""); setTab("catalog"); setSelected(item.operation); setPreset({ key: Date.now(), params: item.params })
+        setSavedError(""); setTab("catalog"); setSelected(item.operation); setPreset(previous => ({ key: (previous?.key ?? 0) + 1, params: item.params }))
     }
     async function removeSaved() {
         if (!deleting || deleteRequest.current) return

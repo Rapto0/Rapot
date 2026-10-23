@@ -13,7 +13,7 @@ const plain = value => JSON.parse(JSON.stringify(value));
 const nodes = node => React.isValidElement(node) ? [node, ...React.Children.toArray(node.props.children).flatMap(nodes)] : [];
 const text = node => Array.isArray(node) ? node.map(text).join('') : React.isValidElement(node) ? text(node.props.children) : typeof node === 'string' || typeof node === 'number' ? String(node) : '';
 function load(path, imports = {}, globals = {}) {
-    const context = vm.createContext({ exports: {}, TextEncoder, ...globals, require(name) { assert.ok(Object.hasOwn(imports, name), `Unexpected import ${name}`); return imports[name]; } });
+    const context = vm.createContext({ exports: {}, TextEncoder, setInterval: () => 1, clearInterval() {}, ...globals, require(name) { assert.ok(Object.hasOwn(imports, name), `Unexpected import ${name}`); return imports[name]; } });
     vm.runInContext(ts.transpileModule(read(path), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText, context);
     return context.exports;
 }
@@ -122,9 +122,13 @@ test('catalog queries are private-session scoped, cancellable and disabled witho
 });
 
 function panelHarness({ session = { user: { username: 'one', is_admin: true }, expiresAt: 1 }, data } = {}) {
-    let states = [], cursor = 0, outer = true;
+    let states = [], cursor = 0, outer = true, effectCursor = 0, effects = [], dirty = false;
+    const effectDeps = [];
     const queries = [], requests = [], transfers = [], navigations = [];
-    const hooks = { useState(initial) { if (outer) return [true, () => {}]; const index = cursor++; if (!(index in states)) states[index] = initial; return [states[index], value => { states[index] = typeof value === 'function' ? value(states[index]) : value; }]; } };
+    const hooks = {
+        useState(initial) { if (outer) return [true, () => {}]; const index = cursor++; if (!(index in states)) states[index] = initial; return [states[index], value => { const next = typeof value === 'function' ? value(states[index]) : value; dirty ||= !Object.is(next, states[index]); states[index] = next; }]; },
+        useEffect(callback, deps) { const index = effectCursor++; if (!effectDeps[index] || deps.some((value, i) => !Object.is(value, effectDeps[index][i]))) { effectDeps[index] = deps; effects.push(callback); } },
+    };
     const loaded = load('../src/components/indicators/custom-indicator-panel.tsx', {
         react: hooks, 'react/jsx-runtime': jsxRuntime, 'next/link': { default: 'a' }, ...ui,
         'next/navigation': { useRouter: () => ({ push: path => navigations.push(path) }) },
@@ -139,7 +143,13 @@ function panelHarness({ session = { user: { username: 'one', is_admin: true }, e
     const wrapper = loaded.CustomIndicatorPanel(props);
     const workspace = nodes(wrapper).find(node => typeof node.type === 'function');
     outer = false;
-    const render = changes => { if (!workspace) return null; cursor = 0; Object.assign(props, changes); return workspace.type({ ...workspace.props, ...props }); };
+    const render = changes => {
+        if (!workspace) return null;
+        Object.assign(props, changes);
+        let tree, rounds = 0;
+        do { assert.ok(++rounds < 10, 'Effects must settle'); cursor = 0; effectCursor = 0; effects = []; dirty = false; tree = workspace.type({ ...workspace.props, ...props }); effects.forEach(effect => effect()); } while (dirty);
+        return tree;
+    };
     return { wrapper, workspace, render, queries, requests, transfers, navigations };
 }
 

@@ -1,10 +1,19 @@
 # Frontend bağımlılık güvenliği
 
-İlk inceleme tarihi: **13 Eylül 2026**; son takip **7 Ekim 2026**. İlk kaynak sürümü
+İlk inceleme tarihi: **13 Eylül 2026**; son takip **23 Ekim 2026**. İlk kaynak sürümü
 `d79f4cc841b3de411777730eb91a245ade96cd6e`; frontend kodu ve lock,
 P3-1 dördüncü adım kapanışındaki durumdur. İş sırası ve üretim kabulü
 [devam planında](RAPOT_DEVAM_PLANI.md#p1-g2--frontend-bağımlılık-güvenliği-takibi)
 tutulur.
+
+## 23 Ekim 2026 — Next.js güvenlik güncellemesi
+
+Hesap koruması yayınının zorunlu CI denetimi Next.js 16.3.8 için iki kritik
+RCE ve bir yüksek DoS bildirimi buldu. Next.js ve eslint-config-next 16.4.2'ye
+yükseltildi; React 19.2.3 ve Sharp 0.35.5 korundu. Kilitli 469 paket düğümünde
+audit sıfır bulgudur. Önceki başarısız CI kaydı korunur; denetim atlanmaz.
+Advisory koşulları ve üretim kapsamı [23 Ekim olay kaydındadır](ACCOUNT_PROTECTION_2026-10-23.md).
+Temiz imaj ve aynı kaynağın CI kabulü olmadan yayın yapılmaz.
 
 ## 7 Ekim 2026 — Sharp ve source-map-js güvenlik yamaları
 

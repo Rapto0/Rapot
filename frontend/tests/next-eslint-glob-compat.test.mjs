@@ -84,7 +84,8 @@ test('pinned plugin has exactly the reviewed fast-glob consumer and the vulnerab
   for (const name of Object.keys(lock.packages)) {
     assert.ok(!/(?:^|\/)(?:braces|micromatch)$/.test(name), name);
   }
-  const alias = lock.packages['node_modules/@next/eslint-plugin-next/node_modules/fast-glob'];
+  const aliasPath = path.relative(frontend, path.dirname(pluginRequire.resolve('fast-glob/package.json'))).replaceAll('\\', '/');
+  const alias = lock.packages[aliasPath];
   assert.equal(alias.name, 'tinyglobby');
   assert.equal(alias.version, '0.2.15');
   assert.match(alias.resolved, /^https:\/\/registry\.npmjs\.org\/tinyglobby\//);

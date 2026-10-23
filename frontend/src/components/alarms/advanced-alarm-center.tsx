@@ -27,6 +27,12 @@ const statistic = (value: unknown) => typeof value === "number" && Number.isFini
 type WatchlistDraft = { name: string; bist: string; crypto: string; id?: string; revision?: number }
 
 export function AdvancedAlarmCenter() {
+    const [now, setNow] = useState(0)
+    useEffect(() => {
+        setNow(Date.now())
+        const timer = setInterval(() => setNow(Date.now()), 1000)
+        return () => clearInterval(timer)
+    }, [])
     const session = useSession()
     const allowed = Boolean(session?.user.is_admin && !session.user.disabled)
     const identity = [session?.user.username, session?.expiresAt]
@@ -57,7 +63,7 @@ export function AdvancedAlarmCenter() {
     const market = runtime?.market ?? {}
     const customStatus = market.custom_indicators !== null && typeof market.custom_indicators === "object" && !Array.isArray(market.custom_indicators) ? market.custom_indicators as Record<string, unknown> : {}
     const nativeLeases = customStatus.native_subscription_policy === "daily_anchor_native_leases"
-    const delayed = Boolean(runtime?.last_cycle_at && Date.now() - Date.parse(runtime.last_cycle_at) > 15_000)
+    const delayed = Boolean(runtime?.last_cycle_at && now - Date.parse(runtime.last_cycle_at) > 15_000)
     const serviceLabel = status.isError ? "Durum doğrulanamadı" : !runtime ? "Durum yükleniyor" : !runtime.running ? "Alarm motoru çalışmıyor" : runtime.last_error ? "Alarm motoru uyarı veriyor" : delayed ? "Son kontrol gecikti" : "Alarm motoru çalışıyor"
 
     useEffect(() => {

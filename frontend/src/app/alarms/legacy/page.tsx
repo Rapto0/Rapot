@@ -30,6 +30,12 @@ const errorLabel = (cause: unknown) => cause instanceof ApiError && cause.status
     : cause instanceof Error ? cause.message : "İşlem tamamlanamadı. Tekrar deneyin."
 
 export default function AlarmsPage() {
+    const [now, setNow] = useState(0)
+    useEffect(() => {
+        setNow(Date.now())
+        const timer = setInterval(() => setNow(Date.now()), 1000)
+        return () => clearInterval(timer)
+    }, [])
     const session = useSession()
     const allowed = Boolean(session?.user.is_admin && !session.user.disabled)
     const queryClient = useQueryClient()
@@ -139,7 +145,7 @@ export default function AlarmsPage() {
     const spec = SERVER_INDICATORS[draft.indicator]
     const runtime = rules.data?.runtime
     const subscriptionCount = rules.data?.rules.reduce((sum, rule) => sum + rule.symbols.length, 0) ?? 0
-    const staleRuntime = Boolean(runtime?.last_cycle_at && Date.now() - Date.parse(runtime.last_cycle_at) > Math.max(180, runtime.poll_interval_seconds * 3) * 1000)
+    const staleRuntime = Boolean(runtime?.last_cycle_at && now - Date.parse(runtime.last_cycle_at) > Math.max(180, runtime.poll_interval_seconds * 3) * 1000)
     const status = rules.isError ? "Durum doğrulanamadı" : !runtime ? "Durum yükleniyor"
         : !runtime.running ? "Alarm servisi çalışmıyor" : !runtime.last_cycle_at ? "İlk sunucu kontrolü bekleniyor"
             : runtime.last_cycle_error ? "Son alarm döngüsü tamamlanamadı" : staleRuntime ? "Son kontrol gecikti" : "Alarm servisi çalışıyor"
