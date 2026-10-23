@@ -365,6 +365,8 @@ class BorsapyGateway:
             )
             self._require_tradingview()
             token = result.get("auth_token") if isinstance(result, dict) else None
+            if token == "unauthorized_user_token":
+                self._trip_tradingview("authentication_failed")
             if not isinstance(token, str) or not token or token == "unauthorized_user_token":
                 raise ValueError
             self._token = token
@@ -1337,8 +1339,9 @@ class BorsapyGateway:
                 self._stop.clear()
                 self._janitor = threading.Thread(target=self._watch_leases, daemon=True)
                 self._janitor.start()
+            result = self._read_quotes(entry, symbols)
             self._require_tradingview()
-            return self._read_quotes(entry, symbols)
+            return result
         except BorsapyGatewayError:
             raise
         except Exception:
@@ -1644,8 +1647,9 @@ class BorsapyGateway:
                     self._janitor = threading.Thread(target=self._watch_leases, daemon=True)
                     self._janitor.start()
             entry["subscribers"][subscriber_id] = self._clock()
+            result = self._read_stream(entry, symbol, interval, study)
             self._require_tradingview()
-            return self._read_stream(entry, symbol, interval, study)
+            return result
         finally:
             _AUTH_LOCK.release()
 

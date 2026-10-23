@@ -241,3 +241,11 @@ bütçeyi, hassas veri taşımayan hata sınıflamasını, tüm gateway taşıma
 kapanmasını ve native fiyat/geçmiş callback'lerini doğruladı. Önceki 198 ilgili
 test de geçti. Bunlar gerçek sağlayıcı izni veya canlı seans kapasitesi kanıtı
 değildir; bu doğrulamalarda dış sağlayıcıya bağlanılmadı.
+
+Bağımsız incelemenin bulduğu kapatma/abonelik yarışına ek koruma uygulanır:
+bütçede bekleyen yeni bağlantı, kapatılmış havuza kaydedilemez; geç açılan
+soket kimlik veya abonelik mesajı göndermeden kapanır. Önbellek okuması
+sırasında durdurma oluşursa sonuç yayınlanmaz. Açık `unauthorized_user_token`
+sonucu kalıcı kimlik reddi sayılır; boş token genel doğrulama hatası kalır.
+Sekiz ek çevrimdışı senaryoyla politika testleri 41'e çıktı; bu düzeltmenin
+140 ilgili testi geçti. Canlı sağlayıcı denemesi yapılmadı.

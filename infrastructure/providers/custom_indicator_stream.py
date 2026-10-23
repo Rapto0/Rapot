@@ -182,26 +182,64 @@ def stream_class(base):
                 self.failed = True
             return self.is_connected and not (self.failed or self.closed)
 
+        def connect(self, timeout=10.0):
+            if self._cancelled():
+                raise ValueError("Native canlı gösterge bağlantısı durduruldu.")
+            result = super().connect(timeout=timeout)
+            if self._cancelled():
+                self.disconnect()
+                raise ValueError("Native canlı gösterge bağlantısı durduruldu.")
+            return result
+
         def _on_open(self, ws):
             self._ws = ws
             self._should_reconnect = False
+            if self._cancelled():
+                self._retire_late_socket(ws)
+                return
             self._quote_session = self._generate_session_id("qs")
             try:
-                ws.send(self._create_message("set_auth_token", [self._auth_token]))
-                ws.send(self._create_message("quote_create_session", [self._quote_session]))
-                ws.send(
-                    self._create_message("quote_set_fields", [self._quote_session, "lp", "lp_time"])
+                messages = (
+                    ("set_auth_token", [self._auth_token]),
+                    ("quote_create_session", [self._quote_session]),
+                    ("quote_set_fields", [self._quote_session, "lp", "lp_time"]),
                 )
+                for method, params in messages:
+                    if self._cancelled():
+                        self._retire_late_socket(ws)
+                        return
+                    ws.send(self._create_message(method, params))
             except Exception:
                 self.failed = True
                 self._connected.clear()
                 raise ValueError("Native gösterge bağlantısı başlatılamadı.") from None
             self.last_message = self.clock()
+            if self._cancelled():
+                self._retire_late_socket(ws)
+                return
             self._connected.set()
+            if self._cancelled():
+                self._retire_late_socket(ws)
+
+        def _cancelled(self):
+            return self.closed or (self.stop is not None and self.stop.is_set())
+
+        def _retire_late_socket(self, ws):
+            self.closed = True
+            self._connected.clear()
+            ws.keep_running = False
+            socket = getattr(ws, "sock", None)
+            if socket is not None:
+                with suppress(Exception):
+                    socket.abort()
+                with suppress(Exception):
+                    socket.shutdown()
+            with suppress(Exception):
+                ws.close()
 
         def _send(self, message):
             try:
-                if not self.is_connected or self.closed or self.failed or self._ws is None:
+                if not self.is_connected or self._cancelled() or self.failed or self._ws is None:
                     raise ValueError
                 if self._ws.send(message) is False:
                     raise ValueError
@@ -695,6 +733,10 @@ class NativeStreamPool:
         self._callback(event)
 
     def configure(self, requested, *, member_slots=None):
+        with self._lock:
+            if self.closed:
+                raise ValueError("Native canlı gösterge bağlantısı durduruldu.")
+            previous_slots = self._member_slots.copy()
         requested = sorted(set(requested))
         if len(requested) > MAX_LIVE_SERIES:
             raise ValueError("Native canlı gösterge abonelik sınırı aşıldı.")
@@ -705,7 +747,7 @@ class NativeStreamPool:
             members.setdefault((market, symbol), set()).add((market, symbol, timeframe))
         if member_slots is None:
             groups, member_slots, refused = plan_native_subscriptions(
-                requested, self._member_slots, lease_long_timeframes=self._leases is not None
+                requested, previous_slots, lease_long_timeframes=self._leases is not None
             )
             if refused:
                 raise ValueError("Native sağlayıcı kapasitesi aşıldı; semboller planlanamadı.")
@@ -716,7 +758,7 @@ class NativeStreamPool:
             for member, slot in member_slots.items():
                 if type(slot) is not int or not 0 <= slot < MAX_LIVE_CONNECTIONS:
                     raise ValueError("Native bağlantı yerleşimi geçersiz.")
-                if member in self._member_slots and self._member_slots[member] != slot:
+                if member in previous_slots and previous_slots[member] != slot:
                     raise ValueError(
                         "Native sembol bağlantısı devamlılık sıfırlanmadan değiştirilemez."
                     )
@@ -731,36 +773,45 @@ class NativeStreamPool:
             ):
                 raise ValueError("Native bağlantı başına doğrulanmış mum kapasitesi aşıldı.")
         # Every plan is validated before transport creation/removal or writes.
-        self._wanted_by_slot = groups
-        self._wanted_by_member = members
-        self._member_slots = dict(member_slots)
         contexts = {}
         if self._leases is not None:
             self._leases.configure(requested, member_slots)
             wire_groups, contexts = self._leases.desired()
         else:
             wire_groups = groups
-        self._wire_by_slot = wire_groups
-        self._needs_refresh = False
-        for slot in list(self._streams):
-            if slot not in groups:
-                self._streams.pop(slot).disconnect()
-        for slot, wanted in wire_groups.items():
+        with self._lock:
+            if self.closed:
+                raise ValueError("Native canlı gösterge bağlantısı durduruldu.")
+            self._wanted_by_slot = groups.copy()
+            self._wanted_by_member = members
+            self._member_slots = dict(member_slots)
+            self._wire_by_slot = wire_groups.copy()
+            self._needs_refresh = False
+            removed = [
+                self._streams.pop(slot) for slot in tuple(self._streams) if slot not in groups
+            ]
+        for stream in removed:
+            stream.disconnect()
+        for slot, wanted in tuple(wire_groups.items()):
             if self.closed:
                 raise ValueError("Native canlı gösterge bağlantısı durduruldu.")
             stream = self._streams.get(slot)
             if stream is None:
                 if self._before_request:
                     self._before_request("connect", stop=self._stop)
-                stream = self._class(
-                    self._token,
-                    self._on_event,
-                    self._clock,
-                    before_request=self._before_request,
-                    on_restriction=self._on_restriction,
-                    stop=self._stop,
-                )
-                self._streams[slot] = stream
+                # Admission may block; close must win before a new socket is registered.
+                with self._lock:
+                    if self.closed or self._stop.is_set():
+                        raise ValueError("Native canlı gösterge bağlantısı durduruldu.")
+                    stream = self._class(
+                        self._token,
+                        self._on_event,
+                        self._clock,
+                        before_request=self._before_request,
+                        on_restriction=self._on_restriction,
+                        stop=self._stop,
+                    )
+                    self._streams[slot] = stream
                 stream.connect(timeout=5)
                 stream._should_reconnect = False
             if not stream.healthy:
@@ -802,13 +853,15 @@ class NativeStreamPool:
         return result
 
     def close(self):
-        self.closed = True
-        self._stop.set()
-        for stream in list(self._streams.values()):
+        with self._lock:
+            self.closed = True
+            self._stop.set()
+            streams = tuple(self._streams.values())
+            self._streams.clear()
+            self._wanted_by_slot.clear()
+            self._wanted_by_member.clear()
+            self._member_slots.clear()
+            self._wire_by_slot.clear()
+        for stream in streams:
             with suppress(Exception):
                 stream.disconnect()
-        self._streams.clear()
-        self._wanted_by_slot.clear()
-        self._wanted_by_member.clear()
-        self._member_slots.clear()
-        self._wire_by_slot.clear()

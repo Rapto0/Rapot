@@ -295,7 +295,7 @@ def test_gateway_custom_native_path_preserves_metadata_and_rejects_account_chang
     provider = NativeProvider()
     monkeypatch.setattr(
         "infrastructure.providers.native_indicator_history.NativeIndicatorHistory",
-        lambda *_args: provider,
+        lambda *_args, **_kwargs: provider,
     )
     try:
         assert gateway.custom_indicator_history_status() == {}

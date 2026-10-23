@@ -7,7 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from application.services.borsapy_gateway import BorsapyGateway, BorsapyGatewayError
-from infrastructure.providers.custom_indicator_stream import NativeStreamPool
+from infrastructure.providers.custom_indicator_stream import NativeStreamPool, stream_class
 from infrastructure.providers.native_indicator_history import NativeIndicatorHistory, _message
 from infrastructure.providers.tradingview_policy import (
     TradingViewPolicy,
@@ -251,3 +251,91 @@ def test_native_history_budget_and_restriction_callbacks():
         assert not history.status()["connected"]
     finally:
         history.close()
+
+
+@pytest.mark.parametrize("kind", ["connect", "chart"])
+def test_pool_close_during_admission_cannot_register_or_open_late_work(kind):
+    instances = []
+
+    class RecordedTransport(Transport):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            instances.append(self)
+
+    def admit(request_kind, **_kwargs):
+        if request_kind == kind:
+            pool.close()
+
+    pool = NativeStreamPool(
+        RecordedTransport, "fake-token", 1, lambda _: None, before_request=admit
+    )
+    with pytest.raises(ValueError):
+        pool.configure([("BIST", "THYAO", "1D")])
+    assert pool.closed and not pool._streams and not pool.connected
+    if kind == "connect":
+        assert not instances
+    else:
+        assert instances and all(not stream.is_connected for stream in instances)
+        assert not any(message["m"] == "chart_create_session" for message in instances[0].sent)
+
+
+@pytest.mark.parametrize("cancel", ["disconnect", "pool_stop"])
+def test_late_handshake_is_closed_without_sending_auth(cancel):
+    stop = threading.Event()
+    stream = stream_class(Transport)("fake-token", lambda _: None, lambda: 1, stop=stop)
+    if cancel == "disconnect":
+        stream.disconnect()
+    else:
+        stop.set()
+    sent, closed = [], []
+    socket = SimpleNamespace(send=sent.append, close=lambda: closed.append(True), keep_running=True)
+    stream._on_open(socket)
+    assert not sent and closed == [True]
+    assert not socket.keep_running and not stream.is_connected and stream.closed
+
+
+def test_close_between_registration_and_connect_does_not_retain_socket():
+    closed, sent = [], []
+
+    class ClosingTransport(Transport):
+        def connect(self, timeout):
+            pool.close()
+            self._on_open(SimpleNamespace(send=sent.append, close=lambda: closed.append(True)))
+
+    pool = NativeStreamPool(ClosingTransport, "fake-token", 1, lambda _: None)
+    with pytest.raises(ValueError):
+        pool.configure([("BIST", "THYAO", "1D")])
+    assert pool.closed and not pool._streams and not pool.connected
+    assert not sent and closed == [True]
+
+
+@pytest.mark.parametrize("kind", ["quotes", "chart"])
+def test_cache_read_denial_cannot_publish_the_observation(gateway, monkeypatch, kind):
+    connect(gateway)
+    method = "_read_quotes" if kind == "quotes" else "_read_stream"
+
+    def call():
+        if kind == "quotes":
+            return gateway.quote_snapshot([("BIST", "THYAO")])
+        return gateway.stream_snapshot("THYAO")
+
+    call()
+    original = getattr(gateway, method)
+
+    def interrupted(*args):
+        result = original(*args)
+        gateway._trip_tradingview("account_restricted")
+        return result
+
+    monkeypatch.setattr(gateway, method, interrupted)
+    with pytest.raises(BorsapyGatewayError) as error:
+        call()
+    assert error.value.status_code == 503
+
+
+def test_explicit_anonymous_token_is_a_persistent_auth_denial(gateway):
+    gateway._session_auth = lambda *_args, **_kwargs: {"auth_token": "unauthorized_user_token"}
+    with pytest.raises(BorsapyGatewayError):
+        connect(gateway)
+    assert not gateway.tradingview_enabled
+    assert gateway._provider_policy.status()["reason"] == "authentication_failed"
