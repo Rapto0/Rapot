@@ -21,7 +21,41 @@ export const RSI_TIMEFRAMES = [
 
 export type RsiTimeframe = typeof RSI_TIMEFRAMES[number]["id"]
 export const TRACKER_PAGE_SIZE = 25
+export const TRACKER_SYMBOL_LIMIT = 2
 export const ALL_RSI_COLUMNS: RsiTimeframe[] = RSI_TIMEFRAMES.map(item => item.id)
+
+type RsiCellStatus = "ready" | "stale" | "candle" | "waiting" | "insufficient" | "capacity" | "paused" | "unavailable"
+
+export interface RsiSnapshot {
+    source: "borsapy_tradingview" | "tradingview_binance"
+    length: number
+    observed_at: number
+    rows: Record<string, {
+        source_time: number | null
+        price: number | null
+        cells: Partial<Record<RsiTimeframe, {
+            status: RsiCellStatus
+            value: number | null
+            bar_time: number | null
+        }>>
+    }>
+}
+
+export const RSI_CELL_STATUS: Record<RsiCellStatus, string> = {
+    ready: "Güncel fiyatla hesaplandı",
+    stale: "Eski fiyat",
+    candle: "Son mum kaydı",
+    waiting: "Veri hazırlanıyor",
+    insufficient: "Yetersiz mum geçmişi",
+    capacity: "Takip kapasitesi dolu",
+    paused: "Veri erişimi duraklatıldı",
+    unavailable: "Periyot verisi alınamadı",
+}
+
+export function rsiSourceTime(epoch: number | null | undefined): string | null {
+    if (typeof epoch !== "number" || !Number.isFinite(epoch)) return null
+    return new Date(epoch * 1000).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" })
+}
 
 export function toggleRsiColumn(selected: readonly RsiTimeframe[], id: RsiTimeframe): RsiTimeframe[] {
     const next = new Set(selected)

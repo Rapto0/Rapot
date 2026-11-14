@@ -37,6 +37,10 @@ class LiveIndicatorData:
         self._configs = {}
         self._members = {}
         self._wanted = set()
+        self._tracker_wanted = set()
+        self._tracker_members = set()
+        self._tracker_refused = set()
+        self._indicator_wanted = set()
         self._native_keys_by_member = {}
         self._member_slots = {}
         self._requested = 0
@@ -71,7 +75,7 @@ class LiveIndicatorData:
     def set_listener(self, listener):
         self._listener = listener
 
-    def configure(self, jobs, *, rule_job_keys=()):
+    def configure(self, jobs, *, rule_job_keys=(), tracker_demands=None):
         """Jobs are the deduplicated configured and leased symbol/settings pairs."""
         members, configs, wanted, blocked, requested = {}, {}, set(), 0, set()
         from application.services.custom_indicators.live import estimate_live_cells
@@ -107,16 +111,39 @@ class LiveIndicatorData:
             members = {key: value for key, value in members.items() if key in member_slots}
             wanted = {key for key in wanted if key[:2] in member_slots}
             cells = sum(estimates[key[2]] for key in configs)
+        indicator_wanted = wanted.copy()
+        tracker_wanted = set()
+        for member, periods in (tracker_demands or {}).items():
+            requested_keys = {(*member, tf) for tf in periods}
+            proposed = wanted | requested_keys | {(*member, "1D")}
+            if len(proposed) > MAX_LIVE_SERIES:
+                tracker_wanted.update(requested_keys & wanted)
+                continue
+            if proposed != wanted:
+                _, slots, refused = plan_native_subscriptions(proposed, member_slots)
+                if refused:
+                    tracker_wanted.update(requested_keys & wanted)
+                    continue
+                wanted, member_slots = proposed, slots
+            tracker_wanted.update(requested_keys)
         with self._lock:
             self._member_slots = member_slots
             self._blocked_jobs = blocked
             self._admitted_cells = cells
             self._admitted_rule_jobs = len(set(configs).intersection(rule_job_keys))
             self._configs, self._members = configs, members
+            self._tracker_wanted = tracker_wanted
+            self._tracker_refused = {
+                (*member, tf)
+                for member, periods in (tracker_demands or {}).items()
+                for tf in periods
+            } - tracker_wanted
+            self._tracker_members = {key[:2] for key in tracker_wanted}
+            self._indicator_wanted = indicator_wanted
             self._previous_quotes = {
-                key: value for key, value in self._previous_quotes.items() if key in members
+                key: value for key, value in self._previous_quotes.items() if key in member_slots
             }
-            self._invalid_quote_members.intersection_update(members)
+            self._invalid_quote_members.intersection_update(member_slots)
             self._daily_witness_after = {
                 key: value for key, value in self._daily_witness_after.items() if key in members
             }
@@ -133,7 +160,7 @@ class LiveIndicatorData:
                 if key not in self._wanted:
                     self._buckets.pop(key)
                     self._witness_certificates.pop(key, None)
-            if not configs:
+            if not wanted:
                 self._queue.clear()
                 self._compiled.clear()
                 self._previous_quotes.clear()
@@ -383,8 +410,16 @@ class LiveIndicatorData:
         elif event["kind"] == "rejected":
             key = tuple(event["key"])
             with self._lock:
+                if key not in self._wanted:
+                    return True
                 self._refused.add(key)
-            self.owner.live_gap("Sağlayıcı bu native sembol/periyot aboneliğini reddetti.", key[:2])
+                indicator_demand = key in self._indicator_wanted
+            if indicator_demand:
+                self.owner.live_gap(
+                    "Sağlayıcı bu native sembol/periyot aboneliğini reddetti.", key[:2]
+                )
+            else:
+                self.owner.invalidate_tracker(key[:2], key)
         return True
 
     def _bars(self, event):
@@ -411,7 +446,10 @@ class LiveIndicatorData:
             # exact exchange close timestamp of a multi-day/week bar is absent.
             points = (replace(points[-2], confirmed=True), replace(points[-1], confirmed=False))
         except Exception:
-            self.owner.live_gap("Native canlı mum paketi doğrulanamadı.", key[:2])
+            if key in self._indicator_wanted:
+                self.owner.live_gap("Native canlı mum paketi doğrulanamadı.", key[:2])
+            else:
+                self.owner.invalidate_tracker(key[:2], key)
             return
         acknowledge = getattr(self._connection, "confirm_native_witness", None)
         if acknowledge is not None:
@@ -509,15 +547,21 @@ class LiveIndicatorData:
                 self._stage_daily_extremes(key[:2], points[-1], event["received_at"])
         if dirty:
             if rollover:
-                self.owner.native_advanced(key, points[-2], points[-1])
+                if key in self._indicator_wanted:
+                    self.owner.native_advanced(key, points[-2], points[-1])
+                else:
+                    self.owner.advance_tracker(key, points[-2], points[-1])
             if rollover and refresh:
                 self.owner.native_refresh(key, jobs=refresh, invalidate_native=False)
             elif not rollover:
-                self.owner.live_gap(
-                    "Native mum başlangıcı/geçmişi değişti; gösterge yeniden hazırlanıyor.",
-                    key[:2],
-                    native_key=key,
-                )
+                if key in self._indicator_wanted:
+                    self.owner.live_gap(
+                        "Native mum başlangıcı/geçmişi değişti; gösterge yeniden hazırlanıyor.",
+                        key[:2],
+                        native_key=key,
+                    )
+                else:
+                    self.owner.invalidate_tracker(key[:2], key)
         self.owner._wake.set()
 
     def _stage_daily_extremes(self, member, daily, received):
@@ -667,20 +711,23 @@ class LiveIndicatorData:
             self._rejected += 1
             with self._lock:
                 first_invalid = member not in self._invalid_quote_members
-                if member in self._members:
+                if member in self._members or member in self._tracker_members:
                     self._invalid_quote_members.add(member)
                 else:
                     first_invalid = False
             if first_invalid:
                 self.owner.live_gap(
-                    "Canlı fiyat eski veya geçersiz; yeni gözlem bekleniyor.", member
+                    "Canlı fiyat eski veya geçersiz; yeni gözlem bekleniyor.",
+                    member,
+                    preserve_tracker=True,
                 )
             return
         updates = []
         with self._lock:
             live_generation = self._generation
             keys = self._members.get(member, ())
-            if not keys:
+            tracked = member in self._tracker_members
+            if not keys and not tracked:
                 return
             self._invalid_quote_members.discard(member)
             previous = self._previous_quotes.get(member)
@@ -789,6 +836,12 @@ class LiveIndicatorData:
                 "Canlı fiyat sırasında boşluk/sıra değişimi görüldü; başlangıç yenileniyor.", member
             )
             return
+        if tracked:
+            self.owner.publish_tracker(
+                member, source=source, received=received, price=price, epoch=epoch, now=now
+            )
+        if not updates:
+            return
         if not self.owner.publish_live(
             updates,
             source=source,
@@ -814,6 +867,22 @@ class LiveIndicatorData:
         if self._listener:
             self._listener(*member)
         self._processed += 1
+
+    def tracker_witness(self, key):
+        """Read the validated current/predecessor pair and daily session anchor."""
+        with self._lock:
+            daily = (*key[:2], "1D")
+            if (
+                key not in self._tracker_wanted
+                or key in self._refused
+                or daily in self._refused
+                or not self._certificate_valid(key)
+            ):
+                return None
+            pair, session = self._buckets.get(key), self._buckets.get(daily)
+            if pair and session:
+                return pair[0], session[0][-1]
+            return None
 
     def status(self):
         with self._lock:

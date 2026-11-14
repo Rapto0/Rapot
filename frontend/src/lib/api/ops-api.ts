@@ -1,4 +1,5 @@
 import { API_BASE_URL, fetchApi } from './core';
+import type { RsiSnapshot, RsiTimeframe, TrackerMarket } from '../rsi-tracker';
 import type {
     ApiHealth,
     ApiStrategyInspector,
@@ -17,6 +18,14 @@ export async function fetchBistSymbols(signal?: AbortSignal): Promise<SymbolsRes
 
 export async function fetchCryptoSymbols(signal?: AbortSignal): Promise<SymbolsResponse> {
     return fetchApi<SymbolsResponse>(`${API_BASE_URL}/symbols/crypto`, { signal });
+}
+
+export function fetchRsiSnapshot(
+    view: string, market: TrackerMarket, symbols: string[], periods: RsiTimeframe[], signal?: AbortSignal,
+): Promise<RsiSnapshot> {
+    return fetchApi(`${API_BASE_URL}/borsapy/market/rsi-tracker`, {
+        method: 'POST', body: JSON.stringify({ view, market, symbols, periods }), signal,
+    });
 }
 
 export async function fetchLogs(limit: number = 50): Promise<LogEntry[]> {

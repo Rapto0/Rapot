@@ -21,6 +21,22 @@ from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from application.services.custom_indicators.core import Bar
+from application.services.rsi_tracker import (
+    HISTORY_BARS as TRACKER_HISTORY_BARS,
+)
+from application.services.rsi_tracker import (
+    HISTORY_REFRESH as TRACKER_HISTORY_REFRESH,
+)
+from application.services.rsi_tracker import (
+    HISTORY_SPACING as TRACKER_HISTORY_SPACING,
+)
+from application.services.rsi_tracker import (
+    NATIVE_TIMEFRAMES,
+    RSI_LENGTH,
+    RsiTrackerData,
+    TrackerSeed,
+)
+from application.services.rsi_tracker import STALE_SECONDS as TRACKER_STALE_SECONDS
 from infrastructure.providers.custom_indicator_leases import is_leased_timeframe
 
 MAX_NATIVE_SERIES = 64
@@ -340,8 +356,14 @@ class CustomIndicatorData:
         self._history_retries = {}
         self._standard_rsi_demands = {}
         self._standard_rsi = {}
+        self.tracker = RsiTrackerData()
+        self._sync_lock = threading.Lock()
 
     def _sync_live(self):
+        with self._sync_lock:
+            self._sync_live_plan()
+
+    def _sync_live_plan(self):
         if self.provider_paused():
             return
         with self._lock:
@@ -350,10 +372,16 @@ class CustomIndicatorData:
             active_previews = frozenset(
                 key for key, (expires, _) in self._previews.items() if expires > self._clock()
             )
-            signature = self._generation, id(self._universe), active_previews
+            tracker_demands = self.tracker.demands(self._clock())
+            tracker_keys = frozenset(
+                (*member, tf) for member, periods in tracker_demands.items() for tf in periods
+            )
+            signature = self._generation, id(self._universe), active_previews, tracker_keys
             if signature == self._live_signature:
                 return
+            previous_signature = self._live_signature
             self._live_signature = signature
+            previous_jobs = set(self._job_order)
             jobs = {}
             from application.services.custom_indicator_live import MAX_LIVE_JOBS
 
@@ -368,8 +396,11 @@ class CustomIndicatorData:
             for key, (expires, config) in self._previews.items():
                 if expires > self._clock() and len(jobs) < MAX_LIVE_JOBS:
                     jobs[key] = config
-        self.live.configure(jobs.items(), rule_job_keys=rule_job_keys)
+        self.live.configure(
+            jobs.items(), rule_job_keys=rule_job_keys, tracker_demands=tracker_demands
+        )
         with self._lock:
+            self.tracker.prune(self.live._tracker_wanted)
             self._job_order = tuple(sorted(key for key in jobs if self.live.admitted(key)))
             retained_jobs = set(self._job_order)
             self._history_failures = {
@@ -381,7 +412,7 @@ class CustomIndicatorData:
             self._seed_due.intersection_update(retained_jobs)
             self._seed_queue = deque(key for key in self._seed_queue if key in retained_jobs)
             self._seed_queued = set(self._seed_queue)
-            members = {key[:2] for key in retained_jobs}
+            members = {key[:2] for key in retained_jobs | self.live._tracker_wanted}
             self._publication_members = {
                 key: value for key, value in self._publication_members.items() if key in members
             }
@@ -398,12 +429,17 @@ class CustomIndicatorData:
                 for key, value in self._standard_rsi.items()
                 if key in self._standard_rsi_demands
             }
-            self._job_cursor = 0
-            for key in self._job_order:
-                if key not in self._results or not self.live.has_seed(
-                    key, self.provider.memory_epoch()
-                ):
-                    self._queue_seed(key)
+            if (
+                previous_signature is None
+                or signature[:3] != previous_signature[:3]
+                or retained_jobs != previous_jobs
+            ):
+                self._job_cursor = 0
+                for key in self._job_order:
+                    if key not in self._results or not self.live.has_seed(
+                        key, self.provider.memory_epoch()
+                    ):
+                        self._queue_seed(key)
 
     def _queue_seed(self, key):
         if self.live.admitted(key) and key not in self._seed_queued:
@@ -429,6 +465,170 @@ class CustomIndicatorData:
     def provider_paused(self):
         """Local configuration only; never obtain an auth token or touch the provider."""
         return getattr(self.provider, "tradingview_enabled", True) is False
+
+    def tracker_snapshot(self, view, market, symbols, periods):
+        """Renew only the visible selection. Request threads do no provider I/O."""
+        now = self._clock()
+        paused = self.provider_paused()
+        epoch = self.provider.memory_epoch()
+        members = tuple((market, symbol) for symbol in symbols)
+        with self._lock:
+            demands = self.tracker.request(
+                view, members, {NATIVE_TIMEFRAMES[tf] for tf in periods}, now
+            )
+            rows = {}
+            for member in members:
+                quote = self.tracker.rows.get(member) or {}
+                connected = self.live._connection is not None and self.live._connection.connected
+                quote_ok = not paused and connected and quote.get("epoch") == epoch
+                stale = (
+                    quote_ok
+                    and max(now - quote["source_time"], now - quote["received_at"])
+                    > TRACKER_STALE_SECONDS
+                )
+                cells = {}
+                for tf in periods:
+                    key = (*member, NATIVE_TIMEFRAMES[tf])
+                    value, bar_time = None, None
+                    status = "waiting"
+                    if paused:
+                        status = "paused"
+                    elif key[2] not in demands.get(member, ()) or key in self.live._tracker_refused:
+                        status = "capacity"
+                    elif key in self.live._refused or (*member, "1D") in self.live._refused:
+                        status = "unavailable"
+                    elif connected and (witness := self.live.tracker_witness(key)):
+                        seed = self.tracker.seeds.get(key)
+                        point = quote.get("cells", {}).get(key[2]) if quote_ok else None
+                        if point and point["bar_time"] == witness[0][-1].time:
+                            value, bar_time = point["value"], point["bar_time"]
+                            status = "stale" if stale else "ready"
+                        elif seed and seed.epoch == epoch and seed.matches(witness[0]):
+                            value, bar_time = (
+                                seed.state.value(seed.current.close),
+                                seed.current.time,
+                            )
+                            status = "candle" if value is not None else "insufficient"
+                    cells[tf] = {"value": value, "bar_time": bar_time, "status": status}
+                rows[member[1]] = {
+                    "source_time": quote["source_time"] if quote_ok else None,
+                    "price": quote["price"] if quote_ok else None,
+                    "cells": cells,
+                }
+        self._wake.set()
+        return {
+            "rows": rows,
+            "observed_at": now,
+            "length": RSI_LENGTH,
+            "source": "borsapy_tradingview" if market == "BIST" else "tradingview_binance",
+        }
+
+    def invalidate_tracker(self, member=None, key=None):
+        with self._lock:
+            self.tracker.invalidate(member, key)
+        self._wake.set()
+
+    def advance_tracker(self, key, closed, current):
+        with self._lock:
+            self.tracker.advance(key, closed, current)
+        self._wake.set()
+
+    def publish_tracker(self, member, *, source, received, price, epoch, now):
+        with self._lock:
+            if (
+                self._stop.is_set()
+                or self.provider_paused()
+                or self.provider.memory_epoch() != epoch
+            ):
+                return
+            periods = self.tracker.demands(now).get(member)
+            if periods:
+                self.tracker.observe(
+                    member, periods, self.live.tracker_witness, source, received, price, epoch, now
+                )
+
+    def _tracker_history_step(self):
+        """One missing series per turn, sharing the alarm worker and gateway budget."""
+        if self.provider_paused():
+            return
+        now, epoch = self._clock(), self.provider.memory_epoch()
+        with self._lock:
+            if now < self.tracker.next_history or not self.tracker.views:
+                return
+            connection = self.live._connection
+            if connection is None or not connection.connected:
+                return
+            for member, periods in self.tracker.demands(now).items():
+                for tf in sorted(periods):
+                    key = (*member, tf)
+                    witness = self.live.tracker_witness(key)
+                    seed = self.tracker.seeds.get(key)
+                    if (
+                        not witness
+                        or now < self.tracker.retry.get(key, 0)
+                        or (
+                            seed
+                            and seed.epoch == epoch
+                            and seed.matches(witness[0])
+                            and now - seed.loaded < TRACKER_HISTORY_REFRESH
+                        )
+                    ):
+                        continue
+                    cached = self._native.get(key)
+                    if (
+                        cached
+                        and cached.epoch == epoch
+                        and cached.requested >= TRACKER_HISTORY_BARS
+                    ):
+                        built = TrackerSeed.build(cached.bars[-TRACKER_HISTORY_BARS:], epoch, now)
+                        if (
+                            built.matches(witness[0])
+                            and now - cached.received < TRACKER_HISTORY_REFRESH
+                        ):
+                            self.tracker.install(key, built)
+                            continue
+                    self.tracker.next_history = now + TRACKER_HISTORY_SPACING
+                    token = self.publication_token(member)
+                    break
+                else:
+                    continue
+                break
+            else:
+                return
+        market, symbol, tf = key
+        try:
+            frame = self.provider.custom_indicator_history(
+                symbol,
+                exchange="BIST" if market == "BIST" else "BINANCE",
+                timeframe=tf,
+                bars=TRACKER_HISTORY_BARS,
+            )
+            bars = native_bars(frame, tf, market, self._clock())
+            seed = TrackerSeed.build(bars, epoch, self._clock())
+        except Exception:
+            seed = None
+        with self._lock:
+            if (
+                self._stop.is_set()
+                or self.provider_paused()
+                or self.provider.memory_epoch() != epoch
+            ):
+                return
+            if tf not in self.tracker.demands(self._clock()).get(member, ()):
+                return
+            witness = self.live.tracker_witness(key)
+            if (
+                seed
+                and witness
+                and seed.matches(witness[0])
+                and connection is self.live._connection
+                and connection.connected
+                and token == self.publication_token(member)
+            ):
+                self.tracker.install(key, seed)
+                self.tracker.retry.pop(key, None)
+            else:
+                self.tracker.retry[key] = self._clock() + HISTORY_RETRY_SECONDS
 
     def supports_standard_rsi(self, member, native_tf):
         return (
@@ -729,6 +929,8 @@ class CustomIndicatorData:
             self._history_retries.clear()
             self._history_reset_fences.clear()
             self._standard_rsi.clear()
+            self.tracker.views.clear()
+            self.tracker.invalidate()
 
     def invalidate(self):
         with self._lock:
@@ -743,6 +945,7 @@ class CustomIndicatorData:
             self._history_summaries.clear()
             self._history_reset_fences.clear()
             self._standard_rsi.clear()
+            self.tracker.invalidate()
             self._history_failures.clear()
             self._history_retries.clear()
             self._live_cells = 0
@@ -776,7 +979,7 @@ class CustomIndicatorData:
             for key in list(self._preview_results):
                 if key not in self._previews:
                     self._preview_results.pop(key)
-            if not self._memberships and not self._previews:
+            if not self._memberships and not self._previews and not self.tracker.views:
                 self._native.clear()
                 self._results.clear()
                 self._live_cells = 0
@@ -872,6 +1075,9 @@ class CustomIndicatorData:
             job = self._next_job()
             if job:
                 self.process(*job)
+            if not job or self._turn % 16 == 0:
+                self._tracker_history_step()
+            if job:
                 self._stop.wait(0.05)
             else:
                 self._wake.wait(0.5)
@@ -1386,9 +1592,11 @@ class CustomIndicatorData:
             + count(previous.get("closed_points", ()))
         )
 
-    def live_gap(self, reason, member=None, native_key=None):
+    def live_gap(self, reason, member=None, native_key=None, *, preserve_tracker=False):
         """Invalidate comparison state after a provider gap; never invent a crossing."""
         with self._publication_lock, self._lock:
+            if not preserve_tracker:
+                self.tracker.invalidate(member, native_key)
             for key in list(self._standard_rsi):
                 if member is None or key[:2] == member:
                     self._standard_rsi.pop(key)
@@ -1423,6 +1631,7 @@ class CustomIndicatorData:
     def native_witness_wait(self, member, reason):
         """Break observation continuity while retaining a proven rollover's seeds."""
         with self._publication_lock, self._lock:
+            self.tracker.rows.pop(member, None)
             self._publication_members[member] = self._publication_members.get(member, 0) + 1
             self._symbol_epochs[member] = self._symbol_epochs.get(member, 0) + 1
             for key, result in self._results.items():
@@ -1459,6 +1668,7 @@ class CustomIndicatorData:
     def native_advanced(self, native_key, closed, current):
         """Retain a witnessed rollover in the bounded shared bootstrap cache."""
         with self._publication_lock, self._lock:
+            self.tracker.advance(native_key, closed, current)
             if (standard := self._standard_rsi.get(native_key)) is not None:
                 if not standard["seed"].advance(closed, current):
                     self._standard_rsi.pop(native_key)

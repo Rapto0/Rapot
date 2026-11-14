@@ -80,6 +80,25 @@ ilerleyecek; bu kayıt bütün dönüşümün uygulanmış olduğu anlamına gel
   aracıyla açılması sonuç vermedi; canlı ekran ve 14 Kasım üretim sağlığı
   doğrulanmış sayılmaz. Aşağıdaki üretim sonuçları tarihli kayıtlardır.
 
+### 14 Kasım — İki sembollü RSI uygulaması
+
+Takipçi RSI(14) hesabında kapanışı ve 14 fiyat değişiminin aritmetik ortalaması
+ile başlayan Wilder ortalamasını kullanır. Başlangıç için en fazla 240 native
+mum okunur. Aynı fiyat olayı seçili periyotlara uygulanır. Sonraki mumun
+sağlayıcıdan gelmesiyle önceki kapanış bir kez işlenir. Günlük seans tanığı,
+üst periyot tanığı ve mum kimliği doğrulanmadan fiyatla RSI yayımlanmaz.
+[TradingView RSI formülü](https://www.tradingview.com/support/solutions/43000502338-relative-strength-index-rsi/).
+
+İlk kapsam iki sembol ve 16 seçilebilir periyottur. Kripto RSI, borsapy
+üzerinden TradingView'in Binance Spot serisinden gelir. Son fiyat sütunundaki
+Binance ticker bağımsızdır. RSI hücresinde kullanılan fiyat ve zaman görülebilir.
+Arayüz sunucudaki son hesabı üç saniyede bir okur. Sekme istekleri kesilince
+15 saniyelik abonelik süresi sona erer. Alarm serileri önce planlanır. Uygun
+geçmiş varsa paylaşılır. Eksik geçmiş, mevcut işçi ve sağlayıcı bütçesi içinde
+en fazla iki saniyede bir istenir. Kapasite, gecikme, son mum, yetersiz geçmiş
+ve erişim durumu tabloda ayrılır. Kademeli kapsam büyütme ve gerçek sağlayıcıyla
+aynı an sayısal karşılaştırması sonraki kabulde izlenir.
+
 ### 14 Kasım — İlk ekran uygulamasının kapsamı
 
 Kullanıcının “DEVAM ET” ve ardından “kaldığın yerden devam et” talimatıyla

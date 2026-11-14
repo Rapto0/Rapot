@@ -1,14 +1,61 @@
 """The site's private Borsapy market surface; no legacy price-cache fallback."""
 
+from typing import Annotated, Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, Field, StringConstraints, model_validator
 
 from api.auth import User, get_current_admin_user
 from api.rate_limit import limiter
 from api.routes.borsapy_connection_routes import PrivateRoute
 from application.services.borsapy_gateway import BorsapyGatewayError, get_borsapy_gateway
 from application.services.borsapy_market_data import get_borsapy_market_data
+from application.services.rsi_tracker import MAX_TRACKER_SYMBOLS, NATIVE_TIMEFRAMES
 
 router = APIRouter(prefix="/borsapy/market", tags=["Private market data"], route_class=PrivateRoute)
+
+
+class RsiTrackerRequest(BaseModel):
+    view: Annotated[str, StringConstraints(pattern=r"^[a-z0-9-]{16,48}$")]
+    market: Literal["BIST", "Kripto"]
+    symbols: list[Annotated[str, StringConstraints(pattern=r"^[A-Z0-9]{1,24}$")]] = Field(
+        max_length=MAX_TRACKER_SYMBOLS
+    )
+    periods: list[str] = Field(min_length=1, max_length=len(NATIVE_TIMEFRAMES))
+
+    @model_validator(mode="after")
+    def check_selection(self):
+        if (
+            len(set(self.symbols)) != len(self.symbols)
+            or len(set(self.periods)) != len(self.periods)
+            or not all(tf in NATIVE_TIMEFRAMES for tf in self.periods)
+            or any(len(symbol) > 20 for symbol in self.symbols)
+            and self.market == "BIST"
+            or self.market == "Kripto"
+            and any(not symbol.endswith("USDT") or len(symbol) < 6 for symbol in self.symbols)
+        ):
+            raise ValueError("Geçersiz RSI takipçi seçimi.")
+        return self
+
+
+@router.post("/rsi-tracker")
+@limiter.limit("40/minute")
+def rsi_tracker(
+    request: Request, payload: RsiTrackerRequest, user: User = Depends(get_current_admin_user)
+) -> dict:
+    from application.services.advanced_alarm_market_data import get_advanced_market_data
+    from application.services.bist_share_universe import share_universe
+
+    if payload.market == "BIST" and any(
+        symbol not in share_universe().symbols for symbol in payload.symbols
+    ):
+        raise HTTPException(422, "Sembol BIST pay listesinde bulunmuyor.")
+    return get_advanced_market_data().custom.tracker_snapshot(
+        (user.username, payload.view),
+        payload.market,
+        payload.symbols,
+        payload.periods,
+    )
 
 
 def _call(method, *args):

@@ -5,19 +5,21 @@ import { load, hooks, nodes, text, primitives } from './view-harness.mjs';
 const model = load('../src/lib/rsi-tracker.ts');
 const symbols = Array.from({ length: 53 }, (_, index) => `PAY${String(index).padStart(2, '0')}`);
 
-function tracker({ allowed = true, responses = {}, bistQuote = {} } = {}) {
+function tracker({ allowed = true, responses = {}, bistQuote = {}, rsiRows = {} } = {}) {
   const state = hooks();
   const queries = [], requests = [], snapshots = [], streams = [];
   const source = load('../src/components/scanner/rsi-tracker.tsx', { ...primitives,
     react: state.react,
     '@tanstack/react-query': { useQuery: options => {
       queries.push(options);
+      if (options.queryKey[0] === 'rsi-tracker-values') return { data: { rows: rsiRows }, dataUpdatedAt: 0 };
       return { data: { symbols: options.queryKey[2] === 'BIST' ? symbols : ['BTCUSDT', 'ETHUSDT'] },
         refetch: () => requests.push('refresh-symbols'), ...responses[options.queryKey[2]] };
     } },
     '@/lib/api/ops-api': {
       fetchBistSymbols: signal => { requests.push(['BIST', signal]); },
       fetchCryptoSymbols: signal => { requests.push(['Kripto', signal]); },
+      fetchRsiSnapshot: (...args) => { requests.push(['RSI', ...args]); },
     },
     '@/lib/hooks/use-private-market': { usePrivateMarket: () => ({ allowed, sessionKey: 'admin:100' }) },
     '@/lib/hooks/use-market-snapshot': { useMarketSnapshot: values => {
@@ -29,7 +31,7 @@ function tracker({ allowed = true, responses = {}, bistQuote = {} } = {}) {
       return { prices: {}, receivedAtBySymbol: {}, status: 'connecting', reconnect: () => requests.push('reconnect') };
     } },
     '@/lib/rsi-tracker': model,
-  });
+  }, `\nconst window = { crypto: { randomUUID: () => '12345678-test-1234-1234-123456789abc' } };`);
   return { queries, requests, snapshots, streams, render() { state.reset(); return source.RsiTracker(); } };
 }
 
@@ -68,7 +70,7 @@ test('chart links carry explicit market and price formatting never invents zero 
 });
 
 test('active market loads only its symbols and at most 25 prices without starting RSI calls', async () => {
-  const app = tracker(); const tree = app.render(); const query = app.queries.at(-1);
+  const app = tracker(); const tree = app.render(); const query = app.queries.at(-2);
   assert.deepEqual(Array.from(query.queryKey), ['rsi-tracker-symbols', 'admin:100', 'BIST']);
   assert.equal(query.enabled, true); assert.equal(query.staleTime, 300_000); assert.equal(query.retry, false);
   assert.equal(query.placeholderData, undefined);
@@ -79,8 +81,8 @@ test('active market loads only its symbols and at most 25 prices without startin
   assert.deepEqual(app.requests, []);
   const signal = new AbortController().signal; await query.queryFn({ signal });
   assert.deepEqual(app.requests, [['BIST', signal]]);
-  assert.match(text(tree), /RSI verileri henüz bağlanmadı/);
-  assert.equal(nodes(tree).filter(node => node.type === 'td' && node.props.title?.endsWith('veri bağlı değil')).length, 25 * 16);
+  assert.equal(app.queries.at(-1).enabled, false);
+  assert.equal(nodes(tree).filter(node => node.type === 'td' && node.props.title === 'RSI takibi kapalı').length, 25 * 16);
 });
 
 test('switching markets resets page and search, retires BIST reads and never displays old market rows', async () => {
@@ -94,9 +96,32 @@ test('switching markets resets page and search, retires BIST reads and never dis
   assert.deepEqual(app.snapshots.at(-1), []);
   assert.deepEqual(app.streams.at(-1).values, ['BTCUSDT', 'ETHUSDT']);
   assert.equal(app.streams.at(-1).paused, false);
-  const query = app.queries.at(-1), signal = new AbortController().signal;
+  const query = app.queries.at(-2), signal = new AbortController().signal;
   assert.deepEqual(Array.from(query.queryKey), ['rsi-tracker-symbols', 'admin:100', 'Kripto']);
   await query.queryFn({ signal }); assert.deepEqual(app.requests, [['Kripto', signal]]);
+});
+
+test('only explicitly tracked symbols request RSI and candle and fresh values are distinguishable', async () => {
+  const app = tracker({ rsiRows: { PAY00: { source_time: 1794651000, price: 42, cells: {
+    '15m': { status: 'ready', value: 0, bar_time: 1794650400 },
+    '1D': { status: 'candle', value: 71.123, bar_time: 1794614400 },
+  } } } });
+  let tree = app.render();
+  const follow = (symbol) => nodes(tree).find(node => node.type === 'button' && node.props['aria-label'] === `${symbol} RSI takibini aç`);
+  follow('PAY00').props.onClick(); tree = app.render();
+  follow('PAY01').props.onClick(); tree = app.render();
+  assert.equal(follow('PAY02').props.disabled, true);
+  const query = app.queries.at(-1), signal = new AbortController().signal;
+  assert.equal(query.enabled, true);
+  await query.queryFn({ signal });
+  assert.deepEqual(Array.from(app.requests[0][3]), ['PAY00', 'PAY01']);
+  assert.equal(app.requests[0][4].length, 16);
+  assert.equal(app.requests[0][5], signal);
+  assert.match(text(tree), /0Güncel fiyatla hesaplandı/);
+  assert.match(text(tree), /71,12Son mum kaydı/);
+  button(tree, 'Kripto').props.onClick(); tree = app.render();
+  assert.equal(app.queries.at(-1).enabled, false);
+  assert.doesNotMatch(text(tree), /71,12/);
 });
 
 test('sign-out suppresses cached symbols, provider subscriptions and queries', () => {
