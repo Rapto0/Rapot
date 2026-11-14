@@ -30,7 +30,7 @@ ilerleyecek; bu kayıt bütün dönüşümün uygulanmış olduğu anlamına gel
   desteği ayrıca doğrulanır. Mevcut standart RSI paylaşımı yalnız BIST 1D/1W ve
   özel göstergelerin zaten istediği serilerdedir; kripto/genel takipçi için
   genişletilmesi gerekir.
-- [x] **1 — Takipçi ekranı kaynakta hazır; yayın kabulü aşağıda izlenir.**
+- [x] **1 — Takipçi ekranı yayımlandı.**
   Hisseler / Kripto ayrımı, gerçek sembol listeleri, arama, A–Z/Z–A sıralama,
   25 satırlık sayfalama ve seçilebilir 16 RSI sütunu uygulandı. Başlangıçta tüm
   sütunlar açık; en az biri açık kalır. Tercihler bu aşamada oturum içindedir.
@@ -107,7 +107,6 @@ açma/kapatma doğrulandı. Normal ve 375 px mobil viewport'ta ana içerik gövd
 sınırlarında kaldı, geniş tablo kendi alanında kaydı; JS konsol hatası yok.
 Kripto gerçek sağlayıcı akışı bu yerel kabulde sınanmadı. UI test isteklerinde
 yeni mum/RSI/alarm/tarama POST'u yok; yalnız sentetik giriş POST'u vardı.
-Frontend yayın sonucu ayrıca eklenecek; hazır kaynak üretime alınmış sayılmaz.
 
 Taze bağımlılık taramasında çıkan tek kök `minimatch` açığı için yalnız
 `@typescript-eslint/typescript-estree@8.72.0` dalı11.0.1'e sabitlendi.
@@ -116,11 +115,30 @@ runtime bağımlılıkları değişmedi. Tam lock kapsamı **470 paket / sıfır
 İlk 469 paket / sekiz moderate bulgu kanıtı korunur. Ayrıntılar
 [bağımlılık güvenliği kaydında](FRONTEND_DEPENDENCY_SECURITY.md).
 
-14 Kasım18:02:42 UTC salt okunur yayın önkontrolünde API/current21e39512,
-frontendbf852c75, dört servis healthy/restart0 ve dört etkin alarm görüldü.
-Boş disk2.813.435.904 bayt, kullanılabilirRAM236.539.904 bayt idi; bu canlı
-RSI veya sürekli kapasite testi değildir. Yalnız frontend yayını hazırlanır;
-API yeniden başlatılmaz. Özel kanıt: `runtime-data/20261114-scanner-stage1/`.
+### 14 Kasım — Yayın ve kabul
+
+Frontend kaynak sürümü `0e7489ce5dd073648bd093fb65859745020745af`
+**18:32:59 UTC / 21:32:59 TSİ**'de yayımlandı. Beş işli
+[GitHub kontrolü](https://github.com/Rapto0/Rapot/actions/runs/43625586813)
+ve [temiz imaj yayını](https://github.com/Rapto0/Rapot/actions/runs/43625856142)
+geçti. Kullanılan frontend imajı
+`ghcr.io/rapto0/rapot/frontend@sha256:cb9877ecc0d7812ec18cdb27cc69f48175c2c9d759f7334e59deb155f153b6d7`.
+API/Compose/current `21e39512` kaynağında kaldı. API, middleware ve PostgreSQL
+container kimlikleri, başlangıç zamanları ve özel ayar dosyaları eşleşti.
+Yayın öncesinde gereken 806.772.830 bayta karşı 2.813.284.352 bayt boş alan
+ölçüldü. Kabulde 2.650.681.344 bayt boştu.
+
+**18:33:09 UTC** bağımsız kabulde sağlık, 4 SSR sayfası, 22 JS/CSS dosyası,
+3 kimliksiz 401 ve yeni takipçi metinleri doğrulandı. Dört servis sağlıklıydı,
+yeniden başlatma sayacı sıfırdı. Dördü etkin sekiz alarm tanımı ve bir izleme
+listesinin özetleri önceki kayıtla eşleşti. Canlı tarayıcıda yeni sayfa başlığı
+ve yönetici girişi doğrulandı. Tarayıcı oturumu kapalıydı. Oturum gerektiren
+tablo etkileşimleri yukarıdaki yerel test verileriyle doğrulandı ve canlı
+RSI veya taze fiyat kabulü bu aşamaya dahil değildi.
+
+Yayın ve kabul kayıtları `runtime-data/20261114-scanner-stage1/` dizininde.
+Yayın kanıtı SHA256 `288dd95b96a1c45a0cbb920fadda493f84938e0ad4a183c8bcea1314cd6c0b88`,
+bağımsız kabul SHA256 `7a849c7c1cee58bfc248dd121218ac1a24a4af76a8d9eee2a5613e088290a3b6`.
 
 ## Son doğrulanmış üretim kayıtları
 

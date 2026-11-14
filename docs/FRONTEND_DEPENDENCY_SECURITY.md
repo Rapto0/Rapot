@@ -478,5 +478,6 @@ yalnız bu Windows platformuna kurulmuş 391 paketlik npm ci özetinden ayrıdı
 
 Özel kanıt dizini `runtime-data/20261114-scanner-stage1/`: `npm-audit/` ilk bulgu,
 `npm-audit-after/` yeni tam kapsam, `npm-ci.log` ve `frontend-tests-final.log`.
-Bu kayıt kaynak/yerel doğrulamayı anlatır; gerçek yayın sonucu devam planında
-ayrı kaydedilir.
+Düzeltme `0e7489ce` frontend imajıyla **14 Kasım 18:32:59 UTC**'de yayımlandı.
+GitHub kontrolleri ve temiz imaj yayını geçti. Ayrı yayın kabulü
+[devam planında](RAPOT_DEVAM_PLANI.md#14-kasım--yayın-ve-kabul) kayıtlıdır.
