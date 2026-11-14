@@ -1,8 +1,86 @@
 # Rapot Devam Planı
 
-**Güncel özet: 23 Ekim 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
+**Güncel plan: 14 Kasım 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
 
-23 Ekim güncel API/Compose/current kaynağı
+## 14 Kasım — Hisse ve kripto RSI takipçisi
+
+Kullanıcı `/scanner` sayfasını adım adım TradingView'in hisse ve kripto takipçi
+sayfalarına benzer biçimde geliştirmek istiyor. Ana hedef, sembol başına aşağıdaki
+**16 zaman diliminin RSI değerlerini aynı tabloda izlemek**. Sonraki ekran ve
+davranış değişiklikleri kullanıcının adım adım vereceği taleplerle bu plandan
+ilerleyecek; bu kayıt bütün dönüşümün uygulanmış olduğu anlamına gelmez.
+
+| Grup | İstenen zaman dilimleri |
+|---|---|
+| Dakika | 15 dakika, 30 dakika |
+| Saat | 1 saat, 2 saat, 4 saat |
+| Gün | 1, 2, 3, 4, 5, 6 gün |
+| Hafta | 1, 2, 3 hafta |
+| Ay | 1 ay, 2 ay |
+
+### Aşamalar ve mevcut durum
+
+- [x] **0 — Kapsam ve mevcut kaynak incelemesi.** `frontend/src/app/scanner/page.tsx`
+  ve `frontend/src/components/scanner/borsapy-screener.tsx` bugün genel Borsapy
+  tarama seçicisi ile `OperationPanel` kullanıyor; 16 periyotlu canlı RSI tablosu
+  yok. Mevcut sunucu liste/alarm ve native mum altyapısı başlangıç noktasıdır.
+  `borsapy_research.py` teknik taraması turkey/BIST, en fazla 20 sembol ve tek
+  periyotla sınırlı; katalogda 2 saat, 2–6 gün, 2–3 hafta ve 1–2 ay eksik.
+  Native çözünürlük doğrulayıcısı 16 periyodun biçimini kabul eder; gerçek veri
+  desteği ayrıca doğrulanır. Mevcut standart RSI paylaşımı yalnız BIST 1D/1W ve
+  özel göstergelerin zaten istediği serilerdedir; kripto/genel takipçi için
+  genişletilmesi gerekir.
+- [ ] **1 — Takipçi ekranı.** Kullanıcının ilk tasarım talebine göre Hisseler /
+  Kripto ayrımı, sembol satırları ve seçilebilir RSI sütunları düzenlenecek.
+  Varsayılan sütunlar, RSI ayarları ve filtrelerin yerleşimi bu adımda
+  netleştirilecek. İlk öneri RSI(14), kapanış kaynağıdır; henüz kullanıcı kararı
+  veya uygulanmış sözleşme değildir.
+- [ ] **2 — Ortak RSI veri servisi.** Sembol/periyot/RSI ayarı başına hesap ve
+  geçmiş paylaşımı; aynı canlı fiyat gözlemiyle açık mum hesapları; istemciye
+  güncel değer, kaynak zamanı ve hazır/eski/bekliyor durumu birlikte aktarılacak.
+  Önce dar sembol kapsamı, sonra kaynak bütçesi içinde genişleyen kapsam.
+- [ ] **3 — Tarama ve kişisel düzen.** RSI sütunlarında sıralama, alt/üst eşik
+  ve çok periyotlu filtreler; izleme listesi seçimi ve sütun tercihlerini
+  saklama, kullanıcının istediği sırayla eklenecek. Kapsam dışındaki üyelerin
+  filtre sonucuna eksiksiz taranmış gibi dahil edilmemesi sağlanacak.
+- [ ] **4 — Doğrulama ve yayın.** Formül/periyot sınırı ve tazelik testleri,
+  ekran kabulü, kaynak ölçümü ve ilgili aşamanın yayını ayrı kaydedilecek.
+  TradingView ile aynı sembol, piyasa, kaynak ve anda karşılaştırma yapılmadan
+  sayısal eşitlik; gerçek seans ölçülmeden bütün evrende anlık kapsam denmeyecek.
+
+### Korunacak hesaplama ve kaynak sözleşmesi
+
+- Önceki canlı RSI talebi geçerli: her yeni fiyat geldiğinde bütün etkin
+  periyotlar o gözlemi kullanır; en küçük periyodun kapanışı beklenmez.
+  Seans dışındaki son değer gösterilebilse de canlı/taze diye etiketlenmez.
+- Çok günlük/haftalık/aylık mumların sınırları sağlayıcının gerçek periyot
+  mumlarından doğrulanır. `2M`, iki takvim ayıdır; sabit 60 gün değildir.
+  BIST seansı ve kriptonun sürekli seansı ayrı ele alınır.
+- Mevcut standart alarm RSI'ı `ta` EWM/500 mum, özel Pine RSI'ları kendi
+  başlangıç sözleşmelerindedir. Yeni takipçinin TradingView uyumu ayrı bir
+  formül/başlangıç kararı ve karşılaştırma gerektirir; mevcut dört alarmın
+  formülü veya ayarları bu dönüşümün yan etkisi olarak değiştirilmez.
+- Borsapy, ortak akış/önbellek, mevcut istek bütçesi ve hesap koruması kullanılır.
+  Her hücre/sekme için yeni sağlayıcı sorgusu açılmaz. Tüm evren × 16 periyot
+  kapasitesi peşinen kabul edilmez; görünür semboller, seçilen listeler ve
+  sunucuda uygulanacak filtre kapsamı birlikte bütçelenir.
+  Mevcut tasarımda 631 × 16 = 10.096 mantıksal seri, 8.192 sınırını aşar;
+  beş gün içi periyot + günlük taban 3.786 kalıcı chart gerektirir ve dört
+  bağlantının 2.000 fiziksel chart sınırını aşar. Bunlar kaynak kodundaki
+  kapasite hesabıdır; güncel sunucuda yük testi değildir. Ortak talep sahipliği
+  ve önceliklendirme geliştirilmeden bütün periyotlar tüm evrene açılmaz;
+  eksik kapsam arayüzde görünür kalır. Limitler körlemesine büyütülmez.
+- BIST ve kripto sembolleri piyasa/işlem çifti kimliğiyle ayrılır. Son doğrulanmış
+  631 pay listesi tarihli bir evrendir; kripto borsası/spot veya vadeli kapsamı
+  ilk veri adımında mevcut sağlayıcı desteği ve kullanıcı isteğiyle belirlenir.
+- Bu aşama yalnız plan ve kaynak incelemesidir. Kod/deploy, alarm değişikliği,
+  yeni test alarmı, Telegram mesajı veya otomatik takip yapılmadı. URL'nin web
+  aracıyla açılması sonuç vermedi; canlı ekran ve 14 Kasım üretim sağlığı
+  doğrulanmış sayılmaz. Aşağıdaki üretim sonuçları tarihli kayıtlardır.
+
+## Son doğrulanmış üretim kayıtları
+
+23 Ekim son doğrulanmış API/Compose/current kaynağı
 **`21e39512e13c2665acb24551248f56d1d4065319`**, **15:20:46 UTC** yalnız API yayını;
 **15:21:55–15:22:21 UTC** ayrı kabul geçti. Frontend `bf852c75`, middleware ve
 PostgreSQL değiştirilmedi. Kullanıcının açık talimatıyla TV erişimi API override

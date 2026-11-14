@@ -1,5 +1,15 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
+**14 Kasım yeni iş — aşamalı RSI takipçisi:** Kullanıcı `/scanner` sayfasını
+TradingView benzeri hisse/kripto takipçisine adım adım dönüştürmek istiyor.
+Hedef16 periyot:15/30 dakika;1/2/4 saat;1–6 gün;1/2/3 hafta;1/2 ay RSI.
+Kapsam ve aşamalar [devam planına](docs/RAPOT_DEVAM_PLANI.md) işlendi; kaynak
+incelemesi tamamlandı. Sonraki ekran talepleri aynı plandan ilerler. Bu adımda
+uygulama veya üretim değişmedi, alarm/test/takip başlatılmadı. Mevcut standart
+RSI ile Pine RSI başlangıç farkı yeni takipçi sözleşmesinde ayrıca çözülür;
+dört alarmın ayarları/formülleri korunur. Alttaki23 Ekim sonuçları tarihli son
+kanıtlardır;14 Kasım üretim veya canlı ekran kabulü değildir.
+
 **23 Ekim kontrollü yeniden açma yayımlandı:** Kullanıcı borsapy erişiminin
 hesap riski azaltılarak ve mevcut dört alarm korunarak sürmesini açıkça istedi.
 `21e39512e13c2665acb24551248f56d1d4065319`, **15:20:46 UTC / 18:20:46 TSİ**
