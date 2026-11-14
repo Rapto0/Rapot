@@ -192,8 +192,8 @@ export default function LandingPage() {
         />
         <QuickLinkCard
           href="/scanner"
-          title="Piyasa Tarayıcı"
-          description="Temel ve teknik piyasa taraması"
+          title="Hisse ve Kripto Takipçisi"
+          description="Sembol takibi ve RSI sütun düzeni"
           icon={Activity}
         />
         <QuickLinkCard

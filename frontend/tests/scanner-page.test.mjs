@@ -10,20 +10,40 @@ const operations = [
   { id: 'company.actions', label: 'Şirket işlemleri' },
 ];
 
-test('scanner mounts only the real screener for admin and no archived history tab', () => {
+test('scanner gates the private workspace behind an admin session', () => {
   for (const allowed of [false, true]) {
     let mounts = 0;
     const page = load('../src/app/scanner/page.tsx', { ...primitives,
+      react: React,
       '@/lib/hooks/use-private-market': { usePrivateMarket: () => ({ allowed, sessionKey: 'admin:100' }) },
       '@/components/market-data-status': { MarketDataStatus: () => null },
-      '@/components/scanner/borsapy-screener': { BorsapyScreener: () => { mounts++; return React.createElement('p', null, 'CURRENT_SCREENER'); } },
+      '@/components/scanner/scanner-workspace': { ScannerWorkspace: () => { mounts++; return React.createElement('p', null, 'RSI_TRACKER'); } },
     });
     const html = renderToStaticMarkup(React.createElement(page.default));
     assert.equal(mounts, allowed ? 1 : 0);
-    assert.equal(html.includes('CURRENT_SCREENER'), allowed);
+    assert.equal(html.includes('RSI_TRACKER'), allowed);
     assert.ok(!/COMBO|HUNTER|Sinyal Geçmişi|scanHistory/.test(html));
     if (!allowed) assert.ok(html.includes('/login?next=%2Fscanner'));
   }
+});
+
+test('advanced scan is available on demand and unmounts when collapsed', () => {
+  const state = hooks();
+  const page = load('../src/components/scanner/scanner-workspace.tsx', { ...primitives,
+    react: state.react,
+    '@/lib/hooks/use-private-market': { usePrivateMarket: () => ({ allowed: true, sessionKey: 'admin:100' }) },
+    '@/components/market-data-status': { MarketDataStatus: () => null },
+    '@/components/scanner/rsi-tracker': { RsiTracker: 'rsi-tracker' },
+    '@/components/scanner/borsapy-screener': { BorsapyScreener: 'advanced-scanner' },
+  });
+  const render = () => { state.reset(); return page.ScannerWorkspace(); };
+  let tree = render();
+  assert.equal(nodes(tree).filter(node => node.type === 'advanced-scanner').length, 0);
+  nodes(tree).find(node => node.type === 'button').props.onClick(); tree = render();
+  assert.equal(nodes(tree).filter(node => node.type === 'advanced-scanner').length, 1);
+  assert.equal(nodes(tree).find(node => node.type === 'button').props['aria-expanded'], true);
+  nodes(tree).find(node => node.type === 'button').props.onClick(); tree = render();
+  assert.equal(nodes(tree).filter(node => node.type === 'advanced-scanner').length, 0);
 });
 
 test('screener offers only fundamental/technical operations and selection has no automatic query/write', async () => {
@@ -58,4 +78,16 @@ test('screener reports missing catalog instead of inventing options', () => {
     '@/components/research/operation-panel': { OperationPanel: () => { throw Error('No fabricated operation'); } },
   });
   assert.match(renderToStaticMarkup(React.createElement(component.BorsapyScreener)), /Tarama seçenekleri alınamadı/);
+});
+
+test('symbol requests forward cancellation to the correct market endpoint', async () => {
+  const requests = [];
+  const api = load('../src/lib/api/ops-api.ts', {
+    './core': { API_BASE_URL: '/api', fetchApi: (url, options) => { requests.push([url, options]); return Promise.resolve({ symbols: [], count: 0 }); } },
+  });
+  const signal = new AbortController().signal;
+  await api.fetchBistSymbols(signal);
+  await api.fetchCryptoSymbols(signal);
+  assert.deepEqual(requests.map(([url]) => url), ['/api/symbols/bist', '/api/symbols/crypto']);
+  assert.ok(requests.every(([, options]) => options.signal === signal));
 });

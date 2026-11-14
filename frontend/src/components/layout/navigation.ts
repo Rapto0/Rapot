@@ -4,7 +4,7 @@ export const navigation = [
   { name: "Ana Sayfa", shortName: "Ana", href: "/", icon: Home },
   { name: "Grafik", shortName: "Grafik", href: "/chart", icon: BarChart3 },
   { name: "Alarmlar", shortName: "Alarmlar", href: "/alarms", icon: AlarmClock },
-  { name: "Tarayıcı", shortName: "Tarayıcı", href: "/scanner", icon: Search },
+  { name: "Takipçi", shortName: "Takipçi", href: "/scanner", icon: Search },
   { name: "Araştırma Merkezi", shortName: "Araştırma", href: "/research", icon: Compass },
   { name: "İşlemler", shortName: "İşlemler", href: "/trades", icon: History },
   { name: "Sistem Sağlığı", shortName: "Sağlık", href: "/health", icon: Activity },

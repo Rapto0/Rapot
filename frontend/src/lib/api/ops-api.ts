@@ -11,12 +11,12 @@ export async function fetchHealth(signal?: AbortSignal): Promise<ApiHealth> {
     return fetchApi<ApiHealth>(`${API_BASE_URL}/health`, { signal });
 }
 
-export async function fetchBistSymbols(): Promise<SymbolsResponse> {
-    return fetchApi<SymbolsResponse>(`${API_BASE_URL}/symbols/bist`);
+export async function fetchBistSymbols(signal?: AbortSignal): Promise<SymbolsResponse> {
+    return fetchApi<SymbolsResponse>(`${API_BASE_URL}/symbols/bist`, { signal });
 }
 
-export async function fetchCryptoSymbols(): Promise<SymbolsResponse> {
-    return fetchApi<SymbolsResponse>(`${API_BASE_URL}/symbols/crypto`);
+export async function fetchCryptoSymbols(signal?: AbortSignal): Promise<SymbolsResponse> {
+    return fetchApi<SymbolsResponse>(`${API_BASE_URL}/symbols/crypto`, { signal });
 }
 
 export async function fetchLogs(limit: number = 50): Promise<LogEntry[]> {

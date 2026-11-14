@@ -61,7 +61,7 @@ export default function SettingsPage() {
           Sunucu izleme listeleri ve alarmlar ise hesabınıza bağlıdır; yerel tercihler bunları değiştirmez.
         </p>
         <Link href="/scanner" className="mt-3 inline-block text-xs text-primary underline underline-offset-4">
-          Piyasa tarayıcısını aç
+          Hisse ve kripto takipçisini aç
         </Link>
       </section>
     </PageShell>

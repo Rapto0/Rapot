@@ -453,3 +453,30 @@ Mevcut uygulamaya yönelik exploit veya image decoder saldırı testi çalışt�
 Advisory araştırmasının dış ağ okumaları paket registry ve açık bakımcı güvenlik
 kaynaklarıyla sınırlıdır; üretim HTTPS okumaları yukarıda ayrı kaydedilir.
 Paket sürümü, statik özellik koşulu ve üretim kabulü ayrı kanıtlardır.
+
+## 14 Kasım 2026 — Takipçi yayını için dar minimatch düzeltmesi
+
+Taze tam lock taraması 469 paket içinde sekiz moderate bulgu verdi; bunlar
+`@typescript-eslint/typescript-estree` dalındaki tek gerçek `minimatch` düğümünün
+üst bağımlılıklara aktarılmış sonuçlarıdır. Bakımcı/GitHub kaydı
+[GHSA-g3hv-75wg-m249](https://github.com/advisories/GHSA-g3hv-75wg-m249),
+7.0.0–11.0.0 sürümlerindeki glob işlem maliyeti artışını açıklar; düzeltme11.0.1.
+
+Yalnız `@typescript-eslint/typescript-estree@8.72.0` altında `minimatch`10.2.6→11.0.1
+override'ı uygulandı; yeni geçişli `@isaacs/nonrecursive-glob-match`1.1.0 eklendi.
+Node18/20/>=22 engine koşulu mevcut Node20.20.2 ile uyumludur. Named CommonJS
+`minimatch` fonksiyonu ve `{dot:true}` eşlemesi korunur. İki test gerçek parser
+`projectService.allowDefaultProject` eşleşmesini, dışarıdaki dosyanın reddini
+ve ayrı ESLint v3 tüketicisinin callable API'sini sınar. Next.js16.4.2 ve
+doğrudan runtime bağımlılıkları değişmedi; major Next düşürme uygulanmadı.
+
+Node20.20.2/npm10.9.9 temiz kurulum ve 324 frontend testi, lint/tip kontrolü
+geçti. Son tam lock taraması **470 paket / sıfır bulgu**. Bu paket kapsamı,
+yalnız bu Windows platformuna kurulmuş 391 paketlik npm ci özetinden ayrıdır.
+İlk hatalı doğrudan script çağrısında seçili npm bağlamı bulunamadı; npm CLI
+üzerinden yeniden çalıştırılan tam tarama geçti. Önceki bulgu kaydı korunur.
+
+Özel kanıt dizini `runtime-data/20261114-scanner-stage1/`: `npm-audit/` ilk bulgu,
+`npm-audit-after/` yeni tam kapsam, `npm-ci.log` ve `frontend-tests-final.log`.
+Bu kayıt kaynak/yerel doğrulamayı anlatır; gerçek yayın sonucu devam planında
+ayrı kaydedilir.

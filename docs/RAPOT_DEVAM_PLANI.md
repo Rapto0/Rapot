@@ -30,11 +30,13 @@ ilerleyecek; bu kayıt bütün dönüşümün uygulanmış olduğu anlamına gel
   desteği ayrıca doğrulanır. Mevcut standart RSI paylaşımı yalnız BIST 1D/1W ve
   özel göstergelerin zaten istediği serilerdedir; kripto/genel takipçi için
   genişletilmesi gerekir.
-- [ ] **1 — Takipçi ekranı.** Kullanıcının ilk tasarım talebine göre Hisseler /
-  Kripto ayrımı, sembol satırları ve seçilebilir RSI sütunları düzenlenecek.
-  Varsayılan sütunlar, RSI ayarları ve filtrelerin yerleşimi bu adımda
-  netleştirilecek. İlk öneri RSI(14), kapanış kaynağıdır; henüz kullanıcı kararı
-  veya uygulanmış sözleşme değildir.
+- [x] **1 — Takipçi ekranı kaynakta hazır; yayın kabulü aşağıda izlenir.**
+  Hisseler / Kripto ayrımı, gerçek sembol listeleri, arama, A–Z/Z–A sıralama,
+  25 satırlık sayfalama ve seçilebilir 16 RSI sütunu uygulandı. Başlangıçta tüm
+  sütunlar açık; en az biri açık kalır. Tercihler bu aşamada oturum içindedir.
+  RSI hücreleri hesaplanmış gibi doldurulmaz; veri servisinin henüz bağlı
+  olmadığı açıkça gösterilir. RSI(14)/kapanış önerisi ve Pine başlangıç
+  sözleşmesi veri servisi aşamasında netleştirilecek; yeni bir hesap uygulanmadı.
 - [ ] **2 — Ortak RSI veri servisi.** Sembol/periyot/RSI ayarı başına hesap ve
   geçmiş paylaşımı; aynı canlı fiyat gözlemiyle açık mum hesapları; istemciye
   güncel değer, kaynak zamanı ve hazır/eski/bekliyor durumu birlikte aktarılacak.
@@ -73,10 +75,52 @@ ilerleyecek; bu kayıt bütün dönüşümün uygulanmış olduğu anlamına gel
 - BIST ve kripto sembolleri piyasa/işlem çifti kimliğiyle ayrılır. Son doğrulanmış
   631 pay listesi tarihli bir evrendir; kripto borsası/spot veya vadeli kapsamı
   ilk veri adımında mevcut sağlayıcı desteği ve kullanıcı isteğiyle belirlenir.
-- Bu aşama yalnız plan ve kaynak incelemesidir. Kod/deploy, alarm değişikliği,
+- İlk planlama adımı yalnız plan ve kaynak incelemesiydi. Kod/deploy, alarm değişikliği,
   yeni test alarmı, Telegram mesajı veya otomatik takip yapılmadı. URL'nin web
   aracıyla açılması sonuç vermedi; canlı ekran ve 14 Kasım üretim sağlığı
   doğrulanmış sayılmaz. Aşağıdaki üretim sonuçları tarihli kayıtlardır.
+
+### 14 Kasım — İlk ekran uygulamasının kapsamı
+
+Kullanıcının “DEVAM ET” ve ardından “kaldığın yerden devam et” talimatıyla
+ilk ekran aşaması geliştirildi. `/scanner` takipçi olur; mevcut temel/teknik
+Borsapy taraması yalnız kullanıcı açtığında yüklenen “Gelişmiş Borsapy taraması”
+bölümünde korunur. Ana gezinme ve ana sayfa bağlantıları Takipçi adını kullanır.
+
+Sembol listeleri mevcut kimlikli API'den gelir. Piyasa değişiminde arama/sayfa
+sıfırlanır; sorgular kullanıcı oturumu ve piyasa ile ayrılır, iptal sinyali
+iletilir. Yeni ekran aynı anda yalnız görünür 25 sembolün fiyatını ister:
+BIST mevcut ortak snapshot yolundan 10 saniyede bir, kripto mevcut Binance
+Spot USDT ticker hook'undan. Bu fiyat yenileme aralığı yeni RSI hesap politikası
+değildir. Eski/eksik fiyat ile hesaplanmamış RSI birbirinden ayrılır. Yeni mum
+aboneliği, RSI hesabı, otomatik tarama, alarm yazımı veya Telegram testi yoktur.
+Mevcut alarmların koşulları/formülleri değişmez.
+
+Node20.20.2/npm10.9.9 ile temiz kurulum, **324 frontend testi**, tam lint ve
+tip kontrolü geçti. Yeni testler piyasa/oturum ayrımını, 25 satır sınırını,
+periyot seçimini, eksik veriyi ve ertelenmiş gelişmiş taramayı kapsar.
+Sembol API'sine iptal sinyali eklenince mevcut grafik queryFn imzası da buna
+uyarlandı. Üretim derlemesi ve standalone HTTP/statik/kimlikli proxy/WS kontrolü
+geçti. Yerel sentetik tarayıcıda giriş, 25 satır/16 sütun, THY araması, sütun
+kaldırma/geri ekleme, ikinci sayfa, kripto boş kaynak ve gelişmiş taramayı
+açma/kapatma doğrulandı. Normal ve 375 px mobil viewport'ta ana içerik gövde
+sınırlarında kaldı, geniş tablo kendi alanında kaydı; JS konsol hatası yok.
+Kripto gerçek sağlayıcı akışı bu yerel kabulde sınanmadı. UI test isteklerinde
+yeni mum/RSI/alarm/tarama POST'u yok; yalnız sentetik giriş POST'u vardı.
+Frontend yayın sonucu ayrıca eklenecek; hazır kaynak üretime alınmış sayılmaz.
+
+Taze bağımlılık taramasında çıkan tek kök `minimatch` açığı için yalnız
+`@typescript-eslint/typescript-estree@8.72.0` dalı11.0.1'e sabitlendi.
+Gerçek parser/projectService uyumluluğu iki testle doğrulandı; Next ve doğrudan
+runtime bağımlılıkları değişmedi. Tam lock kapsamı **470 paket / sıfır bulgu**.
+İlk 469 paket / sekiz moderate bulgu kanıtı korunur. Ayrıntılar
+[bağımlılık güvenliği kaydında](FRONTEND_DEPENDENCY_SECURITY.md).
+
+14 Kasım18:02:42 UTC salt okunur yayın önkontrolünde API/current21e39512,
+frontendbf852c75, dört servis healthy/restart0 ve dört etkin alarm görüldü.
+Boş disk2.813.435.904 bayt, kullanılabilirRAM236.539.904 bayt idi; bu canlı
+RSI veya sürekli kapasite testi değildir. Yalnız frontend yayını hazırlanır;
+API yeniden başlatılmaz. Özel kanıt: `runtime-data/20261114-scanner-stage1/`.
 
 ## Son doğrulanmış üretim kayıtları
 

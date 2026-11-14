@@ -1037,7 +1037,7 @@ export function AdvancedChartPage({
     // Fetch BIST symbols for search
     const { data: bistSymbols } = useQuery({
         queryKey: ['bist-symbols'],
-        queryFn: fetchBistSymbols,
+        queryFn: ({ signal }) => fetchBistSymbols(signal),
         staleTime: 300000,
         enabled: canUseBorsapy,
     })
