@@ -777,6 +777,49 @@
         "title": "ResearchQuery",
         "type": "object"
       },
+      "RsiTrackerRequest": {
+        "properties": {
+          "market": {
+            "enum": [
+              "BIST",
+              "Kripto"
+            ],
+            "title": "Market",
+            "type": "string"
+          },
+          "periods": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "minItems": 1,
+            "title": "Periods",
+            "type": "array"
+          },
+          "symbols": {
+            "items": {
+              "pattern": "^[A-Z0-9]{1,24}$",
+              "type": "string"
+            },
+            "maxItems": 2,
+            "title": "Symbols",
+            "type": "array"
+          },
+          "view": {
+            "pattern": "^[a-z0-9-]{16,48}$",
+            "title": "View",
+            "type": "string"
+          }
+        },
+        "required": [
+          "view",
+          "market",
+          "symbols",
+          "periods"
+        ],
+        "title": "RsiTrackerRequest",
+        "type": "object"
+      },
       "SavedResearchWrite": {
         "additionalProperties": false,
         "properties": {
@@ -3338,6 +3381,55 @@
           }
         ],
         "summary": "Overview",
+        "tags": [
+          "Private market data"
+        ],
+        "x-access-role": "admin"
+      }
+    },
+    "/borsapy/market/rsi-tracker": {
+      "post": {
+        "operationId": "rsi_tracker_borsapy_market_rsi_tracker_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RsiTrackerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Rsi Tracker Borsapy Market Rsi Tracker Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Rsi Tracker",
         "tags": [
           "Private market data"
         ],
