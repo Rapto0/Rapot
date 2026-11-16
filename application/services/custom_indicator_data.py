@@ -548,10 +548,14 @@ class CustomIndicatorData:
                 )
 
     def _tracker_history_step(self):
-        """One missing series per turn, sharing the alarm worker and gateway budget."""
+        """One bounded symbol batch per turn, sharing the alarm worker and gateway."""
+        from infrastructure.providers.native_indicator_history import MAX_BATCH_CHARTS
+
         if self.provider_paused():
             return
         now, epoch = self._clock(), self.provider.memory_epoch()
+        fetch = getattr(self.provider, "custom_indicator_histories", None)
+        limit = MAX_BATCH_CHARTS if callable(fetch) else 1
         with self._lock:
             if now < self.tracker.next_history or not self.tracker.views:
                 return
@@ -559,6 +563,7 @@ class CustomIndicatorData:
             if connection is None or not connection.connected:
                 return
             for member, periods in self.tracker.demands(now).items():
+                pending = []
                 for tf in sorted(periods):
                     key = (*member, tf)
                     witness = self.live.tracker_witness(key)
@@ -587,26 +592,41 @@ class CustomIndicatorData:
                         ):
                             self.tracker.install(key, built)
                             continue
+                    if len(pending) < limit:
+                        pending.append(tf)
+                if pending:
                     self.tracker.next_history = now + TRACKER_HISTORY_SPACING
                     token = self.publication_token(member)
                     break
-                else:
-                    continue
-                break
             else:
                 return
-        market, symbol, tf = key
+        market, symbol = member
         try:
-            frame = self.provider.custom_indicator_history(
-                symbol,
-                exchange="BIST" if market == "BIST" else "BINANCE",
-                timeframe=tf,
-                bars=TRACKER_HISTORY_BARS,
-            )
-            bars = native_bars(frame, tf, market, self._clock())
-            seed = TrackerSeed.build(bars, epoch, self._clock())
+            exchange = "BIST" if market == "BIST" else "BINANCE"
+            if callable(fetch):
+                frames = fetch(
+                    symbol,
+                    exchange=exchange,
+                    requests=dict.fromkeys(pending, TRACKER_HISTORY_BARS),
+                )
+            else:
+                frames = {
+                    pending[0]: self.provider.custom_indicator_history(
+                        symbol,
+                        exchange=exchange,
+                        timeframe=pending[0],
+                        bars=TRACKER_HISTORY_BARS,
+                    )
+                }
         except Exception:
-            seed = None
+            frames = {}
+        seeds = {}
+        for tf in pending:
+            try:
+                bars = native_bars(frames[tf], tf, market, self._clock())
+                seeds[tf] = TrackerSeed.build(bars, epoch, self._clock())
+            except Exception:
+                seeds[tf] = None
         with self._lock:
             if (
                 self._stop.is_set()
@@ -614,21 +634,24 @@ class CustomIndicatorData:
                 or self.provider.memory_epoch() != epoch
             ):
                 return
-            if tf not in self.tracker.demands(self._clock()).get(member, ()):
-                return
-            witness = self.live.tracker_witness(key)
-            if (
-                seed
-                and witness
-                and seed.matches(witness[0])
-                and connection is self.live._connection
-                and connection.connected
-                and token == self.publication_token(member)
-            ):
-                self.tracker.install(key, seed)
-                self.tracker.retry.pop(key, None)
-            else:
-                self.tracker.retry[key] = self._clock() + HISTORY_RETRY_SECONDS
+            demanded = self.tracker.demands(self._clock()).get(member, ())
+            for tf, seed in seeds.items():
+                if tf not in demanded:
+                    continue
+                key = (*member, tf)
+                witness = self.live.tracker_witness(key)
+                if (
+                    seed
+                    and witness
+                    and seed.matches(witness[0])
+                    and connection is self.live._connection
+                    and connection.connected
+                    and token == self.publication_token(member)
+                ):
+                    self.tracker.install(key, seed)
+                    self.tracker.retry.pop(key, None)
+                else:
+                    self.tracker.retry[key] = self._clock() + HISTORY_RETRY_SECONDS
 
     def supports_standard_rsi(self, member, native_tf):
         return (

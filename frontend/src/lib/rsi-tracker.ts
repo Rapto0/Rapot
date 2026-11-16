@@ -21,8 +21,48 @@ export const RSI_TIMEFRAMES = [
 
 export type RsiTimeframe = typeof RSI_TIMEFRAMES[number]["id"]
 export const TRACKER_PAGE_SIZE = 25
-export const TRACKER_SYMBOL_LIMIT = 2
+export const TRACKER_SYMBOL_LIMIT = TRACKER_PAGE_SIZE
 export const ALL_RSI_COLUMNS: RsiTimeframe[] = RSI_TIMEFRAMES.map(item => item.id)
+export const RSI_COLUMNS_STORAGE_KEY = "rapot.rsi-tracker.columns.v1"
+
+export function storedRsiColumns(raw: string | null): RsiTimeframe[] {
+    try {
+        const value: unknown = JSON.parse(raw ?? "null")
+        if (Array.isArray(value)) {
+            const selected = ALL_RSI_COLUMNS.filter(period => value.includes(period))
+            if (selected.length) return selected
+        }
+    } catch { /* Invalid preferences fall back to all columns. */ }
+    return [...ALL_RSI_COLUMNS]
+}
+
+export interface RsiFilter { period: RsiTimeframe; min: string; max: string }
+export interface RsiSort { period: RsiTimeframe; descending: boolean }
+
+/** Filter only the fixed subscribed page; incomplete or stale values never match. */
+export function trackerResultRows(symbols: readonly string[], snapshot: RsiSnapshot | undefined,
+    filters: readonly RsiFilter[], sort: RsiSort | null, fresh: boolean, nowSeconds: number) {
+    const value = (symbol: string, period: RsiTimeframe): number | null => {
+        const row = snapshot?.rows[symbol], cell = row?.cells[period]
+        if (!fresh || cell?.status !== "ready" || cell.value == null || !Number.isFinite(cell.value)
+            || row?.source_time == null || (nowSeconds > 0 && (nowSeconds - row.source_time > 30 || row.source_time - nowSeconds > 5))) return null
+        return cell.value
+    }
+    const active = filters.filter(filter => filter.min.trim() || filter.max.trim())
+    const rows = symbols.filter(symbol => active.every(filter => {
+        const number = value(symbol, filter.period)
+        const min = filter.min.trim() ? Number(filter.min) : 0
+        const max = filter.max.trim() ? Number(filter.max) : 100
+        return number !== null && Number.isFinite(min) && Number.isFinite(max)
+            && min >= 0 && max <= 100 && min <= max && number >= min && number <= max
+    }))
+    if (sort) rows.sort((a, b) => {
+        const left = value(a, sort.period), right = value(b, sort.period)
+        if (left === null || right === null) return left === right ? 0 : left === null ? 1 : -1
+        return (left - right) * (sort.descending ? -1 : 1)
+    })
+    return rows
+}
 
 type RsiCellStatus = "ready" | "stale" | "candle" | "waiting" | "insufficient" | "capacity" | "paused" | "unavailable"
 

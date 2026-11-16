@@ -801,7 +801,7 @@
               "pattern": "^[A-Z0-9]{1,24}$",
               "type": "string"
             },
-            "maxItems": 2,
+            "maxItems": 25,
             "title": "Symbols",
             "type": "array"
           },

@@ -11,7 +11,7 @@ from api.routes.borsapy_market_routes import router
 from application.services import advanced_alarm_market_data
 from application.services.custom_indicator_data import CustomIndicatorData, native_bars
 from application.services.custom_indicators.core import rsi_values
-from application.services.rsi_tracker import NATIVE_TIMEFRAMES, TrackerSeed
+from application.services.rsi_tracker import MAX_TRACKER_SYMBOLS, NATIVE_TIMEFRAMES, TrackerSeed
 from tests.test_custom_indicator_bootstrap import configured, quote, witness
 from tests.test_custom_indicator_data import NOW, Provider, frame
 
@@ -125,7 +125,7 @@ def test_private_route_rejects_unauthorized_or_excess_demand(monkeypatch, api_au
             {"sub": "admin"}
         )
         assert (
-            client.post(path, json={**payload, "symbols": ["THYAO", "GARAN", "AKBNK"]}).status_code
+            client.post(path, json={**payload, "symbols": [f"S{i}" for i in range(26)]}).status_code
             == 422
         )
         assert client.post(path, json={**payload, "periods": ["60d"]}).status_code == 422
@@ -135,3 +135,53 @@ def test_private_route_rejects_unauthorized_or_excess_demand(monkeypatch, api_au
         assert response.status_code == 200
         assert response.headers["Cache-Control"] == "private, no-store"
         assert calls == [(("admin", payload["view"]), "BIST", ["THYAO"], ["2M"])]
+
+
+def test_full_page_demand_is_shared_bounded_and_released_without_provider_io():
+    clock = [NOW + 0.2]
+    provider = Provider()
+    service = CustomIndicatorData(provider=provider, clock=lambda: clock[0])
+    symbols = [f"COIN{i}USDT" for i in range(MAX_TRACKER_SYMBOLS)]
+    periods = tuple(NATIVE_TIMEFRAMES)
+    service.tracker_snapshot("first", "Kripto", symbols, periods)
+    service._sync_live()
+    assert len(service.live._tracker_wanted) == 25 * 16
+    assert not service.live._tracker_refused
+    assert provider.calls == []
+    service.tracker_snapshot("shared", "Kripto", symbols, periods)
+    service._sync_live()
+    assert len(service.live._tracker_wanted) == 400
+    blocked = service.tracker_snapshot("overflow", "Kripto", ["OTHERUSDT"], periods)
+    assert {cell["status"] for cell in blocked["rows"]["OTHERUSDT"]["cells"].values()} == {
+        "capacity"
+    }
+    service.tracker_snapshot("first", "Kripto", [], periods)
+    service.tracker_snapshot("shared", "Kripto", [], periods)
+    service._sync_live()
+    assert len(service.live._tracker_wanted) == 16
+    clock[0] += 16
+    service._sync_live()
+    assert not service.live._tracker_wanted
+    assert not provider.calls
+
+
+def test_full_page_fits_alongside_631_alarm_symbols_without_moving_them():
+    from application.services.bist_share_universe import share_universe
+    from infrastructure.providers.custom_indicator_leases import persistent_keys
+    from infrastructure.providers.custom_indicator_stream import (
+        MAX_LIVE_SERIES,
+        plan_native_subscriptions,
+    )
+
+    alarm_periods = [*(f"{n}D" for n in range(1, 7)), "1W", "2W", "3W", "1M"]
+    alarms = {("BIST", symbol, tf) for symbol in share_universe().symbols for tf in alarm_periods}
+    _, old_slots, refused = plan_native_subscriptions(alarms)
+    assert not refused
+    tracker = {
+        ("Kripto", f"COIN{i}USDT", tf) for i in range(25) for tf in NATIVE_TIMEFRAMES.values()
+    }
+    groups, new_slots, refused = plan_native_subscriptions(alarms | tracker, old_slots)
+    assert not refused
+    assert len(alarms | tracker) <= MAX_LIVE_SERIES
+    assert all(new_slots[member] == slot for member, slot in old_slots.items())
+    assert all(len(persistent_keys(keys)) + 32 <= 500 for keys in groups.values())
