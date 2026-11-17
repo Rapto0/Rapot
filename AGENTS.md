@@ -1,5 +1,25 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
+**17 Kasım RSI takipçisi yayımlandı:** API/frontend kaynak
+`089dea075e4162e01c1313ae3e037388e2396fc7`, **13:47:57 UTC / 16:47:57 TSİ**;
+**13:48:13 UTC** ayrı kabul geçti. Görünür 25 sembol otomatik, 16 RSI periyodu,
+salt okunur sunucu listesi seçimi, sütun kaydı ve sayfa içi RSI sıralama/çok
+periyotlu eşikler hazır. Eksik/eski veri filtreye dahil edilmez. İki sembollük
+pilot sınırı kaldırıldı; küresel 25 sınırı dört görünüm arasında paylaşılır.
+Geçmiş en çok 10 TF gruplarıyla mevcut bütçe/kanaldan hazırlanır. Alarm
+önceliği ve hesap koruması korunur. 2.478 Python/bir atlama, 330 frontend,
+beş CI ve temiz imaj geçti. 15 tablo, dördü etkin sekiz kural, tek liste ve
+487 olay korundu. Compose/current `21e39512`, MW/PG ve özel dosyalar aynı;
+dört servis healthy/restart0. Taze 1.286.144 bayt yedek bağımsız restore edildi.
+Önceki `85bc914` veri pilotunda 16 Kasım THYAO/BTCUSDT **16/16** periyotta
+iki ayrı fiyat gözlemiyle canlı RSI doğrulandı; formül bu yayında değişmez.
+17 Kasım 25 satırlık 10 dakikalık ilk hazırlık kontrolünde her satırda değer,
+400 hücreden 237 sayısal, üç yetersiz geçmiş ve 160 bekleyen hücre görüldü.
+400 hücrenin tamamı hazır kabul edilmedi; test talebi sonunda bırakıldı.
+Bu bütün evren, TradingView ekranıyla aynı an eşitliği veya kalıcı kapasite
+kanıtı değildir. Güncel yayın ve kanıt sınırları
+[devam planında](docs/RAPOT_DEVAM_PLANI.md) kayıtlıdır. Yeni otomatik takip yok.
+
 **14 Kasım ilk RSI takipçi ekranı yayımlandı:** Frontend
 `0e7489ce5dd073648bd093fb65859745020745af` **18:32:59 UTC / 21:32:59 TSİ**
 yayımlandı. **18:33:09 UTC** ayrı kabulde 4 sayfa, 22 statik dosya ve 3 anonim

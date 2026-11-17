@@ -1,6 +1,80 @@
 # Rapot Devam Planı
 
-**Güncel plan: 14 Kasım 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
+**Güncel plan: 17 Kasım 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
+
+## 17 Kasım — RSI takipçisi yayınlandı
+
+Kullanıcının tamamlanmış sonuç talebiyle iki sembollük pilot genişletildi.
+Görünür sayfadaki **25 sembol × 16 periyot** otomatik izlenir. Hisse/kripto,
+sembol arama, kişisel sunucu listesi seçimi, kalıcı sütun tercihleri, RSI
+sıralaması ve birden fazla periyotta alt/üst eşik koşulları hazırdır.
+Filtreler yalnız mevcut sayfaya uygulanır. Eksik/eski değerler eşleşme sayılmaz;
+filtreleme abonelik kümesini daraltıp hesaplamayı döngüye sokmaz. Tüm evrenin
+aynı anda 16 periyotla tarandığı iddia edilmez. Kullanıcı listeleri değiştirilmez.
+
+Güncel kaynak **`089dea075e4162e01c1313ae3e037388e2396fc7`**, API ve frontend'e
+**17 Kasım 13:47:57 UTC / 16:47:57 TSİ** yayımlandı. **13:48:13 UTC** ayrı
+kabul geçti. Compose/current `21e39512`, middleware/PostgreSQL container'ları,
+özel dosyalar, 15 tablo, dördü etkin sekiz kural, bir liste ve 487 olay korundu.
+Dört servis healthy/restart0; sağlayıcı oturumu doğrulanmış, hesap koruması
+engelsizdi. Mevcut koruma, 4 iş/saniye bütçesi ve alarm önceliği korunur.
+Yeni alarm, Telegram testi, emir veya otomatik takip kurulmadı.
+
+Eksik geçmişler mevcut kanal üzerinden aynı sembol için en fazla 10 periyotluk
+gruplarla hazırlanır. İki saniyelik hazırlık aralığı ve ortak bütçe korunur;
+seri başına 240 mumdan kompakt RSI başlangıcı tutulur. Aynı fiyat gözlemindeki
+bütün periyotlar hesaplanır; tablo sunucuyu üç saniyede bir okur. Küresel 25
+sembol sınırı dört görünüm arasında paylaşılır. İstekler kesildiğinde 15 saniye
+sonra talep düşer. İlk yükleme ve sayfa değişiminde hazırlık süresi olabilir.
+Yerel planlayıcı kabulü, mevcut 631 × 10 alarm serisine ek 25 × 16 kripto
+serisinin önceki bağlantı yerleşimini değiştirmeden sınırlara sığdığını doğrular.
+Bu model testi kalıcı CPU/RAM veya tüm piyasa kapasitesi ölçümü değildir.
+
+**2.478 Python testi / bir atlama**, **330 frontend testi**, tip/lint,
+üretim derlemesi ve standalone HTTP/proxy/WS kontrolü geçti. Beş işli
+[kaynak kontrolü](https://github.com/Rapto0/Rapot/actions/runs/43872428110) ve
+[temiz imaj yayını](https://github.com/Rapto0/Rapot/actions/runs/43872450697)
+geçti. 331 kaynak dosyası ve 111 çalışma zamanı dağıtımı imajda doğrulandı.
+Yayın kabulü dört sayfa, 22 statik dosya ve dört kimliksiz 401 kontrolünü kapsar.
+Taze **1.286.144 bayt** SQLite yedeği sunucu dışında bağımsız restore edildi;
+SHA256 `456f706725c2f373a3f43c5600d9096d571029cdff7fab302b65c388d0510b88`.
+Yeni imajlar için gereken 825.567.233 bayta karşı 1.274.793.984 bayt boş alan
+vardı; yayından sonra 1.169.317.888 bayt kaldı. Önceki çalışan imajlar korundu.
+Yayın receipt SHA256
+`c746b3d547a6bce44708421d2e014fa2969da363d1c9d675be5177722cafcc28`.
+Kanıtlar `runtime-data/20261117-scanner-complete/` altında tutulur.
+
+17 Kasım **13:52:18–13:52:39 UTC** iki pasif kaynak örneğinde API CPU
+**%21,17 / %25,12**, API belleği **194,8 / 189,3 MiB**, kullanılabilir sunucu
+belleği **289.021.952 / 284.327.936 bayt** ölçüldü. Bunlar yeniden başlangıç
+ve 25 satır hazırlığı sırasındaki kısa örneklerdir; kalıcı kapasite kanıtı değildir.
+
+**13:48:56–13:59:02 UTC** gerçek 25 pay × 16 periyot kontrolünde her satırda
+sayısal RSI görüldü. Son örnekte 400 hücrenin **237'si sayısal** idi:
+163 güncel, 64 eski fiyat, 10 son mum. Üç hücrede geçmiş yetersiz, **160 hücrede
+ilk hazırlık sürüyordu**. Bu pencere 400 hücrenin tamamının canlı kabulü değildir.
+Mevcut alarm hazırlığı öncelikli olduğu için yeniden başlangıçta uzun periyot
+hazırlığı yavaş ilerler; yalnız ekranın açık olması tüm hücrelerin anında hazır
+olacağı anlamına gelmez. Koruma engeli yoktu, dört kural etkin/motor çalışıyordu.
+151 okumanın sonunda test görünümünün talebi bırakıldı; otomatik takip kurulmadı.
+Sonuç `page-acceptance.json` ve ara durumlar `page-acceptance.jsonl` içindedir.
+
+### Önceki pilot ve canlı formül kabulü
+
+`85bc9149662c1ba7a06366d2e4af2ec861531868` iki sembollük veri pilotu
+15 Kasım **17:12:31 UTC** yayımlandı; **17:12:57 UTC** bağımsız kabul geçti.
+Pazar günü ilk kısa THYAO/BTCUSDT denemeleri başlangıç hazırlığında kaldı;
+bu sonuçlar canlı kabul sayılmaz. 16 Kasım piyasa açıkken aynı kaynağın
+THYAO ve BTCUSDT denemelerinde **16 periyodun tamamı**, her sembol için en az
+iki ayrı fiyat gözleminde `ready` oldu. Son kaynak zamanları sırasıyla
+**13:04:02 UTC / 16:04:02 TSİ** ve **13:04:39 UTC / 16:04:39 TSİ** idi.
+Bu canlı veri/formül yolunun kabulüdür; TradingView ekranıyla aynı andaki
+sayısal eşitlik veya bütün evrenin gün boyu tazeliği değildir. Formül yeni
+25 sembollük yayında değiştirilmedi. İlk pilotta 2.464 Python/bir atlama ve
+325 frontend testi geçti; 15 tablo ve 470 olay korundu.
+
+16 Kasım kanıtları `runtime-data/20261116-scanner-complete/all16-before-*.json`,
+pilot yayın kanıtları `runtime-data/20261115-scanner-stage2/` altındadır.
 
 ## 14 Kasım — Hisse ve kripto RSI takipçisi
 
@@ -37,18 +111,16 @@ ilerleyecek; bu kayıt bütün dönüşümün uygulanmış olduğu anlamına gel
   RSI hücreleri hesaplanmış gibi doldurulmaz; veri servisinin henüz bağlı
   olmadığı açıkça gösterilir. RSI(14)/kapanış önerisi ve Pine başlangıç
   sözleşmesi veri servisi aşamasında netleştirilecek; yeni bir hesap uygulanmadı.
-- [ ] **2 — Ortak RSI veri servisi.** Sembol/periyot/RSI ayarı başına hesap ve
-  geçmiş paylaşımı; aynı canlı fiyat gözlemiyle açık mum hesapları; istemciye
-  güncel değer, kaynak zamanı ve hazır/eski/bekliyor durumu birlikte aktarılacak.
-  Önce dar sembol kapsamı, sonra kaynak bütçesi içinde genişleyen kapsam.
-- [ ] **3 — Tarama ve kişisel düzen.** RSI sütunlarında sıralama, alt/üst eşik
-  ve çok periyotlu filtreler; izleme listesi seçimi ve sütun tercihlerini
-  saklama, kullanıcının istediği sırayla eklenecek. Kapsam dışındaki üyelerin
-  filtre sonucuna eksiksiz taranmış gibi dahil edilmemesi sağlanacak.
-- [ ] **4 — Doğrulama ve yayın.** Formül/periyot sınırı ve tazelik testleri,
-  ekran kabulü, kaynak ölçümü ve ilgili aşamanın yayını ayrı kaydedilecek.
-  TradingView ile aynı sembol, piyasa, kaynak ve anda karşılaştırma yapılmadan
-  sayısal eşitlik; gerçek seans ölçülmeden bütün evrende anlık kapsam denmeyecek.
+- [x] **2 — Ortak RSI veri servisi.** 17 Kasım 25 sembollük görünür sayfaya
+  genişletildi. Ortak geçmiş, canlı fiyat, kaynak zamanı ve hazırlık/tazelik
+  durumları birlikte aktarılır. Bütün evren aynı anda talep edilmez.
+- [x] **3 — Tarama ve kişisel düzen.** Sayfa içi RSI sıralaması, çok periyotlu
+  alt/üst eşikler, sunucu listesi seçimi ve tarayıcıda sütun kaydı yayımlandı.
+  Diğer sayfalar ve eksik/eski değerler eşleşmiş gibi sunulmaz.
+- [x] **4 — Kapsamlı test ve yayın kabulü.** Formül/sınır/tazelik ve kaynak
+  planlayıcı testleri, canlı iki sembol × 16 periyot ve bağımsız yayın kabulü
+  yukarıda tarihleriyle kayıtlıdır. TradingView ekranıyla sayısal eşitlik,
+  tüm evren × 16 periyot ve tam seans kapasitesi bu kabulün dışındadır.
 
 ### Korunacak hesaplama ve kaynak sözleşmesi
 
