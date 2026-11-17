@@ -1098,8 +1098,10 @@ class CustomIndicatorData:
             job = self._next_job()
             if job:
                 self.process(*job)
-            if not job or self._turn % 16 == 0:
-                self._tracker_history_step()
+            # The alarm job always runs first. The tracker has its own two-second
+            # batch gate and the same provider budget; counting sixteen alarm
+            # jobs here can postpone a visible page for an entire cold bootstrap.
+            self._tracker_history_step()
             if job:
                 self._stop.wait(0.05)
             else:

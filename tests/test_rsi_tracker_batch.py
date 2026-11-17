@@ -136,3 +136,23 @@ def test_invalid_frame_does_not_prevent_other_valid_frames_from_preparing():
     service._tracker_history_step()
     assert len(service.tracker.seeds) == 9
     assert ("BIST", "THYAO", "1D") in service.tracker.retry
+
+
+def test_busy_alarm_preparation_still_services_visible_page_after_each_alarm(monkeypatch):
+    _, _, service = tracker()
+    calls = []
+
+    def next_job():
+        service._turn += 1
+        return ("alarm",)
+
+    def page():
+        calls.append("page")
+        if len(calls) == 6:
+            service._stop.set()
+
+    monkeypatch.setattr(service, "_next_job", next_job)
+    monkeypatch.setattr(service, "process", lambda job: calls.append(job))
+    monkeypatch.setattr(service, "_tracker_history_step", page)
+    service._loop()
+    assert calls == ["alarm", "page"] * 3
