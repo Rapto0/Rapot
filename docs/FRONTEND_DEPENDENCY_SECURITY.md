@@ -1,10 +1,29 @@
 # Frontend bağımlılık güvenliği
 
-İlk inceleme tarihi: **13 Eylül 2026**; son takip **23 Ekim 2026**. İlk kaynak sürümü
+İlk inceleme tarihi: **13 Eylül 2026**; son takip **17 Kasım 2026**. İlk kaynak sürümü
 `d79f4cc841b3de411777730eb91a245ade96cd6e`; frontend kodu ve lock,
 P3-1 dördüncü adım kapanışındaki durumdur. İş sırası ve üretim kabulü
 [devam planında](RAPOT_DEVAM_PLANI.md#p1-g2--frontend-bağımlılık-güvenliği-takibi)
 tutulur.
+
+## 17 Kasım 2026 — Next.js önbellek güvenlik yaması
+
+RSI hazırlık düzeltmesinin [CI kontrolü](https://github.com/Rapto0/Rapot/actions/runs/44099248971)
+Next.js 16.4.2 için bir moderate bulguyla durdu. Resmî
+[GHSA-mfr8-8qww-v76h / CVE-2026-119790](https://github.com/vercel/next.js/security/advisories/GHSA-mfr8-8qww-v76h)
+kaydı, root param okuyan aynı `use cache` fonksiyonunun doğrudan ve
+`unstable_cache()` üzerinden eşzamanlı ilk çağrılarında önbellek verisinin
+parametre sınırları arasında karışabilmesini açıklar. Etkilenen aralık
+16.3.0–16.4.4, ilk düzeltilen sürüm 16.4.5'tir. Bu bağımlılık bulgusu Rapot'ta
+veri sızıntısı gerçekleştiği anlamına gelmez.
+
+Next.js ve eslint-config-next **16.4.6**'ya sabitlendi. Kapsamlı paket yükseltmesi
+yapılmadı; lock'ta yalnız 12 Next ailesi paketi ve kök bildirim değişti.
+React, Sharp, Node20.20.2/npm10.9.9 ve diğer paketler korundu. Mevcut tinyglobby
+override'ı ve uyumluluk koruması yalnız yeni Next ESLint tüketicisine taşındı;
+üretim imajı doğrulamasının Next sürümü de güncellendi. Güvenlik denetimi atlanmaz.
+Yerel kanıtlar `runtime-data/20261117-next-security/` dizininde; bu kaynak kaydı
+tek başına üretime yayınlandığı anlamına gelmez.
 
 ## 23 Ekim 2026 — Next.js güvenlik güncellemesi
 

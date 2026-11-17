@@ -18,7 +18,7 @@
   },
   "packageManager": "npm@10.9.9",
   "overrides": {
-    "@next/eslint-plugin-next@16.4.2": {
+    "@next/eslint-plugin-next@16.4.6": {
       "fast-glob": "npm:tinyglobby@0.2.15"
     },
     "@typescript-eslint/typescript-estree@8.72.0": {
@@ -39,7 +39,7 @@
     "clsx": "2.1.1",
     "lightweight-charts": "5.1.0",
     "lucide-react": "0.562.0",
-    "next": "16.4.2",
+    "next": "16.4.6",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "recharts": "3.7.0",
@@ -52,7 +52,7 @@
     "@types/react": "19.2.9",
     "@types/react-dom": "19.2.3",
     "eslint": "9.39.3",
-    "eslint-config-next": "16.4.2",
+    "eslint-config-next": "16.4.6",
     "tailwindcss": "4.1.18",
     "typescript": "5.9.3"
   }

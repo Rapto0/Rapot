@@ -16,7 +16,7 @@ const consumers = Object.entries(lock.packages)
 // This compatibility layer belongs only to the pinned Next lint consumer. Its sole
 // fast-glob call is globSync(rootDir, { onlyDirectories: true }). Recheck that call
 // and remove this layer when Next ships a fixed upstream dependency path.
-if (require(pluginPackage).version !== '16.4.2'
+if (require(pluginPackage).version !== '16.4.6'
     || aliasPackage.name !== 'tinyglobby' || aliasPackage.version !== '0.2.15'
     || !aliasEntry.startsWith(`${aliasDirectory}${path.sep}`)
     || consumers.length !== 1 || consumers[0] !== 'node_modules/@next/eslint-plugin-next') {
