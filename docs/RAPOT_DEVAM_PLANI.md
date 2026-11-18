@@ -1,6 +1,45 @@
 # Rapot Devam Planı
 
-**Güncel plan: 17 Kasım 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
+**Güncel plan: 18 Kasım 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
+
+## 18 Kasım — Son kabul ve yayımlanmamış düzeltmeler
+
+Üretim API/frontend hâlâ **`089dea075e4162e01c1313ae3e037388e2396fc7`**.
+17 Kasım yaklaşık **19:19–19:20 UTC** oturumlu gerçek `/scanner` tablosunun
+DOM kontrolünde 25 satırdaki 400 hücreden **394'ü sayısal son mum değeri**,
+**altısı yetersiz geçmiş**, bekleyen hücre sıfırdı. Bu seans dışı ekran
+kabulüdür; 400 güncel fiyat/TradingView sayısal eşitliği değildir. Önceki
+10 dakikalık kısmi hazırlık sonucu aşağıda korunur.
+
+`11a545c8496e533695bebf5a2ecd431be067ee20`, alarm hazırlığı sırasında RSI
+takipçisinin yalnız her 16 işte bir işlenmesi nedeniyle uzayan beklemeyi
+kaldırır. Alarm işi önce çalışır; takipçi kendi iki saniyelik aralığı ve
+mevcut sağlayıcı bütçesiyle her tur değerlendirilir. 19 ilgili test ve
+2.479 Python testi/bir atlama geçti. Bu düzeltme **henüz yayımlanmadı**.
+
+`5196e5dab59853f050958964c16c90969440e096`, buna Next.js **16.4.6** güvenlik
+yamasını ekler. 18 Kasım **14:22:40 UTC** yerel kabulünde 330 frontend testi,
+lint, tip, üretim derlemesi ve standalone HTTP/proxy/WS kontrolü geçti.
+[Kaynak CI](https://github.com/Rapto0/Rapot/actions/runs/44156773377)
+**başarısızdır**: tek kök picomatch güvenlik kaydı 11 yüksek bağımlılık
+bulgusu üretir. [Temiz imaj yayını](https://github.com/Rapto0/Rapot/actions/runs/44156854025)
+başarılı olması bu denetimi geçersiz kılmaz. Resmî yama yoktur; Next'in
+standalone çıktısında da derlenmiş picomatch bulunduğu için üretim etkisizliği
+iddia edilmez. Yalnız GHSA-fc5q-39xc-vjpf için 2 Aralık'a kadar süreli istisna
+kullanıcıya soruldu; **henüz yanıt/onay kaydı yoktur**, istisna uygulanmadı.
+Ayrıntılar [güvenlik kaydındadır](FRONTEND_DEPENDENCY_SECURITY.md).
+
+18 Kasım **14:26:48 UTC** salt okunur kontrolde dört servis healthy/restart0,
+dört kural etkin, hesap koruması engelsizdi. Ayrı pasif motor okumasında 631
+fiyat aboneliği, 6.310 kabul edilmiş native talep, 5.679 hazır üst periyot
+tanığı, sıfır geçmiş beklemesi ve sıfır taşma görüldü. Canlı kuyruk anlık 138;
+bu tüm fiyatların tazeliği veya sürekli kapasite kanıtı değildir. Sunucu
+yeniden başlatılmadı; alarm/liste tanım hash'leri önceki bazla aynıdır.
+Olay sayısı 496 gönderilmiş + altı bildirimsizdir; 17 Kasım yayınının 487
+toplam olayına göre 15 ek normal teslim kaydı vardır. Yeni test gönderilmedi.
+Kanıtlar
+`runtime-data/20261118-final-checks/` ve
+`runtime-data/20261117-tracker-final/baseline-final18.json` içindedir.
 
 ## 17 Kasım — RSI takipçisi yayınlandı
 

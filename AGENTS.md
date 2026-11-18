@@ -1,5 +1,18 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
+**18 Kasım son durum:** Üretim API/frontend hâlâ `089dea075`. Gerçek oturumlu
+17 Kasım seans dışı tabloda 25 × 16 hücre: 394 sayısal son mum, altı yetersiz
+geçmiş, sıfır bekleyen; canlı tüm-evren kabulü değildir. Hazırlık adaleti
+`11a545c` ve Next16.4.6 `5196e5d` kaynakta hazır, **yayımlanmadı**. 2.479
+Python/bir atlama ve 330 frontend/derleme kabulü var; son kaynak CI, yaması
+olmayan GHSA-fc5q-39xc-vjpf (11 yüksek türemiş bulgu) yüzünden başarısız.
+Next içinde vendored picomatch vardır; production etkisizliği iddia edilmez.
+Süreli istisna kullanıcıya soruldu, yanıt bekleniyor; denetim değiştirilmedi.
+18 Kasım 14:26:48 UTC dört servis healthy/restart0, dört etkin kural,
+631 abonelik ve koruma engelsiz; yeni alarm/takip veya restart yok.
+[Devam planı](docs/RAPOT_DEVAM_PLANI.md) ve
+[güvenlik kaydı](docs/FRONTEND_DEPENDENCY_SECURITY.md) günceldir.
+
 **17 Kasım RSI takipçisi yayımlandı:** API/frontend kaynak
 `089dea075e4162e01c1313ae3e037388e2396fc7`, **13:47:57 UTC / 16:47:57 TSİ**;
 **13:48:13 UTC** ayrı kabul geçti. Görünür 25 sembol otomatik, 16 RSI periyodu,

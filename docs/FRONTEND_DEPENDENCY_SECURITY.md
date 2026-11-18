@@ -1,10 +1,43 @@
 # Frontend bağımlılık güvenliği
 
-İlk inceleme tarihi: **13 Eylül 2026**; son takip **17 Kasım 2026**. İlk kaynak sürümü
+İlk inceleme tarihi: **13 Eylül 2026**; son takip **18 Kasım 2026**. İlk kaynak sürümü
 `d79f4cc841b3de411777730eb91a245ade96cd6e`; frontend kodu ve lock,
 P3-1 dördüncü adım kapanışındaki durumdur. İş sırası ve üretim kabulü
 [devam planında](RAPOT_DEVAM_PLANI.md#p1-g2--frontend-bağımlılık-güvenliği-takibi)
 tutulur.
+
+## 18 Kasım 2026 — Yaması olmayan picomatch bulgusu
+
+Next.js 16.4.6 güncellemesi önceki Next bulgusunu giderir; ancak kaynak
+`5196e5dab59853f050958964c16c90969440e096` denetimi yeni güncellenmiş
+[GHSA-fc5q-39xc-vjpf / CVE-2026-112366](https://github.com/advisories/GHSA-fc5q-39xc-vjpf)
+nedeniyle durdu. 18 Kasım kontrolünde etkilenen sürümler **<=4.0.7**,
+resmî yamalı sürüm **yok**, registry latest **4.0.7**. Uzun girdilerle
+tek dallı tekrarlı extglob kalıpları düzenli ifade kaynak tüketimine yol açar.
+[PR194](https://github.com/micromatch/picomatch/pull/194) açık ve yazarının
+açıklamasına göre bu açığı çözmez; güvenlik yaması yerine kullanılamaz.
+
+470 kilitli düğümün denetiminde tek kök advisory'den türeyen **11 yüksek**
+bulgu vardır. Npm lock'taki etkilenen düğümler geliştirme bağımlılıklarıdır;
+bu durum tek başına production etkisini dışlamaz. Gerçek standalone çıktısında
+`next/dist/compiled/picomatch/index.js` de vardır: 23.909 bayt,
+SHA256 `607dc79784c1161c33076903769dba23e63d9d9ccfe3c4695a32ebe3a5ab892d`.
+Vendored metadata sürüm bildirmez. İncelenen image local/remote pattern
+çağrıları için Rapot özel kalıp tanımlamaz; bu sınırlı inceleme tüm runtime
+yollarının etkilenmediğini kanıtlamaz. Açığın kullanıldığına dair bulgu yoktur.
+
+330 işlev testi, lint/tip/build/standalone kontrolleri başarılıdır; güvenlik
+denetimi başarılı değildir. Ham audit ve hata kayıtları korunur, tüm paket
+kapsamı veya severity eşiği daraltılmadı. Kullanıcıya yalnız bu advisory için
+2 Aralık'a kadar süreli, kayıtlı istisna seçeneği soruldu; **yanıt bekleniyor**.
+İstisna uygulanmadı, son hızlandırma/Next yaması üretime alınmadı. Üretim
+089dea075e4162e01c1313ae3e037388e2396fc7 ve Next16.4.2'de kalmıştır;
+mevcut yayının yeni bulunan açıkları taşımadığı iddia edilmez.
+
+Kanıtlar `runtime-data/20261117-next-security/audit/` ve
+`runtime-data/20261118-final-checks/` altındadır. Sonraki karar bu kayıttaki
+somut bulguya dayanmalıdır; yalnız genel yayın yetkisi özel risk kabulü
+olarak kaydedilmez.
 
 ## 17 Kasım 2026 — Next.js önbellek güvenlik yaması
 
