@@ -2,9 +2,55 @@
 
 **Güncel plan: 18 Kasım 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
 
-## 18 Kasım — Son kabul ve yayımlanmamış düzeltmeler
+## 18 Kasım — Hazırlık hızlandırması ve Next.js 16.4.6 yayımlandı
 
-Üretim API/frontend hâlâ **`089dea075e4162e01c1313ae3e037388e2396fc7`**.
+API/frontend **`029e51177bd3cf48ae5525a989d2e8f1c4f7f40a`** sürümü
+**14:53:38 UTC / 17:53:38 TSİ** yayımlandı. **14:53:44 UTC** bağımsız
+kabulde dört sayfa, 22 statik dosya, dört kimliksiz 401 ve yetkili takipçi
+API'si geçti. Alarm motoru çalışıyor, dört kural etkin, sağlayıcı oturumu
+doğrulanmış ve hesap koruması engelsizdi. Yayın öncesindeki 504 alarm olayı,
+15 tablo, alarm/liste tanımları ve özel dosyalar korundu. Dört servis sağlıklı
+ve restart sayaçları sıfır. Compose/current `21e39512`, middleware ve
+PostgreSQL aynı container'larda kaldı. Yeni alarm veya bildirim testi yok.
+
+2.479 Python testi ve bir atlama ile 330 frontend testi, tip/lint, derleme,
+standalone kontrolü ve beş [CI işi](https://github.com/Rapto0/Rapot/actions/runs/44325922870)
+geçti. [Temiz imaj yayını](https://github.com/Rapto0/Rapot/actions/runs/44325960035)
+331 kaynak ve 111 runtime dağıtımını doğruladı. Npm raporunda 470 düğüm ve
+tek advisory'den türeyen 12 bulgu saklandı. Durum `approved_exception`.
+Kullanıcı onayı yalnız GHSA-fc5q-39xc-vjpf için 2 Aralık 00:00 UTC'ye kadar
+geçerlidir. Ayrıntılar [güvenlik kaydındadır](FRONTEND_DEPENDENCY_SECURITY.md).
+
+1.318.912 baytlık yayın öncesi SQLite yedeği bağımsız geri yüklendi.
+SHA256 `2408adfa0473fda48fd81639629d11f8d84fec885cc110fcddca70a08b4b7228`.
+Yayın receipt SHA256
+`5455210c73fd649157f827bc346fff926cd95cffca131aad7353f414d28910f1`.
+Kanıtlar `runtime-data/20261118-tracker-release/` altında tutulur.
+
+14:53:56–14:54:17 UTC soğuk başlangıç ölçümünde API CPU %82,60 / %38,90,
+API belleği 209,7 / 198,4 MiB ve kullanılabilir sunucu belleği
+315.453.440 / 302.682.112 bayttı. Bu iki ölçüm kalıcı kapasiteyi göstermez.
+
+**14:53:57–15:03:19 UTC** gerçek BIST API kontrolünde 25 satır × 16 periyot
+**9 dakika 22 saniyede** hazırlığı tamamladı. Seans içi bir örnekte 144
+hücrede ve 24 satırda güncel RSI görüldü. Son iki örnekte bekleme sıfırdı.
+Son örnekte 394 sayısal değer (147 eski fiyat, 247 son mum) ve altı yetersiz
+geçmiş kaydı vardı. Bu başlangıç örneği bütün 631 pay için canlı kabul değildir.
+15:03 UTC pasif okumada 631 fiyat aboneliği, sıfır kuyruk/taşma, sağlayıcı
+koruması engelsiz ve alarm hesaplarının hazırlığı devam ediyordu. Kontrol
+görünümü tamamlandığında talebi bıraktı.
+
+**15:03:35–15:08 UTC** BTCUSDT kontrolünde altı periyotta canlı RSI görüldü,
+on uzun periyot hazırlıktaydı. Alarm geçmişi ve uzun periyot hazırlığı ortak
+sağlayıcı bütçesiyle ilerler. Soğuk başlangıç denemesi sonlandırıldı ve 16
+periyodun tamamı için bu sürümde yeni canlı kabul kaydedilmedi. Önceki pilotun
+16/16 kabulü aşağıda durur. Son pasif okumada takipçi talebi düşmüş, dört
+servis sağlıklı/restart0, dört alarm etkin, 631 fiyat aboneliği ve 504 olay
+korunmuştu. Yeni otomatik takip kurulmadı.
+
+### Önceki kabul ve düzeltmenin nedeni
+
+Önceki üretim API/frontend kaynağı `089dea075e4162e01c1313ae3e037388e2396fc7`.
 17 Kasım yaklaşık **19:19–19:20 UTC** oturumlu gerçek `/scanner` tablosunun
 DOM kontrolünde 25 satırdaki 400 hücreden **394'ü sayısal son mum değeri**,
 **altısı yetersiz geçmiş**, bekleyen hücre sıfırdı. Bu seans dışı ekran
@@ -15,7 +61,7 @@ kabulüdür; 400 güncel fiyat/TradingView sayısal eşitliği değildir. Öncek
 takipçisinin yalnız her 16 işte bir işlenmesi nedeniyle uzayan beklemeyi
 kaldırır. Alarm işi önce çalışır; takipçi kendi iki saniyelik aralığı ve
 mevcut sağlayıcı bütçesiyle her tur değerlendirilir. 19 ilgili test ve
-2.479 Python testi/bir atlama geçti. Bu düzeltme **henüz yayımlanmadı**.
+2.479 Python testi/bir atlama geçti. Düzeltme 18 Kasım yayınında etkin.
 
 `5196e5dab59853f050958964c16c90969440e096`, buna Next.js **16.4.6** güvenlik
 yamasını ekler. 18 Kasım **14:22:40 UTC** yerel kabulünde 330 frontend testi,
@@ -29,7 +75,7 @@ iddia edilmez. Yalnız GHSA-fc5q-39xc-vjpf için 2 Aralık'a kadar süreli istis
 kullanıcı tarafından 18 Kasım'da onaylandı. Süre 2 Aralık 00:00 UTC'de dolar.
 Ayrıntılar [güvenlik kaydındadır](FRONTEND_DEPENDENCY_SECURITY.md).
 
-18 Kasım **14:26:48 UTC** salt okunur kontrolde dört servis healthy/restart0,
+Yayın öncesi **14:26:48 UTC** salt okunur kontrolde dört servis healthy/restart0,
 dört kural etkin, hesap koruması engelsizdi. Ayrı pasif motor okumasında 631
 fiyat aboneliği, 6.310 kabul edilmiş native talep, 5.679 hazır üst periyot
 tanığı, sıfır geçmiş beklemesi ve sıfır taşma görüldü. Canlı kuyruk anlık 138;

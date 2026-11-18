@@ -42,6 +42,12 @@ Kanıtlar `runtime-data/20261117-next-security/audit/` ve
 `runtime-data/20261118-final-checks/` altındadır. Üretim yayını ve ayrıca
 doğrulanan sonuçlar [devam planında](RAPOT_DEVAM_PLANI.md) kayıtlıdır.
 
+**14:53:38 UTC** itibarıyla Next.js 16.4.6 ve takipçi düzeltmesi üretimdedir.
+`029e511` kaynağının CI denetimi 470 bağımlılıkta `approved_exception`
+raporladı. Arşivlenen 12 yüksek bulgunun tamamı izin verilen kayda bağlıdır.
+Tam rapor ve doğrulama `runtime-data/20261118-tracker-release/github-runtime-proof/`
+altında tutulur.
+
 ## 17 Kasım 2026 — Next.js önbellek güvenlik yaması
 
 RSI hazırlık düzeltmesinin [CI kontrolü](https://github.com/Rapto0/Rapot/actions/runs/44099248971)

@@ -1,15 +1,18 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
-**18 Kasım son durum:** Üretim API/frontend hâlâ `089dea075`. Gerçek oturumlu
-17 Kasım seans dışı tabloda 25 × 16 hücre: 394 sayısal son mum, altı yetersiz
-geçmiş, sıfır bekleyen; canlı tüm-evren kabulü değildir. Hazırlık adaleti
-`11a545c` ve Next16.4.6 `5196e5d` kaynakta hazır, **yayımlanmadı**. 2.479
-Python/bir atlama ve 330 frontend/derleme kabulü var; son kaynak CI, yaması
-olmayan GHSA-fc5q-39xc-vjpf (11 yüksek türemiş bulgu) yüzünden başarısız.
-Next içinde vendored picomatch vardır; production etkisizliği iddia edilmez.
-Kullanıcı yalnız bu bulgu için 2 Aralık 00:00 UTC'ye kadar istisnayı onayladı.
-18 Kasım 14:26:48 UTC dört servis healthy/restart0, dört etkin kural,
-631 abonelik ve koruma engelsiz; yeni alarm/takip veya restart yok.
+**18 Kasım yayımlandı:** `029e51177bd3cf48ae5525a989d2e8f1c4f7f40a`,
+**14:53:38 UTC / 17:53:38 TSİ** API/frontend, **14:53:44 UTC** bağımsız kabul.
+RSI hazırlığı alarm işinden sonra kendi aralığında ilerler. Next.js 16.4.6
+üretimdedir. 2.479 Python testi/bir atlama, 330 frontend, beş CI ve temiz imaj
+geçti. 470 npm düğümünde tek advisory'den türeyen 12 bulgu ham raporda durur.
+Kullanıcı yalnız GHSA-fc5q-39xc-vjpf için 2 Aralık 00:00 UTC'ye kadar istisnayı
+onayladı. Dört servis healthy/restart0, dört etkin kural ve 504 olay korunmuş,
+hesap koruması engelsiz. 15 tablo, liste, özel dosyalar, MW/PG ve Compose/current
+aynı. 1.318.912 bayt yedek bağımsız restore edildi.
+25 × 16 BIST kontrolü 9:22 sonunda 394 sayısal, altı yetersiz geçmiş ve sıfır
+bekleme verdi. Seans içi zirve 144 güncel hücreydi; son örnek seans sonrasıdır.
+BTCUSDT soğuk başlangıçta altı canlı, on hazırlıkta kaldı. Test talepleri
+bırakıldı. 631 fiyat aboneliği ile alarm geçmişi kademeli hazırlanıyor.
 [Devam planı](docs/RAPOT_DEVAM_PLANI.md) ve
 [güvenlik kaydı](docs/FRONTEND_DEPENDENCY_SECURITY.md) günceldir.
 
