@@ -6,6 +6,24 @@ import { fileURLToPath } from 'node:url';
 
 const severities = ['info', 'low', 'moderate', 'high', 'critical'];
 const dependencyKinds = ['prod', 'dev', 'optional', 'peer', 'peerOptional', 'total'];
+const picomatchException = Object.freeze({
+  advisory: 'GHSA-fc5q-39xc-vjpf',
+  expiresAt: '2026-12-02T00:00:00Z',
+  lockSha256: '7e1dca5bbac39b41cbef1603e4f70a3e280024890c3c62ff4bac1346f812ab25',
+});
+const reviewedDependents = {
+  '@typescript-eslint/eslint-plugin': ['@typescript-eslint/parser', '@typescript-eslint/type-utils', '@typescript-eslint/utils'],
+  '@typescript-eslint/parser': ['@typescript-eslint/typescript-estree'],
+  '@typescript-eslint/type-utils': ['@typescript-eslint/typescript-estree', '@typescript-eslint/utils'],
+  '@typescript-eslint/typescript-estree': ['tinyglobby'],
+  '@typescript-eslint/utils': ['@typescript-eslint/typescript-estree'],
+  'eslint-config-next': ['typescript-eslint'],
+  'eslint-import-resolver-typescript': ['tinyglobby'],
+  fdir: ['picomatch'],
+  tinyglobby: ['fdir', 'picomatch'],
+  'typescript-eslint': ['@typescript-eslint/eslint-plugin', '@typescript-eslint/parser',
+    '@typescript-eslint/typescript-estree', '@typescript-eslint/utils'],
+};
 export const auditArguments = Object.freeze([
   'audit', '--package-lock-only', '--ignore-scripts', '--json', '--audit-level=info',
   '--include=prod', '--include=dev', '--include=optional', '--include=peer',
@@ -78,8 +96,42 @@ export function validateAudit(report, packages, exitCode) {
   return { packages: packages.size, findings: total, severities: actual };
 }
 
+function matchesEntries(actual, expected) {
+  return actual.length === expected.length && expected.every((name) => actual.includes(name));
+}
+
+// The owner approved this graph and lock on 18 November 2026. See the security record.
+function reviewedPicomatchFindings(findings, lock, lockText, now) {
+  if (!(now < Date.parse(picomatchException.expiresAt))) return false;
+  const lockSha256 = createHash('sha256').update(lockText.replaceAll('\r\n', '\n')).digest('hex');
+  if (lockSha256 !== picomatchException.lockSha256) return false;
+  const graph = { ...reviewedDependents };
+  // Some npm versions expand the locked fast-glob alias to its Next ESLint consumer.
+  if (Object.hasOwn(findings, '@next/eslint-plugin-next')) {
+    graph['@next/eslint-plugin-next'] = ['tinyglobby'];
+    graph['eslint-config-next'] = ['@next/eslint-plugin-next', 'typescript-eslint'];
+  }
+  const expected = ['picomatch', ...Object.keys(graph)];
+  if (!matchesEntries(Object.keys(findings), expected)) return false;
+  for (const name of expected) {
+    const finding = findings[name];
+    const nodes = [`node_modules/${name}`];
+    if (name === 'tinyglobby') nodes.push('node_modules/fast-glob');
+    if (finding.severity !== 'high' || !matchesEntries(finding.nodes, nodes)
+        || !nodes.every((node) => lock.packages[node]?.dev === true)) return false;
+    if (name === 'picomatch') {
+      const [advisory] = finding.via;
+      if (finding.via.length !== 1 || !object(advisory)
+          || advisory.url !== `https://github.com/advisories/${picomatchException.advisory}`
+          || advisory.source !== 1247710 || advisory.severity !== 'high'
+          || advisory.name !== name || advisory.dependency !== name || advisory.range !== '<=4.0.7') return false;
+    } else if (!matchesEntries(finding.via, graph[name])) return false;
+  }
+  return true;
+}
+
 export function runAudit({
-  cwd, directory, npmCli = process.env.npm_execpath, execute = spawnSync,
+  cwd, directory, npmCli = process.env.npm_execpath, execute = spawnSync, now = Date.now,
 }) {
   mkdirSync(directory, { recursive: true });
   const output = (name, text) => writeFileSync(path.join(directory, name), text, 'utf8');
@@ -89,7 +141,9 @@ export function runAudit({
   const summary = { status: 'error', scope: 'all locked prod/dev/optional/peer dependencies' };
   try {
     const lockBytes = readFileSync(path.join(cwd, 'package-lock.json'));
-    const packages = lockedPackages(JSON.parse(lockBytes.toString('utf8')));
+    const lockText = lockBytes.toString('utf8');
+    const lock = JSON.parse(lockText);
+    const packages = lockedPackages(lock);
     output('manifest.json', `${JSON.stringify({
       lock_sha256: createHash('sha256').update(lockBytes).digest('hex'),
       packages: [...packages].sort(), arguments: auditArguments,
@@ -108,8 +162,13 @@ export function runAudit({
     if (!readFileSync(path.join(cwd, 'package-lock.json')).equals(lockBytes)) {
       throw new Error('The lockfile changed during the audit');
     }
-    Object.assign(summary, validateAudit(JSON.parse(result.stdout), packages, result.status));
+    const report = JSON.parse(result.stdout);
+    Object.assign(summary, validateAudit(report, packages, result.status));
     summary.status = summary.findings ? 'findings' : 'passed';
+    if (summary.findings && reviewedPicomatchFindings(report.vulnerabilities, lock, lockText, now())) {
+      summary.status = 'approved_exception';
+      summary.exception = picomatchException;
+    }
   } catch (error) {
     summary.error = error instanceof Error ? error.message : 'Unknown dependency audit failure';
   }
@@ -124,5 +183,5 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     : path.resolve(cwd, '../security-reports/npm');
   const summary = runAudit({ cwd, directory });
   console.log(JSON.stringify(summary));
-  if (summary.status !== 'passed') process.exitCode = 1;
+  if (!['passed', 'approved_exception'].includes(summary.status)) process.exitCode = 1;
 }

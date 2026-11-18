@@ -7,7 +7,7 @@ geçmiş, sıfır bekleyen; canlı tüm-evren kabulü değildir. Hazırlık adal
 Python/bir atlama ve 330 frontend/derleme kabulü var; son kaynak CI, yaması
 olmayan GHSA-fc5q-39xc-vjpf (11 yüksek türemiş bulgu) yüzünden başarısız.
 Next içinde vendored picomatch vardır; production etkisizliği iddia edilmez.
-Süreli istisna kullanıcıya soruldu, yanıt bekleniyor; denetim değiştirilmedi.
+Kullanıcı yalnız bu bulgu için 2 Aralık 00:00 UTC'ye kadar istisnayı onayladı.
 18 Kasım 14:26:48 UTC dört servis healthy/restart0, dört etkin kural,
 631 abonelik ve koruma engelsiz; yeni alarm/takip veya restart yok.
 [Devam planı](docs/RAPOT_DEVAM_PLANI.md) ve

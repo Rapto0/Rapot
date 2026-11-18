@@ -27,17 +27,20 @@ Vendored metadata sürüm bildirmez. İncelenen image local/remote pattern
 yollarının etkilenmediğini kanıtlamaz. Açığın kullanıldığına dair bulgu yoktur.
 
 330 işlev testi, lint/tip/build/standalone kontrolleri başarılıdır; güvenlik
-denetimi başarılı değildir. Ham audit ve hata kayıtları korunur, tüm paket
-kapsamı veya severity eşiği daraltılmadı. Kullanıcıya yalnız bu advisory için
-2 Aralık'a kadar süreli, kayıtlı istisna seçeneği soruldu; **yanıt bekleniyor**.
-İstisna uygulanmadı, son hızlandırma/Next yaması üretime alınmadı. Üretim
-089dea075e4162e01c1313ae3e037388e2396fc7 ve Next16.4.2'de kalmıştır;
-mevcut yayının yeni bulunan açıkları taşımadığı iddia edilmez.
+denetimi bulguları kaydeder. Kullanıcı 18 Kasım'da yalnız
+**GHSA-fc5q-39xc-vjpf** için süreli istisnayı onayladı. İstisna
+**2 Aralık 2026 00:00 UTC / 03:00 TSİ** itibarıyla sona erer. Denetim ham
+raporu ve aynı güvenlik kaydından türeyen 11 veya 12 bulguyu saklar. Bazı npm
+sürümleri Next ESLint'in `fast-glob` takma adını ayrıca raporlar. Bu kilit
+dosyası, advisory ve incelemesi yapılan
+geliştirme bağımlılık zinciri eşleşirse sonucu `approved_exception` olarak
+kaydeder. Yeni bulgular, kapsam değişikliği, geçersiz rapor ve süre sonu
+yayını durdurur. Tarih yalnız yayın kontrolünü etkiler. Bu kayıt picomatch
+açığını yamamaz veya çalışan sunucuyu süre sonunda durdurmaz.
 
 Kanıtlar `runtime-data/20261117-next-security/audit/` ve
-`runtime-data/20261118-final-checks/` altındadır. Sonraki karar bu kayıttaki
-somut bulguya dayanmalıdır; yalnız genel yayın yetkisi özel risk kabulü
-olarak kaydedilmez.
+`runtime-data/20261118-final-checks/` altındadır. Üretim yayını ve ayrıca
+doğrulanan sonuçlar [devam planında](RAPOT_DEVAM_PLANI.md) kayıtlıdır.
 
 ## 17 Kasım 2026 — Next.js önbellek güvenlik yaması
 

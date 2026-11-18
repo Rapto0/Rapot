@@ -26,7 +26,7 @@ bulgusu üretir. [Temiz imaj yayını](https://github.com/Rapto0/Rapot/actions/r
 başarılı olması bu denetimi geçersiz kılmaz. Resmî yama yoktur; Next'in
 standalone çıktısında da derlenmiş picomatch bulunduğu için üretim etkisizliği
 iddia edilmez. Yalnız GHSA-fc5q-39xc-vjpf için 2 Aralık'a kadar süreli istisna
-kullanıcıya soruldu; **henüz yanıt/onay kaydı yoktur**, istisna uygulanmadı.
+kullanıcı tarafından 18 Kasım'da onaylandı. Süre 2 Aralık 00:00 UTC'de dolar.
 Ayrıntılar [güvenlik kaydındadır](FRONTEND_DEPENDENCY_SECURITY.md).
 
 18 Kasım **14:26:48 UTC** salt okunur kontrolde dört servis healthy/restart0,

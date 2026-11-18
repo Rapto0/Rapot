@@ -122,7 +122,7 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
-      - name: Audit all locked npm dependencies (findings and tool errors fail)
+      - name: Audit all locked npm dependencies (unapproved findings and tool errors fail)
         timeout-minutes: 4
         run: npm run audit:dependencies
 
