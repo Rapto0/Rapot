@@ -1,10 +1,19 @@
 # Frontend bağımlılık güvenliği
 
-İlk inceleme tarihi: **13 Eylül 2026**; son takip **18 Kasım 2026**. İlk kaynak sürümü
+İlk inceleme tarihi: **13 Eylül 2026**; son takip **19 Kasım 2026**. İlk kaynak sürümü
 `d79f4cc841b3de411777730eb91a245ade96cd6e`; frontend kodu ve lock,
 P3-1 dördüncü adım kapanışındaki durumdur. İş sırası ve üretim kabulü
 [devam planında](RAPOT_DEVAM_PLANI.md#p1-g2--frontend-bağımlılık-güvenliği-takibi)
 tutulur.
+
+## 19 Kasım 2026 — Takipçi yayınının bağımlılık denetimi
+
+GitHub, [GHSA-fc5q-39xc-vjpf](https://github.com/advisories/GHSA-fc5q-39xc-vjpf)
+kaydını 18 Kasım'da geri çekti. `3842ecf` kaynağının CI denetimi 470 kilitli
+bağımlılıkta sıfır bulgu ile `passed` döndü. Bu yayında süreli istisna
+kullanılmadı. Frontend bağımlılık kilidi ve Next.js sürümü önceki yayınla
+aynıdır. Ham rapor `runtime-data/20261119-scanner-refresh/github-runtime-proof/`
+altında tutulur.
 
 ## 18 Kasım 2026 — Yaması olmayan picomatch bulgusu
 

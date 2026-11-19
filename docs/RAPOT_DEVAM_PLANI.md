@@ -1,6 +1,36 @@
 # Rapot Devam Planı
 
-**Güncel plan: 18 Kasım 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
+**Güncel plan: 19 Kasım 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
+
+## 19 Kasım — Takipçi düzeni ve 120 saniyelik yenileme yayımlandı
+
+Takipçi açıkken RSI, BIST fiyat tablosu ve izleme listeleri 120 saniye arayla
+yenilenir. Binance fiyat akışında ilk değerler kısa sürede gösterilir, sonraki
+ekran güncellemeleri iki dakikada toplanır. Manuel Yenile RSI ve fiyatları da
+günceller. Piyasa, sayfa veya sütun değişiminde RSI talebi hemen iletilir.
+Görünür sayfanın sunucu takibi 150 saniyelik süreyle iki okuma arasında korunur.
+RSI sıralaması ve eşikleri, alım anında güncel olan değerlerle çalışır.
+
+Son yenileme saati üstte görünür. Zaman dilimleri gruplandı, RSI ≤30 ve ≥70
+değerleri renkle işaretlendi. Mobilde yatay kaydırma tabloyla sınırlıdır.
+Yerel Edge kabulü 25 satır, 390 px mobil görünüm, zamanlanmış/manuel yenileme,
+iki piyasa, liste seçimi ve önceki sayfaya dönünce sunucu talebinin
+yenilenmesini doğruladı. Tarayıcı verileri sentetikti.
+
+API/frontend **`3842ecff802648ec58031cb4011845a6704d203c`**
+**10:05:14 UTC / 13:05:14 TSİ** yayımlandı. **10:05:23 UTC** ayrı kabulde
+dört sayfa, 22 statik dosya, dört kimliksiz 401, yetkili takipçi API'si ve
+150 saniyelik sunucu süresi doğrulandı. Dört alarm etkin, hesap koruması
+engelsiz. Dört servis sağlıklı, yeniden başlatma sayaçları sıfır.
+Compose/current `21e39512`, middleware/PG, 15 tablo, alarm/liste tanımları,
+özel dosyalar ve 511 alarm olayı korundu. API geçişinden sonra mevcut piyasa
+abonelikleri ve alarm geçmişi kademeli hazırlanır.
+
+2.479 Python testi ve bir atlama, 332 frontend testi, beş [CI işi](https://github.com/Rapto0/Rapot/actions/runs/44499674456)
+ve [temiz imaj yayını](https://github.com/Rapto0/Rapot/actions/runs/44499678523)
+geçti. 1.232.896 bayt SQLite yedeği bağımsız geri yüklendi.
+Yayın receipt SHA256 `194d3abb16c9e2b98e64a30b60f0e6c535cf275a63cd3cfc247932307c5a0073`.
+Kanıtlar `runtime-data/20261119-scanner-refresh/` altında tutulur.
 
 ## 18 Kasım — Hazırlık hızlandırması ve Next.js 16.4.6 yayımlandı
 

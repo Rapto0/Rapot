@@ -1,5 +1,18 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
+**19 Kasım yayımlandı:** `3842ecff802648ec58031cb4011845a6704d203c`,
+**10:05:14 UTC / 13:05:14 TSİ** API/frontend, **10:05:23 UTC** ayrı kabul.
+Takipçi fiyat ve RSI ekranını 120 saniyede yeniler, sunucu talebi 150 saniye
+korunur. İlk açılış ve kapsam değişimi beklemez. Manuel yenileme RSI'ı kapsar.
+Gruplu periyotlar, 30/70 renkleri, alım saati ve mobil tablo kaydırması hazır.
+2.479 Python/bir atlama, 332 frontend, masaüstü/mobil tarayıcı, beş CI ve
+temiz imaj geçti. Dört servis healthy/restart0, dört etkin kural ve 511 olay
+korundu. 15 tablo, özel dosyalar, liste, Compose/current ve MW/PG aynı.
+1.232.896 bayt yedek bağımsız restore edildi. Npm denetimi 470 düğüm/sıfır
+bulgu döndürdü, önceki istisna bu yayında kullanılmadı.
+[Devam planı](docs/RAPOT_DEVAM_PLANI.md) ve
+[güvenlik kaydı](docs/FRONTEND_DEPENDENCY_SECURITY.md) günceldir.
+
 **18 Kasım yayımlandı:** `029e51177bd3cf48ae5525a989d2e8f1c4f7f40a`,
 **14:53:38 UTC / 17:53:38 TSİ** API/frontend, **14:53:44 UTC** bağımsız kabul.
 RSI hazırlığı alarm işinden sonra kendi aralığında ilerler. Next.js 16.4.6
