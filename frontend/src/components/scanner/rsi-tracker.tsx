@@ -8,11 +8,13 @@ import { fetchBistSymbols, fetchCryptoSymbols, fetchRsiSnapshot } from "@/lib/ap
 import { usePrivateMarket } from "@/lib/hooks/use-private-market"
 import { useMarketSnapshot } from "@/lib/hooks/use-market-snapshot"
 import { useBinanceTickerFeed } from "@/lib/hooks/use-binance-ticker"
-import { ALL_RSI_COLUMNS, RSI_CELL_STATUS, RSI_TIMEFRAMES, TRACKER_PAGE_SIZE, RSI_COLUMNS_STORAGE_KEY, storedRsiColumns, trackerResultRows, rsiSourceTime, toggleRsiColumn,
+import { ALL_RSI_COLUMNS, RSI_CELL_STATUS, RSI_TIMEFRAMES, TRACKER_PAGE_SIZE, TRACKER_REFRESH_MS, RSI_COLUMNS_STORAGE_KEY, storedRsiColumns, trackerResultRows, rsiSourceTime, toggleRsiColumn,
     trackerChartHref, trackerNumber, trackerPage, type RsiTimeframe, type TrackerMarket, type RsiFilter, type RsiSort } from "@/lib/rsi-tracker"
 import { cn } from "@/lib/utils"
 
 const control = "inline-flex min-h-11 items-center justify-center rounded border border-border px-3 text-xs transition-colors hover:bg-raised disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
+const refreshPolicy = { refetchInterval: TRACKER_REFRESH_MS, staleTime: TRACKER_REFRESH_MS, retry: false }
+const clock = new Intl.DateTimeFormat("tr-TR", { timeZone: "Europe/Istanbul", timeStyle: "medium" })
 
 export function RsiTracker() {
     const { allowed, sessionKey } = usePrivateMarket()
@@ -22,12 +24,13 @@ export function RsiTracker() {
     const [page, setPage] = useState(0)
     const [columns, setColumns] = useState<RsiTimeframe[]>(() => [...ALL_RSI_COLUMNS])
     const [showColumns, setShowColumns] = useState(false)
-    const [now, setNow] = useState(0)
+    const [expiredRsiAt, setExpiredRsiAt] = useState(0)
     const [listId, setListId] = useState("")
     const [filters, setFilters] = useState<RsiFilter[]>([])
     const [sort, setSort] = useState<RsiSort | null>(null)
     const [preferencesLoaded, setPreferencesLoaded] = useState(false)
     const [view] = useState(() => typeof window === "undefined" ? "" : window.crypto.randomUUID())
+    const symbolQuery = search.trim().toUpperCase()
     const symbols = useQuery({
         queryKey: ["rsi-tracker-symbols", sessionKey, market],
         queryFn: ({ signal }) => market === "BIST" ? fetchBistSymbols(signal) : fetchCryptoSymbols(signal),
@@ -35,7 +38,7 @@ export function RsiTracker() {
     })
     const watchlists = useQuery({
         queryKey: ["rsi-tracker-watchlists", sessionKey], queryFn: ({ signal }) => fetchServerWatchlists(signal),
-        enabled: allowed, staleTime: 30_000, refetchInterval: 30_000, retry: false,
+        enabled: allowed, ...refreshPolicy,
     })
     const selectedList = watchlists.data?.watchlists.find(list => list.id === listId)
     const universe = useMemo(() => {
@@ -45,38 +48,49 @@ export function RsiTracker() {
         const members = new Set(selectedList?.symbols.filter(item => item.market_type === market).map(item => item.symbol))
         return available.filter(symbol => members.has(symbol))
     }, [allowed, symbols.data, listId, selectedList, market])
-    const visible = useMemo(() => trackerPage(universe, search, descending, page),
-        [universe, search, descending, page])
+    const visible = useMemo(() => trackerPage(universe, symbolQuery, descending, page),
+        [universe, symbolQuery, descending, page])
     const tracked = visible.rows
     const bistSymbols = useMemo(() => allowed && market === "BIST" ? visible.rows.map(symbol => `${symbol}.IS`) : [], [allowed, market, visible.rows])
     const cryptoSymbols = useMemo(() => allowed && market === "Kripto" ? visible.rows : [], [allowed, market, visible.rows])
-    const quotes = useMarketSnapshot(bistSymbols)
-    const crypto = useBinanceTickerFeed(cryptoSymbols, { paused: !allowed || market !== "Kripto", flushIntervalMs: 500 })
+    const quotes = useMarketSnapshot(bistSymbols, TRACKER_REFRESH_MS)
+    const crypto = useBinanceTickerFeed(cryptoSymbols, {
+        paused: !allowed || market !== "Kripto", flushIntervalMs: TRACKER_REFRESH_MS, firstFlushMs: 800,
+    })
     const shownColumns = RSI_TIMEFRAMES.filter(item => columns.includes(item.id))
+    const columnGroups = [...new Set(shownColumns.map(item => item.group))]
     const rsi = useQuery({
         queryKey: ["rsi-tracker-values", sessionKey, view, market, tracked, columns],
         queryFn: ({ signal }) => fetchRsiSnapshot(view, market, tracked, columns, signal),
-        enabled: allowed && Boolean(view),
-        refetchInterval: 3_000, retry: false, gcTime: 20_000,
+        enabled: allowed && Boolean(view) && preferencesLoaded,
+        ...refreshPolicy, gcTime: 20_000,
         refetchOnWindowFocus: true, refetchOnReconnect: true,
     })
 
     useEffect(() => {
         try { setColumns(storedRsiColumns(window.localStorage.getItem(RSI_COLUMNS_STORAGE_KEY))) } catch { /* Storage may be disabled. */ }
         setPreferencesLoaded(true)
-        const timer = window.setInterval(() => setNow(Date.now()), 3_000)
-        return () => window.clearInterval(timer)
     }, [])
+    useEffect(() => {
+        const updatedAt = rsi.dataUpdatedAt
+        if (!updatedAt) return
+        const deadline = updatedAt + TRACKER_REFRESH_MS + 15_000
+        const timer = window.setTimeout(() => setExpiredRsiAt(updatedAt), Math.max(0, deadline - Date.now()))
+        return () => window.clearTimeout(timer)
+    }, [rsi.dataUpdatedAt])
     useEffect(() => {
         if (preferencesLoaded) {
             try { window.localStorage.setItem(RSI_COLUMNS_STORAGE_KEY, JSON.stringify(columns)) } catch { /* The current view still works. */ }
         }
     }, [columns, preferencesLoaded])
 
-    const rsiStale = rsi.isError || (now > 0 && rsi.dataUpdatedAt > 0 && now - rsi.dataUpdatedAt > 10_000)
-    const resultRows = trackerResultRows(tracked, rsi.data, filters, sort, !rsiStale, now / 1000)
+    const rsiStale = rsi.isError || rsi.isPaused || (expiredRsiAt > 0 && expiredRsiAt === rsi.dataUpdatedAt)
+    const resultRows = useMemo(() => trackerResultRows(tracked, rsi.data, filters, sort, !rsiStale, rsi.data?.observed_at ?? 0),
+        [tracked, rsi.data, filters, sort, rsiStale])
     const filtering = filters.some(filter => filter.min.trim() || filter.max.trim())
     const skippedMembers = selectedList?.symbols.filter(item => item.market_type === market && !universe.includes(item.symbol)).length ?? 0
+    const fetching = symbols.isFetching || watchlists.isFetching || rsi.isFetching || (market === "BIST" && quotes.isFetching)
+    const lastUpdated = rsi.dataUpdatedAt > 0 && tracked.length > 0 ? clock.format(rsi.dataUpdatedAt) : null
 
     if (!allowed) return <p className="p-4 text-sm">Takipçi için yönetici girişi gerekir.</p>
 
@@ -94,25 +108,33 @@ export function RsiTracker() {
         setFilters(previous => previous.map((filter, position) => position === index ? { ...filter, ...change } : filter))
     }
     const sourceLabel = market === "BIST" ? "Borsa İstanbul · TRY" : "Binance Spot · USDT"
+    const refresh = () => {
+        void symbols.refetch()
+        void watchlists.refetch()
+        if (view && preferencesLoaded) void rsi.refetch()
+        if (market === "BIST" && bistSymbols.length) void quotes.refetch()
+        if (market === "Kripto") crypto.flush()
+    }
 
     return <section aria-label="RSI takipçisi" className="min-w-0 overflow-hidden rounded border border-border bg-surface">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4">
-            <div className="space-y-2">
-                <div className="flex flex-wrap items-center gap-3"><h2 className="text-lg font-semibold tracking-tight">RSI takipçisi</h2><span className="rounded border border-border px-2 py-1 text-[10px] text-muted-foreground">{sourceLabel}</span></div>
-                <p className="text-xs text-muted-foreground">Hisseler ve kripto için çok zaman dilimli RSI takibi.</p>
-            </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-raised/35 px-4 py-3">
             <div className="flex rounded border border-border bg-background p-1" role="group" aria-label="Takip edilecek piyasa">
                 {(["BIST", "Kripto"] as const).map(value => <button key={value} type="button" aria-pressed={market === value} onClick={() => switchMarket(value)} className={cn("min-h-11 rounded px-5 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-foreground", market === value ? "bg-foreground text-background" : "text-muted-foreground hover:bg-raised")}>{value === "BIST" ? "Hisseler" : "Kripto"}</button>)}
+            </div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">{sourceLabel}</span>
+                <span>RSI (14) · Kapanış</span>
+                <span>Otomatik yenileme · {TRACKER_REFRESH_MS / 1000} sn</span>
+                {tracked.length > 0 && <span className="tabular-nums" title="Son RSI yanıtının ekran alım saati">{lastUpdated ? `Son yenileme ${lastUpdated} TSİ` : "İlk RSI verisi bekleniyor"}</span>}
             </div>
         </div>
 
         <div className="flex flex-wrap items-end gap-3 border-b border-border bg-background/40 p-4">
-            <label className="min-w-0 flex-1 space-y-1 text-xs sm:max-w-80"><span className="text-muted-foreground">Sembol ara</span><input type="search" value={search} onChange={event => { setSearch(event.target.value); setPage(0) }} placeholder={market === "BIST" ? "Örn. THYAO" : "Örn. BTCUSDT"} className="min-h-11 w-full rounded border border-border bg-background px-3 text-sm outline-offset-2" /></label>
-            <label className="space-y-1 text-xs"><span className="block text-muted-foreground">İzleme listesi</span><select aria-label="İzleme listesi" value={listId} onChange={event => { setListId(event.target.value); setPage(0) }} className="min-h-11 max-w-64 rounded border border-border bg-background px-3"><option value="">Tüm semboller</option>{watchlists.data?.watchlists.map(list => <option key={list.id} value={list.id}>{list.name}</option>)}</select></label>
-            {search && <button type="button" className={control} onClick={() => { setSearch(""); setPage(0) }}>Aramayı temizle</button>}
+            <label className="min-w-32 flex-1 space-y-1 text-xs sm:max-w-80"><span className="text-muted-foreground">Sembol ara</span><input type="search" value={search} onChange={event => { setSearch(event.target.value); setPage(0) }} placeholder={market === "BIST" ? "Örn. THYAO" : "Örn. BTCUSDT"} className="min-h-11 w-full rounded border border-border bg-background px-3 text-sm outline-offset-2" /></label>
+            <label className="min-w-0 space-y-1 text-xs"><span className="block text-muted-foreground">İzleme listesi</span><select aria-label="İzleme listesi" value={listId} onChange={event => { setListId(event.target.value); setPage(0) }} className="min-h-11 w-full max-w-56 rounded border border-border bg-background px-3"><option value="">Tüm semboller</option>{watchlists.data?.watchlists.map(list => <option key={list.id} value={list.id}>{list.name}</option>)}</select></label>
             <button type="button" className={control} aria-label={`Sembol sıralaması: ${descending ? "Z–A" : "A–Z"}`} onClick={() => { setDescending(value => !value); setPage(0) }}>Sembol {descending ? "↓ Z–A" : "↑ A–Z"}</button>
             <button type="button" className={cn(control, showColumns && "bg-raised")} aria-expanded={showColumns} aria-controls="rsi-column-picker" onClick={() => setShowColumns(value => !value)}>RSI sütunları <span className="ml-2 rounded bg-raised px-1.5 py-0.5 font-mono">{columns.length}/16</span></button>
-            <button type="button" className={control} disabled={symbols.isFetching} onClick={() => { void symbols.refetch(); if (market === "BIST" && bistSymbols.length) void quotes.refetch(); else if (market === "Kripto") crypto.reconnect() }}>{symbols.isFetching ? "Yükleniyor…" : "Yenile"}</button>
+            <button type="button" className={cn(control, "bg-foreground/5 font-semibold")} disabled={fetching} onClick={refresh}>{fetching ? "Yenileniyor…" : "Yenile"}</button>
         </div>
 
         {showColumns && <div id="rsi-column-picker" className="border-b border-border bg-raised/30 p-4">
@@ -122,22 +144,18 @@ export function RsiTracker() {
             </div>
         </div>}
 
-        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-3 text-xs"><p><span className="font-semibold">{visible.matched.toLocaleString("tr-TR")}</span> <span className="text-muted-foreground">{search ? `/ ${visible.total.toLocaleString("tr-TR")} sembol eşleşti` : "sembol"}</span></p><span className="text-muted-foreground">RSI · {shownColumns.length} zaman dilimi</span></div>
-        <div className="space-y-2 border-b border-border bg-neutral/5 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
-            <p><span className="font-medium text-foreground">RSI (14) · Kapanış</span> · Bu sayfadaki {tracked.length} sembol otomatik izleniyor. {market === "BIST" ? "Kaynak: Borsapy / BIST." : "RSI kaynağı: TradingView / Binance Spot."}</p>
-            <p>Hesaplar canlı fiyatla güncellenir, tablo üç saniyede bir yenilenir. Yeni sayfanın verileri hazırlanırken hücrelerin durumu gösterilir.</p>
+        {(watchlists.isError || (listId && !selectedList && !watchlists.isPending) || skippedMembers > 0 || rsiStale) && <div className="space-y-2 border-b border-border bg-neutral/5 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
             {watchlists.isError && <p role="alert">İzleme listeleri yenilenemedi. {selectedList ? "Son alınan liste kullanılıyor." : "Liste seçimi için yeniden deneyin."}</p>}
             {listId && !selectedList && !watchlists.isPending && <p role="status">Seçilen izleme listesi bulunamadı.</p>}
             {skippedMembers > 0 && <p>{skippedMembers} liste üyesi bu piyasanın desteklenen sembol listesinde bulunmuyor.</p>}
-            {rsi.isError && <p role="alert">RSI verisi yenilenemedi. Akış yeniden deneniyor.</p>}
-        </div>
+            {rsiStale && <p role="status">RSI yenilemesi bekleniyor. Varsa son alınan değerler tabloda gösteriliyor.</p>}
+        </div>}
 
         <div className="space-y-3 border-b border-border px-4 py-3 text-xs" aria-label="Sayfadaki RSI koşulları">
-            <p className="text-muted-foreground">RSI sıralaması ve koşulları yalnız bu sayfadaki {tracked.length} sembole uygulanır. Tüm piyasa taranmış sayılmaz; eksik veya eski değerler koşula dahil edilmez.</p>
-            <div className="flex flex-wrap gap-2"><button type="button" className={control} disabled={filters.length >= columns.length} onClick={() => {
+            <div className="flex flex-wrap items-center gap-2"><button type="button" className={control} disabled={filters.length >= columns.length} onClick={() => {
                 const period = columns.find(item => !filters.some(filter => filter.period === item))
                 if (period) setFilters(previous => [...previous, { period, min: "", max: "" }])
-            }}>RSI koşulu ekle</button>{(filters.length > 0 || sort) && <button type="button" className={control} onClick={() => { setFilters([]); setSort(null) }}>RSI koşullarını temizle</button>}</div>
+            }}>RSI koşulu ekle</button>{(filters.length > 0 || sort) && <button type="button" className={control} onClick={() => { setFilters([]); setSort(null) }}>RSI koşullarını temizle</button>}<span className="text-muted-foreground">Koşul ve RSI sıralaması bu sayfaya uygulanır.</span></div>
             {filters.map((filter, index) => <div key={index} className="flex flex-wrap items-end gap-2">
                 <label className="space-y-1"><span className="block">Zaman dilimi</span><select aria-label={`RSI koşulu ${index + 1} zaman dilimi`} className={cn(control, "bg-background")} value={filter.period} onChange={event => updateFilter(index, { period: event.target.value as RsiTimeframe })}>{shownColumns.filter(item => item.id === filter.period || !filters.some(other => other.period === item.id)).map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
                 <label className="space-y-1"><span className="block">En az</span><input aria-label={`RSI koşulu ${index + 1} en az`} className="min-h-11 w-24 rounded border border-border bg-background px-3" type="number" min="0" max="100" step="any" value={filter.min} onChange={event => updateFilter(index, { min: event.target.value })} placeholder="0" /></label>
@@ -150,15 +168,22 @@ export function RsiTracker() {
         {symbols.isError && <div role="alert" className="border-b border-border px-4 py-3 text-xs text-neutral">Sembol listesi alınamadı. {visible.total ? "Son alınan liste gösteriliyor; güncel olmayabilir." : "Yenile düğmesiyle tekrar deneyebilirsiniz."}</div>}
         {market === "BIST" && quotes.isError && visible.rows.length > 0 && <p role="alert" className="border-b border-border px-4 py-3 text-xs text-neutral">Fiyatlar yenilenemedi. Son alınan kayıtlar güncel olmayabilir.</p>}
 
-        <div className="max-h-[38rem] overflow-auto overscroll-contain" role="region" aria-label="Semboller ve RSI zaman dilimleri tablosu" tabIndex={0}>
+        <div className="max-h-[min(64vh,42rem)] min-h-48 overflow-auto overscroll-contain focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-foreground" role="region" aria-label="Semboller ve RSI zaman dilimleri tablosu" tabIndex={0}>
             <table className="w-full border-separate border-spacing-0 text-xs">
                 <caption className="sr-only">{market === "BIST" ? "BIST hisseleri" : "Binance USDT çiftleri"}. Fiyat ve {shownColumns.length} RSI zaman dilimi.</caption>
-                <thead className="sticky top-0 z-20 bg-raised"><tr>
-                    <th scope="col" aria-sort={descending ? "descending" : "ascending"} className="sticky left-0 z-30 min-w-36 border-b border-r border-border bg-raised px-4 py-3 text-left font-medium">Sembol</th>
-                    <th scope="col" className="min-w-36 border-b border-border px-4 py-3 text-right font-medium">Son fiyat <span className="block text-[10px] font-normal text-muted-foreground">{market === "BIST" ? "TRY" : "USDT"}</span></th>
-                    <th scope="col" className="min-w-28 border-b border-border px-4 py-3 text-right font-medium">Değişim <span className="block text-[10px] font-normal text-muted-foreground">{market === "BIST" ? "Günlük" : "24 saat"}</span></th>
-                    {shownColumns.map(item => <th key={item.id} scope="col" aria-label={`RSI ${item.label}`} aria-sort={sort?.period === item.id ? sort.descending ? "descending" : "ascending" : "none"} title={`RSI · ${item.label}`} className="min-w-24 border-b border-l border-border px-3 py-3 text-right font-medium"><button type="button" className="min-h-9 w-full text-right" aria-label={`Bu sayfayı RSI ${item.label} değerine göre sırala`} onClick={() => setSort(previous => ({ period: item.id, descending: previous?.period === item.id ? !previous.descending : false }))}><span className="block text-[9px] font-normal tracking-wide text-muted-foreground">RSI</span>{item.short}{sort?.period === item.id && (sort.descending ? " ↓" : " ↑")}</button></th>)}
-                </tr></thead>
+                <colgroup span={3} />
+                {columnGroups.map(group => <colgroup key={group} span={shownColumns.filter(item => item.group === group).length} />)}
+                <thead className="sticky top-0 z-20 bg-raised">
+                    <tr>
+                        <th rowSpan={2} scope="col" aria-sort={!sort ? descending ? "descending" : "ascending" : undefined} className="sticky left-0 z-30 min-w-28 border-b border-r border-border bg-raised px-3 text-left font-medium sm:min-w-32">Sembol</th>
+                        <th rowSpan={2} scope="col" className="min-w-28 border-b border-border px-3 text-right font-medium">Son fiyat <span className="block text-[10px] font-normal text-muted-foreground">{market === "BIST" ? "TRY" : "USDT"}</span></th>
+                        <th rowSpan={2} scope="col" className="min-w-24 border-b border-border px-3 text-right font-medium">Değişim <span className="block text-[10px] font-normal text-muted-foreground">{market === "BIST" ? "Günlük" : "24 saat"}</span></th>
+                        {columnGroups.map(group => <th key={group} scope="colgroup" colSpan={shownColumns.filter(item => item.group === group).length} className="border-b border-l border-border bg-background/40 px-2 py-1.5 text-center text-[10px] font-medium tracking-wide text-muted-foreground">{group}</th>)}
+                    </tr>
+                    <tr>
+                        {shownColumns.map(item => <th key={item.id} scope="col" aria-label={`RSI ${item.label}`} aria-sort={sort?.period === item.id ? sort.descending ? "descending" : "ascending" : undefined} title={`RSI · ${item.label}`} className={cn("min-w-20 border-b border-l border-border px-2 text-right font-medium", sort?.period === item.id && "bg-foreground/8")}><button type="button" className="min-h-9 w-full whitespace-nowrap text-right focus-visible:outline-foreground" aria-label={`Bu sayfayı RSI ${item.label} değerine göre sırala`} onClick={() => setSort(previous => ({ period: item.id, descending: previous?.period === item.id ? !previous.descending : false }))}>{item.short}{sort?.period === item.id && (sort.descending ? " ↓" : " ↑")}</button></th>)}
+                    </tr>
+                </thead>
                 <tbody>
                     {!visible.rows.length && <tr><td colSpan={3 + shownColumns.length} className="h-44 px-5 py-8 text-center text-muted-foreground"><p className="text-sm font-medium">{symbols.isPending ? "Semboller yükleniyor…" : symbols.isError ? "Sembol listesine erişilemiyor" : search ? "Aramanızla eşleşen sembol yok" : "Bu piyasa için sembol listesi alınamadı"}</p><p className="mt-2 text-xs">{search && !symbols.isError ? "Başka bir sembol arayın veya aramayı temizleyin." : !symbols.isPending && !symbols.isError ? "Kaynak boş bir liste döndürdü. Daha sonra yenileyebilirsiniz." : ""}</p></td></tr>}
                     {visible.rows.length > 0 && !resultRows.length && <tr><td colSpan={3 + shownColumns.length} className="h-32 px-5 py-8 text-center text-muted-foreground">Bu sayfada güncel RSI koşullarını karşılayan sembol yok. Hazırlanan değerler geldikçe sonuç güncellenir.</td></tr>}
@@ -169,28 +194,27 @@ export function RsiTracker() {
                         const price = bist ? quote?.value : tick?.price
                         const change = bist ? quote?.change : tick?.change
                         const received = crypto.receivedAtBySymbol[symbol]
-                        const stale = bist ? quotes.isError || (quote?.state !== undefined && quote.state !== "ok") || (now > 0 && quotes.dataUpdatedAt > 0 && now - quotes.dataUpdatedAt >= 30_000)
-                            : crypto.status !== "connected" || !received || (now > 0 && now - received >= 30_000)
-                        const available = typeof price === "number" && Number.isFinite(price)
-                        const status = !available ? "Fiyat bekleniyor" : stale ? "Son kayıt · güncel olmayabilir" : bist ? "Son alınan fiyat" : "Akış alınıyor"
-                        const follows = tracked.includes(symbol)
-                        const rsiRow = follows ? rsi.data?.rows[symbol] : undefined
+                        const stale = bist ? quotes.isError || quotes.isPaused || (quote?.state !== undefined && quote.state !== "ok")
+                            : crypto.status !== "connected" || !received
+                        const rsiRow = rsi.data?.rows[symbol]
                         const rsiPriceTime = rsiSourceTime(rsiRow?.source_time)
-                        return <tr key={`${market}:${symbol}`} className="group hover:bg-raised/50">
-                            <th scope="row" className="sticky left-0 z-10 border-b border-r border-border bg-surface px-4 py-3 text-left group-hover:bg-raised"><Link href={trackerChartHref(symbol, market)} className="inline-flex min-h-8 items-center gap-2 font-semibold underline-offset-4 hover:underline focus-visible:underline" aria-label={`${symbol} grafiğini aç`}>{symbol}<span aria-hidden="true" className="text-muted-foreground">↗</span></Link></th>
-                            <td className="border-b border-border px-4 py-3 text-right" title={bist ? quote?.message || quote?.provider_time || undefined : undefined}><span className="block font-mono text-sm tabular-nums">{trackerNumber(price)}</span><span className={cn("mt-1 block whitespace-nowrap text-[9px]", available && stale ? "text-neutral" : "text-muted-foreground")}>{status}</span></td>
+                        return <tr key={`${market}:${symbol}`} className="group even:bg-raised/30 hover:bg-raised/70">
+                            <th scope="row" className="sticky left-0 z-10 border-b border-r border-border bg-surface px-3 text-left group-hover:bg-raised"><Link href={trackerChartHref(symbol, market)} className="inline-flex min-h-10 items-center gap-2 font-semibold underline-offset-4 hover:underline focus-visible:underline" aria-label={`${symbol} grafiğini aç`}>{symbol}<span aria-hidden="true" className="text-muted-foreground">↗</span></Link></th>
+                            <td className="border-b border-border px-3 py-2 text-right" title={bist ? [quote?.provider_time, quote?.message].filter(Boolean).join(" · ") : received ? `Akış alımı ${clock.format(received)} TSİ` : undefined}><span className="block font-mono text-sm tabular-nums">{trackerNumber(price)}</span>{price != null && stale && <span className="block text-[10px] text-neutral">Son kayıt</span>}</td>
                             <td className={cn("border-b border-border px-4 py-3 text-right font-mono tabular-nums", change == null || !Number.isFinite(change) ? "text-muted-foreground" : change >= 0 ? "text-profit" : "text-loss")}>{trackerNumber(change)}{change != null && Number.isFinite(change) ? "%" : ""}</td>
                             {shownColumns.map(item => {
                                 const cell = rsiRow?.cells[item.id]
-                                const cellStatus = !follows ? "RSI takibi kapalı" : rsiStale ? "RSI yenilenemedi"
-                                    : RSI_CELL_STATUS[cell?.status ?? "waiting"]
+                                const cellStatus = rsiStale ? "Son alınan RSI" : RSI_CELL_STATUS[cell?.status ?? "waiting"]
                                 const timestamp = cell?.status === "ready" || cell?.status === "stale" ? rsiPriceTime : rsiSourceTime(cell?.bar_time)
                                 const value = cell?.value == null ? "—" : cell.value.toLocaleString("tr-TR", { maximumFractionDigits: 2 })
                                 const priceLabel = (cell?.status === "ready" || cell?.status === "stale") && rsiRow?.price != null
                                     ? `Hesaplanan fiyat ${trackerNumber(rsiRow.price)}` : null
-                                return <td key={item.id} className="border-b border-l border-border/60 px-3 py-3 text-right" title={[cellStatus, timestamp && `${timestamp} TSİ`, priceLabel].filter(Boolean).join(" · ")}>
-                                    <span className={cn("block font-mono tabular-nums", cell?.status === "ready" && !rsiStale ? "text-foreground" : "text-muted-foreground")}>{value}</span>
-                                    {follows && <span className="block text-[9px] text-muted-foreground">{cellStatus}</span>}
+                                const tint = cell?.status === "ready" && !rsiStale && cell.value != null
+                                    ? cell.value <= 30 ? "bg-sky-500/12 text-sky-200" : cell.value >= 70 ? "bg-amber-500/12 text-amber-200" : "text-foreground"
+                                    : "text-muted-foreground"
+                                return <td key={item.id} className={cn("border-b border-l border-border/60 px-3 py-2 text-right", tint)} title={[cellStatus, timestamp && `${timestamp} TSİ`, priceLabel].filter(Boolean).join(" · ")}>
+                                    <span className="block font-mono text-sm tabular-nums">{value}</span>
+                                    <span className={cell?.status === "ready" && !rsiStale ? "sr-only" : "block text-[10px] leading-tight"}>{cellStatus}</span>
                                 </td>
                             })}
                         </tr>
@@ -199,6 +223,9 @@ export function RsiTracker() {
             </table>
         </div>
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border p-4"><p className="text-[11px] text-muted-foreground">{visible.matched ? `${visible.page * TRACKER_PAGE_SIZE + 1}–${Math.min((visible.page + 1) * TRACKER_PAGE_SIZE, visible.matched)} / ${visible.matched}` : "0 sembol"} · Sayfa başına {TRACKER_PAGE_SIZE} sembol</p><nav aria-label="Takipçi sayfaları" className="flex items-center gap-3"><button type="button" className={control} disabled={visible.page === 0} onClick={() => setPage(visible.page - 1)}>Önceki</button><span className="font-mono text-xs">{visible.page + 1} / {visible.pages}</span><button type="button" className={control} disabled={visible.page + 1 >= visible.pages} onClick={() => setPage(visible.page + 1)}>Sonraki</button></nav></div>
-        <p className="border-t border-border px-4 py-3 text-[11px] leading-relaxed text-muted-foreground">{market === "BIST" ? "BIST fiyatları görünür sayfa için 10 saniyede bir kontrol edilir; veri gecikmeli veya seans dışına ait olabilir." : "Binance fiyat akışı yalnız görünür sayfadaki USDT çiftlerini izler."} Sembol bağlantısı grafiği açar.</p>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
+            <span>RSI kaynağı · {market === "BIST" ? "Borsapy / BIST" : "TradingView / Binance"}</span>
+            <span className="text-sky-300">RSI ≤ 30</span><span className="text-amber-300">RSI ≥ 70</span>
+        </div>
     </section>
 }

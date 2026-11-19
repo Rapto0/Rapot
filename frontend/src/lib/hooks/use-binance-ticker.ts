@@ -11,6 +11,7 @@ interface TickerPrice {
 interface UseBinanceTickerOptions {
     paused?: boolean
     flushIntervalMs?: number
+    firstFlushMs?: number
 }
 
 export type BinanceTickerStatus = "connecting" | "connected" | "reconnecting" | "offline" | "paused"
@@ -37,6 +38,7 @@ export function useBinanceTickerFeed(symbols: string[], options?: UseBinanceTick
     const paused = options?.paused === true
     const requestedInterval = options?.flushIntervalMs ?? 250
     const flushIntervalMs = Number.isFinite(requestedInterval) ? Math.max(100, requestedInterval) : 250
+    const firstFlushMs = options?.firstFlushMs ?? flushIntervalMs
     const symbolsKey = useMemo(() => Array.from(new Set(symbols
         .map((symbol) => symbol.trim().toUpperCase())
         .filter((symbol) => /^[A-Z0-9]{1,32}$/.test(symbol)))).sort().join("|"), [symbols])
@@ -47,7 +49,9 @@ export function useBinanceTickerFeed(symbols: string[], options?: UseBinanceTick
         scope, status: paused ? "paused" : symbolsKey ? "connecting" : "offline",
     })
     const reconnectRef = useRef<(() => void) | null>(null)
+    const flushRef = useRef<(() => void) | null>(null)
     const reconnect = useCallback(() => reconnectRef.current?.(), [])
+    const flush = useCallback(() => flushRef.current?.(), [])
 
     useEffect(() => {
         const setStatus = (status: BinanceTickerStatus) => setConnection((previous) =>
@@ -65,6 +69,7 @@ export function useBinanceTickerFeed(symbols: string[], options?: UseBinanceTick
         let flushTimer: number | null = null
         let reconnectDelay = 1000
         let pending = new Map<string, { price: TickerPrice; receivedAt: number }>()
+        let hasPublished = false
         const activeSymbols = new Set(normalizedSymbols)
         const online = () => window.navigator.onLine !== false
         const streams = normalizedSymbols.map((symbol) => `${symbol.toLowerCase()}@ticker`)
@@ -97,24 +102,30 @@ export function useBinanceTickerFeed(symbols: string[], options?: UseBinanceTick
                 previous.close(1000, "Ticker connection retired")
             }
         }
+        const publish = () => {
+            if (flushTimer !== null) window.clearTimeout(flushTimer)
+            flushTimer = null
+            if (!pending.size) return
+            hasPublished = true
+            const updates = pending
+            pending = new Map()
+            setSnapshot((previous) => {
+                const prices = { ...previous.prices }
+                const receivedAtBySymbol = { ...previous.receivedAtBySymbol }
+                for (const [symbol, update] of updates) {
+                    prices[symbol] = update.price
+                    receivedAtBySymbol[symbol] = update.receivedAt
+                }
+                return { prices, receivedAtBySymbol }
+            })
+        }
         const scheduleFlush = () => {
             if (flushTimer !== null) return
             const version = generation
             const timer = window.setTimeout(() => {
                 if (disposed || generation !== version || flushTimer !== timer) return
-                flushTimer = null
-                const updates = pending
-                pending = new Map()
-                setSnapshot((previous) => {
-                    const prices = { ...previous.prices }
-                    const receivedAtBySymbol = { ...previous.receivedAtBySymbol }
-                    for (const [symbol, update] of updates) {
-                        prices[symbol] = update.price
-                        receivedAtBySymbol[symbol] = update.receivedAt
-                    }
-                    return { prices, receivedAtBySymbol }
-                })
-            }, flushIntervalMs)
+                publish()
+            }, hasPublished ? flushIntervalMs : firstFlushMs)
             flushTimer = timer
         }
         const scheduleRetry = () => {
@@ -202,6 +213,7 @@ export function useBinanceTickerFeed(symbols: string[], options?: UseBinanceTick
             if (!disposed && socket === null && reconnectTimer === null) reconnectNow()
         }
         reconnectRef.current = reconnectNow
+        flushRef.current = publish
         window.addEventListener("offline", wentOffline)
         window.addEventListener("online", wentOnline)
         connect()
@@ -213,8 +225,9 @@ export function useBinanceTickerFeed(symbols: string[], options?: UseBinanceTick
             window.removeEventListener("offline", wentOffline)
             window.removeEventListener("online", wentOnline)
             if (reconnectRef.current === reconnectNow) reconnectRef.current = null
+            if (flushRef.current === publish) flushRef.current = null
         }
-    }, [normalizedSymbols, paused, flushIntervalMs, scope])
+    }, [normalizedSymbols, paused, flushIntervalMs, firstFlushMs, scope])
 
     // Removed symbols disappear on the request render, before effect cleanup.
     const visible = useMemo(() => ({
@@ -226,7 +239,7 @@ export function useBinanceTickerFeed(symbols: string[], options?: UseBinanceTick
     }), [snapshot, normalizedSymbols])
     const status: BinanceTickerStatus = paused ? "paused" : !symbolsKey ? "offline"
         : connection.scope === scope ? connection.status : "connecting"
-    return { ...visible, status, reconnect }
+    return { ...visible, status, reconnect, flush }
 }
 
 /** Compatibility API for chart/watchlist consumers that only need quote values. */

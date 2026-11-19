@@ -7,13 +7,16 @@ const symbols = Array.from({ length: 53 }, (_, index) => `PAY${String(index).pad
 
 function tracker({ allowed = true, responses = {}, bistQuote = {}, rsiRows = {}, lists = [] } = {}) {
   const state = hooks();
-  const queries = [], requests = [], snapshots = [], streams = [];
+  const queries = [], requests = [], snapshots = [], streams = [], intervals = [];
+  let mounted = false;
   const source = load('../src/components/scanner/rsi-tracker.tsx', { ...primitives,
-    react: state.react,
+    react: { ...state.react, useEffect(effect, deps) {
+      if (!mounted && deps.length === 0) effect();
+    } },
     '@tanstack/react-query': { useQuery: options => {
       queries.push(options);
-      if (options.queryKey[0] === 'rsi-tracker-values') return { data: { rows: rsiRows }, dataUpdatedAt: 0 };
-      if (options.queryKey[0] === 'rsi-tracker-watchlists') return { data: { watchlists: lists } };
+      if (options.queryKey[0] === 'rsi-tracker-values') return { data: { rows: rsiRows }, dataUpdatedAt: 0, refetch: () => requests.push('refresh-rsi') };
+      if (options.queryKey[0] === 'rsi-tracker-watchlists') return { data: { watchlists: lists }, refetch: () => requests.push('refresh-watchlists') };
       return { data: { symbols: options.queryKey[2] === 'BIST' ? symbols : ['BTCUSDT', 'ETHUSDT'] },
         refetch: () => requests.push('refresh-symbols'), ...responses[options.queryKey[2]] };
     } },
@@ -24,17 +27,19 @@ function tracker({ allowed = true, responses = {}, bistQuote = {}, rsiRows = {},
     },
     '@/lib/api/advanced-alarms-api': { fetchServerWatchlists: signal => requests.push(['watchlists', signal]) },
     '@/lib/hooks/use-private-market': { usePrivateMarket: () => ({ allowed, sessionKey: 'admin:100' }) },
-    '@/lib/hooks/use-market-snapshot': { useMarketSnapshot: values => {
+    '@/lib/hooks/use-market-snapshot': { useMarketSnapshot: (values, interval) => {
       snapshots.push(Array.from(values));
+      intervals.push(interval);
       return { data: bistQuote, dataUpdatedAt: 0, refetch: () => requests.push('refresh-quotes') };
     } },
     '@/lib/hooks/use-binance-ticker': { useBinanceTickerFeed: (values, options) => {
       streams.push({ values: Array.from(values), ...options });
-      return { prices: {}, receivedAtBySymbol: {}, status: 'connecting', reconnect: () => requests.push('reconnect') };
+      return { prices: {}, receivedAtBySymbol: {}, status: 'connecting', flush: () => requests.push('refresh-crypto') };
     } },
     '@/lib/rsi-tracker': model,
   }, `\nconst window = { crypto: { randomUUID: () => '12345678-test-1234-1234-123456789abc' } };`);
-  return { queries, requests, snapshots, streams, render() { state.reset(); return source.RsiTracker(); } };
+  state.reset(); source.RsiTracker(); mounted = true;
+  return { queries, requests, snapshots, streams, intervals, render() { state.reset(); return source.RsiTracker(); } };
 }
 
 const button = (tree, label) => nodes(tree).find(node => node.type === 'button' && text(node) === label);
@@ -128,6 +133,23 @@ test('page replacement keeps the lease identity and only submits the new 25 memb
   assert.deepEqual(Array.from(app.requests.at(-1)[3]), ['BTCUSDT', 'ETHUSDT']);
   assert.equal(app.requests.at(-1)[2], 'Kripto');
   assert.equal(app.requests.at(-1)[1], first[1]);
+});
+
+test('scanner refreshes at two minutes and the refresh button immediately requests its active data', () => {
+  const app = tracker();
+  let tree = app.render();
+  for (const name of ['rsi-tracker-values', 'rsi-tracker-watchlists']) {
+    const query = app.queries.findLast(options => options.queryKey[0] === name);
+    assert.equal(query.refetchInterval, 120_000);
+    assert.equal(query.staleTime, 120_000);
+  }
+  assert.equal(app.intervals.at(-1), 120_000);
+  assert.equal(app.streams.at(-1).flushIntervalMs, 120_000);
+  button(tree, 'Yenile').props.onClick();
+  assert.deepEqual(app.requests.splice(0), ['refresh-symbols', 'refresh-watchlists', 'refresh-rsi', 'refresh-quotes']);
+  button(tree, 'Kripto').props.onClick(); tree = app.render();
+  button(tree, 'Yenile').props.onClick();
+  assert.deepEqual(app.requests, ['refresh-symbols', 'refresh-watchlists', 'refresh-rsi', 'refresh-crypto']);
 });
 
 test('sign-out suppresses cached symbols, provider subscriptions and queries', () => {

@@ -174,6 +174,24 @@ test('identical prices refresh receipt timestamps and bursts retain the latest v
   assert.equal(h.read().receivedAtBySymbol.BTCUSDT, 1_000_300);
 });
 
+test('scanner publishes the initial price promptly and batches subsequent ticks for two minutes', () => {
+  const h = harness({ options: { firstFlushMs: 800, flushIntervalMs: 120_000 } });
+  h.latest().open();
+  h.latest().message(quote());
+  h.advance(800);
+  assert.equal(h.read().prices.BTCUSDT.price, 123.5);
+  h.latest().message(quote('BTCUSDT', '130'));
+  h.advance(119_999);
+  assert.equal(h.read().prices.BTCUSDT.price, 123.5);
+  h.advance(1);
+  assert.equal(h.read().prices.BTCUSDT.price, 130);
+  h.latest().message(quote('BTCUSDT', '140'));
+  h.read().flush();
+  assert.equal(h.read().prices.BTCUSDT.price, 140);
+  assert.equal(h.sockets.length, 1);
+  assert.equal(h.timers.size, 0);
+});
+
 test('malformed, unrequested and nonfinite packets cannot replace a valid price or receipt timestamp', () => {
   const h = harness();
   h.latest().open();

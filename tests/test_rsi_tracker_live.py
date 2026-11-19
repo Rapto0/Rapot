@@ -11,7 +11,12 @@ from api.routes.borsapy_market_routes import router
 from application.services import advanced_alarm_market_data
 from application.services.custom_indicator_data import CustomIndicatorData, native_bars
 from application.services.custom_indicators.core import rsi_values
-from application.services.rsi_tracker import MAX_TRACKER_SYMBOLS, NATIVE_TIMEFRAMES, TrackerSeed
+from application.services.rsi_tracker import (
+    LEASE_SECONDS,
+    MAX_TRACKER_SYMBOLS,
+    NATIVE_TIMEFRAMES,
+    TrackerSeed,
+)
 from tests.test_custom_indicator_bootstrap import configured, quote, witness
 from tests.test_custom_indicator_data import NOW, Provider, frame
 
@@ -76,7 +81,12 @@ def test_shared_history_lease_and_rejection_do_not_reseed_existing_alarm():
     assert service.publication_token(job[:2]) == state
     assert (*job[:2], "15") in service.live._refused
     assert service.live.has_seed(job, provider.generation)
-    clock[0] += 16
+    seed = service.tracker.seeds[(*job[:2], "1D")]
+    clock[0] += 120
+    service._sync_live()
+    assert service.tracker.seeds[(*job[:2], "1D")] is seed
+    service.tracker_snapshot("tab", job[0], [job[1]], ["1D", "15m"])
+    clock[0] += LEASE_SECONDS + 1
     service._sync_live()
     assert not service.live._tracker_wanted and not service.tracker.seeds
     assert service.live.admitted(job)
@@ -159,7 +169,7 @@ def test_full_page_demand_is_shared_bounded_and_released_without_provider_io():
     service.tracker_snapshot("shared", "Kripto", [], periods)
     service._sync_live()
     assert len(service.live._tracker_wanted) == 16
-    clock[0] += 16
+    clock[0] += LEASE_SECONDS + 1
     service._sync_live()
     assert not service.live._tracker_wanted
     assert not provider.calls

@@ -28,13 +28,15 @@ export async function loadMarketSnapshot(symbols: string[], signal: AbortSignal)
   }
 }
 
-export function useMarketSnapshot(symbols: string[]) {
+export function useMarketSnapshot(symbols: string[], refreshMs = MARKET_REFRESH_MS) {
   const { allowed, sessionKey } = usePrivateMarket()
   return useQuery({
-    queryKey: ["private-market-snapshot", sessionKey, symbols],
+    queryKey: refreshMs === MARKET_REFRESH_MS
+      ? ["private-market-snapshot", sessionKey, symbols]
+      : ["private-market-snapshot", sessionKey, symbols, refreshMs],
     queryFn: ({ signal }) => loadMarketSnapshot(symbols, signal),
-    refetchInterval: MARKET_REFRESH_MS,
-    staleTime: MARKET_REFRESH_MS,
+    refetchInterval: refreshMs,
+    staleTime: refreshMs,
     refetchOnWindowFocus: true,
     retry: false,
     enabled: allowed && symbols.length > 0,

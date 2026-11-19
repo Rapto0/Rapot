@@ -21,9 +21,13 @@ export const RSI_TIMEFRAMES = [
 
 export type RsiTimeframe = typeof RSI_TIMEFRAMES[number]["id"]
 export const TRACKER_PAGE_SIZE = 25
+export const TRACKER_REFRESH_MS = 120_000
 export const TRACKER_SYMBOL_LIMIT = TRACKER_PAGE_SIZE
 export const ALL_RSI_COLUMNS: RsiTimeframe[] = RSI_TIMEFRAMES.map(item => item.id)
 export const RSI_COLUMNS_STORAGE_KEY = "rapot.rsi-tracker.columns.v1"
+const sourceTimeFormat = new Intl.DateTimeFormat("tr-TR", {
+    timeZone: "Europe/Istanbul", dateStyle: "short", timeStyle: "medium",
+})
 
 export function storedRsiColumns(raw: string | null): RsiTimeframe[] {
     try {
@@ -41,11 +45,11 @@ export interface RsiSort { period: RsiTimeframe; descending: boolean }
 
 /** Filter only the fixed subscribed page; incomplete or stale values never match. */
 export function trackerResultRows(symbols: readonly string[], snapshot: RsiSnapshot | undefined,
-    filters: readonly RsiFilter[], sort: RsiSort | null, fresh: boolean, nowSeconds: number) {
+    filters: readonly RsiFilter[], sort: RsiSort | null, fresh: boolean, observedAt: number) {
     const value = (symbol: string, period: RsiTimeframe): number | null => {
         const row = snapshot?.rows[symbol], cell = row?.cells[period]
         if (!fresh || cell?.status !== "ready" || cell.value == null || !Number.isFinite(cell.value)
-            || row?.source_time == null || (nowSeconds > 0 && (nowSeconds - row.source_time > 30 || row.source_time - nowSeconds > 5))) return null
+            || row?.source_time == null || (observedAt > 0 && (observedAt - row.source_time > 30 || row.source_time - observedAt > 5))) return null
         return cell.value
     }
     const active = filters.filter(filter => filter.min.trim() || filter.max.trim())
@@ -94,7 +98,7 @@ export const RSI_CELL_STATUS: Record<RsiCellStatus, string> = {
 
 export function rsiSourceTime(epoch: number | null | undefined): string | null {
     if (typeof epoch !== "number" || !Number.isFinite(epoch)) return null
-    return new Date(epoch * 1000).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" })
+    return sourceTimeFormat.format(epoch * 1000)
 }
 
 export function toggleRsiColumn(selected: readonly RsiTimeframe[], id: RsiTimeframe): RsiTimeframe[] {
