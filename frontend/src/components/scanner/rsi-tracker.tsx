@@ -63,8 +63,10 @@ export function RsiTracker() {
         queryKey: ["rsi-tracker-values", sessionKey, view, market, tracked, columns],
         queryFn: ({ signal }) => fetchRsiSnapshot(view, market, tracked, columns, signal),
         enabled: allowed && Boolean(view) && preferencesLoaded,
-        ...refreshPolicy, gcTime: 20_000,
-        refetchOnWindowFocus: true, refetchOnReconnect: true,
+        refetchInterval: TRACKER_REFRESH_MS, retry: false, staleTime: 0, gcTime: 20_000,
+        // The view has one server lease. Returning to a cached page must register it again.
+        refetchOnWindowFocus: query => query.state.dataUpdatedAt + TRACKER_REFRESH_MS <= Date.now(),
+        refetchOnReconnect: true,
     })
 
     useEffect(() => {

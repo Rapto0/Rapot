@@ -141,7 +141,6 @@ test('scanner refreshes at two minutes and the refresh button immediately reques
   for (const name of ['rsi-tracker-values', 'rsi-tracker-watchlists']) {
     const query = app.queries.findLast(options => options.queryKey[0] === name);
     assert.equal(query.refetchInterval, 120_000);
-    assert.equal(query.staleTime, 120_000);
   }
   assert.equal(app.intervals.at(-1), 120_000);
   assert.equal(app.streams.at(-1).flushIntervalMs, 120_000);
