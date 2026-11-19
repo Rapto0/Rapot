@@ -168,7 +168,7 @@ export function RsiTracker() {
         {symbols.isError && <div role="alert" className="border-b border-border px-4 py-3 text-xs text-neutral">Sembol listesi alınamadı. {visible.total ? "Son alınan liste gösteriliyor; güncel olmayabilir." : "Yenile düğmesiyle tekrar deneyebilirsiniz."}</div>}
         {market === "BIST" && quotes.isError && visible.rows.length > 0 && <p role="alert" className="border-b border-border px-4 py-3 text-xs text-neutral">Fiyatlar yenilenemedi. Son alınan kayıtlar güncel olmayabilir.</p>}
 
-        <div className="max-h-[min(64vh,42rem)] min-h-48 overflow-auto overscroll-contain focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-foreground" role="region" aria-label="Semboller ve RSI zaman dilimleri tablosu" tabIndex={0}>
+        <div className="relative max-h-[min(64vh,42rem)] min-h-48 overflow-auto overscroll-contain focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-foreground" role="region" aria-label="Semboller ve RSI zaman dilimleri tablosu" tabIndex={0}>
             <table className="w-full border-separate border-spacing-0 text-xs">
                 <caption className="sr-only">{market === "BIST" ? "BIST hisseleri" : "Binance USDT çiftleri"}. Fiyat ve {shownColumns.length} RSI zaman dilimi.</caption>
                 <colgroup span={3} />
