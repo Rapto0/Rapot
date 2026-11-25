@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { clearSession } from '@/lib/auth/session';
+import { signOut } from '@/lib/api/auth-api';
 import { useSession } from '@/lib/hooks/use-session';
 
 export function SessionControls() {
@@ -15,7 +15,7 @@ export function SessionControls() {
     return (
         <div className="flex items-center gap-2 text-xs">
             <span>{session.user.is_admin ? 'Admin' : session.user.username}</span>
-            <button type="button" className={className} onClick={() => clearSession()}>Çıkış yap</button>
+            <button type="button" className={className} onClick={() => { void signOut(); }}>Çıkış yap</button>
         </div>
     );
 }

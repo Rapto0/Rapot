@@ -6,6 +6,7 @@ import { createRealtimeConnection } from './connection';
 import { useRealtimeStore } from './store';
 import { resolveRealtimeWsBaseUrl } from './url';
 import { getSession, getAccessToken } from '../auth/session';
+import { fetchWsTicket } from '../api/auth-api';
 
 interface UseRealtimeConnectionOptions {
   autoConnect?: boolean;
@@ -24,7 +25,7 @@ export function useRealtimeConnection(options: UseRealtimeConnectionOptions = {}
     if (!allowed) return;
     // Each effect setup owns a fresh controller, including StrictMode's second setup.
     const connection = createRealtimeConnection({
-      getToken: getAccessToken,
+      getToken: () => getAccessToken() ?? fetchWsTicket(),
       baseUrl: () => resolveRealtimeWsBaseUrl(
         window.location.origin,
         process.env.NEXT_PUBLIC_API_URL,

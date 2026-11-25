@@ -456,6 +456,17 @@
         "title": "IndicatorPreview",
         "type": "object"
       },
+      "LogoutResponse": {
+        "properties": {
+          "logged_out": {
+            "default": true,
+            "title": "Logged Out",
+            "type": "boolean"
+          }
+        },
+        "title": "LogoutResponse",
+        "type": "object"
+      },
       "MarketAnalysisResponse": {
         "description": "Manual AI analysis response.",
         "properties": {
@@ -848,6 +859,51 @@
           "name"
         ],
         "title": "SavedResearchWrite",
+        "type": "object"
+      },
+      "SessionStatusResponse": {
+        "properties": {
+          "authenticated": {
+            "title": "Authenticated",
+            "type": "boolean"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "expires_in": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires In"
+          },
+          "user": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/User"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "authenticated"
+        ],
+        "title": "SessionStatusResponse",
         "type": "object"
       },
       "StatsResponse": {
@@ -1285,6 +1341,24 @@
           "name"
         ],
         "title": "WatchlistWrite",
+        "type": "object"
+      },
+      "WsTicketResponse": {
+        "properties": {
+          "expires_in": {
+            "title": "Expires In",
+            "type": "integer"
+          },
+          "ticket": {
+            "title": "Ticket",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticket",
+          "expires_in"
+        ],
+        "title": "WsTicketResponse",
         "type": "object"
       },
       "api__routes__advanced_alarm_routes__AlarmWrite": {
@@ -2887,6 +2961,27 @@
         "x-access-role": "admin"
       }
     },
+    "/auth/logout": {
+      "post": {
+        "operationId": "logout_auth_logout_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogoutResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Logout",
+        "tags": [
+          "Authentication"
+        ]
+      }
+    },
     "/auth/me": {
       "get": {
         "operationId": "get_me_auth_me_get",
@@ -2908,6 +3003,66 @@
           }
         ],
         "summary": "Get Me",
+        "tags": [
+          "Authentication"
+        ]
+      }
+    },
+    "/auth/session": {
+      "get": {
+        "operationId": "get_session_status_auth_session_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Session Status",
+        "tags": [
+          "Authentication"
+        ]
+      },
+      "post": {
+        "operationId": "create_session_auth_session_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserLogin"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Session",
         "tags": [
           "Authentication"
         ]
@@ -2952,6 +3107,33 @@
         "tags": [
           "Authentication"
         ]
+      }
+    },
+    "/auth/ws-ticket": {
+      "post": {
+        "operationId": "issue_ws_ticket_auth_ws_ticket_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WsTicketResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Issue Ws Ticket",
+        "tags": [
+          "Authentication"
+        ],
+        "x-access-role": "admin"
       }
     },
     "/borsapy/candles/{symbol}": {

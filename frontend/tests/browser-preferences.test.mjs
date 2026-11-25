@@ -114,17 +114,20 @@ test('global Providers startup cleans old settings even when the settings page i
   const storage = fakeStorage({ 'rapot.settings.v1': JSON.stringify(unsafeValues), 'rapot-settings': JSON.stringify({ state: unsafeValues }) });
   const browserModule = load('../src/lib/browser-preferences.ts', {}, { window: { localStorage: storage } });
   const effects = [];
+  let hydrated = 0;
   const provider = load('../src/components/providers.tsx', {
     'react/jsx-runtime': jsxRuntime,
     react: { useEffect: (callback) => effects.push(callback), useState: React.useState },
     '@tanstack/react-query': {},
     '@/components/ui/toast': {},
     '@/lib/hooks/use-session': { useSession: () => null }, '@/lib/api/core': {},
+    '@/lib/api/auth-api': { hydrateSession: async () => { hydrated++; return false; } },
     '@/components/realtime-bridge': {}, '@/lib/browser-preferences': browserModule,
   });
   provider.Providers({ children: null });
   effects.forEach((effect) => effect());
   assert.equal(storage.data.size, 0);
+  assert.equal(hydrated, 1);
 });
 
 function renderSettings(cleanupResult = null) {

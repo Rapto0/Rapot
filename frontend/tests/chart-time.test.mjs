@@ -18,10 +18,14 @@ const helperSource = read('../src/lib/chart-time.ts');
 const helper = load(helperSource);
 const chartSource = read('../src/components/charts/advanced-chart.tsx');
 const chartAst = ts.createSourceFile('advanced-chart.tsx', chartSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+const constantsSource = read('../src/components/charts/chart-constants.ts');
+const constantsAst = ts.createSourceFile('chart-constants.ts', constantsSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+const paneSource = read('../src/components/charts/indicator-pane.tsx');
+const paneAst = ts.createSourceFile('indicator-pane.tsx', paneSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 const parserNames = new Set(['DATE_ONLY_RE', 'INTRADAY_RE', 'parseChartTimeToUnix', 'formatTime']);
-const parserSource = chartAst.statements.filter(node => ts.isVariableStatement(node)
-  && node.declarationList.declarations.some(declaration => parserNames.has(declaration.name.getText(chartAst))))
-  .map(node => node.getText(chartAst)).join('\n') + '\nexport { parseChartTimeToUnix, formatTime };';
+const parserSource = constantsAst.statements.filter(node => ts.isVariableStatement(node)
+  && node.declarationList.declarations.some(declaration => parserNames.has(declaration.name.getText(constantsAst))))
+  .map(node => node.getText(constantsAst)).join('\n');
 const parser = load(parserSource);
 const istanbul = helper.createChartTimeFormatters(helper.chartTimeZone('BIST'));
 const utc = helper.createChartTimeFormatters(helper.chartTimeZone('Kripto'));
@@ -122,15 +126,19 @@ function findNodes(node, predicate, result = []) {
   return result;
 }
 test('both real chart update effects switch axis and crosshair formatters without retaining the previous market', () => {
-  const effects = findNodes(chartAst, node => ts.isCallExpression(node) && node.expression.getText(chartAst) === 'useEffect'
-    && node.arguments[0].getText(chartAst).includes('timeFormattersRef.current = timeFormatters'));
+  const effects = [
+    ...findNodes(chartAst, node => ts.isCallExpression(node) && node.expression.getText(chartAst) === 'useEffect'
+      && node.arguments[0].getText(chartAst).includes('timeFormattersRef.current = timeFormatters')).map(node => ({ node, ast: chartAst })),
+    ...findNodes(paneAst, node => ts.isCallExpression(node) && node.expression.getText(paneAst) === 'useEffect'
+      && node.arguments[0].getText(paneAst).includes('timeFormattersRef.current = timeFormatters')).map(node => ({ node, ast: paneAst })),
+  ];
   assert.equal(effects.length, 2, 'Main and every indicator pane have their own formatter update');
-  for (const effect of effects) {
-    assert.equal(effect.arguments[1].getText(chartAst), '[timeFormatters]');
+  for (const { node: effect, ast } of effects) {
+    assert.equal(effect.arguments[1].getText(ast), '[timeFormatters]');
     const applied = [];
     const ref = { current: { applyOptions: value => applied.push(value) } };
     const context = vm.createContext({ exports: {}, timeFormatters: istanbul, timeFormattersRef: { current: null }, chartInstance: ref, chartRef: ref });
-    vm.runInContext(transpile(`exports.update = ${effect.arguments[0].getText(chartAst)};`), context);
+    vm.runInContext(transpile(`exports.update = ${effect.arguments[0].getText(ast)};`), context);
     context.exports.update();
     assert.equal(applied[0].timeScale.tickMarkFormatter(epoch, 3, 'en'), '10:00');
     context.timeFormatters = utc;

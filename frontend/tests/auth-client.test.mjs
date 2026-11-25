@@ -10,13 +10,14 @@ const sourceRoot = fileURLToPath(new URL('../src/lib/', import.meta.url));
 
 test('private market and calendar requests stop before HTTP when the session is absent or expired', async () => {
     const client = createClient();
-    for (const path of ['/api/borsapy/market/indices', '/api/borsapy/candles/THYAO', '/api/calendar?country=TR']) {
-        await assert.rejects(client.core.fetchApi(path), error => error.status === 401);
+    for (const target of ['/api/borsapy/market/indices', '/api/borsapy/candles/THYAO', '/api/calendar?country=TR']) {
+        await assert.rejects(client.core.fetchApi(target), error => error.status === 401);
     }
     assert.equal(client.calls.length, 0);
-    client.login();
+    client.loginCookie();
     await client.core.fetchApi('/api/borsapy/market/indices');
-    assert.equal(client.calls[0].headers.get('Authorization'), 'Bearer test-token');
+    assert.equal(client.calls[0].headers.get('Authorization'), null);
+    assert.equal(client.calls[0].credentials, 'same-origin');
     client.advance(61_000);
     await assert.rejects(client.core.fetchApi('/api/calendar'), error => error.status === 401);
     assert.equal(client.calls.length, 1);
@@ -30,9 +31,11 @@ function createClient(apiBase = '/api', healthBase = '/health-api') {
     let handler = () => Response.json({});
     const timers = new Map();
     let timerId = 0;
+    const documentObj = { cookie: '' };
     const context = vm.createContext({
         Headers, URL, Set, Number, AbortController,
         Date: class extends Date { static now() { return now; } },
+        document: documentObj,
         window: {
             location: { origin: 'https://rapot.test' },
             localStorage: { setItem() { assert.fail('Credentials must not be persisted'); } },
@@ -67,6 +70,7 @@ function createClient(apiBase = '/api', healthBase = '/health-api') {
         auth: load(path.join(sourceRoot, 'api/auth-api.ts')),
         ops: load(path.join(sourceRoot, 'api/ops-api.ts')),
         calls,
+        document: documentObj,
         respond(fn) { handler = fn; },
         advance(ms) { now += ms; },
         expire() { for (const callback of timers.values()) callback(); },
@@ -76,37 +80,104 @@ function createClient(apiBase = '/api', healthBase = '/health-api') {
                 user: { username: 'admin', is_admin: true, disabled: false },
             });
         },
+        loginCookie() {
+            session.setSession({
+                expiresAt: now + 60_000,
+                user: { username: 'admin', is_admin: true, disabled: false },
+            });
+        },
     };
 }
 
-test('sign in verifies identity before storing a memory-only session', async () => {
+test('sign in creates an HttpOnly cookie session without storing a JWT in JS memory', async () => {
     const client = createClient();
     client.respond((url, options) => {
-        if (url.endsWith('/auth/token')) {
-            assert.deepEqual(JSON.parse(options.body), { username: 'admin', password: 'test-password' });
-            return Response.json({ access_token: 'issued-token', token_type: 'bearer', expires_in: 60 });
-        }
-        assert.equal(options.headers.get('Authorization'), 'Bearer issued-token');
+        assert.equal(url, '/api/auth/session');
+        assert.equal(options.method, 'POST');
+        assert.equal(options.credentials, 'same-origin');
+        assert.deepEqual(JSON.parse(options.body), { username: 'admin', password: 'test-password' });
         assert.equal(client.session.getSession(), null);
-        return Response.json({ username: 'admin', is_admin: true, disabled: false });
+        return Response.json({
+            authenticated: true,
+            user: { username: 'admin', is_admin: true, disabled: false },
+            expires_in: 60,
+        });
     });
     await client.auth.signIn('admin', 'test-password');
     assert.equal(client.session.getSession().user.is_admin, true);
-    assert.equal(client.session.getAccessToken(), 'issued-token');
-    client.session.clearSession();
+    assert.equal(client.session.getAccessToken(), null);
+    assert.equal(client.session.hasActiveSession(), true);
+
+    client.document.cookie = 'rapot_csrf=csrf-abc123';
+    client.respond((url, options) => {
+        assert.equal(url, '/api/auth/logout');
+        assert.equal(options.method, 'POST');
+        assert.equal(options.headers.get('X-CSRF-Token'), 'csrf-abc123');
+        return Response.json({ logged_out: true });
+    });
+    await client.auth.signOut();
     assert.equal(client.session.getSession(), null);
 });
 
-for (const failureAt of ['token', 'me']) {
-    test(`failed ${failureAt} response never installs a session`, async () => {
-        const client = createClient();
-        client.respond((url) => url.endsWith(`/auth/${failureAt}`)
-            ? Response.json({ detail: 'denied' }, { status: 401 })
-            : Response.json({ access_token: 'issued-token', token_type: 'bearer', expires_in: 60 }));
-        await assert.rejects(client.auth.signIn('admin', 'wrong'), (error) => error.status === 401);
-        assert.equal(client.session.getSession(), null);
+test('hydrateSession restores HttpOnly session on reload without overwriting a newer login', async () => {
+    const client = createClient();
+    client.respond((url, options) => {
+        assert.equal(url, '/api/auth/session');
+        assert.equal(options.credentials, 'same-origin');
+        return Response.json({
+            authenticated: true,
+            user: { username: 'admin', is_admin: true, disabled: false },
+            expires_in: 120,
+        });
     });
-}
+    assert.equal(await client.auth.hydrateSession(), true);
+    assert.equal(client.session.getSession().user.username, 'admin');
+
+    // A stale hydrate response must not overwrite a newer session established in-flight.
+    let resolveHydrate;
+    client.respond(() => new Promise((resolve) => { resolveHydrate = resolve; }));
+    const pendingHydrate = client.auth.hydrateSession();
+    client.session.setSession({
+        expiresAt: 1_800_000_000_000 + 300_000,
+        user: { username: 'fresh-admin', is_admin: true, disabled: false },
+    });
+    resolveHydrate(Response.json({
+        authenticated: true,
+        user: { username: 'stale-admin', is_admin: true, disabled: false },
+        expires_in: 60,
+    }));
+    assert.equal(await pendingHydrate, false);
+    assert.equal(client.session.getSession().user.username, 'fresh-admin');
+});
+
+test('failed signIn response never installs a session', async () => {
+    const client = createClient();
+    client.respond(() => Response.json({ detail: 'denied' }, { status: 401 }));
+    await assert.rejects(client.auth.signIn('admin', 'wrong'), (error) => error.status === 401);
+    assert.equal(client.session.getSession(), null);
+});
+
+test('CSRF header is attached only to mutating core API cookie requests and ws-ticket uses it', async () => {
+    const client = createClient();
+    client.loginCookie();
+    client.document.cookie = 'other=1; rapot_csrf=csrf-xyz-789';
+    client.respond((url) => {
+        if (url.endsWith('/auth/ws-ticket')) return Response.json({ ticket: 'short-ws-ticket', expires_in: 30 });
+        return Response.json({});
+    });
+    await client.core.fetchApi('/api/logs');
+    await client.core.fetchApi('/api/alarms', { method: 'POST', body: '{}' });
+    await client.core.fetchApi('https://external.invalid/api/alarms', { method: 'POST', body: '{}' });
+    const ticket = await client.auth.fetchWsTicket();
+
+    assert.equal(ticket, 'short-ws-ticket');
+    assert.equal(client.calls[0].headers.get('X-CSRF-Token'), null);
+    assert.equal(client.calls[1].headers.get('X-CSRF-Token'), 'csrf-xyz-789');
+    assert.equal(client.calls[1].credentials, 'same-origin');
+    assert.equal(client.calls[2].headers.get('X-CSRF-Token'), null);
+    assert.equal(client.calls[2].credentials, undefined);
+    assert.equal(client.calls[3].headers.get('X-CSRF-Token'), 'csrf-xyz-789');
+});
 
 test('bearer token is scoped to the configured API origin and path', async () => {
     const client = createClient();
@@ -165,9 +236,9 @@ test('an unavailable API health response rejects instead of caching success and 
     assert.equal(client.session.getAccessToken(), 'test-token');
 });
 
-test('current 401 clears the session, while 403 preserves it', async () => {
+test('current 401 clears cookie and bearer sessions, while 403 preserves them', async () => {
     const client = createClient();
-    client.login();
+    client.loginCookie();
     client.respond(() => Response.json({}, { status: 403 }));
     await assert.rejects(client.core.fetchApi('/api/logs'), (error) => error.status === 403);
     assert.ok(client.session.getSession());
@@ -180,15 +251,22 @@ test('current 401 clears the session, while 403 preserves it', async () => {
     unsubscribe();
 });
 
-test('late 401 from an old token does not clear a new login', async () => {
+test('late 401 from an old cookie or bearer session does not clear a new login', async () => {
     const client = createClient();
-    client.login('old-token');
+    client.loginCookie();
     let complete;
     client.respond(() => new Promise((resolve) => { complete = resolve; }));
     const pending = client.core.fetchApi('/api/logs');
-    client.login('new-token');
+    client.loginCookie();
     complete(Response.json({}, { status: 401 }));
     await assert.rejects(pending, (error) => error.status === 401);
+    assert.ok(client.session.getSession());
+
+    client.login('old-token');
+    const pendingBearer = client.core.fetchApi('/api/logs');
+    client.login('new-token');
+    complete(Response.json({}, { status: 401 }));
+    await assert.rejects(pendingBearer, (error) => error.status === 401);
     assert.equal(client.session.getAccessToken(), 'new-token');
 });
 

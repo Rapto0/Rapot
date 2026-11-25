@@ -1,6 +1,7 @@
 ﻿"use client"
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react"
+import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useQuery } from "@tanstack/react-query"
 import {
@@ -10,17 +11,14 @@ import {
     fetchEconomicCalendar,
     fetchGlobalIndices,
     fetchTicker,
-    type EconomicCalendarEvent,
 } from "@/lib/api/client"
 import { useBinanceTicker } from "@/lib/hooks/use-binance-ticker"
 import { useSession } from "@/lib/hooks/use-session"
 import { MarketDataStatus } from "@/components/market-data-status"
-import { CustomIndicatorPanel } from "@/components/indicators/custom-indicator-panel"
 import { BORSAPY_INTERVALS, borsapyVolumeWarning, fetchBorsapyCandles, fetchBorsapyChartSnapshot, mergeBorsapyCandles, releaseBorsapyChart } from "@/lib/api/borsapy-chart-api"
-import { ChartDrawingTools } from "./chart-drawing-tools"
 import { ServerWatchlistPanel } from "./server-watchlist-panel"
 import { ChartDataError, hasDisplayableCandles } from "./chart-data-error"
-import { chartTimeZone, createChartTimeFormatters, type ChartTimeZone } from "@/lib/chart-time"
+import { chartTimeZone, createChartTimeFormatters } from "@/lib/chart-time"
 import { cn } from "@/lib/utils"
 import { ActionDialog } from "@/components/ui/action-dialog"
 import { IconButton } from "@/components/ui/icon-button"
@@ -28,14 +26,12 @@ import { useToast } from "@/components/ui/toast"
 import {
     AVAILABLE_INDICATORS,
     type Candle,
-    type IndicatorMeta,
     type IndicatorParamSchema,
 } from "@/lib/indicators"
 import type {
     IndicatorWorkerComputeRequest,
     IndicatorWorkerComputeResponse,
     WorkerIndicatorDescriptor,
-    WorkerPaneSeriesResult,
 } from "@/lib/types/indicator-worker"
 import {
     Search,
@@ -60,10 +56,6 @@ import {
     Eye,
     EyeOff,
     Bell,
-    MessageSquare,
-    CalendarDays,
-    LayoutGrid,
-    CircleHelp,
     Share2,
     Copy,
     FolderOpen,
@@ -80,516 +72,57 @@ import {
     updateAlarmRuleStorage,
     type AlarmRuleChange,
 } from "@/lib/alarm-rule-storage"
+import {
+    ACTIVE_WATCHLIST_STORAGE_KEY,
+    BIST_ALLOWED_TIMEFRAMES,
+    CRYPTO_WATCHLIST,
+    DEFAULT_WATCHLISTS,
+    DEV_PERF_ENABLED,
+    DEV_PERF_THROTTLE_MS,
+    INDICATOR_SETTINGS_STORAGE_KEY,
+    QUICK_TIMEFRAMES,
+    TIMEFRAME_CATEGORIES,
+    WATCHLIST_PANEL_STORAGE_KEY,
+    WATCHLIST_STORAGE_KEY,
+    WATCHLIST_UTILITY_CALENDAR_REFRESH_MS,
+    WATCHLIST_UTILITY_ITEMS,
+    buildMarkerHash,
+    buildUtilityCalendarItems,
+    chartColors,
+    deduplicateByTime,
+    formatTime,
+    getDefaultActiveIndicators,
+    getTimeframeStepSeconds,
+    makeWatchlistId,
+    normalizeHorzTimeToUnix,
+    parseChartTimeToUnix,
+    symbolRow,
+    type ActiveIndicator,
+    type MarketType,
+    type PersistedActiveIndicator,
+    type RightUtilityPanelId,
+    type SignalMarker,
+    type WatchlistDialogState,
+    type WatchlistModel,
+    type WatchlistRow,
+    type WatchlistSymbolRow,
+    type WorkerComputationState,
+} from "./chart-constants"
 
-// ==================== TYPES ====================
+const CustomIndicatorPanel = dynamic(
+    () => import("@/components/indicators/custom-indicator-panel").then((mod) => mod.CustomIndicatorPanel),
+    { ssr: false }
+)
 
-interface SignalMarker {
-    time: string
-    type: 'AL' | 'SAT'
-    price: number
-    label?: string
-}
+const ChartDrawingTools = dynamic(
+    () => import("./chart-drawing-tools").then((mod) => mod.ChartDrawingTools),
+    { ssr: false }
+)
 
-type MarketType = "BIST" | "Kripto"
-
-interface ActiveIndicator {
-    id: string
-    meta: IndicatorMeta
-    params: Record<string, number>
-    visible: boolean
-}
-
-interface PersistedActiveIndicator {
-    id: string
-    params: Record<string, number>
-    visible: boolean
-}
-
-interface WatchlistSymbolRow {
-    kind: "symbol"
-    rawSymbol: string
-    marketType: MarketType
-}
-
-interface WatchlistSectionRow {
-    kind: "section"
-    id: string
-    title: string
-}
-
-type WatchlistRow = WatchlistSymbolRow | WatchlistSectionRow
-
-interface WatchlistModel {
-    id: string
-    name: string
-    alarmsEnabled: boolean
-    notes: string
-    rows: WatchlistRow[]
-}
-
-type RightUtilityPanelId = "alerts" | "notes" | "calendar" | "layout" | "help"
-
-interface UtilityPanelItem {
-    id: RightUtilityPanelId
-    label: string
-    icon: any
-}
-
-interface WorkerComputationState {
-    requestId: number
-    computeMs: number
-    panes: Record<string, WorkerPaneSeriesResult>
-    overlays: {
-        combo: Array<{ time: string, signal: "AL" | "SAT" }>
-        hunter: Array<{ time: string, signal: "AL" | "SAT" }>
-    }
-}
-
-type UtilityCalendarImpact = "Dusuk" | "Orta" | "Yuksek"
-
-interface UtilityCalendarItem {
-    id: string
-    date: string
-    time: string
-    country: string
-    title: string
-    impact: UtilityCalendarImpact
-    actual: string
-    forecast: string
-    previous: string
-    orderKey: string
-}
-
-type WatchlistDialogState =
-    | { type: "addSymbol"; value: string }
-    | { type: "renameWatchlist"; watchlistId: string; value: string }
-    | { type: "createWatchlist"; value: string }
-    | { type: "deleteWatchlist"; watchlistId: string; watchlistName: string }
-    | { type: "clearWatchlist"; watchlistId: string; watchlistName: string }
-    | { type: "clearWatchlistNotes"; watchlistId: string; watchlistName: string }
-    | null
-
-const INDICATOR_SETTINGS_STORAGE_KEY = "rapot.dashboard.indicators.v1"
-const DEFAULT_OVERLAY_INDICATOR_IDS = ["combo", "hunter"] as const
-const WATCHLIST_STORAGE_KEY = "rapot.dashboard.watchlists.v1"
-const ACTIVE_WATCHLIST_STORAGE_KEY = "rapot.dashboard.watchlists.active.v1"
-const WATCHLIST_PANEL_STORAGE_KEY = "rapot.dashboard.watchlists.panel.v1"
-const WATCHLIST_UTILITY_CALENDAR_REFRESH_MS = 60_000
-
-const WATCHLIST_UTILITY_ITEMS: UtilityPanelItem[] = [
-    { id: "alerts", label: "Alarmlar", icon: Bell },
-    { id: "notes", label: "Notlar", icon: MessageSquare },
-    { id: "calendar", label: "Takvim", icon: CalendarDays },
-    { id: "layout", label: "Yerleşim", icon: LayoutGrid },
-    { id: "help", label: "Yardım", icon: CircleHelp },
-]
-
-const makeWatchlistId = (name: string) =>
-    `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now().toString(36)}`
-
-const symbolRow = (rawSymbol: string, marketType: MarketType): WatchlistSymbolRow => ({
-    kind: "symbol",
-    rawSymbol,
-    marketType,
-})
-
-const DEFAULT_WATCHLISTS: WatchlistModel[] = [
-    {
-        id: "binance-spot",
-        name: "BINANCE SPOT",
-        alarmsEnabled: false,
-        notes: "",
-        rows: [
-            symbolRow("BTCUSDT", "Kripto"),
-            symbolRow("ETHUSDT", "Kripto"),
-            symbolRow("BNBUSDT", "Kripto"),
-            symbolRow("XRPUSDT", "Kripto"),
-            symbolRow("SOLUSDT", "Kripto"),
-            symbolRow("DOGEUSDT", "Kripto"),
-            symbolRow("ADAUSDT", "Kripto"),
-            symbolRow("AVAXUSDT", "Kripto"),
-        ],
-    },
-    {
-        id: "futures",
-        name: "Futures",
-        alarmsEnabled: false,
-        notes: "",
-        rows: [
-            symbolRow("BTCUSDT", "Kripto"),
-            symbolRow("ETHUSDT", "Kripto"),
-            symbolRow("SOLUSDT", "Kripto"),
-            symbolRow("XRPUSDT", "Kripto"),
-            symbolRow("DOGEUSDT", "Kripto"),
-        ],
-    },
-    {
-        id: "gem",
-        name: "Gem",
-        alarmsEnabled: false,
-        notes: "",
-        rows: [
-            symbolRow("ARBUSDT", "Kripto"),
-            symbolRow("SEIUSDT", "Kripto"),
-            symbolRow("INJUSDT", "Kripto"),
-            symbolRow("TIAUSDT", "Kripto"),
-            symbolRow("SUIUSDT", "Kripto"),
-        ],
-    },
-    {
-        id: "global",
-        name: "Global",
-        alarmsEnabled: false,
-        notes: "",
-        rows: [
-            symbolRow("BTCUSDT", "Kripto"),
-            symbolRow("ETHUSDT", "Kripto"),
-            symbolRow("THYAO", "BIST"),
-            symbolRow("GARAN", "BIST"),
-            symbolRow("ASELS", "BIST"),
-        ],
-    },
-    {
-        id: "bist-portfolio",
-        name: "BIST Portföy",
-        alarmsEnabled: false,
-        notes: "",
-        rows: [
-            symbolRow("THYAO", "BIST"),
-            symbolRow("ASELS", "BIST"),
-            symbolRow("EREGL", "BIST"),
-            symbolRow("BIMAS", "BIST"),
-            symbolRow("KCHOL", "BIST"),
-        ],
-    },
-]
-
-const getDefaultActiveIndicators = (): ActiveIndicator[] => {
-    const defaults: ActiveIndicator[] = []
-    for (const id of DEFAULT_OVERLAY_INDICATOR_IDS) {
-        const meta = AVAILABLE_INDICATORS.find((indicator) => indicator.id === id)
-        if (!meta) continue
-        defaults.push({
-            id,
-            meta,
-            params: { ...meta.defaultParams },
-            visible: true,
-        })
-    }
-    return defaults
-}
-
-// Extended Timeframe options organized by category
-const TIMEFRAME_CATEGORIES = [
-    {
-        category: "Dakika",
-        items: [
-            { label: "1D", value: "1m", description: "1 Dakika" },
-            { label: "5D", value: "5m", description: "5 Dakika" },
-            { label: "15D", value: "15m", description: "15 Dakika" },
-            { label: "30D", value: "30m", description: "30 Dakika" },
-        ]
-    },
-    {
-        category: "Saat",
-        items: [
-            { label: "1S", value: "1h", description: "1 Saat" },
-            { label: "2S", value: "2h", description: "2 Saat" },
-            { label: "4S", value: "4h", description: "4 Saat" },
-            { label: "8S", value: "8h", description: "8 Saat" },
-            { label: "12S", value: "12h", description: "12 Saat" },
-        ]
-    },
-    {
-        category: "Gün",
-        items: [
-            { label: "1G", value: "1d", description: "1 Gün" },
-            { label: "2G", value: "2d", description: "2 Gün" },
-            { label: "3G", value: "3d", description: "3 Gün" },
-            { label: "4G", value: "4d", description: "4 Gün" },
-            { label: "5G", value: "5d", description: "5 Gün" },
-            { label: "6G", value: "6d", description: "6 Gün" },
-        ]
-    },
-    {
-        category: "Hafta",
-        items: [
-            { label: "1H", value: "1wk", description: "1 Hafta" },
-            { label: "2H", value: "2wk", description: "2 Hafta" },
-            { label: "3H", value: "3wk", description: "3 Hafta" },
-        ]
-    },
-    {
-        category: "Ay",
-        items: [
-            { label: "1A", value: "1mo", description: "1 Ay" },
-            { label: "2A", value: "2mo", description: "2 Ay" },
-            { label: "3A", value: "3mo", description: "3 Ay" },
-        ]
-    },
-]
-
-// Quick timeframes for header
-const QUICK_TIMEFRAMES = [
-    { label: "1D", value: "1m" },
-    { label: "5D", value: "5m" },
-    { label: "1S", value: "1h" },
-    { label: "4S", value: "4h" },
-    { label: "1G", value: "1d" },
-    { label: "1H", value: "1wk" },
-    { label: "1A", value: "1mo" },
-]
-
-const BIST_ALLOWED_TIMEFRAMES = new Set([
-    "15m",
-    "30m",
-    "1h",
-    "2h",
-    "4h",
-    "1d",
-    "2d",
-    "3d",
-    "4d",
-    "5d",
-    "6d",
-    "1wk",
-    "2wk",
-    "3wk",
-    "1mo",
-    "2mo",
-    "3mo",
-])
-
-// Popular crypto symbols for watchlist
-const CRYPTO_WATCHLIST = [
-    "BTCUSDT", "ETHUSDT", "BNBUSDT", "XRPUSDT", "ADAUSDT",
-    "DOGEUSDT", "SOLUSDT", "DOTUSDT", "MATICUSDT", "LTCUSDT",
-]
-
-const DEV_PERF_ENABLED = process.env.NODE_ENV !== "production"
-const DEV_PERF_THROTTLE_MS = 2000
-
-// ==================== CHART THEME ====================
-
-const chartColors = {
-    background: "transparent",
-    text: "rgba(255, 255, 255, 0.5)",
-    grid: "rgba(255, 255, 255, 0.04)",
-    crosshair: "rgba(255, 255, 255, 0.18)",
-    crosshairLabel: "#16161e",
-    bullish: "#22c55e",
-    bearish: "#ef4444",
-    volume: {
-        up: "rgba(34, 197, 94, 0.18)",
-        down: "rgba(239, 68, 68, 0.18)"
-    },
-    indicators: {
-        rsi: "#3b82f6",
-        macd: "#8b5cf6",
-        macdSignal: "#06b6d4",
-        macdHistogram: "rgba(255, 255, 255, 0.28)",
-        wr: "#8b5cf6",
-        cci: "#3b82f6",
-    }
-}
-
-const DATE_ONLY_RE = /^(\d{4})-(\d{2})-(\d{2})$/
-const INTRADAY_RE = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/
-
-const normalizeHorzTimeToUnix = (value: unknown): number | null => {
-    if (typeof value === "number" && Number.isFinite(value)) {
-        return Math.floor(value)
-    }
-    if (typeof value === "string") {
-        if (!value.trim()) return null
-        return parseChartTimeToUnix(value)
-    }
-    if (value && typeof value === "object" && "year" in value && "month" in value && "day" in value) {
-        const typed = value as { year: number, month: number, day: number }
-        return Math.floor(Date.UTC(typed.year, typed.month - 1, typed.day, 0, 0, 0) / 1000)
-    }
-    return null
-}
-
-const getTimeframeStepSeconds = (timeframe: string): number => {
-    const mapping: Record<string, number> = {
-        "1m": 60,
-        "5m": 5 * 60,
-        "15m": 15 * 60,
-        "30m": 30 * 60,
-        "1h": 60 * 60,
-        "2h": 2 * 60 * 60,
-        "4h": 4 * 60 * 60,
-        "8h": 8 * 60 * 60,
-        "12h": 12 * 60 * 60,
-        "18h": 18 * 60 * 60,
-        "1d": 24 * 60 * 60,
-        "2d": 2 * 24 * 60 * 60,
-        "3d": 3 * 24 * 60 * 60,
-        "4d": 4 * 24 * 60 * 60,
-        "5d": 5 * 24 * 60 * 60,
-        "6d": 6 * 24 * 60 * 60,
-        "1wk": 7 * 24 * 60 * 60,
-        "2wk": 14 * 24 * 60 * 60,
-        "3wk": 21 * 24 * 60 * 60,
-        "1mo": 30 * 24 * 60 * 60,
-        "2mo": 60 * 24 * 60 * 60,
-        "3mo": 90 * 24 * 60 * 60,
-    }
-    return mapping[timeframe] ?? 24 * 60 * 60
-}
-
-const findNearestSeriesPointByTime = (
-    points: Array<{ timeKey: number, rawTime: string | number, value: number }>,
-    targetTime: number
-): { timeKey: number, rawTime: string | number, value: number } | null => {
-    if (points.length === 0) return null
-
-    let left = 0
-    let right = points.length - 1
-    while (left <= right) {
-        const mid = Math.floor((left + right) / 2)
-        const current = points[mid].timeKey
-        if (current === targetTime) return points[mid]
-        if (current < targetTime) left = mid + 1
-        else right = mid - 1
-    }
-
-    const leftPoint = left < points.length ? points[left] : null
-    const rightPoint = right >= 0 ? points[right] : null
-    if (!leftPoint) return rightPoint
-    if (!rightPoint) return leftPoint
-    return Math.abs(leftPoint.timeKey - targetTime) < Math.abs(rightPoint.timeKey - targetTime)
-        ? leftPoint
-        : rightPoint
-}
-
-const buildMarkerHash = (markers: Array<{ time: string | number, text?: string, position?: string, color?: string }>): string => {
-    if (markers.length === 0) return "0"
-    let hash = 17
-    for (let i = 0; i < markers.length; i++) {
-        const marker = markers[i]
-        const encoded = `${marker.time}|${marker.text || ""}|${marker.position || ""}|${marker.color || ""}`
-        for (let j = 0; j < encoded.length; j++) {
-            hash = (hash * 31 + encoded.charCodeAt(j)) >>> 0
-        }
-    }
-    return `${markers.length}:${hash}`
-}
-
-// Keep data timestamps unchanged: Borsapy BIST supplies offset-aware ISO values,
-// and stream epochs refer to the same instant. Timezone-free legacy crypto values
-// remain UTC; daily date strings preserve their calendar date. Exchange-time labels
-// are formatted separately. Legacy naive BIST wall-times are not used by this UI.
-const parseChartTimeToUnix = (timeStr: string): number => {
-    const value = timeStr.trim()
-    const intradayMatch = value.match(INTRADAY_RE)
-    if (intradayMatch) {
-        const year = Number(intradayMatch[1])
-        const month = Number(intradayMatch[2])
-        const day = Number(intradayMatch[3])
-        const hour = Number(intradayMatch[4])
-        const minute = Number(intradayMatch[5])
-        const second = Number(intradayMatch[6] || "0")
-        return Math.floor(Date.UTC(year, month - 1, day, hour, minute, second) / 1000)
-    }
-
-    const dateOnlyMatch = value.match(DATE_ONLY_RE)
-    if (dateOnlyMatch) {
-        const year = Number(dateOnlyMatch[1])
-        const month = Number(dateOnlyMatch[2])
-        const day = Number(dateOnlyMatch[3])
-        return Math.floor(Date.UTC(year, month - 1, day, 0, 0, 0) / 1000)
-    }
-
-    const parsed = Date.parse(value)
-    if (!Number.isNaN(parsed)) {
-        return Math.floor(parsed / 1000)
-    }
-    return 0
-}
-
-// Helper to format date for Lightweight Charts
-// For daily data: returns yyyy-mm-dd string
-// For intraday data: returns Unix timestamp (seconds)
-const formatTime = (timeStr: string): string | number => {
-    if (timeStr.includes(' ') || timeStr.includes('T')) {
-        return parseChartTimeToUnix(timeStr)
-    }
-    return timeStr
-}
-
-// Helper to deduplicate and sort candle data by time
-const deduplicateByTime = <T extends { time: string | number }>(data: T[]): T[] => {
-    const seen = new Map<string | number, T>()
-    for (const item of data) {
-        seen.set(item.time, item) // Later items override earlier ones
-    }
-    return Array.from(seen.values()).sort((a, b) => {
-        const timeA = typeof a.time === 'number' ? a.time : parseChartTimeToUnix(a.time)
-        const timeB = typeof b.time === 'number' ? b.time : parseChartTimeToUnix(b.time)
-        return timeA - timeB
-    })
-}
-
-const mapUtilityCalendarImpact = (value: string | null): UtilityCalendarImpact => {
-    const normalized = (value || "").toLowerCase()
-    if (normalized.includes("high") || normalized === "3" || normalized.includes("critical")) return "Yuksek"
-    if (normalized.includes("medium") || normalized === "2" || normalized.includes("med")) return "Orta"
-    return "Dusuk"
-}
-
-const formatUtilityCalendarMetric = (value: number | string | null, unit: string | null): string => {
-    if (value === null || value === undefined) return ""
-    if (typeof value === "string") return value
-    const numeric = Number(value)
-    const formatted = Number.isInteger(numeric) ? numeric.toString() : numeric.toFixed(2)
-    return `${formatted}${unit || ""}`
-}
-
-const parseUtilityCalendarDateTime = (
-    value: string | null
-): { date: string, time: string, orderKey: string } | null => {
-    if (!value) return null
-    const direct = value.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/)
-    if (direct) {
-        const date = direct[1]
-        const time = direct[2]
-        return { date, time, orderKey: `${date}T${time}` }
-    }
-
-    const normalized = value.includes("T") ? value : value.replace(" ", "T")
-    const dateObj = new Date(normalized)
-    if (Number.isNaN(dateObj.getTime())) return null
-
-    return {
-        date: dateObj.toISOString().slice(0, 10),
-        time: dateObj.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" }),
-        orderKey: dateObj.toISOString(),
-    }
-}
-
-const buildUtilityCalendarItems = (rawEvents: EconomicCalendarEvent[]): UtilityCalendarItem[] => {
-    return rawEvents
-        .map((event, index) => {
-            const parsed = event.date ? { date: event.date, time: event.source_time || "Saat belirsiz", orderKey: `${event.date}T${event.source_time || "99:99"}` } : parseUtilityCalendarDateTime(event.time)
-            if (!parsed) return null
-            return {
-                id: `${parsed.orderKey}-${event.country || "ROW"}-${index}`,
-                date: parsed.date,
-                time: parsed.time,
-                country: (event.country || event.currency || "ROW").toUpperCase(),
-                title: event.event || "Ekonomik veri",
-                impact: mapUtilityCalendarImpact(event.impact),
-                actual: formatUtilityCalendarMetric(event.actual, event.unit),
-                forecast: formatUtilityCalendarMetric(event.estimate, event.unit),
-                previous: formatUtilityCalendarMetric(event.previous, event.unit),
-                orderKey: parsed.orderKey,
-            }
-        })
-        .filter((item): item is UtilityCalendarItem => item !== null)
-        .sort((a, b) => a.orderKey.localeCompare(b.orderKey))
-}
+const IndicatorPane = dynamic(
+    () => import("./indicator-pane").then((mod) => mod.IndicatorPane),
+    { ssr: false }
+)
 
 interface ChartPageProps {
     initialSymbol?: string
@@ -3271,438 +2804,6 @@ export function AdvancedChartPage({
                 onCancel={closeWatchlistDialog}
                 onConfirm={confirmWatchlistDialog}
             />
-        </div>
-    )
-}
-
-// ==================== INDICATOR PANE COMPONENT ====================
-
-interface IndicatorPaneProps {
-    indicator: ActiveIndicator
-    candles: Candle[]
-    precomputedSeries: WorkerPaneSeriesResult | null
-    onRemove: () => void
-    mainChartRef: React.MutableRefObject<any>
-    hoveredUnixTime: number | null
-    timeZone: ChartTimeZone
-    showTimeScale: boolean
-    onChartReady?: (indicatorId: string, chart: any) => void
-}
-
-function IndicatorPane({
-    indicator,
-    candles,
-    precomputedSeries,
-    onRemove,
-    mainChartRef,
-    hoveredUnixTime,
-    timeZone,
-    showTimeScale,
-    onChartReady,
-}: IndicatorPaneProps) {
-    const containerRef = useRef<HTMLDivElement>(null)
-    const chartRef = useRef<any>(null)
-    const timeFormatters = useMemo(() => createChartTimeFormatters(timeZone), [timeZone])
-    const timeFormattersRef = useRef(timeFormatters)
-    useEffect(() => {
-        timeFormattersRef.current = timeFormatters
-        chartRef.current?.applyOptions({
-            localization: { locale: "tr-TR", timeFormatter: timeFormatters.timeFormatter },
-            timeScale: { tickMarkFormatter: timeFormatters.tickMarkFormatter },
-        })
-    }, [timeFormatters])
-    const primarySeriesRef = useRef<any>(null)
-    const primarySeriesPointsRef = useRef<Array<{ timeKey: number, rawTime: string | number, value: number }>>([])
-    const isSyncingRef = useRef(false)
-    const isDisposedRef = useRef(false)
-    const [paneHeight, setPaneHeight] = useState(120)
-    const [hoveredValue, setHoveredValue] = useState<number | null>(null)
-    const resizeStartYRef = useRef(0)
-    const resizeStartHeightRef = useRef(120)
-    const paneHeightRef = useRef(120)
-    const lastHoverSyncUnixRef = useRef<number | null>(null)
-    const lastHoverValueRef = useRef<number | null>(null)
-    const hoverSyncRafRef = useRef<number | null>(null)
-
-    const candleSignature = useMemo(() => {
-        if (candles.length === 0) return "empty"
-        const first = candles[0]?.time || ""
-        const last = candles[candles.length - 1]?.time || ""
-        return `${candles.length}:${first}:${last}`
-    }, [candles])
-
-    useEffect(() => {
-        paneHeightRef.current = paneHeight
-    }, [paneHeight])
-
-    const startResize = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-        event.preventDefault()
-        event.currentTarget.setPointerCapture?.(event.pointerId)
-
-        const pointerId = event.pointerId
-        resizeStartYRef.current = event.clientY
-        resizeStartHeightRef.current = paneHeight
-
-        const handlePointerMove = (moveEvent: PointerEvent) => {
-            if (moveEvent.pointerId !== pointerId) return
-            const delta = moveEvent.clientY - resizeStartYRef.current
-            const nextHeight = Math.max(84, Math.min(360, resizeStartHeightRef.current - delta))
-            setPaneHeight(nextHeight)
-        }
-
-        const handlePointerUp = (upEvent: PointerEvent) => {
-            if (upEvent.pointerId !== pointerId) return
-            window.removeEventListener("pointermove", handlePointerMove)
-            window.removeEventListener("pointerup", handlePointerUp)
-            window.removeEventListener("pointercancel", handlePointerUp)
-        }
-
-        window.addEventListener("pointermove", handlePointerMove)
-        window.addEventListener("pointerup", handlePointerUp)
-        window.addEventListener("pointercancel", handlePointerUp)
-    }, [paneHeight])
-
-    useEffect(() => {
-        if (!containerRef.current || candles.length === 0) return
-
-        isDisposedRef.current = false
-
-        import("lightweight-charts").then(({ createChart, ColorType, LineSeries, HistogramSeries, CrosshairMode }) => {
-            if (!containerRef.current || isDisposedRef.current) return
-
-            if (chartRef.current) {
-                try {
-                    chartRef.current.remove()
-                } catch {
-                    // Chart already disposed
-                }
-                chartRef.current = null
-            }
-
-            const chart = createChart(containerRef.current, {
-                layout: { background: { type: ColorType.Solid, color: 'transparent' }, textColor: chartColors.text, fontSize: 10 },
-                grid: { vertLines: { color: chartColors.grid }, horzLines: { color: chartColors.grid } },
-                width: containerRef.current.clientWidth,
-                height: paneHeightRef.current,
-                rightPriceScale: {
-                    borderColor: chartColors.grid,
-                    minimumWidth: 64,
-                    // Keep indicator labels away from pane edges so they don't collide with main chart labels.
-                    scaleMargins: { top: 0.22, bottom: showTimeScale ? 0.2 : 0.16 },
-                },
-                timeScale: {
-                    visible: showTimeScale,
-                    borderColor: chartColors.grid,
-                    timeVisible: true,
-                    secondsVisible: false,
-                    rightOffset: 12,
-                    barSpacing: 6,
-                    minBarSpacing: 2,
-                    tickMarkFormatter: timeFormattersRef.current.tickMarkFormatter,
-                },
-                localization: { locale: "tr-TR", timeFormatter: timeFormattersRef.current.timeFormatter },
-                crosshair: {
-                    mode: CrosshairMode.Normal,
-                    vertLine: { color: chartColors.crosshair, width: 1, style: 0 },
-                    horzLine: { color: chartColors.crosshair, width: 1, style: 0 },
-                },
-                handleScroll: {
-                    mouseWheel: false,
-                    pressedMouseMove: false,
-                    horzTouchDrag: false,
-                    vertTouchDrag: false,
-                },
-                handleScale: {
-                    axisPressedMouseMove: false,
-                    mouseWheel: false,
-                    pinch: false,
-                },
-            })
-
-            let series: any = null
-
-            const setPrimarySeriesPoints = (line: Array<{ time: string | number, value: number }>) => {
-                primarySeriesPointsRef.current = line
-                    .map((point) => ({
-                        rawTime: point.time,
-                        timeKey: typeof point.time === "number" ? point.time : parseChartTimeToUnix(point.time),
-                        value: point.value,
-                    }))
-                    .sort((a, b) => a.timeKey - b.timeKey)
-            }
-
-            const candleTimeline = deduplicateByTime(
-                candles.map((item) => ({ time: formatTime(item.time) }))
-            ).map((item) => item.time)
-
-            const alignLineToTimeline = (line: Array<{ time: string | number, value: number }>) => {
-                if (candleTimeline.length === 0) return line as Array<{ time: string | number } | { time: string | number, value: number }>
-                const valueByTime = new Map<number, number>()
-                for (const point of line) {
-                    const timeKey = typeof point.time === "number" ? point.time : parseChartTimeToUnix(point.time)
-                    valueByTime.set(timeKey, point.value)
-                }
-                return candleTimeline.map((time) => {
-                    const timeKey = typeof time === "number" ? time : parseChartTimeToUnix(time)
-                    const value = valueByTime.get(timeKey)
-                    if (value === undefined) {
-                        return { time }
-                    }
-                    return { time, value }
-                })
-            }
-
-            const alignHistogramToTimeline = (histogram: Array<{ time: string | number, value: number, color: string }>) => {
-                if (candleTimeline.length === 0) return histogram as Array<{ time: string | number } | { time: string | number, value: number, color: string }>
-                const valueByTime = new Map<number, { value: number, color: string }>()
-                for (const point of histogram) {
-                    const timeKey = typeof point.time === "number" ? point.time : parseChartTimeToUnix(point.time)
-                    valueByTime.set(timeKey, { value: point.value, color: point.color })
-                }
-                return candleTimeline.map((time) => {
-                    const timeKey = typeof time === "number" ? time : parseChartTimeToUnix(time)
-                    const value = valueByTime.get(timeKey)
-                    if (!value) {
-                        return { time }
-                    }
-                    return { time, value: value.value, color: value.color }
-                })
-            }
-
-            if (indicator.id === "rsi") {
-                series = chart.addSeries(LineSeries, { color: chartColors.indicators.rsi, lineWidth: 2, priceScaleId: "right" })
-                let lineData: Array<{ time: string | number, value: number }> = []
-                if (precomputedSeries?.kind === "line") {
-                    lineData = deduplicateByTime(
-                        precomputedSeries.line.map((point) => ({ time: formatTime(point.time), value: point.value }))
-                    )
-                }
-                series.setData(alignLineToTimeline(lineData) as any)
-                setPrimarySeriesPoints(lineData)
-            } else if (indicator.id === "macd") {
-                const macdSeries = chart.addSeries(LineSeries, { color: chartColors.indicators.macd, lineWidth: 2 })
-                const signalSeries = chart.addSeries(LineSeries, { color: chartColors.indicators.macdSignal, lineWidth: 2 })
-                const histSeries = chart.addSeries(HistogramSeries, { color: chartColors.indicators.macdHistogram })
-
-                let macdLine: Array<{ time: string | number, value: number }> = []
-                let signalLine: Array<{ time: string | number, value: number }> = []
-                let histogram: Array<{ time: string | number, value: number, color: string }> = []
-
-                if (precomputedSeries?.kind === "macd") {
-                    macdLine = deduplicateByTime(
-                        precomputedSeries.macd.map((point) => ({ time: formatTime(point.time), value: point.value }))
-                    )
-                    signalLine = deduplicateByTime(
-                        precomputedSeries.signal.map((point) => ({ time: formatTime(point.time), value: point.value }))
-                    )
-                    histogram = deduplicateByTime(
-                        precomputedSeries.histogram.map((point) => ({
-                            time: formatTime(point.time),
-                            value: point.value,
-                            color: point.color,
-                        }))
-                    )
-                }
-
-                macdSeries.setData(alignLineToTimeline(macdLine) as any)
-                signalSeries.setData(alignLineToTimeline(signalLine) as any)
-                histSeries.setData(alignHistogramToTimeline(histogram) as any)
-                series = macdSeries
-                setPrimarySeriesPoints(macdLine)
-            } else if (indicator.id === "wr") {
-                series = chart.addSeries(LineSeries, { color: chartColors.indicators.wr, lineWidth: 2 })
-                let lineData: Array<{ time: string | number, value: number }> = []
-                if (precomputedSeries?.kind === "line") {
-                    lineData = deduplicateByTime(
-                        precomputedSeries.line.map((point) => ({ time: formatTime(point.time), value: point.value }))
-                    )
-                }
-                series.setData(alignLineToTimeline(lineData) as any)
-                setPrimarySeriesPoints(lineData)
-            } else if (indicator.id === "cci") {
-                series = chart.addSeries(LineSeries, { color: chartColors.indicators.cci, lineWidth: 2 })
-                let lineData: Array<{ time: string | number, value: number }> = []
-                if (precomputedSeries?.kind === "line") {
-                    lineData = deduplicateByTime(
-                        precomputedSeries.line.map((point) => ({ time: formatTime(point.time), value: point.value }))
-                    )
-                }
-                series.setData(alignLineToTimeline(lineData) as any)
-                setPrimarySeriesPoints(lineData)
-            }
-
-            chartRef.current = chart
-            primarySeriesRef.current = series
-            onChartReady?.(indicator.id, chart)
-
-            // Sync time scale with main chart (with safety checks)
-            const syncWithMain = () => {
-                if (isDisposedRef.current || !mainChartRef.current || isSyncingRef.current) return
-                try {
-                    const mainTimeScale = mainChartRef.current.timeScale()
-                    const logicalRange = mainTimeScale.getVisibleLogicalRange?.() || null
-                    const visibleRange = mainTimeScale.getVisibleRange?.() || null
-                    if ((visibleRange || logicalRange) && chartRef.current) {
-                        isSyncingRef.current = true
-                        const paneTimeScale = chartRef.current.timeScale()
-                        if (logicalRange && typeof paneTimeScale.setVisibleLogicalRange === "function") {
-                            paneTimeScale.setVisibleLogicalRange(logicalRange)
-                        } else if (visibleRange && typeof paneTimeScale.setVisibleRange === "function") {
-                            paneTimeScale.setVisibleRange(visibleRange)
-                        }
-                        isSyncingRef.current = false
-                    }
-                } catch {
-                    // Chart disposed or not ready
-                }
-            }
-
-            // Subscribe to main chart's visible range changes
-            let mainTimeScale: any = null
-
-            if (mainChartRef.current) {
-                try {
-                    mainTimeScale = mainChartRef.current.timeScale()
-                    mainTimeScale.subscribeVisibleLogicalRangeChange(syncWithMain)
-
-                    // Initial sync
-                    syncWithMain()
-                } catch {
-                    // Main chart not ready
-                }
-            }
-
-            const handleResize = () => {
-                if (containerRef.current && chartRef.current && !isDisposedRef.current) {
-                    try {
-                        chartRef.current.applyOptions({
-                            width: containerRef.current.clientWidth,
-                            height: paneHeightRef.current,
-                        })
-                    } catch {
-                        // Chart disposed
-                    }
-                }
-            }
-            window.addEventListener('resize', handleResize)
-
-            // Cleanup function
-            return () => {
-                isDisposedRef.current = true
-                window.removeEventListener('resize', handleResize)
-
-                // Unsubscribe from events
-                if (mainTimeScale) {
-                    try { mainTimeScale.unsubscribeVisibleLogicalRangeChange(syncWithMain) } catch { /* ignore */ }
-                }
-
-                // Remove chart
-                if (chartRef.current) {
-                    try {
-                        chartRef.current.remove()
-                    } catch {
-                        // Already disposed
-                    }
-                    chartRef.current = null
-                }
-                primarySeriesRef.current = null
-                primarySeriesPointsRef.current = []
-            }
-        })
-    }, [indicator, candleSignature, mainChartRef, onChartReady, candles, precomputedSeries, showTimeScale])
-
-    useEffect(() => {
-        if (!containerRef.current || !chartRef.current || isDisposedRef.current) return
-        try {
-            chartRef.current.applyOptions({
-                width: containerRef.current.clientWidth,
-                height: paneHeight,
-                rightPriceScale: {
-                    scaleMargins: { top: 0.22, bottom: showTimeScale ? 0.2 : 0.16 },
-                },
-                timeScale: {
-                    visible: showTimeScale,
-                },
-            })
-        } catch {
-            // Chart disposed
-        }
-    }, [paneHeight, showTimeScale])
-
-    useEffect(() => {
-        if (!chartRef.current || !primarySeriesRef.current) return
-
-        if (hoverSyncRafRef.current !== null) {
-            window.cancelAnimationFrame(hoverSyncRafRef.current)
-            hoverSyncRafRef.current = null
-        }
-
-        if (hoveredUnixTime === null) {
-            lastHoverSyncUnixRef.current = null
-            lastHoverValueRef.current = null
-            setHoveredValue((prev) => (prev === null ? prev : null))
-            if (typeof chartRef.current.clearCrosshairPosition === "function") {
-                try { chartRef.current.clearCrosshairPosition() } catch { /* ignore */ }
-            }
-            return
-        }
-
-        if (lastHoverSyncUnixRef.current === hoveredUnixTime) {
-            return
-        }
-        lastHoverSyncUnixRef.current = hoveredUnixTime
-
-        hoverSyncRafRef.current = window.requestAnimationFrame(() => {
-            const nearest = findNearestSeriesPointByTime(primarySeriesPointsRef.current, hoveredUnixTime)
-            if (!nearest) return
-
-            if (lastHoverValueRef.current !== nearest.value) {
-                lastHoverValueRef.current = nearest.value
-                setHoveredValue(nearest.value)
-            }
-
-            if (typeof chartRef.current.setCrosshairPosition === "function") {
-                try {
-                    chartRef.current.setCrosshairPosition(nearest.value, hoveredUnixTime as any, primarySeriesRef.current)
-                } catch {
-                    // Ignore crosshair sync errors
-                }
-            }
-        })
-    }, [hoveredUnixTime, indicator.id, candleSignature])
-
-    useEffect(() => {
-        return () => {
-            if (hoverSyncRafRef.current !== null) {
-                window.cancelAnimationFrame(hoverSyncRafRef.current)
-                hoverSyncRafRef.current = null
-            }
-        }
-    }, [])
-
-    return (
-        <div className="relative border-t border-border/30">
-            <div
-                onPointerDown={startResize}
-                className="group relative z-20 h-3 w-full cursor-row-resize touch-none select-none border-y border-border/60 bg-border/50 hover:border-primary/70 hover:bg-primary/25"
-                title="Panel yüksekliğini ayarlamak için sürükleyin"
-            >
-                <div className="pointer-events-none absolute left-1/2 top-1/2 h-1 w-16 -translate-x-1/2 -translate-y-1/2 rounded-full bg-muted-foreground/70 group-hover:bg-primary/90" />
-            </div>
-            <div className="flex items-center justify-between px-4 py-1 bg-muted/10">
-                <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-muted-foreground">{indicator.meta.shortName}</span>
-                    {hoveredValue !== null && (
-                        <span className="text-xs font-semibold text-foreground/90 mono-numbers">
-                            {hoveredValue.toFixed(2)}
-                        </span>
-                    )}
-                </div>
-                <IconButton onClick={onRemove} className="text-muted-foreground hover:text-loss" label={`${indicator.meta.shortName} panelini kaldır`}>
-                    <X className="h-3 w-3" />
-                </IconButton>
-            </div>
-            <div ref={containerRef} className="w-full overflow-hidden" style={{ height: `${paneHeight}px` }} />
         </div>
     )
 }

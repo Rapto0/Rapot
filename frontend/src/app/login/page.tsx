@@ -57,7 +57,7 @@ export default function LoginPage() {
                 </label>
                 {error && <p role="alert" className="text-sm text-loss">{error}</p>}
                 <Button type="submit" disabled={pending}>{pending ? 'Giriş yapılıyor…' : 'Giriş yap'}</Button>
-                <p className="text-xs text-muted-foreground">Sayfayı yenilediğinizde veya oturum süreniz dolduğunda tekrar giriş yapmanız gerekir.</p>
+                <p className="text-xs text-muted-foreground">Oturumunuz güvenli HttpOnly çerez ile korunur; sayfa yenilemelerinde ve yeni sekmelerde oturum süreniz dolana kadar geçerlidir.</p>
             </form>
         </PageShell>
     );

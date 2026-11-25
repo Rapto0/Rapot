@@ -8,10 +8,13 @@ Usage:
 
 import hashlib
 import hmac
+import math
+import secrets
+import time
 from datetime import UTC, datetime, timedelta
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt.exceptions import InvalidTokenError
 from pydantic import BaseModel, Field
@@ -85,6 +88,14 @@ def _resolve_secret_key() -> str:
 SECRET_KEY = _resolve_secret_key()
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(runtime_settings.jwt_expire_minutes)
+
+SESSION_COOKIE_NAME = "rapot_session"
+CSRF_COOKIE_NAME = "rapot_csrf"
+CSRF_HEADER_NAME = "x-csrf-token"
+WS_TICKET_PURPOSE = "ws_ticket"
+WS_TICKET_TTL_SECONDS = 30
+WS_MAX_SESSION_SECONDS = 3600
+MUTATING_HTTP_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 
 DEFAULT_ADMIN_PASSWORD = str(runtime_settings.admin_password or "")
 DEFAULT_USER_PASSWORD = str(runtime_settings.user_password or "")
@@ -266,8 +277,48 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
-def verify_token(token: str) -> TokenData | None:
-    """Validate JWT token and return token data."""
+def is_secure_cookie_request(request: Request) -> bool:
+    """Return True when session cookies should include the Secure attribute."""
+    forwarded = request.headers.get("x-forwarded-proto", "").split(",")[0].strip().lower()
+    if forwarded == "https" or request.url.scheme == "https":
+        return True
+    host = (request.url.hostname or "").strip().lower()
+    if host in {"localhost", "127.0.0.1", "::1", "testserver"}:
+        return False
+    return _resolve_runtime_env() == "production"
+
+
+def generate_csrf_token() -> str:
+    """Create a cryptographically random CSRF double-submit token."""
+    return secrets.token_urlsafe(32)
+
+
+def verify_csrf_double_submit(csrf_cookie: str | None, csrf_header: str | None) -> bool:
+    """Validate double-submit CSRF cookie and header in constant time."""
+    if not csrf_cookie or not csrf_header:
+        return False
+    return hmac.compare_digest(csrf_cookie.strip(), csrf_header.strip())
+
+
+def create_ws_ticket(username: str, session_exp: float) -> tuple[str, int]:
+    """Create a short-lived, single-purpose WebSocket handshake ticket."""
+    now = time.time()
+    effective_session_exp = min(float(session_exp), now + WS_MAX_SESSION_SECONDS)
+    if effective_session_exp <= now:
+        raise ValueError("Session already expired")
+    ticket_exp = min(effective_session_exp, now + WS_TICKET_TTL_SECONDS)
+    ttl = max(1, int(ticket_exp - now))
+    payload = {
+        "sub": username,
+        "purpose": WS_TICKET_PURPOSE,
+        "exp": ticket_exp,
+        "session_exp": effective_session_exp,
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM), ttl
+
+
+def decode_session_token(token: str) -> tuple[str, float] | None:
+    """Validate a standard session/Bearer JWT and return (username, expiry)."""
     try:
         payload = jwt.decode(
             token, SECRET_KEY, algorithms=[ALGORITHM], options={"require": ["exp"]}
@@ -275,33 +326,75 @@ def verify_token(token: str) -> TokenData | None:
     except (InvalidTokenError, TypeError, OverflowError):
         # Invalid numeric claims can fail int() outside PyJWT's token-error hierarchy.
         return None
-    username: str | None = payload.get("sub")
-    if username is None:
+    if payload.get("purpose") is not None:
         return None
-    return TokenData(username=username)
+    username = payload.get("sub")
+    expiry = payload.get("exp")
+    if not isinstance(username, str) or not username or isinstance(expiry, bool):
+        return None
+    if isinstance(expiry, str):
+        try:
+            expiry_num = float(expiry)
+        except ValueError:
+            return None
+    elif isinstance(expiry, (int, float)):
+        expiry_num = float(expiry)
+    else:
+        return None
+    if not math.isfinite(expiry_num) or expiry_num <= time.time():
+        return None
+    return username, expiry_num
+
+
+def verify_token(token: str) -> TokenData | None:
+    """Validate JWT token and return token data."""
+    decoded = decode_session_token(token)
+    if decoded is None:
+        return None
+    return TokenData(username=decoded[0])
 
 
 # ==================== DEPENDENCIES ====================
 
 
 async def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
 ) -> User:
-    """Return currently authenticated user."""
+    """Return currently authenticated user from Bearer header or HttpOnly session cookie."""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Geçersiz kimlik bilgileri",
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-    if credentials is None:
+    via_cookie = False
+    if credentials is not None:
+        token = credentials.credentials
+    else:
+        token = request.cookies.get(SESSION_COOKIE_NAME) or ""
+        via_cookie = bool(token)
+
+    if not token:
         raise credentials_exception
 
-    token = credentials.credentials
     token_data = verify_token(token)
 
     if token_data is None:
         raise credentials_exception
+
+    if (
+        via_cookie
+        and request.method.upper() in MUTATING_HTTP_METHODS
+        and not verify_csrf_double_submit(
+            request.cookies.get(CSRF_COOKIE_NAME),
+            request.headers.get(CSRF_HEADER_NAME),
+        )
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="CSRF doğrulaması başarısız.",
+        )
 
     user = get_user(token_data.username)
     if user is None:
@@ -333,16 +426,33 @@ async def get_current_admin_user(
 
 
 def get_optional_user(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Depends(security),
 ) -> User | None:
-    """Return user when token is valid; otherwise None."""
-    if credentials is None:
+    """Return user when Bearer token or session cookie is valid; otherwise None."""
+    via_cookie = False
+    if credentials is not None:
+        token = credentials.credentials
+    else:
+        token = request.cookies.get(SESSION_COOKIE_NAME) or ""
+        via_cookie = bool(token)
+
+    if not token:
         return None
 
-    token = credentials.credentials
     token_data = verify_token(token)
 
     if token_data is None:
+        return None
+
+    if (
+        via_cookie
+        and request.method.upper() in MUTATING_HTTP_METHODS
+        and not verify_csrf_double_submit(
+            request.cookies.get(CSRF_COOKIE_NAME),
+            request.headers.get(CSRF_HEADER_NAME),
+        )
+    ):
         return None
 
     user = get_user(token_data.username)

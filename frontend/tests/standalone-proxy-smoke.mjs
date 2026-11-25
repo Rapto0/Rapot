@@ -34,7 +34,19 @@ function listen(server, port, hostname) {
 function mockService(name) {
   const server = http.createServer((req, res) => {
     res.setHeader('Content-Type', 'application/json');
-    res.end(JSON.stringify({ service: name, path: req.url, authorization: req.headers.authorization }));
+    if (req.url === '/auth/session' && req.method === 'POST') {
+      res.setHeader('Set-Cookie', [
+        'rapot_session=smoke-jwt; Path=/; HttpOnly; SameSite=Lax',
+        'rapot_csrf=smoke-csrf; Path=/; SameSite=Lax',
+      ]);
+    }
+    res.end(JSON.stringify({
+      service: name,
+      path: req.url,
+      authorization: req.headers.authorization,
+      cookie: req.headers.cookie,
+      csrf: req.headers['x-csrf-token'],
+    }));
   });
   server.on('connection', socket => { sockets.add(socket); socket.on('close', () => sockets.delete(socket)); });
   servers.push(server);
@@ -86,6 +98,21 @@ try {
   assert.ok((await staticAsset.arrayBuffer()).byteLength > 0);
   const proxied = await localFetch(origin + '/api/auth/me?smoke=1', { headers: { Authorization: 'Bearer local-smoke' } });
   assert.deepEqual(await proxied.json(), { service: 'api', path: '/auth/me?smoke=1', authorization: 'Bearer local-smoke' });
+  const sessionCreate = await localFetch(origin + '/api/auth/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  assert.equal(sessionCreate.status, 200);
+  const setCookies = sessionCreate.headers.getSetCookie?.() ?? [sessionCreate.headers.get('set-cookie') ?? ''];
+  assert.ok(setCookies.some((c) => c.includes('rapot_session=smoke-jwt') && c.includes('HttpOnly')), 'Proxy must forward HttpOnly Set-Cookie');
+  assert.ok(setCookies.some((c) => c.includes('rapot_csrf=smoke-csrf')), 'Proxy must forward CSRF Set-Cookie');
+  const cookieForwarded = await localFetch(origin + '/api/auth/ws-ticket', {
+    method: 'POST',
+    headers: { Cookie: 'rapot_session=smoke-jwt; rapot_csrf=smoke-csrf', 'X-CSRF-Token': 'smoke-csrf' },
+  });
+  assert.deepEqual(await cookieForwarded.json(), {
+    service: 'api',
+    path: '/auth/ws-ticket',
+    cookie: 'rapot_session=smoke-jwt; rapot_csrf=smoke-csrf',
+    csrf: 'smoke-csrf',
+  });
   const health = await localFetch(origin + '/api/health');
   assert.deepEqual(await health.json(), { service: 'api', path: '/health' });
   for (const [route, destination] of [['/signals', '/alarms'], ['/tradingview', '/ai']]) {

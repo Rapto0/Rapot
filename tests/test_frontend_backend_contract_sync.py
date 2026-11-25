@@ -6,6 +6,10 @@ def test_frontend_http_contracts_exist_in_openapi():
 
     expected_contracts = {
         ("post", "/auth/token"),
+        ("post", "/auth/session"),
+        ("get", "/auth/session"),
+        ("post", "/auth/logout"),
+        ("post", "/auth/ws-ticket"),
         ("get", "/auth/me"),
         ("get", "/trades"),
         ("get", "/stats"),

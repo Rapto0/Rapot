@@ -66,6 +66,9 @@ function harness(realQueryClient, { token, guest = false } = {}) {
         getSession: () => guest ? null : { user: { username: 'admin', is_admin: true, disabled: false }, expiresAt: 123 },
         getAccessToken: () => guest ? null : 'session-token',
       };
+      if (specifier === '../api/auth-api') return {
+        fetchWsTicket: async () => guest ? null : 'ws-ticket-token',
+      };
       if (specifier === '@tanstack/react-query') return { useQueryClient: () => realQueryClient ?? queryClient };
       if (specifier === 'react') return {
         useRef: (value) => ({ current: value }), useCallback: (callback) => callback,
@@ -224,4 +227,40 @@ test('kline and trade subscriptions use dedicated endpoints, share duplicates, a
   assert.ok(!h.sockets.some((socket) => socket.url.endsWith('/ticker')));
   h.connection.dispose();
   assert.equal(h.timers.size, 0);
+});
+
+test('async ws-ticket provider authenticates cookie sessions and ignores stale resolves after disconnect', async () => {
+  const h = harness();
+  const connectionModule = h.load('connection.ts');
+  let resolveTicket;
+  const conn = connectionModule.createRealtimeConnection({
+    baseUrl: () => 'wss://rapot.test/api/realtime/ws',
+    getStore: h.store.getState,
+    getToken: () => new Promise((resolve) => { resolveTicket = resolve; }),
+  });
+  conn.connect();
+  assert.equal(h.sockets.length, 0);
+  resolveTicket('ephemeral-ws-ticket');
+  await Promise.resolve();
+  const socket = h.latest('/ticker');
+  assert.ok(socket);
+  socket.open(false);
+  assert.deepEqual(socket.sent, [{ type: 'auth', token: 'ephemeral-ws-ticket' }]);
+  socket.message({ type: 'authenticated' });
+  assert.equal(h.store.getState().connectionState, 'connected');
+  conn.dispose();
+
+  // Disconnect before an async ticket resolves must never construct a zombie socket.
+  const stale = connectionModule.createRealtimeConnection({
+    baseUrl: () => 'wss://rapot.test/api/realtime/ws',
+    getStore: h.store.getState,
+    getToken: () => new Promise((resolve) => { resolveTicket = resolve; }),
+  });
+  const before = h.sockets.length;
+  stale.connect();
+  stale.disconnect();
+  resolveTicket('late-ws-ticket');
+  await Promise.resolve();
+  assert.equal(h.sockets.length, before);
+  stale.dispose();
 });

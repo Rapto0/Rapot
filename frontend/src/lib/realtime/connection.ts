@@ -2,12 +2,14 @@ import { dispatchTickerSocketMessage } from './message-parser';
 import type { useRealtimeStore } from './store';
 import type { BISTStock, ConnectionState, KlineData, TickerData, TradeData } from './types';
 
+type TokenProvider = () => string | null | Promise<string | null>;
+
 interface SocketOptions {
   url: () => string;
   onMessage: (data: string) => void;
   onOpen?: () => void;
   onState?: (state: ConnectionState) => void;
-  getToken?: () => string | null;
+  getToken?: TokenProvider;
   onAuthFailure?: () => void;
 }
 
@@ -16,11 +18,13 @@ export function createReconnectingSocket(options: SocketOptions) {
   let socket: WebSocket | null = null;
   let retry: ReturnType<typeof setTimeout> | null = null;
   let attempts = 0;
+  let attemptId = 0;
   let enabled = false;
   let disposed = false;
   let authTimeout: ReturnType<typeof setTimeout> | null = null;
 
   function retire() {
+    attemptId += 1;
     if (authTimeout !== null) clearTimeout(authTimeout);
     authTimeout = null;
     const previous = socket;
@@ -40,9 +44,8 @@ export function createReconnectingSocket(options: SocketOptions) {
     }, delay);
   }
 
-  function open() {
-    if (!enabled || disposed || socket || retry !== null) return;
-    const token = options.getToken?.();
+  function openWithToken(token: string | null | undefined, expectedAttempt: number) {
+    if (!enabled || disposed || socket || retry !== null || expectedAttempt !== attemptId) return;
     if (options.getToken && !token) { enabled = false; options.onState?.('disconnected'); return; }
     options.onState?.(attempts ? 'reconnecting' : 'connecting');
     try {
@@ -99,6 +102,21 @@ export function createReconnectingSocket(options: SocketOptions) {
     }
   }
 
+  function open() {
+    if (!enabled || disposed || socket || retry !== null) return;
+    const expectedAttempt = ++attemptId;
+    const tokenOrPromise = options.getToken?.();
+    if (tokenOrPromise && typeof (tokenOrPromise as Promise<string | null>).then === 'function') {
+      options.onState?.(attempts ? 'reconnecting' : 'connecting');
+      void (tokenOrPromise as Promise<string | null>).then(
+        (resolved) => openWithToken(resolved, expectedAttempt),
+        () => openWithToken(null, expectedAttempt),
+      );
+      return;
+    }
+    openWithToken(tokenOrPromise as string | null | undefined, expectedAttempt);
+  }
+
   function disconnect() {
     const wasActive = enabled || socket !== null || retry !== null;
     enabled = false;
@@ -126,7 +144,7 @@ export function createReconnectingSocket(options: SocketOptions) {
 interface RealtimeConnectionOptions {
   baseUrl: () => string;
   getStore: typeof useRealtimeStore.getState;
-  getToken?: () => string | null;
+  getToken?: TokenProvider;
 }
 
 export function createRealtimeConnection(options: RealtimeConnectionOptions) {

@@ -22,7 +22,17 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 from api import auth
 
 PUBLIC_PATHS = frozenset(
-    {"/", "/health", "/auth/token", "/auth/me", "/docs", "/redoc", "/openapi.json"}
+    {
+        "/",
+        "/health",
+        "/auth/token",
+        "/auth/me",
+        "/auth/session",
+        "/auth/logout",
+        "/docs",
+        "/redoc",
+        "/openapi.json",
+    }
 )
 PRIVATE_CACHE = "private, no-store"
 MAX_TOKEN_BYTES = 8192
@@ -35,19 +45,39 @@ class AccessGrant:
 
     token: str
     expires_at: float
+    username: str = ""
+    is_ws_ticket: bool = False
 
     def check(self) -> None:
+        if self.is_ws_ticket:
+            if time.time() >= self.expires_at:
+                raise HTTPException(
+                    401,
+                    "Yönetici oturumu geçersiz veya süresi dolmuş.",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            user = auth.get_user(self.username)
+            if user is None:
+                raise HTTPException(
+                    401, "Yönetici oturumu geçersiz.", headers={"WWW-Authenticate": "Bearer"}
+                )
+            if user.get("disabled") or not user.get("is_admin"):
+                raise HTTPException(
+                    403, "Bu kişisel verilere erişmek için yönetici yetkisi gerekli."
+                )
+            return
         admin_grant(self.token)
 
     def remaining(self) -> float:
         return max(0.0, self.expires_at - time.time())
 
 
-def admin_grant(token: str | None) -> AccessGrant:
+def admin_grant(token: str | None, *, allow_ws_ticket: bool = False) -> AccessGrant:
     if not isinstance(token, str) or not token or len(token) > MAX_TOKEN_BYTES:
         raise HTTPException(
             401, "Yönetici oturumu gerekli.", headers={"WWW-Authenticate": "Bearer"}
         )
+    now = time.time()
     try:
         payload = jwt.decode(
             token, auth.SECRET_KEY, algorithms=[auth.ALGORITHM], options={"require": ["exp"]}
@@ -60,9 +90,28 @@ def admin_grant(token: str | None) -> AccessGrant:
             or isinstance(expiry, bool)
             or not isinstance(expiry, (int, float))
             or not math.isfinite(expiry)
-            or expiry <= time.time()
+            or expiry <= now
         ):
             raise ValueError
+        purpose = payload.get("purpose")
+        if purpose == auth.WS_TICKET_PURPOSE:
+            if not allow_ws_ticket:
+                raise ValueError
+            session_exp = payload.get("session_exp")
+            if (
+                isinstance(session_exp, bool)
+                or not isinstance(session_exp, (int, float))
+                or not math.isfinite(session_exp)
+                or session_exp <= now
+            ):
+                raise ValueError
+            grant_expiry = float(session_exp)
+            is_ws_ticket = True
+        elif purpose is not None:
+            raise ValueError
+        else:
+            grant_expiry = float(expiry)
+            is_ws_ticket = False
     except (jwt.InvalidTokenError, ValueError, TypeError, OverflowError):
         raise HTTPException(
             401,
@@ -76,7 +125,25 @@ def admin_grant(token: str | None) -> AccessGrant:
         )
     if user.get("disabled") or not user.get("is_admin"):
         raise HTTPException(403, "Bu kişisel verilere erişmek için yönetici yetkisi gerekli.")
-    return AccessGrant(token=token, expires_at=float(expiry))
+    return AccessGrant(
+        token=token,
+        expires_at=grant_expiry,
+        username=username,
+        is_ws_ticket=is_ws_ticket,
+    )
+
+
+def _parse_cookies(headers: Headers) -> dict[str, str]:
+    cookies: dict[str, str] = {}
+    for raw_header in headers.getlist("cookie"):
+        for chunk in raw_header.split(";"):
+            name, sep, value = chunk.partition("=")
+            if not sep:
+                continue
+            key = name.strip()
+            if key:
+                cookies[key] = value.strip().strip('"')
+    return cookies
 
 
 def bearer_grant(headers: Headers) -> AccessGrant:
@@ -87,8 +154,21 @@ def bearer_grant(headers: Headers) -> AccessGrant:
     return admin_grant(token if separator and scheme.lower() == "bearer" else None)
 
 
+def request_grant(headers: Headers, method: str = "GET") -> AccessGrant:
+    if headers.getlist("authorization"):
+        return bearer_grant(headers)
+    cookies = _parse_cookies(headers)
+    grant = admin_grant(cookies.get(auth.SESSION_COOKIE_NAME))
+    if method.upper() in auth.MUTATING_HTTP_METHODS and not auth.verify_csrf_double_submit(
+        cookies.get(auth.CSRF_COOKIE_NAME),
+        headers.get(auth.CSRF_HEADER_NAME),
+    ):
+        raise HTTPException(403, "CSRF doğrulaması başarısız.")
+    return grant
+
+
 def require_admin_request(request: Request) -> AccessGrant:
-    return bearer_grant(request.headers)
+    return request_grant(request.headers, request.method)
 
 
 class PrivateDataAccessMiddleware:
@@ -110,7 +190,7 @@ class PrivateDataAccessMiddleware:
         )
         if not public and not preflight:
             try:
-                grant = bearer_grant(headers)
+                grant = request_grant(headers, str(scope.get("method") or "GET"))
                 scope.setdefault("state", {})["private_data_grant"] = grant
             except HTTPException as error:
                 response = JSONResponse(
@@ -133,6 +213,7 @@ class PrivateDataAccessMiddleware:
                 output_headers = MutableHeaders(scope=message)
                 output_headers["Cache-Control"] = PRIVATE_CACHE
                 output_headers.add_vary_header("Authorization")
+                output_headers.add_vary_header("Cookie")
             await send(message)
 
         try:
@@ -164,7 +245,7 @@ async def authenticate_websocket(websocket: WebSocket) -> AccessGrant | None:
             or value["type"] != "auth"
         ):
             raise ValueError
-        grant = admin_grant(value["token"])
+        grant = admin_grant(value["token"], allow_ws_ticket=True)
     except HTTPException as error:
         await websocket.close(code=4403 if error.status_code == 403 else 4401)
         return None

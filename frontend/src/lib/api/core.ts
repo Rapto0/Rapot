@@ -1,4 +1,9 @@
-import { clearSession, getAccessToken } from '../auth/session';
+import {
+    clearSession,
+    getAccessToken,
+    getSessionGeneration,
+    hasActiveSession,
+} from '../auth/session';
 
 function normalizeBaseUrl(rawValue: string | undefined, fallback: string): string {
     const value = rawValue?.trim();
@@ -8,6 +13,9 @@ function normalizeBaseUrl(rawValue: string | undefined, fallback: string): strin
 
 export const API_BASE_URL = normalizeBaseUrl(process.env.NEXT_PUBLIC_API_URL, '/api');
 
+const CSRF_COOKIE_NAME = 'rapot_csrf';
+const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
 function isCoreApiUrl(url: string): boolean {
     if (typeof window === 'undefined') return false;
     const base = new URL(API_BASE_URL, window.location.origin);
@@ -16,6 +24,26 @@ function isCoreApiUrl(url: string): boolean {
     return target.origin === base.origin && (
         target.pathname === prefix || target.pathname.startsWith(`${prefix}/`)
     );
+}
+
+function readBrowserCookie(name: string): string | null {
+    if (typeof document === 'undefined' || typeof document.cookie !== 'string') return null;
+    for (const part of document.cookie.split(';')) {
+        const trimmed = part.trim();
+        if (!trimmed) continue;
+        const eq = trimmed.indexOf('=');
+        if (eq <= 0) continue;
+        const key = trimmed.slice(0, eq).trim();
+        if (key === name) {
+            const raw = trimmed.slice(eq + 1).trim();
+            try {
+                return decodeURIComponent(raw);
+            } catch {
+                return raw;
+            }
+        }
+    }
+    return null;
 }
 
 export class ApiError extends Error {
@@ -58,11 +86,24 @@ export async function fetchApi<T>(
     const headers = new Headers(options.headers);
     if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
     const coreApi = isCoreApiUrl(url);
+    const activeSession = coreApi ? hasActiveSession() : false;
     const token = coreApi ? getAccessToken() : null;
-    if (coreApi && /\/(?:borsapy(?:\/|\?|$)|calendar(?:\?|$))/.test(new URL(url, window.location.origin).pathname) && !token) {
+    const generation = coreApi ? getSessionGeneration() : null;
+    if (
+        coreApi
+        && /\/(?:borsapy(?:\/|\?|$)|calendar(?:\?|$))/.test(new URL(url, window.location.origin).pathname)
+        && !activeSession
+        && !headers.has('Authorization')
+    ) {
         throw new ApiError('Bu işlem için giriş yapın.', 401);
     }
     if (token && !headers.has('Authorization')) headers.set('Authorization', `Bearer ${token}`);
+
+    const method = (options.method ?? 'GET').toUpperCase();
+    if (coreApi && !headers.has('Authorization') && MUTATING_METHODS.has(method) && !headers.has('X-CSRF-Token')) {
+        const csrfToken = readBrowserCookie(CSRF_COOKIE_NAME);
+        if (csrfToken) headers.set('X-CSRF-Token', csrfToken);
+    }
 
     let controller: AbortController | null = null;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -83,6 +124,7 @@ export async function fetchApi<T>(
             ...options,
             headers,
             signal,
+            credentials: options.credentials ?? (coreApi ? 'same-origin' : undefined),
             cache: options.cache ?? 'no-store',
         });
     } catch (error) {
@@ -95,8 +137,12 @@ export async function fetchApi<T>(
     }
 
     if (!response.ok) {
-        if (response.status === 401 && token && headers.get('Authorization') === `Bearer ${token}`) {
-            clearSession(token);
+        if (response.status === 401) {
+            if (token && headers.get('Authorization') === `Bearer ${token}`) {
+                clearSession(token);
+            } else if (coreApi && activeSession && generation !== null && !headers.has('Authorization')) {
+                clearSession(generation);
+            }
         }
         let message = response.status === 401 ? 'Bu işlem için giriş yapın.'
             : response.status === 403 ? 'Bu işlem için yetkiniz bulunmuyor.'

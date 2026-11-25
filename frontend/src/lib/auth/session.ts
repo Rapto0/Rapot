@@ -5,18 +5,23 @@ export interface AuthUser {
 }
 
 export interface AuthSession {
-    accessToken: string;
+    accessToken?: string;
     expiresAt: number;
     user: AuthUser;
 }
 
-// Credentials live only in this tab's memory, never in browser storage.
+// Session metadata lives only in memory; the actual browser session credential is an HttpOnly cookie.
 let session: AuthSession | null = null;
+let sessionGeneration = 0;
 let expiryTimer: ReturnType<typeof setTimeout> | undefined;
 const listeners = new Set<() => void>();
 
 export function getSession(): AuthSession | null {
     return session;
+}
+
+export function getSessionGeneration(): number {
+    return sessionGeneration;
 }
 
 export function subscribeSession(listener: () => void): () => void {
@@ -27,6 +32,7 @@ export function subscribeSession(listener: () => void): () => void {
 export function setSession(next: AuthSession | null): void {
     if (expiryTimer !== undefined) clearTimeout(expiryTimer);
     expiryTimer = undefined;
+    sessionGeneration += 1;
     session = next && next.expiresAt > Date.now() ? next : null;
     if (session) {
         expiryTimer = setTimeout(() => setSession(null), session.expiresAt - Date.now());
@@ -34,10 +40,19 @@ export function setSession(next: AuthSession | null): void {
     listeners.forEach((listener) => listener());
 }
 
-export function clearSession(expectedToken?: string): void {
+export function clearSession(expected?: string | number): void {
     // An old request's 401 must not sign out a newer login.
-    if (expectedToken !== undefined && session?.accessToken !== expectedToken) return;
+    if (typeof expected === 'string' && session?.accessToken !== expected) return;
+    if (typeof expected === 'number' && sessionGeneration !== expected) return;
     setSession(null);
+}
+
+export function hasActiveSession(): boolean {
+    if (session && session.expiresAt <= Date.now()) {
+        clearSession();
+        return false;
+    }
+    return session !== null;
 }
 
 export function getAccessToken(): string | null {
