@@ -107,13 +107,15 @@ test('health hooks are session scoped and disabled for anonymous or non-admin us
 function renderHealth(health, alarms, session = admin, onQuery = () => {}) {
   const page = load('../src/app/health/page.tsx', {
     react: React, 'react/jsx-runtime': jsxRuntime, 'next/link': { default: 'a' },
-    '@tanstack/react-query': { useQuery: options => { onQuery(options); return { data: [], isLoading: false, isError: false }; } },
-    '@/lib/api/client': {}, '@/lib/hooks/use-health': { useApiHealth: () => health, useAlarmRuntimeHealth: () => alarms },
+    '@tanstack/react-query': { useQuery: options => { onQuery(options); return { data: options.queryKey[0] === 'logs' ? [] : undefined, isLoading: false, isError: false }; } },
+    '@/lib/api/client': {}, '@/lib/api/borsapy-api': { fetchResearchConnection: () => {} },
+    '@/lib/hooks/use-health': { useApiHealth: () => health, useAlarmRuntimeHealth: () => alarms },
     '@/lib/hooks/use-session': { useSession: () => session },
     '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') },
     '@/components/ui/page-shell': { PageShell: ({ children, actions, title }) => React.createElement('main', null, title, actions, children) },
     '@/components/ui/kpi-ribbon': { KpiRibbon: ({ items }) => React.createElement('section', null, ...items.map(item => React.createElement('span', { key: item.label }, item.label + ':' + item.value))) },
     '@/components/ui/button': { Button: 'button' },
+    '@/components/ui/input': { Input: 'input' },
   });
   return renderToStaticMarkup(React.createElement(page.default));
 }
@@ -132,7 +134,7 @@ test('health page keeps API connected while the alarm worker is stopped and pres
 test('anonymous health page hides cached private content and disables its private log query', () => {
   const queries = [];
   const html = renderHealth(deriveApiHealth(query), deriveAlarmRuntime({ ...query, data: runtime }, now), null, value => queries.push(value));
-  assert.equal(queries.length, 1);
+  assert.equal(queries.length, 2);
   assert.ok(queries.every(value => value.enabled === false));
   assert.ok(html.includes('/login?next=%2Fhealth'));
   assert.ok(!html.includes('Telegram bağlantısı'));

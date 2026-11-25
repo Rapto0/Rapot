@@ -8,8 +8,12 @@ import { fetchBistSymbols, fetchCryptoSymbols, fetchRsiSnapshot } from "@/lib/ap
 import { usePrivateMarket } from "@/lib/hooks/use-private-market"
 import { useMarketSnapshot } from "@/lib/hooks/use-market-snapshot"
 import { useBinanceTickerFeed } from "@/lib/hooks/use-binance-ticker"
-import { ALL_RSI_COLUMNS, RSI_CELL_STATUS, RSI_TIMEFRAMES, TRACKER_PAGE_SIZE, TRACKER_REFRESH_MS, RSI_COLUMNS_STORAGE_KEY, storedRsiColumns, trackerResultRows, rsiSourceTime, toggleRsiColumn,
-    trackerChartHref, trackerNumber, trackerPage, type RsiTimeframe, type TrackerMarket, type RsiFilter, type RsiSort } from "@/lib/rsi-tracker"
+import {
+    ALL_RSI_COLUMNS, RSI_CELL_STATUS, RSI_PRESETS, RSI_TIMEFRAMES, TRACKER_PAGE_SIZE, TRACKER_REFRESH_MS, RSI_COLUMNS_STORAGE_KEY,
+    buildTrackerCsv, parseTrackerUrlState, serializeTrackerUrlState, storedRsiColumns, summarizeRsiCells,
+    trackerAlarmHref, trackerChartHref, trackerNumber, trackerPage, trackerResultRows, rsiSourceTime, toggleRsiColumn,
+    type RsiPreset, type RsiTimeframe, type TrackerMarket, type RsiFilter, type RsiSort,
+} from "@/lib/rsi-tracker"
 import { cn } from "@/lib/utils"
 
 const control = "inline-flex min-h-11 items-center justify-center rounded border border-border px-3 text-xs transition-colors hover:bg-raised disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
@@ -70,9 +74,45 @@ export function RsiTracker() {
     })
 
     useEffect(() => {
-        try { setColumns(storedRsiColumns(window.localStorage.getItem(RSI_COLUMNS_STORAGE_KEY))) } catch { /* Storage may be disabled. */ }
+        let initialColumns = [...ALL_RSI_COLUMNS]
+        try { initialColumns = storedRsiColumns(window.localStorage.getItem(RSI_COLUMNS_STORAGE_KEY)) } catch { /* Storage may be disabled. */ }
+        let urlState: Partial<ReturnType<typeof parseTrackerUrlState>> = {}
+        try {
+            if (typeof window.location?.search === "string" && window.location.search) {
+                urlState = parseTrackerUrlState(window.location.search)
+            }
+        } catch { /* Ignore unavailable location search in non-browser harnesses. */ }
+        if (urlState.market) setMarket(urlState.market)
+        if (urlState.search !== undefined) setSearch(urlState.search)
+        if (urlState.descending) setDescending(true)
+        if (urlState.page !== undefined) setPage(urlState.page)
+        if (urlState.listId !== undefined) setListId(urlState.listId)
+        if (urlState.filters?.length) {
+            const needed = new Set<RsiTimeframe>(initialColumns)
+            for (const filter of urlState.filters) needed.add(filter.period)
+            initialColumns = RSI_TIMEFRAMES.filter(item => needed.has(item.id)).map(item => item.id)
+            setFilters(urlState.filters)
+        }
+        if (urlState.sort) {
+            const needed = new Set<RsiTimeframe>(initialColumns)
+            needed.add(urlState.sort.period)
+            initialColumns = RSI_TIMEFRAMES.filter(item => needed.has(item.id)).map(item => item.id)
+            setSort(urlState.sort)
+        }
+        setColumns(initialColumns)
         setPreferencesLoaded(true)
     }, [])
+    useEffect(() => {
+        if (!preferencesLoaded) return
+        try {
+            if (typeof window.history?.replaceState === "function" && typeof window.location?.pathname === "string") {
+                const query = serializeTrackerUrlState({ market, search, descending, page, listId, filters, sort })
+                const nextUrl = query ? `${window.location.pathname}?${query}` : window.location.pathname
+                const currentUrl = `${window.location.pathname}${window.location.search ?? ""}`
+                if (nextUrl !== currentUrl) window.history.replaceState(null, "", nextUrl)
+            }
+        } catch { /* History synchronization is best-effort. */ }
+    }, [preferencesLoaded, market, search, descending, page, listId, filters, sort])
     useEffect(() => {
         const updatedAt = rsi.dataUpdatedAt
         if (!updatedAt) return
@@ -89,6 +129,7 @@ export function RsiTracker() {
     const rsiStale = rsi.isError || rsi.isPaused || (expiredRsiAt > 0 && expiredRsiAt === rsi.dataUpdatedAt)
     const resultRows = useMemo(() => trackerResultRows(tracked, rsi.data, filters, sort, !rsiStale, rsi.data?.observed_at ?? 0),
         [tracked, rsi.data, filters, sort, rsiStale])
+    const readiness = useMemo(() => summarizeRsiCells(tracked, rsi.data, columns), [tracked, rsi.data, columns])
     const filtering = filters.some(filter => filter.min.trim() || filter.max.trim())
     const skippedMembers = selectedList?.symbols.filter(item => item.market_type === market && !universe.includes(item.symbol)).length ?? 0
     const fetching = symbols.isFetching || watchlists.isFetching || rsi.isFetching || (market === "BIST" && quotes.isFetching)
@@ -108,6 +149,35 @@ export function RsiTracker() {
     }
     const updateFilter = (index: number, change: Partial<RsiFilter>) => {
         setFilters(previous => previous.map((filter, position) => position === index ? { ...filter, ...change } : filter))
+    }
+    const applyPreset = (preset: RsiPreset) => {
+        const needed = new Set<RsiTimeframe>(columns)
+        for (const filter of preset.filters) needed.add(filter.period)
+        needed.add(preset.sort.period)
+        const nextColumns = RSI_TIMEFRAMES.filter(item => needed.has(item.id)).map(item => item.id)
+        if (nextColumns.length !== columns.length) setColumns(nextColumns)
+        setFilters(preset.filters.map(item => ({ ...item })))
+        setSort({ ...preset.sort })
+    }
+    const exportCsv = () => {
+        const pricesBySymbol: Record<string, { price?: number | null; change?: number | null }> = {}
+        for (const symbol of resultRows) {
+            if (market === "BIST") {
+                const quote = quotes.data?.[`${symbol}.IS`]
+                pricesBySymbol[symbol] = { price: quote?.value, change: quote?.change }
+            } else {
+                const tick = crypto.prices[symbol]
+                pricesBySymbol[symbol] = { price: tick?.price, change: tick?.change }
+            }
+        }
+        const csv = buildTrackerCsv(resultRows, market, pricesBySymbol, rsi.data, columns)
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+        const url = URL.createObjectURL(blob)
+        const anchor = document.createElement("a")
+        anchor.href = url
+        anchor.download = `rapot-rsi-${market.toLowerCase()}-s${visible.page + 1}.csv`
+        anchor.click()
+        URL.revokeObjectURL(url)
     }
     const sourceLabel = market === "BIST" ? "Borsa İstanbul · TRY" : "Binance Spot · USDT"
     const refresh = () => {
@@ -136,6 +206,7 @@ export function RsiTracker() {
             <label className="min-w-0 space-y-1 text-xs"><span className="block text-muted-foreground">İzleme listesi</span><select aria-label="İzleme listesi" value={listId} onChange={event => { setListId(event.target.value); setPage(0) }} className="min-h-11 w-full max-w-56 rounded border border-border bg-background px-3 text-base sm:text-xs"><option value="">Tüm semboller</option>{watchlists.data?.watchlists.map(list => <option key={list.id} value={list.id}>{list.name}</option>)}</select></label>
             <button type="button" className={control} aria-label={`Sembol sıralaması: ${descending ? "Z–A" : "A–Z"}`} onClick={() => { setDescending(value => !value); setPage(0) }}>Sembol {descending ? "↓ Z–A" : "↑ A–Z"}</button>
             <button type="button" className={cn(control, showColumns && "bg-raised")} aria-expanded={showColumns} aria-controls="rsi-column-picker" onClick={() => setShowColumns(value => !value)}>RSI sütunları <span className="ml-2 rounded bg-raised px-1.5 py-0.5 font-mono">{columns.length}/16</span></button>
+            <button type="button" className={control} disabled={!resultRows.length} onClick={exportCsv}>CSV indir</button>
             <button type="button" className={cn(control, "bg-foreground/5 font-semibold")} disabled={fetching} onClick={refresh}>{fetching ? "Yenileniyor…" : "Yenile"}</button>
         </div>
 
@@ -154,10 +225,15 @@ export function RsiTracker() {
         </div>}
 
         <div className="space-y-3 border-b border-border px-4 py-3 text-xs" aria-label="Sayfadaki RSI koşulları">
-            <div className="flex flex-wrap items-center gap-2"><button type="button" className={control} disabled={filters.length >= columns.length} onClick={() => {
-                const period = columns.find(item => !filters.some(filter => filter.period === item))
-                if (period) setFilters(previous => [...previous, { period, min: "", max: "" }])
-            }}>RSI koşulu ekle</button>{(filters.length > 0 || sort) && <button type="button" className={control} onClick={() => { setFilters([]); setSort(null) }}>RSI koşullarını temizle</button>}<span className="text-muted-foreground">Koşul ve RSI sıralaması bu sayfaya uygulanır.</span></div>
+            <div className="flex flex-wrap items-center gap-2">
+                <button type="button" className={control} disabled={filters.length >= columns.length} onClick={() => {
+                    const period = columns.find(item => !filters.some(filter => filter.period === item))
+                    if (period) setFilters(previous => [...previous, { period, min: "", max: "" }])
+                }}>RSI koşulu ekle</button>
+                {RSI_PRESETS.map(preset => <button key={preset.id} type="button" className={control} onClick={() => applyPreset(preset)}>{preset.label}</button>)}
+                {(filters.length > 0 || sort) && <button type="button" className={control} onClick={() => { setFilters([]); setSort(null) }}>RSI koşullarını temizle</button>}
+                <span className="text-muted-foreground">Koşul ve RSI sıralaması bu sayfaya uygulanır.</span>
+            </div>
             {filters.map((filter, index) => <div key={index} className="flex flex-wrap items-end gap-2">
                 <label className="space-y-1"><span className="block">Zaman dilimi</span><select aria-label={`RSI koşulu ${index + 1} zaman dilimi`} className={cn(control, "bg-background")} value={filter.period} onChange={event => updateFilter(index, { period: event.target.value as RsiTimeframe })}>{shownColumns.filter(item => item.id === filter.period || !filters.some(other => other.period === item.id)).map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select></label>
                 <label className="space-y-1"><span className="block">En az</span><input aria-label={`RSI koşulu ${index + 1} en az`} className="min-h-11 w-24 rounded border border-border bg-background px-3 text-base sm:text-xs" type="number" min="0" max="100" step="any" value={filter.min} onChange={event => updateFilter(index, { min: event.target.value })} placeholder="0" /></label>
@@ -166,6 +242,21 @@ export function RsiTracker() {
             </div>)}
             {filtering && <p role="status">{resultRows.length} / {tracked.length} sembol bütün RSI koşullarını karşılıyor. Diğer sayfalar değerlendirilmedi.</p>}
         </div>
+
+        {readiness.total > 0 && <div className="space-y-1.5 border-b border-border bg-background/30 px-4 py-2.5 text-xs" aria-label="RSI hazırlık özeti">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-muted-foreground">
+                <span className="tabular-nums">
+                    <strong className="text-foreground">{readiness.numeric} / {readiness.total}</strong> hücre sayısal
+                    {readiness.ready > 0 ? ` (${readiness.ready} güncel)` : ""}
+                    {readiness.waiting > 0 ? ` · ${readiness.waiting} hazırlanıyor` : ""}
+                    {readiness.insufficient > 0 ? ` · ${readiness.insufficient} yetersiz geçmiş` : ""}
+                </span>
+                <span className="mono-numbers text-[11px]">{readiness.percent}%</span>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-raised" role="progressbar" aria-label="Sayfa RSI hazırlık oranı" aria-valuenow={readiness.percent} aria-valuemin={0} aria-valuemax={100}>
+                <div className={cn("h-full transition-all", readiness.waiting === 0 ? "bg-profit" : "bg-neutral")} style={{ width: `${readiness.percent}%` }} />
+            </div>
+        </div>}
 
         {symbols.isError && <div role="alert" className="border-b border-border px-4 py-3 text-xs text-neutral">Sembol listesi alınamadı. {visible.total ? "Son alınan liste gösteriliyor; güncel olmayabilir." : "Yenile düğmesiyle tekrar deneyebilirsiniz."}</div>}
         {market === "BIST" && quotes.isError && visible.rows.length > 0 && <p role="alert" className="border-b border-border px-4 py-3 text-xs text-neutral">Fiyatlar yenilenemedi. Son alınan kayıtlar güncel olmayabilir.</p>}
@@ -177,7 +268,7 @@ export function RsiTracker() {
                 {columnGroups.map(group => <colgroup key={group} span={shownColumns.filter(item => item.group === group).length} />)}
                 <thead className="sticky top-0 z-20 bg-raised">
                     <tr>
-                        <th rowSpan={2} scope="col" aria-sort={!sort ? descending ? "descending" : "ascending" : undefined} className="sticky left-0 z-30 min-w-28 border-b border-r border-border bg-raised px-3 text-left font-medium sm:min-w-32">Sembol</th>
+                        <th rowSpan={2} scope="col" aria-sort={!sort ? descending ? "descending" : "ascending" : undefined} className="sticky left-0 z-30 min-w-32 border-b border-r border-border bg-raised px-3 text-left font-medium sm:min-w-36">Sembol</th>
                         <th rowSpan={2} scope="col" className="min-w-28 border-b border-border px-3 text-right font-medium">Son fiyat <span className="block text-[10px] font-normal text-muted-foreground">{market === "BIST" ? "TRY" : "USDT"}</span></th>
                         <th rowSpan={2} scope="col" className="min-w-24 border-b border-border px-3 text-right font-medium">Değişim <span className="block text-[10px] font-normal text-muted-foreground">{market === "BIST" ? "Günlük" : "24 saat"}</span></th>
                         {columnGroups.map(group => <th key={group} scope="colgroup" colSpan={shownColumns.filter(item => item.group === group).length} className="border-b border-l border-border bg-background/40 px-2 py-1.5 text-center text-[10px] font-medium tracking-wide text-muted-foreground">{group}</th>)}
@@ -201,7 +292,12 @@ export function RsiTracker() {
                         const rsiRow = rsi.data?.rows[symbol]
                         const rsiPriceTime = rsiSourceTime(rsiRow?.source_time)
                         return <tr key={`${market}:${symbol}`} className="group even:bg-raised/30 hover:bg-raised/70">
-                            <th scope="row" className="sticky left-0 z-10 border-b border-r border-border bg-surface px-3 text-left group-hover:bg-raised"><Link href={trackerChartHref(symbol, market)} className="inline-flex min-h-10 items-center gap-2 font-semibold underline-offset-4 hover:underline focus-visible:underline" aria-label={`${symbol} grafiğini aç`}>{symbol}<span aria-hidden="true" className="text-muted-foreground">↗</span></Link></th>
+                            <th scope="row" className="sticky left-0 z-10 border-b border-r border-border bg-surface px-3 text-left group-hover:bg-raised">
+                                <div className="flex items-center justify-between gap-2">
+                                    <Link href={trackerChartHref(symbol, market)} className="inline-flex min-h-10 items-center gap-1.5 font-semibold underline-offset-4 hover:underline focus-visible:underline" aria-label={`${symbol} grafiğini aç`}>{symbol}<span aria-hidden="true" className="text-muted-foreground">↗</span></Link>
+                                    <Link href={trackerAlarmHref(symbol, market)} className="inline-flex min-h-9 items-center rounded border border-border/70 px-1.5 text-[10px] font-normal text-muted-foreground hover:bg-background hover:text-foreground" aria-label={`${symbol} için alarm taslağı oluştur`} title="Sunucu alarmı taslağı">Alarm</Link>
+                                </div>
+                            </th>
                             <td className="border-b border-border px-3 py-2 text-right" title={bist ? [quote?.provider_time, quote?.message].filter(Boolean).join(" · ") : received ? `Akış alımı ${clock.format(received)} TSİ` : undefined}><span className="block font-mono text-sm tabular-nums">{trackerNumber(price)}</span>{price != null && stale && <span className="block text-[10px] text-neutral">Son kayıt</span>}</td>
                             <td className={cn("border-b border-border px-4 py-3 text-right font-mono tabular-nums", change == null || !Number.isFinite(change) ? "text-muted-foreground" : change >= 0 ? "text-profit" : "text-loss")}>{trackerNumber(change)}{change != null && Number.isFinite(change) ? "%" : ""}</td>
                             {shownColumns.map(item => {

@@ -245,3 +245,44 @@ test('filtering the displayed page never changes the subscribed page or provider
   button(tree, 'RSI koşullarını temizle').props.onClick(); tree = app.render();
   assert.equal(symbolRows(tree).length, 25);
 });
+
+test('URL serialization, readiness summary, alarm links, presets and CSV export stay safe and exact', () => {
+  const encoded = model.serializeTrackerUrlState({
+    market: 'Kripto', search: 'BTC', descending: true, page: 2, listId: 'list-1',
+    filters: [{ period: '1D', min: '0', max: '30' }], sort: { period: '15m', descending: false },
+  });
+  const parsed = model.parseTrackerUrlState(`?${encoded}`);
+  assert.equal(parsed.market, 'Kripto');
+  assert.equal(parsed.search, 'BTC');
+  assert.equal(parsed.descending, true);
+  assert.equal(parsed.page, 2);
+  assert.equal(parsed.listId, 'list-1');
+  assert.deepEqual(JSON.parse(JSON.stringify(parsed.filters)), [{ period: '1D', min: '0', max: '30' }]);
+  assert.deepEqual(JSON.parse(JSON.stringify(parsed.sort)), { period: '15m', descending: false });
+  assert.equal(model.parseTrackerUrlState('?market=INVALID&page=-3&filters=BAD:1:2,1D:999:0').market, undefined);
+
+  assert.equal(model.trackerAlarmHref('THYAO', 'BIST'), '/alarms?symbol=THYAO&market=BIST');
+  const summary = model.summarizeRsiCells(['A', 'B'], {
+    rows: {
+      A: { source_time: 100, price: 10, cells: { '15m': { status: 'ready', value: 25, bar_time: 90 }, '1D': { status: 'insufficient', value: null, bar_time: null } } },
+      B: { source_time: null, price: null, cells: { '15m': { status: 'waiting', value: null, bar_time: null }, '1D': { status: 'candle', value: 55, bar_time: 80 } } },
+    },
+  }, ['15m', '1D']);
+  assert.deepEqual(JSON.parse(JSON.stringify(summary)), {
+    total: 4, numeric: 2, ready: 1, stale: 0, candle: 1, waiting: 1, insufficient: 1, other: 0, percent: 75,
+  });
+
+  const csv = model.buildTrackerCsv(['THYAO', '=CMD'], 'BIST', { THYAO: { price: 312.5, change: 1.25 } }, {
+    rows: { THYAO: { source_time: 100, price: 312.5, cells: { '1D': { status: 'ready', value: 28.456, bar_time: 90 } } } },
+  }, ['1D']);
+  assert.ok(csv.startsWith('\uFEFF'));
+  assert.match(csv, /THYAO,BIST,312\.5,1\.25,28\.46/);
+  assert.match(csv, /'=CMD,BIST,,,/);
+
+  const app = tracker({ rsiRows: { PAY00: { source_time: 1794651000, cells: { '1D': { value: 22, status: 'ready' } } } } });
+  let tree = app.render();
+  assert.match(text(tree), /1 \/ 400 hücre sayısal/);
+  button(tree, 'Aşırı satım (1G ≤ 30)').props.onClick(); tree = app.render();
+  assert.equal(symbolRows(tree).length, 1);
+  assert.match(text(symbolRows(tree)[0]), /PAY00/);
+});

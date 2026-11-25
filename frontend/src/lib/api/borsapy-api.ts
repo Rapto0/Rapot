@@ -45,6 +45,15 @@ export interface ResearchResult {
     candles?: ResearchCandle[];
     volume_quality?: VolumeQuality;
 }
+export interface ProviderProtectionStatus {
+    blocked: boolean;
+    reason: string | null;
+    requests_admitted: number;
+    budget_waits: number;
+    requests_per_second: number;
+    burst: number;
+    auth_minimum_seconds: number;
+}
 export interface ResearchConnection {
     installed: boolean;
     version: string | null;
@@ -54,6 +63,7 @@ export interface ResearchConnection {
     twitter_configured: boolean;
     state: string;
     message: string;
+    provider_protection?: ProviderProtectionStatus;
 }
 export interface ResearchSecrets { session?: string; session_sign?: string; evds_key?: string; twitter_auth_token?: string; twitter_ct0?: string }
 export interface ResearchStream {

@@ -12,18 +12,37 @@ import { useSession } from "@/lib/hooks/use-session"
 import { cn } from "@/lib/utils"
 
 type Impact = "Düşük" | "Orta" | "Yüksek" | "Belirsiz"
+type WindowPreset = "last7" | "next7" | "next14" | "next30"
 type UiEvent = { id: string; date: string; time: string; country: string; impact: Impact; title: string; actual: string; forecast: string; previous: string; orderKey: string }
+
 const IMPACT_OPTIONS: readonly FilterChipOption<string>[] = [
   { value: "all", label: "Tümü" }, { value: "Yüksek", label: "Yüksek" },
   { value: "Orta", label: "Orta" }, { value: "Düşük", label: "Düşük" },
   { value: "Belirsiz", label: "Belirsiz" },
 ]
 
+const WINDOW_OPTIONS: readonly FilterChipOption<WindowPreset>[] = [
+  { value: "last7", label: "Son 7 gün" },
+  { value: "next7", label: "Gelecek 7 gün" },
+  { value: "next14", label: "Gelecek 14 gün" },
+  { value: "next30", label: "Gelecek 30 gün" },
+]
+
+const SUPPORTED_COUNTRIES = [
+  { code: "TR", label: "TR" },
+  { code: "US", label: "US" },
+  { code: "EU", label: "EU" },
+  { code: "DE", label: "DE" },
+  { code: "GB", label: "GB" },
+  { code: "JP", label: "JP" },
+  { code: "CN", label: "CN" },
+] as const
+
 export default function CalendarPage() {
   const session = useSession()
   const allowed = Boolean(session?.user.is_admin && !session.user.disabled)
   const sessionKey = session ? `${session.user.username}:${session.expiresAt}` : ""
-  return <PageShell label="Takvim" title="Ekonomik takvim" description="Borsapy / Doviz.com ekonomik olayları. Türkiye ve ABD için yayımlanan takvim.">
+  return <PageShell label="Takvim" title="Ekonomik takvim" description="Borsapy / Doviz.com ekonomik olayları. Seçili ülkeler ve tarih aralığı için yayımlanan takvim.">
     {!allowed ? <section className="space-y-3 border border-border bg-surface p-5">
       <p className="text-sm text-muted-foreground">{session ? "Takvim için yönetici yetkisi gerekiyor." : "Takvimi görmek için yönetici hesabınızla giriş yapın."}</p>
       <Link href="/login?next=%2Fcalendar" className="inline-flex min-h-11 items-center rounded-sm border border-border px-4 text-sm">Giriş yap</Link>
@@ -33,6 +52,8 @@ export default function CalendarPage() {
 
 function CalendarWorkspace({ sessionKey }: { sessionKey: string }) {
   const [today, setToday] = useState(() => istanbulDay(new Date()))
+  const [windowPreset, setWindowPreset] = useState<WindowPreset>("next14")
+  const [countries, setCountries] = useState<string[]>(["TR", "US"])
   const [selectedDate, setSelectedDate] = useState("all")
   const [selectedImpact, setSelectedImpact] = useState("all")
   const [selectedCountry, setSelectedCountry] = useState("all")
@@ -40,12 +61,23 @@ function CalendarWorkspace({ sessionKey }: { sessionKey: string }) {
     const timer = setInterval(() => setToday(istanbulDay(new Date())), 60_000)
     return () => clearInterval(timer)
   }, [])
-  const toDate = addDays(today, 14)
+  const { fromDate, toDate } = resolveCalendarRange(today, windowPreset)
+  const countryParam = countries.join(",")
   const query = useQuery({
-    queryKey: ["calendar-page", sessionKey, today, toDate],
-    queryFn: ({ signal }) => fetchEconomicCalendar({ from_date: today, to_date: toDate }, { signal }),
+    queryKey: ["calendar-page", sessionKey, fromDate, toDate, countryParam],
+    queryFn: ({ signal }) => fetchEconomicCalendar({ from_date: fromDate, to_date: toDate, country: countryParam }, { signal }),
     refetchInterval: 300_000, staleTime: 300_000, refetchIntervalInBackground: false, retry: false,
   })
+  const toggleCountry = (code: string) => {
+    setCountries(current => {
+      if (current.includes(code)) {
+        return current.length > 1 ? current.filter(item => item !== code) : current
+      }
+      if (current.length >= 3) return current
+      return [...current, code]
+    })
+    setSelectedCountry("all")
+  }
   const events = useMemo(() => mapCalendarEvents(query.data?.events ?? []), [query.data])
   const dateOptions = useMemo(() => [
     { value: "all", label: "Tümü" },
@@ -73,6 +105,32 @@ function CalendarWorkspace({ sessionKey }: { sessionKey: string }) {
       {metadata?.state === "stale" && <p role="status" className="text-xs text-warning">Kaynak yenilenemedi; önceki yanıt gösteriliyor. Alınma zamanını kontrol edin.</p>}
       {metadata?.warnings.filter(message => !message.includes("saat dilimi") && !message.includes("önbelleği")).map(message => <p key={message} className="text-xs text-muted-foreground">{message}</p>)}
     </section>
+    <section className="flex flex-wrap items-center gap-4 border border-border bg-surface p-3" aria-label="Takvim sorgu kapsamı">
+      <FilterChips
+        label="Aralık"
+        options={WINDOW_OPTIONS}
+        value={windowPreset}
+        onChange={(next) => { setWindowPreset(next); setSelectedDate("all") }}
+      />
+      <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Ülke seçimi (en fazla 3)">
+        <span className="label-uppercase">Ülkeler (maks 3)</span>
+        {SUPPORTED_COUNTRIES.map(item => {
+          const active = countries.includes(item.code)
+          const disabled = (!active && countries.length >= 3) || (active && countries.length <= 1)
+          return <button
+            key={item.code}
+            type="button"
+            aria-pressed={active}
+            disabled={disabled}
+            onClick={() => toggleCountry(item.code)}
+            className={cn(
+              "min-h-9 rounded-sm border px-2.5 text-xs transition-colors disabled:opacity-45",
+              active ? "border-foreground/50 bg-raised font-medium text-foreground" : "border-border text-muted-foreground hover:bg-raised"
+            )}
+          >{item.label}</button>
+        })}
+      </div>
+    </section>
     <section className="flex flex-wrap gap-3 border border-border bg-surface p-3">
       <FilterChips label="Tarih" options={dateOptions} value={selectedDate} onChange={setSelectedDate} />
       <FilterChips label="Etki" options={IMPACT_OPTIONS} value={selectedImpact} onChange={setSelectedImpact} />
@@ -95,6 +153,13 @@ function CalendarWorkspace({ sessionKey }: { sessionKey: string }) {
         </table>
       </div>}
   </div>
+}
+
+function resolveCalendarRange(today: string, preset: WindowPreset): { fromDate: string; toDate: string } {
+  if (preset === "last7") return { fromDate: addDays(today, -7), toDate: today }
+  if (preset === "next7") return { fromDate: today, toDate: addDays(today, 7) }
+  if (preset === "next30") return { fromDate: today, toDate: addDays(today, 30) }
+  return { fromDate: today, toDate: addDays(today, 14) }
 }
 
 function mapCalendarEvents(rows: EconomicCalendarEvent[]): UiEvent[] {

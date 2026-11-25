@@ -32,6 +32,10 @@ export function deriveApiHealth(query: StatusQuery<ApiHealth>) {
   };
 }
 
+function optionalCount(value: unknown): number | null {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
+}
+
 export function deriveAlarmRuntime(query: StatusQuery<AdvancedAlarmStatus>, now = Date.now()) {
   const data = usable(query) ? query.data : undefined;
   const lastCycle = typeof data?.last_cycle_at === 'string' ? Date.parse(data.last_cycle_at) : NaN;
@@ -42,12 +46,26 @@ export function deriveAlarmRuntime(query: StatusQuery<AdvancedAlarmStatus>, now 
         : data.running === false ? 'stopped'
           : data.running === true && recentCycle ? 'running'
             : data.running === true && data.last_cycle_at === null ? 'starting' : 'unknown';
+  const market = data?.market && typeof data.market === 'object' && !Array.isArray(data.market) ? data.market : undefined;
+  const custom = market?.custom_indicators && typeof market.custom_indicators === 'object' && !Array.isArray(market.custom_indicators)
+    ? market.custom_indicators as Record<string, unknown> : undefined;
   return {
     state,
     label: { loading: 'Yükleniyor', unknown: 'Doğrulanamadı', error: 'Kontrol hatası', stopped: 'Durduruldu', running: 'Çalışıyor', starting: 'İlk kontrol bekleniyor' }[state],
     tone: state === 'running' ? 'profit' as const : state === 'error' || state === 'stopped' ? 'loss' as const : 'neutral' as const,
     lastCycle: data && Number.isFinite(lastCycle) ? lastCycle : null,
     telegramConfigured: typeof data?.telegram_configured === 'boolean' ? data.telegram_configured : null,
-    pendingDeliveries: typeof data?.delivery?.pending === 'number' && Number.isSafeInteger(data.delivery.pending) && data.delivery.pending >= 0 ? data.delivery.pending : null,
+    pendingDeliveries: optionalCount(data?.delivery?.pending),
+    marketState: typeof market?.state === 'string' ? market.state : null,
+    freshSymbols: optionalCount(market?.fresh_symbols ?? market?.ready_symbols),
+    trackedSymbols: optionalCount(market?.tracked_symbols ?? market?.symbol_count),
+    nativeStreamsConnected: optionalCount(custom?.native_streams_connected),
+    nativeRegistered: optionalCount(custom?.native_subscriptions_registered),
+    nativeCapacity: optionalCount(custom?.native_physical_capacity),
+    nativeLeaseCertified: optionalCount(custom?.native_lease_certified),
+    nativeLeasePending: optionalCount(custom?.native_lease_pending),
+    liveQueuePending: optionalCount(custom?.live_queue_pending),
+    liveQueueLimit: optionalCount(custom?.live_queue_limit),
+    liveOverflowCount: optionalCount(custom?.live_overflow_count),
   };
 }

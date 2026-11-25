@@ -5,7 +5,7 @@ import vm from 'node:vm';
 import ts from 'typescript';
 
 const source = readFileSync(new URL('../src/app/calendar/page.tsx', import.meta.url), 'utf8');
-const compiled = ts.transpileModule(`${source}\nexports.testing = { mapCalendarEvents, formatMetric, istanbulDay, addDays };`, {
+const compiled = ts.transpileModule(`${source}\nexports.testing = { mapCalendarEvents, formatMetric, istanbulDay, addDays, resolveCalendarRange };`, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
 }).outputText;
 let session = null;
@@ -73,6 +73,7 @@ test('admin query is session scoped, abortable and does not automatically retry'
     await query.queryFn({ signal });
     assert.equal(requests.at(-1)[1].signal, signal);
     assert.equal(requests.at(-1)[0].from_date, query.queryKey[2]);
+    assert.equal(requests.at(-1)[0].country, 'TR,US');
 });
 
 test('text, null and zero metrics and medium impact survive the real view mapping', () => {
@@ -98,4 +99,6 @@ test('unspecified event clock is retained without inventing midnight or an absol
 test('the date window follows Istanbul midnight independently of browser timezone', () => {
     assert.equal(page.testing.istanbulDay(new Date('2026-10-04T21:01:00Z')), '2026-10-05');
     assert.equal(page.testing.addDays('2026-10-31', 14), '2026-11-14');
+    assert.deepEqual(plain(page.testing.resolveCalendarRange('2026-11-25', 'last7')), { fromDate: '2026-11-18', toDate: '2026-11-25' });
+    assert.deepEqual(plain(page.testing.resolveCalendarRange('2026-11-25', 'next30')), { fromDate: '2026-11-25', toDate: '2026-12-25' });
 });

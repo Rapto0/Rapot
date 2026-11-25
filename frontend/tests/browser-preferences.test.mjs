@@ -128,24 +128,37 @@ test('global Providers startup cleans old settings even when the settings page i
 });
 
 function renderSettings(cleanupResult = null) {
+  let stateIndex = 0;
   const page = load('../src/app/settings/page.tsx', {
     'react/jsx-runtime': jsxRuntime,
-    react: { useEffect() {}, useState: () => [cleanupResult, () => {}] },
+    react: {
+      useEffect() {},
+      useState(initial) {
+        const idx = stateIndex++;
+        if (idx === 0) return [cleanupResult, () => {}];
+        return [typeof initial === 'function' ? initial() : initial, () => {}];
+      },
+    },
     'next/link': { default: ({ children, ...props }) => React.createElement('a', props, children) },
+    '@/components/ui/action-dialog': { ActionDialog: () => null },
+    '@/components/ui/button': { Button: ({ children, ...props }) => React.createElement('button', props, children) },
     '@/components/ui/page-shell': { PageShell: ({ children, title, description }) => React.createElement('main', null,
       React.createElement('h1', null, title), React.createElement('p', null, description), children) },
     '@/lib/browser-preferences': { cleanupLegacyBrowserSettings },
+    '@/lib/hooks/use-session': { useSession: () => null },
+    '@/lib/rsi-tracker': { RSI_COLUMNS_STORAGE_KEY: 'rapot.rsi-tracker.columns.v1' },
   });
   return renderToStaticMarkup(React.createElement(page.default));
 }
 
-test('settings page is honest about server-managed configuration and links actual browser preferences', () => {
+test('settings page is honest about server-managed configuration and manages only real browser preferences', () => {
   const html = renderSettings({ status: 'complete', failedKeys: [] });
   assert.ok(html.includes('Sunucu izleme listeleri'));
   assert.ok(html.includes('sunucu yapılandırmasından gelir'));
   assert.ok(html.includes('etkisiz geçmiş kayıtları'));
   assert.ok(html.includes('href="/scanner"'));
-  assert.ok(!/<input|<button|role="switch"/.test(html), 'No fake controls or credential inputs');
+  assert.ok(html.includes('Tercihleri dışa aktar (JSON)'));
+  assert.ok(!/<input|role="switch"/.test(html), 'No fake toggle switches or credential inputs');
   assert.ok(!html.includes('Kaydet'));
   assert.ok(!html.includes('role="alert"'));
   const blocked = renderSettings({ status: 'blocked', failedKeys: ['rapot-settings'] });

@@ -128,7 +128,177 @@ export function trackerChartHref(symbol: string, market: TrackerMarket) {
     return `/chart?${new URLSearchParams({ symbol, market })}`
 }
 
+export function trackerAlarmHref(symbol: string, market: TrackerMarket) {
+    return `/alarms?${new URLSearchParams({ symbol, market })}`
+}
+
 export function trackerNumber(value: number | undefined | null): string {
     return typeof value === "number" && Number.isFinite(value)
         ? value.toLocaleString("tr-TR", { maximumFractionDigits: 5 }) : "—"
+}
+
+export interface TrackerUrlState {
+    market: TrackerMarket
+    search: string
+    descending: boolean
+    page: number
+    listId: string
+    filters: RsiFilter[]
+    sort: RsiSort | null
+}
+
+const VALID_PERIODS = new Set<string>(ALL_RSI_COLUMNS)
+
+function isValidRsiBound(raw: string): boolean {
+    if (!raw) return true
+    if (!/^\d{1,3}(?:\.\d{1,2})?$/.test(raw)) return false
+    const num = Number(raw)
+    return Number.isFinite(num) && num >= 0 && num <= 100
+}
+
+export function parseTrackerUrlState(searchString: string): Partial<TrackerUrlState> {
+    const params = new URLSearchParams(searchString)
+    const state: Partial<TrackerUrlState> = {}
+    const rawMarket = params.get("market")
+    if (rawMarket === "BIST" || rawMarket === "Kripto") state.market = rawMarket
+    const rawSearch = params.get("q")
+    if (rawSearch !== null) state.search = rawSearch.slice(0, 32)
+    if (params.get("desc") === "1") state.descending = true
+    const rawPage = params.get("page")
+    if (rawPage !== null && /^\d+$/.test(rawPage)) {
+        const parsedPage = Number.parseInt(rawPage, 10)
+        if (Number.isSafeInteger(parsedPage) && parsedPage >= 0 && parsedPage < 10_000) state.page = parsedPage
+    }
+    const rawList = params.get("list")
+    if (rawList !== null) state.listId = rawList.slice(0, 128)
+    const rawSort = params.get("sort")
+    if (rawSort) {
+        const [period, dir] = rawSort.split(":")
+        if (VALID_PERIODS.has(period) && (dir === "asc" || dir === "desc")) {
+            state.sort = { period: period as RsiTimeframe, descending: dir === "desc" }
+        }
+    }
+    const rawFilters = params.get("filters")
+    if (rawFilters) {
+        const parsed: RsiFilter[] = []
+        const seen = new Set<string>()
+        for (const chunk of rawFilters.split(",").slice(0, 16)) {
+            const [period, min = "", max = ""] = chunk.split(":")
+            if (!VALID_PERIODS.has(period) || seen.has(period)) continue
+            if (!isValidRsiBound(min) || !isValidRsiBound(max)) continue
+            seen.add(period)
+            parsed.push({ period: period as RsiTimeframe, min, max })
+        }
+        if (parsed.length) state.filters = parsed
+    }
+    return state
+}
+
+export function serializeTrackerUrlState(state: TrackerUrlState): string {
+    const params = new URLSearchParams()
+    if (state.market !== "BIST") params.set("market", state.market)
+    if (state.search.trim()) params.set("q", state.search.trim().slice(0, 32))
+    if (state.descending) params.set("desc", "1")
+    if (state.page > 0) params.set("page", String(state.page))
+    if (state.listId) params.set("list", state.listId)
+    if (state.sort) params.set("sort", `${state.sort.period}:${state.sort.descending ? "desc" : "asc"}`)
+    const activeFilters = state.filters.filter(filter => filter.min.trim() || filter.max.trim())
+    if (activeFilters.length) {
+        params.set("filters", activeFilters.map(filter => `${filter.period}:${filter.min.trim()}:${filter.max.trim()}`).join(","))
+    }
+    return params.toString()
+}
+
+export interface RsiReadinessSummary {
+    total: number
+    numeric: number
+    ready: number
+    stale: number
+    candle: number
+    waiting: number
+    insufficient: number
+    other: number
+    percent: number
+}
+
+export function summarizeRsiCells(
+    symbols: readonly string[],
+    snapshot: RsiSnapshot | undefined,
+    periods: readonly RsiTimeframe[],
+): RsiReadinessSummary {
+    const total = symbols.length * periods.length
+    let numeric = 0
+    let ready = 0
+    let stale = 0
+    let candle = 0
+    let waiting = 0
+    let insufficient = 0
+    let other = 0
+    for (const symbol of symbols) {
+        const cells = snapshot?.rows[symbol]?.cells
+        for (const period of periods) {
+            const cell = cells?.[period]
+            const status = cell?.status ?? "waiting"
+            if (cell?.value != null && Number.isFinite(cell.value)) numeric++
+            if (status === "ready") ready++
+            else if (status === "stale") stale++
+            else if (status === "candle") candle++
+            else if (status === "waiting") waiting++
+            else if (status === "insufficient") insufficient++
+            else other++
+        }
+    }
+    const percent = total > 0 ? Math.round(((numeric + insufficient) / total) * 100) : 0
+    return { total, numeric, ready, stale, candle, waiting, insufficient, other, percent }
+}
+
+export interface RsiPreset {
+    id: string
+    label: string
+    filters: readonly RsiFilter[]
+    sort: RsiSort
+}
+
+export const RSI_PRESETS: readonly RsiPreset[] = [
+    { id: "oversold-1d", label: "Aşırı satım (1G ≤ 30)", filters: [{ period: "1D", min: "", max: "30" }], sort: { period: "1D", descending: false } },
+    { id: "overbought-1d", label: "Aşırı alım (1G ≥ 70)", filters: [{ period: "1D", min: "70", max: "" }], sort: { period: "1D", descending: true } },
+    { id: "multi-dip", label: "Çoklu dip (15dk & 1G ≤ 30)", filters: [{ period: "15m", min: "", max: "30" }, { period: "1D", min: "", max: "30" }], sort: { period: "15m", descending: false } },
+]
+
+function csvEscape(value: string): string {
+    const safe = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value
+    return /[",\n\r]/.test(safe) ? `"${safe.replaceAll('"', '""')}"` : safe
+}
+
+export function buildTrackerCsv(
+    symbols: readonly string[],
+    market: TrackerMarket,
+    pricesBySymbol: Record<string, { price?: number | null; change?: number | null }>,
+    snapshot: RsiSnapshot | undefined,
+    periods: readonly RsiTimeframe[],
+): string {
+    const headers = [
+        "Sembol",
+        "Piyasa",
+        market === "BIST" ? "Son Fiyat (TRY)" : "Son Fiyat (USDT)",
+        "Değişim (%)",
+        ...periods.map(period => `RSI ${period}`),
+    ]
+    const lines = [headers.map(csvEscape).join(",")]
+    for (const symbol of symbols) {
+        const quote = pricesBySymbol[symbol]
+        const rsiRow = snapshot?.rows[symbol]
+        const cells = [
+            symbol,
+            market,
+            typeof quote?.price === "number" && Number.isFinite(quote.price) ? String(quote.price) : "",
+            typeof quote?.change === "number" && Number.isFinite(quote.change) ? quote.change.toFixed(2) : "",
+            ...periods.map(period => {
+                const val = rsiRow?.cells[period]?.value
+                return typeof val === "number" && Number.isFinite(val) ? val.toFixed(2) : ""
+            }),
+        ]
+        lines.push(cells.map(csvEscape).join(","))
+    }
+    return `\uFEFF${lines.join("\r\n")}`
 }
