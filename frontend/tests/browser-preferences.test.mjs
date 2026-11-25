@@ -118,7 +118,7 @@ test('global Providers startup cleans old settings even when the settings page i
     'react/jsx-runtime': jsxRuntime,
     react: { useEffect: (callback) => effects.push(callback), useState: React.useState },
     '@tanstack/react-query': {},
-    '@/components/ui/toast': {}, '@/components/layout/sidebar-context': {},
+    '@/components/ui/toast': {},
     '@/lib/hooks/use-session': { useSession: () => null }, '@/lib/api/core': {},
     '@/components/realtime-bridge': {}, '@/lib/browser-preferences': browserModule,
   });

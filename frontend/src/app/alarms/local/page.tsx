@@ -120,12 +120,12 @@ export default function AlarmsPage() {
                         onClick={() => void evaluateRules()}
                         disabled={isChecking || !hydrated}
                         className={cn(
-                            "inline-flex items-center gap-2 rounded border border-border px-3 py-1.5 text-xs",
+                            "inline-flex min-h-11 items-center gap-2 rounded border border-border px-3 py-2 text-xs",
                             isChecking ? "opacity-70" : "hover:bg-raised"
                         )}
                     >
                         <RefreshCw className={cn("h-3.5 w-3.5", isChecking && "animate-spin")} />
-                        Simdi kontrol et
+                        Şimdi kontrol et
                     </button>
                 </div>
             </section>
@@ -190,20 +190,21 @@ export default function AlarmsPage() {
                                         <button
                                             onClick={() => handleToggleRule(rule.id)}
                                             className={cn(
-                                                "rounded px-2 py-1 text-[11px]",
+                                                "inline-flex min-h-11 items-center rounded px-3 py-2 text-xs",
                                                 rule.enabled
                                                     ? "bg-primary text-primary-foreground"
                                                     : "bg-raised text-muted-foreground"
                                             )}
                                         >
-                                            {rule.enabled ? "Acik" : "Kapali"}
+                                            {rule.enabled ? "Açık" : "Kapalı"}
                                         </button>
                                         <button
                                             onClick={() => handleDeleteRule(rule.id)}
-                                            className="rounded p-1 text-muted-foreground hover:bg-loss/10 hover:text-loss"
-                                            title="Kurali sil"
+                                            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded p-2 text-muted-foreground hover:bg-loss/10 hover:text-loss"
+                                            title="Kuralı sil"
+                                            aria-label="Kuralı sil"
                                         >
-                                            <Trash2 className="h-3.5 w-3.5" />
+                                            <Trash2 className="h-4 w-4" />
                                         </button>
                                     </div>
                                 </div>

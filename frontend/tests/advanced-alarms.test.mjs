@@ -244,7 +244,8 @@ test('UI reports measured backlog and quote coverage instead of claiming all dat
   assert.match(view.text(), /Bekleyen kontrol: 500/);
   assert.match(view.text(), /580 güncel \/ 600/);
   const streamQueries = view.queries.filter(q => ['advanced-alarm-status', 'advanced-alarm-events'].includes(q.queryKey[0]));
-  assert.ok(streamQueries.every(q => q.refetchInterval === 1000));
+  assert.ok(streamQueries.every(q => q.refetchInterval === 5000 && q.refetchIntervalInBackground === false));
+  assert.ok(view.queries.every(q => q.refetchIntervalInBackground === false));
   assert.equal(view.requests.length, 0);
 });
 

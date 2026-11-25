@@ -66,6 +66,9 @@ test('admin query is session scoped, abortable and does not automatically retry'
     const query = queries[0];
     assert.equal(query.queryKey[1], 'owner:456');
     assert.equal(query.retry, false);
+    assert.equal(query.refetchInterval, 300_000);
+    assert.equal(query.staleTime, 300_000);
+    assert.equal(query.refetchIntervalInBackground, false);
     const signal = new AbortController().signal;
     await query.queryFn({ signal });
     assert.equal(requests.at(-1)[1].signal, signal);

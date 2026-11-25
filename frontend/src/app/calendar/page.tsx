@@ -44,7 +44,7 @@ function CalendarWorkspace({ sessionKey }: { sessionKey: string }) {
   const query = useQuery({
     queryKey: ["calendar-page", sessionKey, today, toDate],
     queryFn: ({ signal }) => fetchEconomicCalendar({ from_date: today, to_date: toDate }, { signal }),
-    refetchInterval: 60_000, staleTime: 60_000, retry: false,
+    refetchInterval: 300_000, staleTime: 300_000, refetchIntervalInBackground: false, retry: false,
   })
   const events = useMemo(() => mapCalendarEvents(query.data?.events ?? []), [query.data])
   const dateOptions = useMemo(() => [
@@ -68,7 +68,7 @@ function CalendarWorkspace({ sessionKey }: { sessionKey: string }) {
           <RefreshCw aria-hidden="true" className={cn("h-3.5 w-3.5", query.isFetching && "animate-spin")} />{query.isFetching ? "Yenileniyor…" : "Yenile"}
         </Button>
       </div>
-      <p className="text-xs text-muted-foreground">Sağlayıcı veriyi 1 saat önbellekte tutabilir. Dakikalık kontrol veya Yenile düğmesi yeni veri geldiği anlamına gelmez.</p>
+      <p className="text-xs text-muted-foreground">Sağlayıcı veriyi 1 saat önbellekte tutabilir. 5 dakikalık otomatik yenileme veya Yenile düğmesi yeni veri geldiği anlamına gelmez.</p>
       <p className="text-xs text-muted-foreground">Olay saatleri kaynaktaki haliyle gösterilir; saat dilimi doğrulanmadığı için İstanbul veya UTC saatine çevrilmez.</p>
       {metadata?.state === "stale" && <p role="status" className="text-xs text-warning">Kaynak yenilenemedi; önceki yanıt gösteriliyor. Alınma zamanını kontrol edin.</p>}
       {metadata?.warnings.filter(message => !message.includes("saat dilimi") && !message.includes("önbelleği")).map(message => <p key={message} className="text-xs text-muted-foreground">{message}</p>)}

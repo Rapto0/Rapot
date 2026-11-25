@@ -3,7 +3,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { ToastProvider } from '@/components/ui/toast';
-import { SidebarProvider } from '@/components/layout/sidebar-context';
 import { useSession } from '@/lib/hooks/use-session';
 import { ApiError } from '@/lib/api/core';
 import { RealtimeBridge } from '@/components/realtime-bridge';
@@ -41,11 +40,9 @@ function SessionProviders({ children }: { children: React.ReactNode }) {
     return (
         <QueryClientProvider client={queryClient}>
             <RealtimeBridge />
-            <SidebarProvider>
-                <ToastProvider>
-                    {children}
-                </ToastProvider>
-            </SidebarProvider>
+            <ToastProvider>
+                {children}
+            </ToastProvider>
         </QueryClientProvider>
     );
 }

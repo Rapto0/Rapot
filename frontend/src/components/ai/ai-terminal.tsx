@@ -71,7 +71,7 @@ function ManualAITerminal() {
     } catch (analysisError) {
       setResult(null)
       setError(
-        analysisError instanceof Error ? analysisError.message : "AI analizi alinamadi."
+        analysisError instanceof Error ? analysisError.message : "AI analizi alınamadı."
       )
     } finally {
       setIsLoading(false)
@@ -121,19 +121,19 @@ function ManualAITerminal() {
 
       <section className="grid min-h-16 grid-cols-2 border border-border bg-surface md:grid-cols-4">
         <RibbonStat label="Sembol" value={symbol || "—"} />
-        <RibbonStat label="AI Kaydi" value={`${recentAnalysesQuery.data?.length ?? 0}`} />
-        <RibbonStat label="Ort. Guven" value={averageConfidence} tone="profit" />
+        <RibbonStat label="AI Kaydı" value={`${recentAnalysesQuery.data?.length ?? 0}`} />
+        <RibbonStat label="Ort. Güven" value={averageConfidence} tone="profit" />
         <RibbonStat
-          label="Secili"
+          label="Seçili"
           value={strategy}
         />
       </section>
 
       <section className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_320px]">
-        <main className="flex min-w-0 flex-col gap-3">
+        <div className="flex min-w-0 flex-col gap-3">
           <section className="border border-border bg-surface">
             <div className="border-b border-border px-3 py-2">
-              <span className="label-uppercase">Komut satiri</span>
+              <span className="label-uppercase">Komut satırı</span>
             </div>
             <div className="grid gap-2 p-3 lg:grid-cols-[minmax(0,1fr)_120px_120px_140px_auto]">
               <Input
@@ -141,7 +141,7 @@ function ManualAITerminal() {
                 value={symbol}
                 onChange={(event) => setSymbol(event.target.value.toUpperCase())}
                 placeholder="THYAO veya BTCUSDT"
-                className="h-9 text-xs uppercase"
+                className="min-h-11 text-base uppercase sm:text-xs"
                 onKeyDown={(event) => {
                   if (event.key === "Enter") {
                     event.preventDefault()
@@ -154,7 +154,7 @@ function ManualAITerminal() {
                 aria-label="Gösterge"
                 value={strategy}
                 onChange={(event) => setStrategy(event.target.value as StrategyType)}
-                className="h-9 border border-border bg-base px-2 text-xs text-foreground outline-none"
+                className="min-h-11 border border-border bg-base px-2 text-base text-foreground outline-none sm:text-xs"
               >
                 <option value="HUNTER">HUNTER</option>
                 <option value="COMBO">COMBO</option>
@@ -164,7 +164,7 @@ function ManualAITerminal() {
                 aria-label="Piyasa"
                 value={marketType}
                 onChange={(event) => setMarketType(event.target.value as MarketType)}
-                className="h-9 border border-border bg-base px-2 text-xs text-foreground outline-none"
+                className="min-h-11 border border-border bg-base px-2 text-base text-foreground outline-none sm:text-xs"
               >
                 <option value="AUTO">AUTO</option>
                 <option value="BIST">BIST</option>
@@ -175,26 +175,26 @@ function ManualAITerminal() {
                 aria-label="Periyot"
                 value={timeframe}
                 onChange={(event) => setTimeframe(event.target.value as TimeframeType)}
-                className="h-9 border border-border bg-base px-2 text-xs text-foreground outline-none"
+                className="min-h-11 border border-border bg-base px-2 text-base text-foreground outline-none sm:text-xs"
               >
-                <option value="ALL">Tum Periyotlar</option>
-                <option value="1D">1 Gunluk</option>
-                <option value="1W">1 Haftalik</option>
-                <option value="2W">2 Haftalik</option>
-                <option value="3W">3 Haftalik</option>
-                <option value="1M">1 Aylik</option>
+                <option value="ALL">Tüm Periyotlar</option>
+                <option value="1D">1 Günlük</option>
+                <option value="1W">1 Haftalık</option>
+                <option value="2W">2 Haftalık</option>
+                <option value="3W">3 Haftalık</option>
+                <option value="1M">1 Aylık</option>
               </select>
 
               <Button
                 type="button"
                 variant="outline"
-                className="h-9 text-xs"
+                className="min-h-11 text-xs"
                 onClick={runAnalysis}
                 disabled={isLoading || !allowed}
                 aria-busy={isLoading}
               >
                 {isLoading ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Brain className="mr-1.5 h-3.5 w-3.5" />}
-                {isLoading ? "Yorumlaniyor" : "AI Yorumla"}
+                {isLoading ? "Yorumlanıyor" : "AI Yorumla"}
               </Button>
 
             </div>
@@ -208,7 +208,7 @@ function ManualAITerminal() {
 
           {!result && !error ? (
             <section className="border border-dashed border-border bg-surface px-4 py-12">
-              <div className="label-uppercase">Hazir</div>
+              <div className="label-uppercase">Hazır</div>
               <div className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
                 Sembolü girin, gösterge ve periyodu seçin, ardından AI Yorumla düğmesine basın.
                 Sonuçlar yalnız sizin isteğinizle oluşturulur; sağlayıcı verisi ve model erişimi gerekir.
@@ -222,13 +222,13 @@ function ManualAITerminal() {
                 <div className="border border-border bg-surface p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-3">
                     <div>
-                      <div className="label-uppercase">AI cikti</div>
+                      <div className="label-uppercase">AI çıktısı</div>
                       <div className="mt-1 flex items-center gap-2">
                         <span className={cn("signal-badge", toneClass(toneFromLabel(structured.sentiment_label)))}>
                           {structured.sentiment_label}
                         </span>
                         <span className="mono-numbers text-sm text-foreground">
-                          Guven {structured.confidence_score}
+                          Güven {structured.confidence_score}
                         </span>
                         <span className="mono-numbers text-sm text-muted-foreground">
                           Risk {structured.risk_level}
@@ -267,7 +267,7 @@ function ManualAITerminal() {
                       <MetricRow label="Prompt" value={structured.prompt_version || "--"} />
                       <MetricRow label="Teknik bias" value={`${structured.technical_view.bias} / ${structured.technical_view.strength}`} />
                       <MetricRow label="Haber bias" value={`${structured.news_view.bias} / ${structured.news_view.strength}`} />
-                      <MetricRow label="Baslik" value={`${structured.news_view.headline_count}`} />
+                      <MetricRow label="Başlık" value={`${structured.news_view.headline_count}`} />
                     </div>
                   </section>
 
@@ -275,7 +275,7 @@ function ManualAITerminal() {
                     <div className="label-uppercase">Seviye matrisi</div>
                     <div className="mt-3 grid gap-2 lg:grid-cols-2 xl:grid-cols-1">
                       <LevelCluster title="Destek" values={structured.key_levels.support} tone="profit" />
-                      <LevelCluster title="Direnc" values={structured.key_levels.resistance} tone="loss" />
+                      <LevelCluster title="Direnç" values={structured.key_levels.resistance} tone="loss" />
                     </div>
                   </section>
                 </div>
@@ -293,7 +293,7 @@ function ManualAITerminal() {
               </section>
             </>
           ) : null}
-        </main>
+        </div>
 
         <aside className="flex min-h-0 flex-col gap-3">
           <section className="min-h-0 flex-1 border border-border bg-surface">
@@ -302,7 +302,7 @@ function ManualAITerminal() {
             </div>
             <div className="max-h-[420px] overflow-auto">
               {recentAnalysesQuery.isLoading ? (
-                <div className="px-3 py-6 text-center text-xs text-muted-foreground">Yukleniyor...</div>
+                <div className="px-3 py-6 text-center text-xs text-muted-foreground">Yükleniyor...</div>
               ) : (recentAnalysesQuery.data?.length ?? 0) === 0 ? (
                 <div className="px-3 py-6 text-center text-xs text-muted-foreground">
                   Henüz manuel analiz kaydı yok.
@@ -329,7 +329,7 @@ function ManualAITerminal() {
                       </span>
                     </div>
                     <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-muted-foreground">
-                      <span>Guven {analysis.confidenceScore ?? "--"}</span>
+                      <span>Güven {analysis.confidenceScore ?? "--"}</span>
                       <span>{getTimeAgo(analysis.createdAt)}</span>
                     </div>
                   </button>
@@ -430,21 +430,21 @@ function MatrixRow({ label, value }: { label: string; value: string }) {
 function timeframeLabel(value: string) {
   switch (value) {
     case "ALL":
-      return "Tum Periyotlar"
+      return "Tüm Periyotlar"
     case "1D":
-      return "1 Gunluk"
+      return "1 Günlük"
     case "1W":
     case "W-FRI":
-      return "1 Haftalik"
+      return "1 Haftalık"
     case "2W":
     case "2W-FRI":
-      return "2 Haftalik"
+      return "2 Haftalık"
     case "3W":
     case "3W-FRI":
-      return "3 Haftalik"
+      return "3 Haftalık"
     case "1M":
     case "ME":
-      return "1 Aylik"
+      return "1 Aylık"
     default:
       return value
   }

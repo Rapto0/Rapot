@@ -8,7 +8,7 @@ import { useSession } from '@/lib/hooks/use-session';
 export function SessionControls() {
     const session = useSession();
     const pathname = usePathname();
-    const className = 'border border-border px-2 py-1 text-xs hover:bg-raised';
+    const className = 'inline-flex min-h-11 items-center border border-border px-3 text-xs hover:bg-raised md:min-h-8 md:px-2';
     if (!session) {
         return <Link className={className} href={`/login?next=${encodeURIComponent(pathname)}`}>Giriş yap</Link>;
     }

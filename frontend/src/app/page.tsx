@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ComponentType } from "react"
 import Link from "next/link"
-import { CalendarDays, LineChart, Activity, List, Bell, Brain } from "lucide-react"
+import { CalendarDays, LineChart, Activity, Compass, Bell, Brain } from "lucide-react"
 import { SymbolSearch } from "@/components/dashboard/symbol-search"
 import { MarketCategoryPanel } from "@/components/dashboard/market-category"
 import { useBinanceTickerFeed } from "@/lib/hooks/use-binance-ticker"
@@ -167,10 +167,10 @@ export default function LandingPage() {
       <section aria-labelledby="quick-links-heading" className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <h2 id="quick-links-heading" className="sr-only">Hızlı erişim</h2>
         <QuickLinkCard
-          href="/chart"
-          title="İzleme Listeleri"
-          description="Listelerinizdeki sembolleri grafikte takip edin"
-          icon={List}
+          href="/research"
+          title="Araştırma Merkezi"
+          description="Borsapy araçları ve veri bağlantıları"
+          icon={Compass}
         />
         <QuickLinkCard
           href="/alarms"

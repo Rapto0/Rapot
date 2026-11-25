@@ -74,6 +74,10 @@ try {
     await delay(250);
   }
   assert.ok(page?.ok, output);
+  assert.equal(page.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(page.headers.get('x-frame-options'), 'DENY');
+  assert.equal(page.headers.get('referrer-policy'), 'strict-origin-when-cross-origin');
+  assert.match(page.headers.get('permissions-policy') ?? '', /camera=\(\)/);
   const html = await page.text();
   const asset = html.match(/src="(\/_next\/static\/[^" ]+\.js)"/);
   assert.ok(asset, 'Expected a standalone static asset');

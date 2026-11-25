@@ -1,6 +1,7 @@
 ﻿"use client"
 
 import { useMemo, useState } from "react"
+import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { PageShell } from "@/components/ui/page-shell"
@@ -14,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { useSession } from "@/lib/hooks/use-session"
 import { useTrades, useTradeStats } from "@/lib/hooks/use-trades"
 import { formatDate, cn } from "@/lib/utils"
 import { formatMetric, formatMetricPercent, formatTradePrice, metricTextClass, metricTone } from "@/lib/metric-display"
@@ -30,6 +32,8 @@ const STATUS_OPTIONS = [
 ] as const satisfies readonly FilterChipOption<StatusFilter>[]
 
 export default function TradesPage() {
+  const session = useSession()
+  const allowed = Boolean(session?.user.is_admin && !session.user.disabled)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
 
   const { data: trades, isLoading, isError, refetch, isFetching } = useTrades({ status: statusFilter })
@@ -46,13 +50,32 @@ export default function TradesPage() {
     }
   }, [stats])
 
+  if (!allowed) {
+    return (
+      <PageShell
+        label="İşlemler"
+        title="İşlem geçmişi"
+        description="PnL yalnız kapanmış işlemler için kayıtlıdır. Toplam, işlemlerin kendi para birimlerini toplar; döviz dönüşümü içermez."
+      >
+        <section className="space-y-3 border border-border bg-surface p-5">
+          <p className="text-sm text-muted-foreground">
+            {session ? "İşlem geçmişi için yönetici yetkisi gerekiyor." : "İşlem geçmişini görmek için yönetici hesabınızla giriş yapın."}
+          </p>
+          <Link href="/login?next=%2Ftrades" className="inline-flex min-h-11 items-center rounded-sm border border-border px-4 text-sm hover:bg-raised">
+            Giriş yap
+          </Link>
+        </section>
+      </PageShell>
+    )
+  }
+
   return (
     <PageShell
       label="İşlemler"
       title="İşlem geçmişi"
       description="PnL yalnız kapanmış işlemler için kayıtlıdır. Toplam, işlemlerin kendi para birimlerini toplar; döviz dönüşümü içermez."
       actions={
-        <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => refetch()} disabled={isFetching}>
+        <Button type="button" variant="outline" size="sm" className="min-h-11 gap-1.5" onClick={() => refetch()} disabled={isFetching}>
           <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />
           Yenile
         </Button>
@@ -68,7 +91,7 @@ export default function TradesPage() {
           { label: "Açık", value: formatMetric(ribbon.open, 0) },
           { label: "Kapalı", value: formatMetric(ribbon.closed, 0) },
           {
-            label: "Win Rate",
+            label: "Kazanma Oranı",
             value: formatMetricPercent(ribbon.winRate, 1),
             tone: metricTone(ribbon.winRate, 50),
           },

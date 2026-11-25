@@ -194,6 +194,8 @@ test('landing page uses the search component and clear heading hierarchy without
   assert.match(html, /data-symbol-search="true"/);
   assert.match(html, /<h2[^>]*>BIST<\/h2>/);
   assert.match(html, /<h3[^>]*>Apple \(AAPL\)<\/h3>/);
-  assert.match(html, /<h3[^>]*>İzleme Listeleri<\/h3>/);
+  assert.match(html, /<h3[^>]*>Araştırma Merkezi<\/h3>/);
+  assert.match(html, /href="\/research"/);
+  assert.equal((html.match(/href="\/chart"/g) ?? []).length, 1);
   assert.doesNotMatch(html, /AAPLE|Saniyelik/);
 });

@@ -7,6 +7,7 @@ Usage:
 """
 
 import hashlib
+import hmac
 from datetime import UTC, datetime, timedelta
 
 import jwt
@@ -147,7 +148,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
     if _is_legacy_sha256_hash(hashed_password):
         legacy_hash = hashlib.sha256(plain_password.encode()).hexdigest()
-        return legacy_hash == hashed_password.lower()
+        return hmac.compare_digest(legacy_hash, hashed_password.lower())
 
     return False
 

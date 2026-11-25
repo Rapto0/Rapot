@@ -26,20 +26,26 @@ const readableError = (error: unknown) => error instanceof ApiError && error.sta
 const statistic = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? value.toLocaleString("tr-TR") : "—"
 type WatchlistDraft = { name: string; bist: string; crypto: string; id?: string; revision?: number }
 
-export function AdvancedAlarmCenter() {
+function AlarmServiceStatus({ isError, hasRuntime, running, lastError, lastCycleAt }: { isError: boolean; hasRuntime: boolean; running?: boolean; lastError?: string | null; lastCycleAt?: string | null }) {
     const [now, setNow] = useState(0)
     useEffect(() => {
         setNow(Date.now())
-        const timer = setInterval(() => setNow(Date.now()), 1000)
+        const timer = setInterval(() => setNow(Date.now()), 5_000)
         return () => clearInterval(timer)
     }, [])
+    const delayed = Boolean(lastCycleAt && now > 0 && now - Date.parse(lastCycleAt) > 15_000)
+    const label = isError ? "Durum doğrulanamadı" : !hasRuntime ? "Durum yükleniyor" : !running ? "Alarm motoru çalışmıyor" : lastError ? "Alarm motoru uyarı veriyor" : delayed ? "Son kontrol gecikti" : "Alarm motoru çalışıyor"
+    return <p className="mt-2 text-sm font-semibold">{label}</p>
+}
+
+export function AdvancedAlarmCenter() {
     const session = useSession()
     const allowed = Boolean(session?.user.is_admin && !session.user.disabled)
     const identity = [session?.user.username, session?.expiresAt]
-    const rules = useQuery({ queryKey: ["advanced-alarms", ...identity], queryFn: ({ signal }) => fetchAdvancedAlarms(signal), enabled: allowed, refetchInterval: 15_000, retry: false })
-    const status = useQuery({ queryKey: ["advanced-alarm-status", ...identity], queryFn: ({ signal }) => fetchAdvancedAlarmStatus(signal), enabled: allowed, refetchInterval: 1000, retry: false })
-    const events = useQuery({ queryKey: ["advanced-alarm-events", ...identity], queryFn: ({ signal }) => fetchAdvancedEvents(undefined, signal), enabled: allowed, refetchInterval: 1000, retry: false })
-    const watchlists = useQuery({ queryKey: ["advanced-alarm-watchlists", ...identity], queryFn: ({ signal }) => fetchServerWatchlists(signal), enabled: allowed, refetchInterval: 15_000, retry: false })
+    const rules = useQuery({ queryKey: ["advanced-alarms", ...identity], queryFn: ({ signal }) => fetchAdvancedAlarms(signal), enabled: allowed, refetchInterval: 15_000, refetchIntervalInBackground: false, retry: false })
+    const status = useQuery({ queryKey: ["advanced-alarm-status", ...identity], queryFn: ({ signal }) => fetchAdvancedAlarmStatus(signal), enabled: allowed, refetchInterval: 5_000, refetchIntervalInBackground: false, retry: false })
+    const events = useQuery({ queryKey: ["advanced-alarm-events", ...identity], queryFn: ({ signal }) => fetchAdvancedEvents(undefined, signal), enabled: allowed, refetchInterval: 5_000, refetchIntervalInBackground: false, retry: false })
+    const watchlists = useQuery({ queryKey: ["advanced-alarm-watchlists", ...identity], queryFn: ({ signal }) => fetchServerWatchlists(signal), enabled: allowed, refetchInterval: 15_000, refetchIntervalInBackground: false, retry: false })
     const [category, setCategory] = useState<AlarmCategory>("price")
     const [search, setSearch] = useState("")
     const [page, setPage] = useState(0)
@@ -63,8 +69,6 @@ export function AdvancedAlarmCenter() {
     const market = runtime?.market ?? {}
     const customStatus = market.custom_indicators !== null && typeof market.custom_indicators === "object" && !Array.isArray(market.custom_indicators) ? market.custom_indicators as Record<string, unknown> : {}
     const nativeLeases = customStatus.native_subscription_policy === "daily_anchor_native_leases"
-    const delayed = Boolean(runtime?.last_cycle_at && now - Date.parse(runtime.last_cycle_at) > 15_000)
-    const serviceLabel = status.isError ? "Durum doğrulanamadı" : !runtime ? "Durum yükleniyor" : !runtime.running ? "Alarm motoru çalışmıyor" : runtime.last_error ? "Alarm motoru uyarı veriyor" : delayed ? "Son kontrol gecikti" : "Alarm motoru çalışıyor"
 
     useEffect(() => {
         setLocalLists([...loadStoredWatchlists(), ...loadStoredScannerWatchlists()])
@@ -189,12 +193,12 @@ export function AdvancedAlarmCenter() {
         {!allowed ? <section className="space-y-3 rounded border border-border bg-surface p-5"><p>{session ? "Alarm yönetimi için yönetici yetkisi gerekir." : "Kalıcı alarmlarını yönetmek için hesabına giriş yap."}</p><Link href="/login?next=%2Falarms" className="inline-flex min-h-11 items-center rounded border border-border px-4 text-sm">Giriş yap</Link><p className="text-xs text-muted-foreground">Oturumun kapanması sunucudaki etkin kuralları durdurmaz.</p></section> : <>
             {market.state === "provider_paused" && <p role="alert" className="rounded border border-loss/40 bg-loss/5 p-3 text-sm">TradingView verisi hesap koruması için duraklatıldı. Bu kaynağa bağlı alarmlar şu anda değerlendirilmez. Alarm ayarlarınız korunuyor.</p>}
             <section aria-label="Canlı alarm durumu" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                <div className="rounded border border-border bg-surface p-4"><p className="flex items-center gap-2 text-xs text-muted-foreground"><Activity className="h-4 w-4" />Sunucu</p><p className="mt-2 text-sm font-semibold">{serviceLabel}</p><p className="mt-1 text-xs text-muted-foreground">Son tur: {timeLabel(runtime?.last_cycle_at)}</p></div>
+                <div className="rounded border border-border bg-surface p-4"><p className="flex items-center gap-2 text-xs text-muted-foreground"><Activity className="h-4 w-4" />Sunucu</p><AlarmServiceStatus isError={status.isError} hasRuntime={Boolean(runtime)} running={runtime?.running} lastError={runtime?.last_error} lastCycleAt={runtime?.last_cycle_at} /><p className="mt-1 text-xs text-muted-foreground">Son tur: {timeLabel(runtime?.last_cycle_at)}</p></div>
                 <div className="rounded border border-border bg-surface p-4"><p className="text-xs text-muted-foreground">Son kontrol turu</p><p className="mt-2 text-sm font-semibold">{statistic(runtime?.evaluation?.ready)} hazır / {statistic(runtime?.evaluation?.checked)} kontrol</p><p className="mt-1 text-xs text-muted-foreground">Toplam {statistic(runtime?.evaluation?.total)} eşleşme · Bekleyen kontrol: {statistic(runtime?.evaluation?.backlog)}</p></div>
                 <div className="rounded border border-border bg-surface p-4"><p className="text-xs text-muted-foreground">Fiyat takibi</p><p className="mt-2 text-sm font-semibold">{statistic(market.fresh_symbols ?? market.ready_symbols)} güncel / {statistic(market.tracked_symbols ?? market.symbol_count)} sembol</p><p className="mt-1 text-xs text-muted-foreground">{typeof market.state === "string" ? ({ ok: "Taze fiyat alınıyor", waiting: "İlk fiyat bekleniyor", warming: "Veri hazırlanıyor", auth_required: "Hesap bağlantısını doğrulayın", storage_error: "Veri kaydı bekletiliyor", error: "Bağlantı sorunu", running: "Veri takibi açık", connected: "Bağlantı açık", unavailable: "Veri bekleniyor", disabled: "Veri takibi kapalı", provider_paused: "Hesap koruması için duraklatıldı", reconnecting: "Yeniden bağlanıyor" }[market.state] ?? "Durum ayrıntılarını inceleyin") : "İlk veri bekleniyor"}</p></div>
                 <div className="rounded border border-border bg-surface p-4"><p className="text-xs text-muted-foreground">Telegram kuyruğu</p><p className="mt-2 text-sm font-semibold">{statistic(runtime?.delivery?.pending)} bekleyen · {statistic(runtime?.delivery?.failed)} başarısız</p><p className="mt-1 text-xs text-muted-foreground">{runtime?.telegram_configured ? "Sunucudaki Telegram hedefi hazır" : "Telegram bağlantı durumu bekleniyor"}</p></div>
             </section>
-            <p className="text-xs leading-relaxed text-muted-foreground">Ekran saniyede bir yenilenir. Beş özel gösterge, gelen canlı fiyat olaylarıyla hesaplanır ve liste alarmları ekran yenilemesini beklemez. Ayrı standart RSI/EMA gibi mum koşullarının geçmiş yenileme hedefi 1 dakikalık mumlarda 30 saniye, diğer periyotlarda 60 saniyedir. Son kontrol turu düzenli veri denetimini; aşağıdaki canlı sayaçlar fiyat olaylarının değerlendirmesini gösterir. Seans dışında BIST’te yeni işlem fiyatı oluşmayabilir. Kaynak ve bildirim gecikmeleri ölçülerek izlenir.</p>
+            <p className="text-xs leading-relaxed text-muted-foreground">Ekran beş saniyede bir yenilenir. Beş özel gösterge, gelen canlı fiyat olaylarıyla hesaplanır ve liste alarmları ekran yenilemesini beklemez. Ayrı standart RSI/EMA gibi mum koşullarının geçmiş yenileme hedefi 1 dakikalık mumlarda 30 saniye, diğer periyotlarda 60 saniyedir. Son kontrol turu düzenli veri denetimini; aşağıdaki canlı sayaçlar fiyat olaylarının değerlendirmesini gösterir. Seans dışında BIST’te yeni işlem fiyatı oluşmayabilir. Kaynak ve bildirim gecikmeleri ölçülerek izlenir.</p>
             <details className="rounded border border-border bg-surface p-3 text-xs">
                 <summary className="cursor-pointer">Veri kapsamı ve bağlantı ayrıntıları</summary>
                 {typeof market.universe_as_of === "string" && <p className="mt-3 text-muted-foreground">BIST hisse listesinin denetim tarihi: {market.universe_as_of}. Bu tarih, fiyatların güncelliğini göstermez.</p>}

@@ -33,7 +33,7 @@ export default function AlarmsPage() {
     const [now, setNow] = useState(0)
     useEffect(() => {
         setNow(Date.now())
-        const timer = setInterval(() => setNow(Date.now()), 1000)
+        const timer = setInterval(() => setNow(Date.now()), 15_000)
         return () => clearInterval(timer)
     }, [])
     const session = useSession()
@@ -43,12 +43,12 @@ export default function AlarmsPage() {
     const rules = useQuery({
         queryKey,
         queryFn: ({ signal }) => fetchServerAlarms(signal),
-        enabled: allowed, refetchInterval: 15_000, retry: false,
+        enabled: allowed, refetchInterval: 15_000, refetchIntervalInBackground: false, retry: false,
     })
     const events = useQuery({
         queryKey: ["server-alarm-events", session?.user.username, session?.expiresAt],
         queryFn: ({ signal }) => fetchServerAlarmEvents(signal),
-        enabled: allowed, refetchInterval: 15_000, retry: false,
+        enabled: allowed, refetchInterval: 15_000, refetchIntervalInBackground: false, retry: false,
     })
     const [draft, setDraft] = useState<AlarmDraft>(emptyAlarmDraft)
     const [formOpen, setFormOpen] = useState(false)
@@ -151,7 +151,7 @@ export default function AlarmsPage() {
             : runtime.last_cycle_error ? "Son alarm döngüsü tamamlanamadı" : staleRuntime ? "Son kontrol gecikti" : "Alarm servisi çalışıyor"
 
     return (
-        <PageShell label="Sunucu alarmları" title="Alarm merkezi" description="Kurallar sunucuda saklanır. Alarm servisi çalışırken tarayıcınız ve bilgisayarınız kapalı olsa da kontrol edilir.">
+        <PageShell label="Eski sunucu alarmları" title="Eski sunucu alarmları" description="Kurallar sunucuda saklanır. Alarm servisi çalışırken tarayıcınız ve bilgisayarınız kapalı olsa da kontrol edilir.">
             {!allowed ? (
                 <section className="space-y-3 border border-border bg-surface p-4">
                     <p className="text-sm">{session ? "Sunucu alarmlarını yönetmek için yönetici yetkisi gerekir." : "Sunucu alarmlarınızı görmek ve düzenlemek için yönetici hesabınızla giriş yapın."}</p>

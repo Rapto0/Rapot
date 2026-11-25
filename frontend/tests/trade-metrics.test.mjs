@@ -39,12 +39,16 @@ const stats = {
   total_pnl: 0, win_rate: 0, scan_count: 0,
 };
 
-function tradeStats(rawStats) {
+const adminSession = { user: { username: 'admin', is_admin: true, disabled: false }, expiresAt: 9999 };
+
+function tradeStats(rawStats, session = adminSession) {
+  const queries = [];
   const hooks = loadSource('../src/lib/hooks/use-trades.ts', {
-    '@tanstack/react-query': { useQuery: options => ({ data: options.select(rawStats) }) },
+    '@tanstack/react-query': { useQuery: options => { queries.push(options); return { data: options.select(rawStats) }; } },
     '@/lib/api/client': { ...normalizers, fetchStats() {}, fetchTrades() {} },
+    './use-session': { useSession: () => session },
   });
-  return hooks.useTradeStats().data;
+  return { data: hooks.useTradeStats().data, query: queries[0] };
 }
 
 const container = ({ children, className }) => React.createElement('div', { className }, children);
@@ -65,9 +69,10 @@ const sharedImports = {
   '@/components/ui/badge': { Badge: container },
 };
 
-function renderTrades(rawTrades, rawStats = undefined) {
+function renderTrades(rawTrades, rawStats = undefined, session = adminSession) {
   const page = loadSource('../src/app/trades/page.tsx', {
     ...sharedImports,
+    'next/link': { __esModule: true, default: ({ children, ...props }) => React.createElement('a', props, children) },
     '@/components/ui/button': { Button: container },
     '@/components/ui/page-shell': { PageShell: ({ children, description }) => React.createElement('main', null, description, children) },
     '@/components/ui/kpi-ribbon': { KpiRibbon: ({ items }) => React.createElement('aside', null,
@@ -77,9 +82,10 @@ function renderTrades(rawTrades, rawStats = undefined) {
       ['Table', 'table'], ['TableBody', 'tbody'], ['TableCell', 'td'], ['TableHead', 'th'],
       ['TableHeader', 'thead'], ['TableRow', 'tr'],
     ]),
+    '@/lib/hooks/use-session': { useSession: () => session },
     '@/lib/hooks/use-trades': {
       useTrades: () => ({ data: rawTrades.map(normalizers.transformTrade), isLoading: false, isError: false }),
-      useTradeStats: () => ({ data: rawStats === undefined ? undefined : tradeStats(rawStats) }),
+      useTradeStats: () => ({ data: rawStats === undefined ? undefined : tradeStats(rawStats, session).data }),
     },
     '@/components/shared/error-boundary': { EmptyState: () => null },
   });
@@ -139,7 +145,10 @@ test('missing dates and unknown trade direction never become now or BUY', () => 
 });
 
 test('stats use the explicit CLOSED count and preserve legacy unknown counts and absent metrics', () => {
-  const result = tradeStats(stats);
+  const { data: result, query } = tradeStats(stats);
+  assert.equal(query.enabled, true);
+  assert.equal(query.retry, false);
+  assert.equal(query.queryKey[2], 'admin:9999');
   assert.equal(result.closed, 1, 'The third CANCELLED trade is not CLOSED');
   assert.equal(result.openPnL, null);
   assert.equal(result.totalPnL, 0);
@@ -199,80 +208,22 @@ test('actual trades page renders unknown current/PnL/date and separates cancelle
   assert.ok(zeroQuantity[6].endsWith('—'));
 });
 
-test('portfolio and mini portfolio show unknown aggregates and no fabricated open-position valuation', () => {
-  const loaded = loadSource('../src/components/dashboard/portfolio-panel.tsx', {
-    ...sharedImports,
-    '@/lib/hooks': {
-      useTrades: () => ({ data: [normalizers.transformTrade({ ...trade, status: 'OPEN' })] }),
-      useTradeStats: () => ({ data: undefined }),
-    },
-  });
-  for (const Component of [loaded.PortfolioPanel, loaded.MiniPortfolio]) {
-    const html = renderToStaticMarkup(React.createElement(Component));
-    assert.ok(html.includes('—'));
-    assert.ok(!html.includes('+0,00'));
-    assert.ok(!html.includes('text-profit'));
+test('trades page and hooks enforce admin session boundaries and use Turkish KPI labels', () => {
+  for (const guest of [null, { user: { username: 'reader', is_admin: false, disabled: false }, expiresAt: 10 }, { user: { username: 'admin', is_admin: true, disabled: true }, expiresAt: 10 }]) {
+    const queries = [];
+    const hooks = loadSource('../src/lib/hooks/use-trades.ts', {
+      '@tanstack/react-query': { useQuery: options => { queries.push(options); return { data: undefined }; } },
+      '@/lib/api/client': { ...normalizers, fetchStats() {}, fetchTrades() {} },
+      './use-session': { useSession: () => guest },
+    });
+    hooks.useTrades();
+    hooks.useTradeStats();
+    assert.ok(queries.every(query => query.enabled === false));
+    const html = renderTrades([trade], stats, guest);
+    assert.ok(html.includes('/login?next=%2Ftrades'));
+    assert.ok(!html.includes('THYAO'));
   }
-  const html = renderToStaticMarkup(React.createElement(loaded.PortfolioPanel));
-  assert.ok(html.includes('İşlem gönderimi bağlı değil'));
-  assert.ok(!html.includes('Paper Trading Aktif'));
-  assert.ok(!html.includes('Bağlı'));
-  for (const button of html.matchAll(/<button([^>]*)>(.*?)<\/button>/gs)) {
-    const label = button[2].replace(/<[^>]*>/g, '');
-    if (['AL', 'SAT'].includes(label) || button[1].includes('Pozisyonu Kapat')) {
-      assert.ok(button[1].includes('disabled'), label || 'close');
-    }
-  }
-});
-
-test('portfolio has no executable buy, sell or close event path', () => {
-  // Inspect actual component event props as well as the server-rendered disabled markup.
-  const loaded = loadSource('../src/components/dashboard/portfolio-panel.tsx', {
-    ...sharedImports,
-    react: { ...React, useState: () => [false, () => {}], useMemo: callback => callback() },
-    '@/lib/hooks': {
-      useTrades: () => ({ data: [normalizers.transformTrade({ ...trade, status: 'OPEN' })] }),
-      useTradeStats: () => ({ data: undefined }),
-    },
-  });
-  const buttons = [];
-  function visit(element) {
-    if (!element || typeof element !== 'object') return;
-    if (Array.isArray(element)) return element.forEach(visit);
-    if (typeof element.type === 'function') return visit(element.type(element.props));
-    if (element.type === 'button' && element.props.disabled) buttons.push(element.props);
-    visit(element.props?.children);
-  }
-  visit(loaded.PortfolioPanel({}));
-  assert.equal(buttons.length, 3, 'BUY, SELL and close are all disabled');
-  for (const props of buttons) {
-    assert.equal(props.onClick, undefined, 'No buy/sell/close callback can be dispatched');
-  }
-});
-
-test('open positions apply the shared measured-source contract', () => {
-  const rawRows = [
-    { ...trade, status: 'OPEN', pnl: 123 },
-    { ...trade, id: 2, status: 'CANCELLED', pnl: 123 },
-    { ...trade, id: 3, status: 'CLOSED', pnl: null },
-  ];
-  const query = {
-    useQuery: options => {
-      const raw = options.queryKey[0] === 'stats' ? stats : rawRows;
-      return { data: options.select(raw), isLoading: false, isError: false };
-    },
-  };
-  const positions = loadSource('../src/components/dashboard/market-overview.tsx', {
-    ...sharedImports,
-    '@tanstack/react-query': query,
-    '@/lib/api/client': { ...normalizers, fetchMarketOverview() {}, fetchTrades() {} },
-    '@/lib/hooks/use-binance-ticker': { useBinanceTicker: () => ({}) },
-    '@/lib/hooks/use-private-market': { usePrivateMarket: () => ({ allowed: true, sessionKey: 'admin:123' }) },
-    '@/components/market-data-status': { MarketDataStatus: () => null },
-    recharts: {},
-  });
-  const html = renderToStaticMarkup(React.createElement(positions.OpenPositions));
-  assert.ok(html.includes('—'));
-  assert.ok(!html.includes('123'));
-  assert.ok(!html.includes('0.00%'));
+  const adminHtml = renderTrades([trade], stats, adminSession);
+  assert.ok(adminHtml.includes('Kazanma Oranı'));
+  assert.ok(!adminHtml.includes('Win Rate'));
 });

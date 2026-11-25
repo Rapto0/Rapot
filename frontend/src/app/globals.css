@@ -14,14 +14,15 @@
 
   /* Text */
   --text-primary: #e8e8ec;
-  --text-secondary: rgba(255, 255, 255, 0.5);
-  --text-tertiary: rgba(255, 255, 255, 0.3);
-  --text-ghost: rgba(255, 255, 255, 0.15);
+  --text-secondary: rgba(255, 255, 255, 0.65);
+  --text-tertiary: rgba(255, 255, 255, 0.54);
+  --text-ghost: rgba(255, 255, 255, 0.2);
 
   /* Market colors */
   --positive: #22c55e;
   --negative: #ef4444;
   --neutral: #f59e0b;
+  --warning: var(--neutral);
 
   /* Chart colors */
   --chart-1: #3b82f6;
@@ -91,6 +92,7 @@
   --color-positive: var(--positive);
   --color-negative: var(--negative);
   --color-neutral: var(--neutral);
+  --color-warning: var(--warning);
 
   --radius-sm: 2px;
   --radius-md: 2px;
@@ -319,6 +321,10 @@ button {
 
 .text-neutral {
   color: var(--neutral);
+}
+
+.text-warning {
+  color: var(--warning);
 }
 
 .bg-profit {

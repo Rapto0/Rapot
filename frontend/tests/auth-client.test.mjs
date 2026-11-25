@@ -31,7 +31,7 @@ function createClient(apiBase = '/api', healthBase = '/health-api') {
     const timers = new Map();
     let timerId = 0;
     const context = vm.createContext({
-        Headers, URL, Set, Number,
+        Headers, URL, Set, Number, AbortController,
         Date: class extends Date { static now() { return now; } },
         window: {
             location: { origin: 'https://rapot.test' },
@@ -210,4 +210,27 @@ test('expiry timer signs out idle tabs without requiring a request', () => {
     client.advance(61_000);
     client.expire();
     assert.equal(client.session.getSession(), null);
+});
+
+test('fetchApi surfaces single-line backend details on 4xx/5xx errors and aborts hung requests', async () => {
+    const client = createClient();
+    client.login();
+    client.respond(() => Response.json({ detail: 'Sembol desteklenmiyor.' }, { status: 400 }));
+    await assert.rejects(client.core.fetchApi('/api/symbols/check'),
+        error => error.status === 400 && error.message === 'Sembol desteklenmiyor.');
+
+    client.respond(() => Response.json({ detail: [{ msg: 'Value error, Eşik 0-100 arası olmalı.' }] }, { status: 422 }));
+    await assert.rejects(client.core.fetchApi('/api/alarms'),
+        error => error.status === 422 && error.message === 'Eşik 0-100 arası olmalı.');
+
+    client.respond(() => Response.json({ detail: 'Traceback\nline 2' }, { status: 503, statusText: 'Service Unavailable' }));
+    await assert.rejects(client.core.fetchApi('/api/health'),
+        error => error.status === 503 && error.message === 'API error: Service Unavailable');
+
+    client.respond((_url, options) => new Promise((_resolve, reject) => {
+        options.signal.addEventListener('abort', () => reject(new Error('aborted')));
+    }));
+    const pending = client.core.fetchApi('/api/logs');
+    client.expire();
+    await assert.rejects(pending, error => error.status === 408 && /zaman aşımı/.test(error.message));
 });
