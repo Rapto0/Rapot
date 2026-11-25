@@ -1,5 +1,32 @@
 # AGENTS.md — Rapot kod tabanı rehberi
 
+**25 Kasım Aşama 1–3 yayımlandı:** Güncel API/frontend kaynağı
+`6e489b52651920b05bfb07fb463d63942e65b425` (**16:37:07 UTC / 19:37:07 TSİ**
+yayın, **16:37:28 UTC** ayrı kabul; önceki ara yayınlar: Aşama 1 API/frontend
+`2ea0d148` **14:51:03 UTC**, Aşama 2 yalnız frontend `fd400264` **15:55:52 UTC**).
+Aşama 1: `--warning`/kontrast CSS düzeltmeleri, `/trades` yönetici oturum sınırı,
+iç içe `<main>` temizliği, ana sayfa `/research` kartı, `/alarms` 5 sn / `/calendar`
+300 sn sorgu aralığı, güvenlik başlıkları, 30 sn API zaman aşımı/FastAPI hata
+metinleri, sabit zamanlı eski SHA-256 doğrulama (`hmac.compare_digest`) ve ölü
+bileşen temizliği. Aşama 2: RSI takipçisi URL eşitleme, hazırlık çubuğu, hazır
+tarama filtreleri, CSV dışa aktarma, satır alarm kısayolu, `/health` sağlayıcı
+koruması/log filtreleme, `/calendar` tarih/ülke filtreleri, `/settings` gerçek
+`localStorage` yönetimi, özel 404/hata sınırları ve yerel tipografi. Aşama 3:
+`HttpOnly; SameSite=Lax; Secure` çerez oturumu (`/auth/session`, `/auth/logout`),
+çift gönderimli CSRF koruması (`rapot_csrf`/`X-CSRF-Token`), HTTP'den yalıtılmış
+30 sn WebSocket bileti (`/auth/ws-ticket`), Bearer geriye dönük uyumluluğu ve
+`advanced-chart.tsx` modülerleştirmesi (`chart-constants.ts`, `indicator-pane.tsx`
+ve dinamik lazy-load). Kullanıcı onayıyla yalnızca 3–23 Ekim 2026 kullanılmayan
+48 eski Rapot imajı silinerek ~3,31 GiB alan açıldı; tüm Kasım imajları ve aktif
+rollback imajları korundu. Beş CI işi (`45652067336`), temiz imaj (`45652780627`),
+470 paket/sıfır audit bulgusu, 334 frontend + 169 hedefli Python testi ve standalone
+proxy doğrulaması geçti. Dört servis healthy/restart0, dört etkin kural, 4 native
+akış, 15 tablo, özel dosyalar, Compose/current `21e39512`, MW/PG ve 452 olay
+korundu (önceki 30 gün üzeri terminal olay budaması yayın öncesi kaydedildi).
+1.150.976 bayt yedek bağımsız restore edildi; boş disk ~3,89 GiB.
+[Devam planı](docs/RAPOT_DEVAM_PLANI.md) ve
+[güvenlik kaydı](docs/FRONTEND_DEPENDENCY_SECURITY.md) günceldir.
+
 **19 Kasım yayımlandı:** `3842ecff802648ec58031cb4011845a6704d203c`,
 **10:05:14 UTC / 13:05:14 TSİ** API/frontend, **10:05:23 UTC** ayrı kabul.
 Takipçi fiyat ve RSI ekranını 120 saniyede yeniler, sunucu talebi 150 saniye

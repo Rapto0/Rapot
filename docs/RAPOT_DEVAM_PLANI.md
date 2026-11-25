@@ -1,6 +1,50 @@
 # Rapot Devam Planı
 
-**Güncel plan: 19 Kasım 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
+**Güncel plan: 25 Kasım 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
+
+## 25 Kasım — Web sitesi Aşama 1, 2 ve 3 iyileştirmeleri yayımlandı
+
+Kullanıcı onayıyla web sitesinin üç aşamalı iyileştirme planı sırayla uygulandı,
+her aşama sonrası ayrı CI/temiz imaj/yayın ve bağımsız üretim kabulü tamamlandı:
+
+- **Aşama 1 — Güvenilirlik ve temel düzeltmeler (`2ea0d148b52864a2b048264c99e2c31053e39cb3`, API/frontend):**
+  **14:51:03 UTC / 17:51:03 TSİ** yayımlandı, **14:52:13 UTC** bağımsız kabul geçti.
+  CI [`45631046376`](https://github.com/Rapto0/Rapot/actions/runs/45631046376), temiz imaj
+  [`45632124203`](https://github.com/Rapto0/Rapot/actions/runs/45632124203), 470 paket/0 bulgu,
+  1.150.976 bayt yedek bağımsız geri yüklendi (`dd6bb9fe...`), receipt SHA256 `237c2ac4...`.
+  `--warning`/kontrast CSS tanımları, `/trades` yönetici oturum sınırı, iç içe `<main>`
+  düzeltmesi, ana sayfa `/research` kartı, `/alarms` 5 sn / `/calendar` 300 sn sorgu aralığı,
+  HTTP güvenlik başlıkları, 30 sn API zaman aşımı/FastAPI hata detayı, sabit zamanlı eski SHA-256
+  doğrulama ve ölü bileşen temizliği yayımlandı.
+- **Aşama 2 — Kullanıcı deneyimi ve gözlemlenebilirlik (`fd4002648ff2c31cf96047ec626a18f197b310a5`, yalnız frontend):**
+  **15:55:52 UTC / 18:55:52 TSİ** yayımlandı, **15:56:31 UTC** bağımsız kabul geçti (`rapot-api-1`
+  dokunulmadan `2ea0d148` üzerinde kaldı). CI [`45640464645`](https://github.com/Rapto0/Rapot/actions/runs/45640464645),
+  temiz imaj [`45648086879`](https://github.com/Rapto0/Rapot/actions/runs/45648086879), 470 paket/0 bulgu,
+  receipt SHA256 `604586b5...`. RSI takipçisi URL eşitleme, hazırlık çubuğu, 3 hazır tarama
+  filtresi, formül güvenli CSV dışa aktarma, satır bazlı sunucu alarm kısayolu, `/health` sağlayıcı
+  koruma/log filtreleme, `/calendar` tarih/ülke filtreleri, `/settings` gerçek `localStorage` yönetimi,
+  özel 404/hata sınırları ve yerel tipografi yayımlandı.
+- **Aşama 3 — `HttpOnly` çerez oturumu + CSRF + WebSocket bileti ve grafik modülerleştirmesi (`6e489b52651920b05bfb07fb463d63942e65b425`, API/frontend):**
+  **16:37:07 UTC / 19:37:07 TSİ** yayımlandı, **16:37:28 UTC** bağımsız kabul geçti.
+  CI [`45652067336`](https://github.com/Rapto0/Rapot/actions/runs/45652067336) (5/5 iş), temiz imaj
+  [`45652780627`](https://github.com/Rapto0/Rapot/actions/runs/45652780627) (332 kaynak, 111 dağıtım,
+  Next 16.4.6 / Sharp 0.35.5, 470 npm paket / 0 bulgu).
+  Backend digest `ghcr.io/rapto0/rapot/backend@sha256:4f91e7ce5d67f926761ab253a66f10a11b876ae40b9fdb0f4e3f71ebd04743fe`,
+  frontend digest `ghcr.io/rapto0/rapot/frontend@sha256:0b94a05ae5bae45109d61d8f51e8deca9b96625ce6b100651ffc73cd22bd616c`.
+  Tarayıcı oturumu `HttpOnly; SameSite=Lax; Secure` `rapot_session` çerezi (`POST/GET /auth/session`,
+  `POST /auth/logout`), yazma isteklerinde çift gönderimli CSRF (`rapot_csrf` + `X-CSRF-Token`) ve
+  HTTP'den yalıtılmış 30 sn WebSocket bileti (`POST /auth/ws-ticket`) ile F5/yeni sekme kalıcılığına
+  geçti; mevcut `Authorization: Bearer` istemci uyumluluğu korundu. `advanced-chart.tsx` dosyası
+  `chart-constants.ts` ve `indicator-pane.tsx` modüllerine ayrıldı; `CustomIndicatorPanel`,
+  `ChartDrawingTools` ve `IndicatorPane` `next/dynamic(..., { ssr: false })` ile tembel yüklenir.
+  Kullanıcı onayıyla yalnızca 3–23 Ekim 2026 kullanılmayan 48 eski Rapot imajı temizlenerek
+  `3.557.171.200` bayt (~3,31 GiB) disk alanı açıldı; tüm Kasım ve aktif rollback imajları korundu.
+  1.150.976 bayt taze SQLite yedeği bağımsız geri yüklendi (`767e4bd7...`); 15 tablo, dört etkin
+  kural, 4 native akış, 452 olay, özel dosyalar, Compose/current `21e39512`, MW/PG ve dört servisin
+  healthy/restart0 durumu doğrulandı. Yayın receipt SHA256
+  `e000028ce06aa09b4ee70b75fb0b60a0e5b0bf3b3c79b7043a22457925f485a7`, kalan boş disk
+  `4.172.152.832` bayt (~3,89 GiB). Kanıtlar `runtime-data/20261125-phase1-hardening/`,
+  `runtime-data/20261125-phase2-ux/` ve `runtime-data/20261125-phase3-auth-chart/` altındadır.
 
 ## 19 Kasım — Takipçi düzeni ve 120 saniyelik yenileme yayımlandı
 

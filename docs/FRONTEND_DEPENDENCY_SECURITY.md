@@ -1,10 +1,18 @@
 # Frontend bağımlılık güvenliği
 
-İlk inceleme tarihi: **13 Eylül 2026**; son takip **19 Kasım 2026**. İlk kaynak sürümü
+İlk inceleme tarihi: **13 Eylül 2026**; son takip **25 Kasım 2026**. İlk kaynak sürümü
 `d79f4cc841b3de411777730eb91a245ade96cd6e`; frontend kodu ve lock,
 P3-1 dördüncü adım kapanışındaki durumdur. İş sırası ve üretim kabulü
 [devam planında](RAPOT_DEVAM_PLANI.md#p1-g2--frontend-bağımlılık-güvenliği-takibi)
 tutulur.
+
+## 25 Kasım 2026 — Aşama 1–3 yayınlarının bağımlılık denetimi
+
+`2ea0d148`, `fd400264` ve `6e489b52` kaynaklarının her üç CI denetimi (`45631046376`,
+`45640464645`, `45652067336`) 470 kilitli bağımlılıkta sıfır bulgu ile `passed` döndü.
+Frontend bağımlılık kilidi ve Next.js `16.4.6` / Sharp `0.35.5` sürümleri değişmedi;
+süreli istisna kullanılmadı. Kanıtlar `runtime-data/20261125-phase3-auth-chart/github-runtime-proof/`
+altında tutulur.
 
 ## 19 Kasım 2026 — Takipçi yayınının bağımlılık denetimi
 
