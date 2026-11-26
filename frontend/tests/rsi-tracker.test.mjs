@@ -5,7 +5,7 @@ import { load, hooks, nodes, text, primitives } from './view-harness.mjs';
 const model = load('../src/lib/rsi-tracker.ts');
 const symbols = Array.from({ length: 53 }, (_, index) => `PAY${String(index).padStart(2, '0')}`);
 
-function tracker({ allowed = true, responses = {}, bistQuote = {}, rsiRows = {}, lists = [] } = {}) {
+function tracker({ allowed = true, responses = {}, bistQuote = {}, rsiRows = {}, rsiQuery = {}, lists = [] } = {}) {
   const state = hooks();
   const queries = [], requests = [], snapshots = [], streams = [], intervals = [];
   let mounted = false;
@@ -15,7 +15,7 @@ function tracker({ allowed = true, responses = {}, bistQuote = {}, rsiRows = {},
     } },
     '@tanstack/react-query': { useQuery: options => {
       queries.push(options);
-      if (options.queryKey[0] === 'rsi-tracker-values') return { data: { rows: rsiRows }, dataUpdatedAt: 0, refetch: () => requests.push('refresh-rsi') };
+      if (options.queryKey[0] === 'rsi-tracker-values') return { data: { rows: rsiRows }, dataUpdatedAt: 0, refetch: () => requests.push('refresh-rsi'), ...rsiQuery };
       if (options.queryKey[0] === 'rsi-tracker-watchlists') return { data: { watchlists: lists }, refetch: () => requests.push('refresh-watchlists') };
       return { data: { symbols: options.queryKey[2] === 'BIST' ? symbols : ['BTCUSDT', 'ETHUSDT'] },
         refetch: () => requests.push('refresh-symbols'), ...responses[options.queryKey[2]] };
@@ -135,13 +135,21 @@ test('page replacement keeps the lease identity and only submits the new 25 memb
   assert.equal(app.requests.at(-1)[1], first[1]);
 });
 
-test('scanner refreshes at two minutes and the refresh button immediately requests its active data', () => {
+test('scanner bounds preparation checks and the refresh button immediately requests active data', async () => {
   const app = tracker();
   let tree = app.render();
-  for (const name of ['rsi-tracker-values', 'rsi-tracker-watchlists']) {
-    const query = app.queries.findLast(options => options.queryKey[0] === name);
-    assert.equal(query.refetchInterval, 120_000);
-  }
+  const values = app.queries.findLast(options => options.queryKey[0] === 'rsi-tracker-values');
+  const lists = app.queries.findLast(options => options.queryKey[0] === 'rsi-tracker-watchlists');
+  const data = { rows: { PAY00: { cells: { '1D': { status: 'waiting' } } } } };
+  assert.equal(lists.refetchInterval, 120_000);
+  assert.equal(values.refetchIntervalInBackground, false);
+  await values.queryFn({ signal: new AbortController().signal });
+  app.requests.length = 0;
+  assert.equal(values.refetchInterval({ state: { status: 'success', data } }), 10_000);
+  assert.equal(values.refetchInterval({ state: { status: 'error', data } }), 120_000);
+  assert.equal(model.trackerPollInterval(data, 1_000, 51_000), 10_000);
+  assert.equal(model.trackerPollInterval(data, 1_000, 51_001), 120_000);
+  assert.equal(model.trackerPollInterval({ rows: {} }, 1_000, 1_000), 120_000);
   assert.equal(app.intervals.at(-1), 120_000);
   assert.equal(app.streams.at(-1).flushIntervalMs, 120_000);
   button(tree, 'Yenile').props.onClick();
@@ -269,7 +277,7 @@ test('URL serialization, readiness summary, alarm links, presets and CSV export 
     },
   }, ['15m', '1D']);
   assert.deepEqual(JSON.parse(JSON.stringify(summary)), {
-    total: 4, numeric: 2, ready: 1, stale: 0, candle: 1, waiting: 1, insufficient: 1, other: 0, percent: 75,
+    total: 4, numeric: 2, ready: 1, stale: 0, candle: 1, retained: 0, waiting: 1, insufficient: 1, other: 0, percent: 75,
   });
 
   const csv = model.buildTrackerCsv(['THYAO', '=CMD'], 'BIST', { THYAO: { price: 312.5, change: 1.25 } }, {
@@ -285,4 +293,24 @@ test('URL serialization, readiness summary, alarm links, presets and CSV export 
   button(tree, 'Aşırı satım (1G ≤ 30)').props.onClick(); tree = app.render();
   assert.equal(symbolRows(tree).length, 1);
   assert.match(text(symbolRows(tree)[0]), /PAY00/);
+});
+
+test('last records survive a timeout with labels and never satisfy a live filter', () => {
+  const last = { value: 23, bar_time: 1794614400, received_at: 1794651000, kind: 'closed' };
+  const row = { source_time: null, price: null, session_ended: true,
+    last_price: { value: 42, source_time: 1794651000, received_at: 1794651001 },
+    cells: { '1D': { value: null, status: 'waiting', last } } };
+  const snapshot = { rows: { PAY00: row } };
+  const app = tracker({ rsiRows: snapshot.rows, rsiQuery: { isError: true, error: { status: 408 } } });
+  const tree = app.render();
+  assert.match(text(tree), /23Son kapanış · Veri hazırlanıyor/);
+  assert.match(text(tree), /42Son kayıt/);
+  assert.match(text(tree), /RSI isteği zaman aşımına uğradı/);
+  const summary = model.summarizeRsiCells(['PAY00'], snapshot, ['1D']);
+  assert.equal(summary.numeric, 1);
+  assert.equal(summary.retained, 1);
+  assert.equal(summary.ready, 0);
+  assert.equal(summary.percent, 0);
+  assert.equal(model.trackerResultRows(['PAY00'], snapshot, [{ period: '1D', min: '', max: '30' }], null, true, 1794651001).length, 0);
+  assert.match(model.buildTrackerCsv(['PAY00'], 'BIST', {}, snapshot, ['1D']), /23\.00,Son kapanış/);
 });

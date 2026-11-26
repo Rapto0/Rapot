@@ -22,6 +22,8 @@ export const RSI_TIMEFRAMES = [
 export type RsiTimeframe = typeof RSI_TIMEFRAMES[number]["id"]
 export const TRACKER_PAGE_SIZE = 25
 export const TRACKER_REFRESH_MS = 120_000
+export const TRACKER_PREPARATION_POLL_MS = 10_000
+export const TRACKER_PREPARATION_WINDOW_MS = 60_000
 export const TRACKER_SYMBOL_LIMIT = TRACKER_PAGE_SIZE
 export const ALL_RSI_COLUMNS: RsiTimeframe[] = RSI_TIMEFRAMES.map(item => item.id)
 export const RSI_COLUMNS_STORAGE_KEY = "rapot.rsi-tracker.columns.v1"
@@ -49,7 +51,7 @@ export function trackerResultRows(symbols: readonly string[], snapshot: RsiSnaps
     const value = (symbol: string, period: RsiTimeframe): number | null => {
         const row = snapshot?.rows[symbol], cell = row?.cells[period]
         if (!fresh || cell?.status !== "ready" || cell.value == null || !Number.isFinite(cell.value)
-            || row?.source_time == null || (observedAt > 0 && (observedAt - row.source_time > 30 || row.source_time - observedAt > 5))) return null
+            || !trackerQuoteFresh(row?.source_time, observedAt)) return null
         return cell.value
     }
     const active = filters.filter(filter => filter.min.trim() || filter.max.trim())
@@ -70,18 +72,25 @@ export function trackerResultRows(symbols: readonly string[], snapshot: RsiSnaps
 
 type RsiCellStatus = "ready" | "stale" | "candle" | "waiting" | "insufficient" | "capacity" | "paused" | "unavailable"
 
+export interface RsiCell {
+    status: RsiCellStatus
+    value: number | null
+    bar_time: number | null
+    received_at?: number
+    last?: { value: number; bar_time: number; received_at: number; kind: "closed" | "candle" }
+}
+
 export interface RsiSnapshot {
+    snapshot_version?: number
     source: "borsapy_tradingview" | "tradingview_binance"
     length: number
     observed_at: number
     rows: Record<string, {
         source_time: number | null
         price: number | null
-        cells: Partial<Record<RsiTimeframe, {
-            status: RsiCellStatus
-            value: number | null
-            bar_time: number | null
-        }>>
+        session_ended?: boolean
+        last_price?: { value: number; source_time: number; received_at: number }
+        cells: Partial<Record<RsiTimeframe, RsiCell>>
     }>
 }
 
@@ -94,6 +103,33 @@ export const RSI_CELL_STATUS: Record<RsiCellStatus, string> = {
     capacity: "Takip kapasitesi dolu",
     paused: "Veri erişimi duraklatıldı",
     unavailable: "Periyot verisi alınamadı",
+}
+
+export function rsiDisplayValue(cell?: RsiCell): number | null {
+    const value = cell?.value ?? cell?.last?.value
+    return value != null && Number.isFinite(value) ? value : null
+}
+
+export function trackerQuoteFresh(sourceTime: number | null | undefined, observedAt: number) {
+    return sourceTime != null && Number.isFinite(sourceTime) &&
+        (observedAt <= 0 || (observedAt - sourceTime <= 30 && sourceTime - observedAt <= 5))
+}
+
+export function rsiDisplayStatus(cell: RsiCell | undefined, expired: boolean): string {
+    const status = cell?.status ?? "waiting"
+    if (cell?.last) {
+        const label = cell.last.kind === "closed" ? "Son kapanış" : "Son mum kaydı"
+        return `${label} · ${RSI_CELL_STATUS[status]}`
+    }
+    return expired && status === "ready" ? "Son alınan RSI" : RSI_CELL_STATUS[status]
+}
+
+export function trackerPollInterval(snapshot: RsiSnapshot | undefined, startedAt: number, now: number) {
+    if (startedAt > 0 && now + TRACKER_PREPARATION_POLL_MS - startedAt <= TRACKER_PREPARATION_WINDOW_MS &&
+        Object.values(snapshot?.rows ?? {}).some(row => Object.values(row.cells).some(cell => cell.status === "waiting"))) {
+        return TRACKER_PREPARATION_POLL_MS
+    }
+    return TRACKER_REFRESH_MS
 }
 
 export function rsiSourceTime(epoch: number | null | undefined): string | null {
@@ -215,6 +251,7 @@ export interface RsiReadinessSummary {
     ready: number
     stale: number
     candle: number
+    retained: number
     waiting: number
     insufficient: number
     other: number
@@ -225,31 +262,36 @@ export function summarizeRsiCells(
     symbols: readonly string[],
     snapshot: RsiSnapshot | undefined,
     periods: readonly RsiTimeframe[],
+    fresh = true,
+    observedAt = snapshot?.observed_at ?? 0,
 ): RsiReadinessSummary {
     const total = symbols.length * periods.length
     let numeric = 0
     let ready = 0
     let stale = 0
     let candle = 0
+    let retained = 0
     let waiting = 0
     let insufficient = 0
     let other = 0
     for (const symbol of symbols) {
-        const cells = snapshot?.rows[symbol]?.cells
+        const row = snapshot?.rows[symbol]
+        const quoteFresh = fresh && trackerQuoteFresh(row?.source_time, observedAt)
         for (const period of periods) {
-            const cell = cells?.[period]
+            const cell = row?.cells[period]
             const status = cell?.status ?? "waiting"
-            if (cell?.value != null && Number.isFinite(cell.value)) numeric++
-            if (status === "ready") ready++
-            else if (status === "stale") stale++
+            if (rsiDisplayValue(cell) != null) numeric++
+            if (cell?.last && cell.value == null) retained++
+            if (status === "ready" && quoteFresh) ready++
+            else if (status === "stale" || status === "ready") stale++
             else if (status === "candle") candle++
             else if (status === "waiting") waiting++
             else if (status === "insufficient") insufficient++
             else other++
         }
     }
-    const percent = total > 0 ? Math.round(((numeric + insufficient) / total) * 100) : 0
-    return { total, numeric, ready, stale, candle, waiting, insufficient, other, percent }
+    const percent = total > 0 ? Math.round(((numeric - retained + insufficient) / total) * 100) : 0
+    return { total, numeric, ready, stale, candle, retained, waiting, insufficient, other, percent }
 }
 
 export interface RsiPreset {
@@ -276,6 +318,8 @@ export function buildTrackerCsv(
     pricesBySymbol: Record<string, { price?: number | null; change?: number | null }>,
     snapshot: RsiSnapshot | undefined,
     periods: readonly RsiTimeframe[],
+    expired = false,
+    observedAt = snapshot?.observed_at ?? 0,
 ): string {
     const headers = [
         "Sembol",
@@ -283,6 +327,7 @@ export function buildTrackerCsv(
         market === "BIST" ? "Son Fiyat (TRY)" : "Son Fiyat (USDT)",
         "Değişim (%)",
         ...periods.map(period => `RSI ${period}`),
+        ...periods.flatMap(period => [`RSI ${period} Durum`, `RSI ${period} Veri Zamanı`]),
     ]
     const lines = [headers.map(csvEscape).join(",")]
     for (const symbol of symbols) {
@@ -294,8 +339,13 @@ export function buildTrackerCsv(
             typeof quote?.price === "number" && Number.isFinite(quote.price) ? String(quote.price) : "",
             typeof quote?.change === "number" && Number.isFinite(quote.change) ? quote.change.toFixed(2) : "",
             ...periods.map(period => {
-                const val = rsiRow?.cells[period]?.value
-                return typeof val === "number" && Number.isFinite(val) ? val.toFixed(2) : ""
+                return rsiDisplayValue(rsiRow?.cells[period])?.toFixed(2) ?? ""
+            }),
+            ...periods.flatMap(period => {
+                const cell = rsiRow?.cells[period]
+                const timestamp = cell?.last?.bar_time ?? (cell?.status === "ready" || cell?.status === "stale"
+                    ? rsiRow?.source_time : cell?.bar_time)
+                return [rsiDisplayStatus(cell, expired || !trackerQuoteFresh(rsiRow?.source_time, observedAt)), rsiSourceTime(timestamp) ?? ""]
             }),
         ]
         lines.push(cells.map(csvEscape).join(","))

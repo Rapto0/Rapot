@@ -1,4 +1,4 @@
-import { API_BASE_URL, fetchApi } from './core';
+import { API_BASE_URL, ApiError, fetchApi } from './core';
 import type { RsiSnapshot, RsiTimeframe, TrackerMarket } from '../rsi-tracker';
 import type {
     ApiHealth,
@@ -20,12 +20,21 @@ export async function fetchCryptoSymbols(signal?: AbortSignal): Promise<SymbolsR
     return fetchApi<SymbolsResponse>(`${API_BASE_URL}/symbols/crypto`, { signal });
 }
 
-export function fetchRsiSnapshot(
+export async function fetchRsiSnapshot(
     view: string, market: TrackerMarket, symbols: string[], periods: RsiTimeframe[], signal?: AbortSignal,
 ): Promise<RsiSnapshot> {
-    return fetchApi(`${API_BASE_URL}/borsapy/market/rsi-tracker`, {
-        method: 'POST', body: JSON.stringify({ view, market, symbols, periods }), signal,
-    });
+    const timeout = AbortSignal.timeout(8_000);
+    try {
+        return await fetchApi(`${API_BASE_URL}/borsapy/market/rsi-tracker`, {
+            method: 'POST', body: JSON.stringify({ view, market, symbols, periods }),
+            signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+        });
+    } catch (error) {
+        if (timeout.aborted && !signal?.aborted) {
+            throw new ApiError('RSI isteği zaman aşımına uğradı.', 408);
+        }
+        throw error;
+    }
 }
 
 export async function fetchLogs(limit: number = 50): Promise<LogEntry[]> {

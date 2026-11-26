@@ -9,16 +9,72 @@ import { usePrivateMarket } from "@/lib/hooks/use-private-market"
 import { useMarketSnapshot } from "@/lib/hooks/use-market-snapshot"
 import { useBinanceTickerFeed } from "@/lib/hooks/use-binance-ticker"
 import {
-    ALL_RSI_COLUMNS, RSI_CELL_STATUS, RSI_PRESETS, RSI_TIMEFRAMES, TRACKER_PAGE_SIZE, TRACKER_REFRESH_MS, RSI_COLUMNS_STORAGE_KEY,
+    ALL_RSI_COLUMNS, RSI_PRESETS, RSI_TIMEFRAMES, TRACKER_PAGE_SIZE, TRACKER_REFRESH_MS, RSI_COLUMNS_STORAGE_KEY,
     buildTrackerCsv, parseTrackerUrlState, serializeTrackerUrlState, storedRsiColumns, summarizeRsiCells,
-    trackerAlarmHref, trackerChartHref, trackerNumber, trackerPage, trackerResultRows, rsiSourceTime, toggleRsiColumn,
-    type RsiPreset, type RsiTimeframe, type TrackerMarket, type RsiFilter, type RsiSort,
+    trackerAlarmHref, trackerChartHref, trackerNumber, trackerPage, trackerPollInterval, trackerQuoteFresh, trackerResultRows,
+    rsiDisplayStatus, rsiDisplayValue, rsiSourceTime, toggleRsiColumn,
+    type RsiPreset, type RsiSnapshot, type RsiTimeframe, type TrackerMarket, type RsiFilter, type RsiSort,
 } from "@/lib/rsi-tracker"
 import { cn } from "@/lib/utils"
 
 const control = "inline-flex min-h-11 items-center justify-center rounded border border-border px-3 text-xs transition-colors hover:bg-raised disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-foreground"
 const refreshPolicy = { refetchInterval: TRACKER_REFRESH_MS, staleTime: TRACKER_REFRESH_MS, retry: false }
 const clock = new Intl.DateTimeFormat("tr-TR", { timeZone: "Europe/Istanbul", timeStyle: "medium" })
+const timingMilestones = ["first-response", "first-price", "first-numeric-rsi", "first-usable-table"] as const
+
+function useTrackerTiming(scope: string, response: boolean, price: boolean, hasRows: boolean, numeric: number, total: number) {
+    useEffect(() => {
+        const timeline = window.performance
+        if (!timeline) return
+        for (const milestone of timingMilestones) {
+            timeline.clearMarks(`rapot.rsi.${milestone}`)
+            timeline.clearMeasures(`rapot.rsi.${milestone}`)
+        }
+        timeline.clearMarks("rapot.rsi.scope")
+        timeline.clearMarks("rapot.rsi.coverage")
+        timeline.mark("rapot.rsi.scope")
+    }, [scope])
+    useEffect(() => {
+        const timeline = window.performance
+        if (!timeline || !total) return
+        const record = () => {
+            const reached = [response, price, hasRows && numeric > 0, price && numeric > 0]
+            for (const [index, milestone] of timingMilestones.entries()) {
+                const name = `rapot.rsi.${milestone}`
+                if (reached[index] && !timeline.getEntriesByName(name, "mark").length) {
+                    timeline.mark(name)
+                    timeline.measure(name, "rapot.rsi.scope", name)
+                }
+            }
+            timeline.clearMarks("rapot.rsi.coverage")
+            timeline.mark("rapot.rsi.coverage", { detail: { numeric, total } })
+        }
+        const frame = window.requestAnimationFrame(record)
+        return () => window.cancelAnimationFrame(frame)
+    }, [scope, response, price, hasRows, numeric, total])
+}
+
+function useRsiClock(snapshot: RsiSnapshot | undefined, updatedAt: number) {
+    const [clock, setClock] = useState({ updatedAt: 0, time: 0 })
+    useEffect(() => {
+        if (!snapshot?.observed_at || !updatedAt) return
+        const observedAt = snapshot.observed_at
+        const deadlines = Object.values(snapshot.rows).flatMap(row => row.source_time != null &&
+            Object.values(row.cells).some(cell => cell.status === "ready") ? [row.source_time + 30.001] : [])
+        if (!deadlines.length) return
+        let timer: number
+        const advance = () => {
+            const now = observedAt + Math.max(0, Date.now() - updatedAt) / 1000
+            setClock({ updatedAt, time: now })
+            const next = Math.min(...deadlines.filter(at => at > now))
+            if (Number.isFinite(next)) timer = window.setTimeout(advance, Math.ceil((next - now) * 1000))
+        }
+        const first = Math.min(...deadlines)
+        timer = window.setTimeout(advance, Math.max(0, Math.ceil((first - observedAt) * 1000) - (Date.now() - updatedAt)))
+        return () => window.clearTimeout(timer)
+    }, [snapshot, updatedAt])
+    return clock.updatedAt === updatedAt && updatedAt > 0 ? clock.time : snapshot?.observed_at ?? 0
+}
 
 export function RsiTracker() {
     const { allowed, sessionKey } = usePrivateMarket()
@@ -34,6 +90,7 @@ export function RsiTracker() {
     const [sort, setSort] = useState<RsiSort | null>(null)
     const [preferencesLoaded, setPreferencesLoaded] = useState(false)
     const [view] = useState(() => typeof window === "undefined" ? "" : window.crypto.randomUUID())
+    const [preparation] = useState(() => ({ scope: "", startedAt: 0 }))
     const symbolQuery = search.trim().toUpperCase()
     const symbols = useQuery({
         queryKey: ["rsi-tracker-symbols", sessionKey, market],
@@ -63,11 +120,20 @@ export function RsiTracker() {
     })
     const shownColumns = RSI_TIMEFRAMES.filter(item => columns.includes(item.id))
     const columnGroups = [...new Set(shownColumns.map(item => item.group))]
+    const rsiScope = JSON.stringify([market, tracked, columns])
     const rsi = useQuery({
         queryKey: ["rsi-tracker-values", sessionKey, view, market, tracked, columns],
-        queryFn: ({ signal }) => fetchRsiSnapshot(view, market, tracked, columns, signal),
-        enabled: allowed && Boolean(view) && preferencesLoaded,
-        refetchInterval: TRACKER_REFRESH_MS, retry: false, staleTime: 0, gcTime: 20_000,
+        queryFn: ({ signal }) => {
+            if (preparation.scope !== rsiScope) {
+                preparation.scope = rsiScope
+                preparation.startedAt = Date.now()
+            }
+            return fetchRsiSnapshot(view, market, tracked, columns, signal)
+        },
+        enabled: allowed && Boolean(view) && preferencesLoaded && !!symbols.data && (!listId || !!watchlists.data),
+        refetchInterval: query => query.state.status === "error" ? TRACKER_REFRESH_MS
+            : trackerPollInterval(query.state.data, preparation.startedAt, Date.now()),
+        refetchIntervalInBackground: false, retry: false, staleTime: 0, gcTime: 20_000,
         // The view has one server lease. Returning to a cached page must register it again.
         refetchOnWindowFocus: query => query.state.dataUpdatedAt + TRACKER_REFRESH_MS <= Date.now(),
         refetchOnReconnect: true,
@@ -127,9 +193,16 @@ export function RsiTracker() {
     }, [columns, preferencesLoaded])
 
     const rsiStale = rsi.isError || rsi.isPaused || (expiredRsiAt > 0 && expiredRsiAt === rsi.dataUpdatedAt)
-    const resultRows = useMemo(() => trackerResultRows(tracked, rsi.data, filters, sort, !rsiStale, rsi.data?.observed_at ?? 0),
-        [tracked, rsi.data, filters, sort, rsiStale])
-    const readiness = useMemo(() => summarizeRsiCells(tracked, rsi.data, columns), [tracked, rsi.data, columns])
+    const rsiTimedOut = rsi.error && "status" in rsi.error && rsi.error.status === 408
+    const observedAt = useRsiClock(rsi.data, rsi.dataUpdatedAt)
+    const resultRows = useMemo(() => trackerResultRows(tracked, rsi.data, filters, sort, !rsiStale, observedAt),
+        [tracked, rsi.data, filters, sort, rsiStale, observedAt])
+    const readiness = useMemo(() => summarizeRsiCells(tracked, rsi.data, columns, !rsiStale, observedAt), [tracked, rsi.data, columns, rsiStale, observedAt])
+    const sessionEnded = market === "BIST" && tracked.length > 0 && tracked.every(symbol => rsi.data?.rows[symbol]?.session_ended)
+    const hasPrice = resultRows.some(symbol => (market === "BIST" ? quotes.data?.[`${symbol}.IS`]?.value : crypto.prices[symbol]?.price) != null
+        || rsi.data?.rows[symbol]?.last_price != null)
+    useTrackerTiming(JSON.stringify([sessionKey, market, listId, symbolQuery, descending, page, columns]),
+        rsi.isFetchedAfterMount && rsi.isSuccess, hasPrice, resultRows.length > 0, readiness.numeric, readiness.total)
     const filtering = filters.some(filter => filter.min.trim() || filter.max.trim())
     const skippedMembers = selectedList?.symbols.filter(item => item.market_type === market && !universe.includes(item.symbol)).length ?? 0
     const fetching = symbols.isFetching || watchlists.isFetching || rsi.isFetching || (market === "BIST" && quotes.isFetching)
@@ -162,15 +235,16 @@ export function RsiTracker() {
     const exportCsv = () => {
         const pricesBySymbol: Record<string, { price?: number | null; change?: number | null }> = {}
         for (const symbol of resultRows) {
+            const lastPrice = rsi.data?.rows[symbol]?.last_price?.value
             if (market === "BIST") {
                 const quote = quotes.data?.[`${symbol}.IS`]
-                pricesBySymbol[symbol] = { price: quote?.value, change: quote?.change }
+                pricesBySymbol[symbol] = { price: quote?.value ?? lastPrice, change: quote?.value != null ? quote.change : null }
             } else {
                 const tick = crypto.prices[symbol]
-                pricesBySymbol[symbol] = { price: tick?.price, change: tick?.change }
+                pricesBySymbol[symbol] = { price: tick?.price ?? lastPrice, change: tick?.change }
             }
         }
-        const csv = buildTrackerCsv(resultRows, market, pricesBySymbol, rsi.data, columns)
+        const csv = buildTrackerCsv(resultRows, market, pricesBySymbol, rsi.data, columns, rsiStale, observedAt)
         const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
         const url = URL.createObjectURL(blob)
         const anchor = document.createElement("a")
@@ -183,7 +257,7 @@ export function RsiTracker() {
     const refresh = () => {
         void symbols.refetch()
         void watchlists.refetch()
-        if (view && preferencesLoaded) void rsi.refetch()
+        if (view && preferencesLoaded && symbols.data && (!listId || watchlists.data)) void rsi.refetch()
         if (market === "BIST" && bistSymbols.length) void quotes.refetch()
         if (market === "Kripto") crypto.flush()
     }
@@ -196,7 +270,8 @@ export function RsiTracker() {
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
                 <span className="font-medium text-foreground">{sourceLabel}</span>
                 <span>RSI (14) · Kapanış</span>
-                <span>Otomatik yenileme · {TRACKER_REFRESH_MS / 1000} sn</span>
+                {sessionEnded && <span className="text-neutral">BIST seansı kapalı</span>}
+                <span>Normal yenileme · {TRACKER_REFRESH_MS / 1000} sn</span>
                 {tracked.length > 0 && <span className="tabular-nums" title="Son RSI yanıtının ekran alım saati">{lastUpdated ? `Son yenileme ${lastUpdated} TSİ` : "İlk RSI verisi bekleniyor"}</span>}
             </div>
         </div>
@@ -221,7 +296,7 @@ export function RsiTracker() {
             {watchlists.isError && <p role="alert">İzleme listeleri yenilenemedi. {selectedList ? "Son alınan liste kullanılıyor." : "Liste seçimi için yeniden deneyin."}</p>}
             {listId && !selectedList && !watchlists.isPending && <p role="status">Seçilen izleme listesi bulunamadı.</p>}
             {skippedMembers > 0 && <p>{skippedMembers} liste üyesi bu piyasanın desteklenen sembol listesinde bulunmuyor.</p>}
-            {rsiStale && <p role="status">RSI yenilemesi bekleniyor. Varsa son alınan değerler tabloda gösteriliyor.</p>}
+            {rsiStale && <p role="status">{rsiTimedOut ? "RSI isteği zaman aşımına uğradı." : "RSI yenilemesi bekleniyor."} Varsa son alınan değerler tabloda gösteriliyor.</p>}
         </div>}
 
         <div className="space-y-3 border-b border-border px-4 py-3 text-xs" aria-label="Sayfadaki RSI koşulları">
@@ -248,6 +323,8 @@ export function RsiTracker() {
                 <span className="tabular-nums">
                     <strong className="text-foreground">{readiness.numeric} / {readiness.total}</strong> hücre sayısal
                     {readiness.ready > 0 ? ` (${readiness.ready} güncel)` : ""}
+                    {readiness.retained > 0 ? ` · ${readiness.retained} son kayıt` : ""}
+                    {readiness.stale > 0 ? ` · ${readiness.stale} güncelliğini yitirmiş` : ""}
                     {readiness.waiting > 0 ? ` · ${readiness.waiting} hazırlanıyor` : ""}
                     {readiness.insufficient > 0 ? ` · ${readiness.insufficient} yetersiz geçmiş` : ""}
                 </span>
@@ -284,13 +361,19 @@ export function RsiTracker() {
                         const quote = quotes.data?.[`${symbol}.IS`]
                         const tick = crypto.prices[symbol]
                         const bist = market === "BIST"
-                        const price = bist ? quote?.value : tick?.price
-                        const change = bist ? quote?.change : tick?.change
-                        const received = crypto.receivedAtBySymbol[symbol]
-                        const stale = bist ? quotes.isError || quotes.isPaused || (quote?.state !== undefined && quote.state !== "ok")
-                            : crypto.status !== "connected" || !received
                         const rsiRow = rsi.data?.rows[symbol]
+                        const lastPrice = rsiRow?.last_price
+                        const marketPrice = bist ? quote?.value : tick?.price
+                        const price = marketPrice ?? lastPrice?.value
+                        const change = marketPrice == null ? null : bist ? quote?.change : tick?.change
+                        const received = crypto.receivedAtBySymbol[symbol]
+                        const stale = marketPrice == null || (bist ? quotes.isError || quotes.isPaused || (quote?.state !== undefined && quote.state !== "ok")
+                            : crypto.status !== "connected" || !received)
                         const rsiPriceTime = rsiSourceTime(rsiRow?.source_time)
+                        const lastRsi = rsiStale || !trackerQuoteFresh(rsiRow?.source_time, observedAt)
+                        const priceTime = marketPrice == null ? rsiSourceTime(lastPrice?.source_time)
+                            : bist ? [quote?.provider_time, quote?.message].filter(Boolean).join(" · ")
+                            : received ? `Akış alımı ${clock.format(received)} TSİ` : undefined
                         return <tr key={`${market}:${symbol}`} className="group even:bg-raised/30 hover:bg-raised/70">
                             <th scope="row" className="sticky left-0 z-10 border-b border-r border-border bg-surface px-3 text-left group-hover:bg-raised">
                                 <div className="flex items-center justify-between gap-2">
@@ -298,21 +381,23 @@ export function RsiTracker() {
                                     <Link href={trackerAlarmHref(symbol, market)} className="inline-flex min-h-9 items-center rounded border border-border/70 px-1.5 text-[10px] font-normal text-muted-foreground hover:bg-background hover:text-foreground" aria-label={`${symbol} için alarm taslağı oluştur`} title="Sunucu alarmı taslağı">Alarm</Link>
                                 </div>
                             </th>
-                            <td className="border-b border-border px-3 py-2 text-right" title={bist ? [quote?.provider_time, quote?.message].filter(Boolean).join(" · ") : received ? `Akış alımı ${clock.format(received)} TSİ` : undefined}><span className="block font-mono text-sm tabular-nums">{trackerNumber(price)}</span>{price != null && stale && <span className="block text-[10px] text-neutral">Son kayıt</span>}</td>
+                            <td className="border-b border-border px-3 py-2 text-right" title={priceTime ?? undefined}><span className="block font-mono text-sm tabular-nums">{trackerNumber(price)}</span>{price != null && stale && <span className="block text-[10px] text-neutral">Son kayıt</span>}</td>
                             <td className={cn("border-b border-border px-4 py-3 text-right font-mono tabular-nums", change == null || !Number.isFinite(change) ? "text-muted-foreground" : change >= 0 ? "text-profit" : "text-loss")}>{trackerNumber(change)}{change != null && Number.isFinite(change) ? "%" : ""}</td>
                             {shownColumns.map(item => {
                                 const cell = rsiRow?.cells[item.id]
-                                const cellStatus = rsiStale ? "Son alınan RSI" : RSI_CELL_STATUS[cell?.status ?? "waiting"]
-                                const timestamp = cell?.status === "ready" || cell?.status === "stale" ? rsiPriceTime : rsiSourceTime(cell?.bar_time)
-                                const value = cell?.value == null ? "—" : cell.value.toLocaleString("tr-TR", { maximumFractionDigits: 2 })
+                                const cellStatus = rsiDisplayStatus(cell, lastRsi)
+                                const timestamp = cell?.last ? rsiSourceTime(cell.last.bar_time)
+                                    : cell?.status === "ready" || cell?.status === "stale" ? rsiPriceTime : rsiSourceTime(cell?.bar_time)
+                                const acquired = rsiSourceTime(cell?.last?.received_at ?? cell?.received_at)
+                                const value = rsiDisplayValue(cell)?.toLocaleString("tr-TR", { maximumFractionDigits: 2 }) ?? "—"
                                 const priceLabel = (cell?.status === "ready" || cell?.status === "stale") && rsiRow?.price != null
                                     ? `Hesaplanan fiyat ${trackerNumber(rsiRow.price)}` : null
-                                const tint = cell?.status === "ready" && !rsiStale && cell.value != null
+                                const tint = cell?.status === "ready" && !lastRsi && cell.value != null
                                     ? cell.value <= 30 ? "bg-sky-500/12 text-sky-200" : cell.value >= 70 ? "bg-amber-500/12 text-amber-200" : "text-foreground"
                                     : "text-muted-foreground"
-                                return <td key={item.id} className={cn("border-b border-l border-border/60 px-3 py-2 text-right", tint)} title={[cellStatus, timestamp && `${timestamp} TSİ`, priceLabel].filter(Boolean).join(" · ")}>
+                                return <td key={item.id} className={cn("border-b border-l border-border/60 px-3 py-2 text-right", tint)} title={[cellStatus, timestamp && `Veri ${timestamp} TSİ`, acquired && `Alım ${acquired} TSİ`, priceLabel].filter(Boolean).join(" · ")}>
                                     <span className="block font-mono text-sm tabular-nums">{value}</span>
-                                    <span className={cell?.status === "ready" && !rsiStale ? "sr-only" : "block text-[10px] leading-tight"}>{cellStatus}</span>
+                                    <span className={cell?.status === "ready" && !lastRsi ? "sr-only" : "block text-[10px] leading-tight"}>{cellStatus}</span>
                                 </td>
                             })}
                         </tr>

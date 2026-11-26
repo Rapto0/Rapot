@@ -12,6 +12,8 @@ from application.services import advanced_alarm_market_data
 from application.services.custom_indicator_data import CustomIndicatorData, native_bars
 from application.services.custom_indicators.core import rsi_values
 from application.services.rsi_tracker import (
+    DISPLAY_SECONDS,
+    DISPLAY_SYMBOLS,
     LEASE_SECONDS,
     MAX_TRACKER_SYMBOLS,
     NATIVE_TIMEFRAMES,
@@ -102,6 +104,72 @@ def test_rollover_commits_only_the_provider_close():
     expected = rsi_values([*(bar.close for bar in bars[:-1]), 190, 130], 14)[-1]
     assert result == pytest.approx(expected)
     assert rolled.advance(closed, current) is None
+
+
+def test_display_survives_lease_and_reconnect_without_fabricating_live_rsi():
+    clock = [NOW + 0.2]
+    service = CustomIndicatorData(provider=Provider(), clock=lambda: clock[0])
+    member = ("BIST", "THYAO")
+    key = (*member, "1D")
+    service.tracker_snapshot("first", "BIST", ["THYAO"], ["1D"])
+    service._sync_live()
+    service.live._connection = SimpleNamespace(connected=True)
+    bars = native_bars(frame(count=22), "1D", "BIST", clock[0])
+    service.live._buckets[key] = (bars[-2:], clock[0])
+    service.tracker.install(key, TrackerSeed.build(bars, 1, clock[0]))
+    expected = rsi_values([bar.close for bar in bars], 14)[-1]
+    quote(service, member, clock, 165)
+
+    clock[0] += LEASE_SECONDS + 1
+    service._sync_live()
+    assert not service.tracker.seeds and not service.tracker.rows
+    response = service.tracker_snapshot("second", "BIST", ["THYAO", "GARAN"], ["1D"])
+    assert response["snapshot_version"] == 2
+    saved = response["rows"]["THYAO"]
+    assert saved["price"] is None and saved["last_price"]["value"] == 165
+    cell = saved["cells"]["1D"]
+    assert cell["status"] == "waiting" and cell["value"] is None
+    assert cell["last"] == {
+        "kind": "candle",
+        "bar_time": bars[-1].time,
+        "received_at": NOW + 0.2,
+        "value": pytest.approx(expected),
+    }
+    assert "last" not in response["rows"]["GARAN"]["cells"]["1D"]
+    service._wake.clear()
+    service.tracker_snapshot("second", "BIST", ["THYAO", "GARAN"], ["1D"])
+    assert not service._wake.is_set()
+    assert not service.provider.calls
+
+    quote_only = service.tracker_snapshot("second", "Kripto", ["THYAO"], ["1D"])["rows"]["THYAO"]
+    assert "last_price" not in quote_only and "last" not in quote_only["cells"]["1D"]
+    clock[0] += DISPLAY_SECONDS
+    expired = service.tracker_snapshot("third", "BIST", ["THYAO"], ["1D"])["rows"]["THYAO"]
+    assert "last_price" not in expired and "last" not in expired["cells"]["1D"]
+
+
+def test_display_only_labels_witnessed_rollover_closed_and_is_bounded():
+    clock = [NOW + 0.2]
+    service = CustomIndicatorData(provider=Provider(), clock=lambda: clock[0])
+    key = ("BIST", "THYAO", "1D")
+    bars = native_bars(frame(count=22), "1D", "BIST", clock[0])
+    seed = TrackerSeed.build(bars, 1, clock[0])
+    service.tracker.install(key, seed)
+    closed = replace(bars[-1], close=190)
+    service.advance_tracker(key, closed, replace(closed, time=closed.time + 86400))
+    service.tracker.install(key, seed)
+    snapshot = service.tracker_snapshot("view", "BIST", ["THYAO"], ["1D"])
+    last = snapshot["rows"]["THYAO"]["cells"]["1D"]["last"]
+    assert last["kind"] == "closed"
+    assert last["value"] == pytest.approx(seed.state.value(190))
+
+    service.provider.generation += 1
+    snapshot = service.tracker_snapshot("view", "BIST", ["THYAO"], ["1D"])
+    assert "last" not in snapshot["rows"]["THYAO"]["cells"]["1D"]
+    for index in range(DISPLAY_SYMBOLS):
+        service.tracker.install(("Kripto", f"COIN{index}USDT", "1D"), seed)
+    assert len(service.tracker.display) == DISPLAY_SYMBOLS
+    assert key[:2] not in service.tracker.display
 
 
 def test_private_route_rejects_unauthorized_or_excess_demand(monkeypatch, api_auth_users):

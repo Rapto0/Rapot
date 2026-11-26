@@ -21,6 +21,7 @@ from datetime import UTC, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from application.services.custom_indicators.core import Bar
+from application.services.rsi_tracker import DISPLAY_SECONDS as TRACKER_DISPLAY_SECONDS
 from application.services.rsi_tracker import (
     HISTORY_BARS as TRACKER_HISTORY_BARS,
 )
@@ -473,13 +474,21 @@ class CustomIndicatorData:
         epoch = self.provider.memory_epoch()
         members = tuple((market, symbol) for symbol in symbols)
         with self._lock:
+            previous = self.tracker.views.get(view)
             demands = self.tracker.request(
                 view, members, {NATIVE_TIMEFRAMES[tf] for tf in periods}, now
             )
+            current = self.tracker.views.get(view)
+            changed = (previous[1:] if previous and previous[0] > now else None) != (
+                current[1:] if current else None
+            )
             rows = {}
+            connected = self.live._connection is not None and self.live._connection.connected
+            istanbul = ZoneInfo("Europe/Istanbul") if market == "BIST" else None
+            today = datetime.fromtimestamp(now, istanbul).date() if istanbul else None
             for member in members:
+                saved = self.tracker.display_row(member, epoch)
                 quote = self.tracker.rows.get(member) or {}
-                connected = self.live._connection is not None and self.live._connection.connected
                 quote_ok = not paused and connected and quote.get("epoch") == epoch
                 stale = (
                     quote_ok
@@ -487,9 +496,11 @@ class CustomIndicatorData:
                     > TRACKER_STALE_SECONDS
                 )
                 cells = {}
+                day = None
                 for tf in periods:
                     key = (*member, NATIVE_TIMEFRAMES[tf])
                     value, bar_time = None, None
+                    received_at = None
                     status = "waiting"
                     if paused:
                         status = "paused"
@@ -498,25 +509,49 @@ class CustomIndicatorData:
                     elif key in self.live._refused or (*member, "1D") in self.live._refused:
                         status = "unavailable"
                     elif connected and (witness := self.live.tracker_witness(key)):
+                        day = witness[1]
                         seed = self.tracker.seeds.get(key)
                         point = quote.get("cells", {}).get(key[2]) if quote_ok else None
                         if point and point["bar_time"] == witness[0][-1].time:
                             value, bar_time = point["value"], point["bar_time"]
                             status = "stale" if stale else "ready"
+                            received_at = quote["received_at"]
                         elif seed and seed.epoch == epoch and seed.matches(witness[0]):
                             value, bar_time = (
                                 seed.state.value(seed.current.close),
                                 seed.current.time,
                             )
                             status = "candle" if value is not None else "insufficient"
-                    cells[tf] = {"value": value, "bar_time": bar_time, "status": status}
+                            received_at = seed.loaded
+                    cell = cells[tf] = {"value": value, "bar_time": bar_time, "status": status}
+                    if received_at is not None:
+                        cell["received_at"] = received_at
+                    if value is None and status != "insufficient" and saved:
+                        last = saved.cells.get(key[2])
+                        if last and now - last["received_at"] <= TRACKER_DISPLAY_SECONDS:
+                            cell["last"] = last
                 rows[member[1]] = {
                     "source_time": quote["source_time"] if quote_ok else None,
                     "price": quote["price"] if quote_ok else None,
                     "cells": cells,
+                    "session_ended": bool(
+                        istanbul
+                        and day
+                        and day.end
+                        and day.end <= now
+                        and datetime.fromtimestamp(day.end, istanbul).date() == today
+                    ),
                 }
-        self._wake.set()
+                if (
+                    saved
+                    and saved.price
+                    and now - saved.price["received_at"] <= TRACKER_DISPLAY_SECONDS
+                ):
+                    rows[member[1]]["last_price"] = saved.price
+        if changed:
+            self._wake.set()
         return {
+            "snapshot_version": 2,
             "rows": rows,
             "observed_at": now,
             "length": RSI_LENGTH,
@@ -530,7 +565,7 @@ class CustomIndicatorData:
 
     def advance_tracker(self, key, closed, current):
         with self._lock:
-            self.tracker.advance(key, closed, current)
+            self.tracker.advance(key, closed, current, self._clock())
         self._wake.set()
 
     def publish_tracker(self, member, *, source, received, price, epoch, now):
@@ -585,7 +620,9 @@ class CustomIndicatorData:
                         and cached.epoch == epoch
                         and cached.requested >= TRACKER_HISTORY_BARS
                     ):
-                        built = TrackerSeed.build(cached.bars[-TRACKER_HISTORY_BARS:], epoch, now)
+                        built = TrackerSeed.build(
+                            cached.bars[-TRACKER_HISTORY_BARS:], epoch, cached.received
+                        )
                         if (
                             built.matches(witness[0])
                             and now - cached.received < TRACKER_HISTORY_REFRESH
@@ -954,6 +991,7 @@ class CustomIndicatorData:
             self._standard_rsi.clear()
             self.tracker.views.clear()
             self.tracker.invalidate()
+            self.tracker.display.clear()
 
     def invalidate(self):
         with self._lock:
@@ -969,6 +1007,7 @@ class CustomIndicatorData:
             self._history_reset_fences.clear()
             self._standard_rsi.clear()
             self.tracker.invalidate()
+            self.tracker.display.clear()
             self._history_failures.clear()
             self._history_retries.clear()
             self._live_cells = 0
@@ -1693,7 +1732,7 @@ class CustomIndicatorData:
     def native_advanced(self, native_key, closed, current):
         """Retain a witnessed rollover in the bounded shared bootstrap cache."""
         with self._publication_lock, self._lock:
-            self.tracker.advance(native_key, closed, current)
+            self.tracker.advance(native_key, closed, current, self._clock())
             if (standard := self._standard_rsi.get(native_key)) is not None:
                 if not standard["seed"].advance(closed, current):
                     self._standard_rsi.pop(native_key)

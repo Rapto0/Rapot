@@ -1,6 +1,7 @@
 """Leased scanner RSI calculations over the existing native history and quote workers."""
 
-from dataclasses import dataclass
+from collections import OrderedDict
+from dataclasses import dataclass, field
 
 from application.services.custom_indicators.core import Bar, pine_rsi
 
@@ -25,6 +26,8 @@ LEASE_SECONDS = 150
 STALE_SECONDS = 30
 HISTORY_SPACING = 2
 HISTORY_REFRESH = 21600
+DISPLAY_SYMBOLS = MAX_TRACKER_SYMBOLS * MAX_TRACKER_VIEWS
+DISPLAY_SECONDS = 86400
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,6 +93,15 @@ class TrackerSeed:
         return TrackerSeed(closed, current, self.state.add(closed.close), self.epoch, self.loaded)
 
 
+@dataclass(slots=True)
+class TrackerDisplay:
+    """Last validated observations for display only, independent of an active lease."""
+
+    epoch: int
+    cells: dict = field(default_factory=dict)
+    price: dict | None = None
+
+
 class RsiTrackerData:
     """Owner lock protects leases, compact seeds and one atomic row per symbol."""
 
@@ -97,6 +109,7 @@ class RsiTrackerData:
         self.views = {}
         self.seeds = {}
         self.rows = {}
+        self.display: OrderedDict[tuple[str, str], TrackerDisplay] = OrderedDict()
         self.retry = {}
         self.next_history = 0
 
@@ -131,9 +144,42 @@ class RsiTrackerData:
             self.retry.clear()
         else:
             self.rows.pop(member, None)
+            if key is None:
+                self.display.pop(member, None)
+            elif (saved := self.display.get(member)) is not None:
+                saved.cells.pop(key[2], None)
             for series in tuple(self.seeds):
                 if series[:2] == member and (key is None or series == key):
                     self.seeds.pop(series)
+
+    def _display_row(self, member, epoch):
+        row = self.display.get(member)
+        if row is None or row.epoch != epoch:
+            row = self.display[member] = TrackerDisplay(epoch)
+        self.display.move_to_end(member)
+        if len(self.display) > DISPLAY_SYMBOLS:
+            self.display.popitem(last=False)
+        return row
+
+    def display_row(self, member, epoch):
+        row = self.display.get(member)
+        return row if row is not None and row.epoch == epoch else None
+
+    def _remember_candle(self, key, epoch, value, bar, kind, now):
+        if value is None:
+            return
+        row = self._display_row(key[:2], epoch)
+        prior = row.cells.get(key[2])
+        if prior is None or (prior["bar_time"], prior["kind"] == "closed") <= (
+            bar.time,
+            kind == "closed",
+        ):
+            row.cells[key[2]] = {
+                "value": value,
+                "bar_time": bar.time,
+                "received_at": now,
+                "kind": kind,
+            }
 
     def observe(self, member, periods, witness, source, received, price, epoch, now):
         cells = {}
@@ -165,8 +211,11 @@ class RsiTrackerData:
             "cells": cells,
             "observed_at": now,
         }
+        display = self._display_row(member, epoch)
+        if display.price is None or display.price["source_time"] <= source:
+            display.price = {"value": price, "source_time": source, "received_at": received}
 
-    def advance(self, key, closed, current):
+    def advance(self, key, closed, current, now):
         self.rows.pop(key[:2], None)
         seed = self.seeds.get(key)
         if seed is not None:
@@ -175,9 +224,20 @@ class RsiTrackerData:
                 self.seeds.pop(key)
             else:
                 self.seeds[key] = advanced
+                self._remember_candle(
+                    key, seed.epoch, seed.state.value(closed.close), closed, "closed", now
+                )
 
     def install(self, key, seed):
         previous = self.seeds.get(key)
         if previous and previous.state != seed.state and (row := self.rows.get(key[:2])):
             row["cells"].pop(key[2], None)
         self.seeds[key] = seed
+        self._remember_candle(
+            key,
+            seed.epoch,
+            seed.state.value(seed.current.close),
+            seed.current,
+            "candle",
+            seed.loaded,
+        )

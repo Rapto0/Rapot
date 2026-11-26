@@ -1,6 +1,166 @@
 # Rapot Devam Planı
 
-**Güncel plan: 25 Kasım 2026.** Bu dosya, sonraki çalışmaya başlamak için okunur.
+**Güncel plan: 26 Kasım 2026.** Sıradaki iş aşağıdaki Aşama 4.1, Takipçi ilk açılışı.
+
+## 26 Kasım — Veri akışı incelemesi ve geliştirme sırası
+
+### Üretimde gözlenen durum
+
+- **Takipçi, `/scanner`.** Kullanıcının 20:39 TSİ görüntüsünde BIST fiyatları
+  son kayıt olarak vardı, 400 RSI hücresi hazırlanıyordu. Oturumlu tarayıcıda
+  20:47'de 0/400 ve ardından 15/400, sayfaya tekrar girişte yine 0/400 görüldü.
+  20:51:10 yenilemesinde **394 son mum değeri, 6 yetersiz geçmiş, 0 bekleyen**
+  vardı. Bu 394 değerin tamamı `Son mum kaydı` durumundaydı. Mumların kesin
+  kapanış durumu ve hazırlığın hangi saniyede tamamlandığı bu örnekten çıkmaz.
+  Kriptoya geçince 529 çiftlik evrenin ilk 25 satırında 0/400 görüldü. Aynı
+  sekmede hemen BIST'e dönünce önceki 394 değer tarayıcıdan görünebildi. İki
+  saatlik kesintisiz bekleme kaydı yok. Tekrar girişte boş ilk yanıt ve bir
+  sonraki 120 saniyelik sorguya kadar hazırlığın ekrana yansımayabilmesi tekrarlandı.
+- **Neden.** İlk ve sonraki RSI okumaları aynı `/borsapy/market/rsi-tracker`
+  POST'uyla görünür sembollere geçici talep açıyor. Sunucu dört görünümde
+  toplam 25 sembol kabul ediyor. İstek iş parçacığı sağlayıcıya gitmez, fakat
+  değer için native mum tanığı ve hesap başlangıcı gerekir. Geçmiş, alarm
+  işinden sonra aynı sağlayıcı bütçesinde, sembol başına en çok 10 periyotluk
+  partilerle hazırlanır. Hazır ve eşleşen geçmiş paylaşılabilir. 150 saniyelik
+  görünüm talebi düşüp seri ihtiyaç dışı kalınca RSI başlangıçları ve satırları
+  budanabilir. Bu sonuçlar süreç belleğindedir. Tarayıcı yeni sayfa bileşeninde
+  yeni görünüm kimliği kullanır, sorgu anahtarı görünüm/sembol/sütuna bağlıdır.
+  Sayfadan çıkış, kapsam değişimi, sekme beklemesi ve API yeniden başlatması bu
+  yüzden farklı şekilde tekrar bekleme yaratabilir. Son mum değeri mevcut
+  uygulamada gösterilebilir, fakat filtreler yalnız `ready` hücreleri alır.
+  [RSI durumu](../application/services/rsi_tracker.py),
+  [native hazırlık ve okuma](../application/services/custom_indicator_data.py),
+  [tarayıcı sorgusu](../frontend/src/components/scanner/rsi-tracker.tsx),
+  [filtre sözleşmesi](../frontend/src/lib/rsi-tracker.ts).
+- **Hazırlık ve canlılık.** 20:48 TSİ sağlık ekranı, doğrulanmış TradingView
+  oturumu ve engelsiz hesap koruması, 631 izlenen sembolde 0 güncel fiyat,
+  dört native bağlantı, 698/2.000 abonelik, 5.679 hazır ve 25 bekleyen uzun
+  periyot tanığı gösterdi. Fiyat kuyruğu ve taşma sıfırdı. Ortak bütçe
+  4 iş/sn, burst 4. Ekran 81.552 kabul ve 299.569 bekleme saydı. Bunlar
+  birikimli sayaçlardır, anlık kuyruk derinliği ayrı ölçülür. Gözlem BIST
+  seans dışındaydı. Son geçerli kayıt, yeni işlem bulunmaması, sağlayıcı
+  kesintisi ve RSI hazırlığı farklı durumlar olarak gösterilmeli.
+  [Borsa İstanbul işlem saatleri](https://www.borsaistanbul.com/en/markets/equity-market/trading-hours).
+- **Uygulama ve kapasite.** API/frontend `6e489b52651920b05bfb07fb463d63942e65b425`.
+  Dört servis sağlıklı, restart sayacı sıfır. 13 sayfa HTTPS 200, iki eski yol
+  307. Dış HTML ilk bayt tek geçişte 0,31–0,95 sn, yerel `/health` beş örnekte
+  9–20 ms ve frontend `/scanner` HTML ilk baytı 5–17 ms. Bunlar oturumlu ekranın
+  ilk verisini ölçmez. 20:49 TSİ örneğinde 1 vCPU, 957 MiB toplam/190 MiB
+  kullanılabilir RAM, yaklaşık 293 MiB dolu swap, 3,8 GiB boş disk ve 282 MiB
+  API belleği vardı. Üç bir saniyelik aralıkta CPU boşta %0, birinde swap-out
+  yaklaşık 25 MiB/sn. 20:52 TSİ ikinci kısa aralıkta CPU boşta %35–90,
+  kullanılabilir RAM 221 MiB ve swap kullanımı 328 MiB idi. Başlangıçtaki CPU
+  sıkışması bu pencerede sürmedi. Sunucu boyutu ve RSI gecikmesine etkisi için
+  açık seans ölçümü gerekir.
+
+### Sayfa bazında inceleme ve yapılacak iş
+
+| Ekran | İlk veri ve gözlem | Yapılacak iş |
+|---|---|---|
+| `/` Ana sayfa | Oturum açılınca tarayıcı Binance fiyatları 4/4, BIST özet fiyatları 4/4 ve 631 üyeli liste görüldü. ABD, emtia ve döviz aynı özet yüzeyinde ayrı kategoriler. | Son başarılı veriyi hemen çiz. Her kategori için kaynak, veri zamanı, seans ve gecikme ayrı olsun. Kısmi sonuçta diğer kategoriler kalsın. Grafik ve Takipçi ile ortak fiyat okuması. |
+| `/scanner` Takipçi | BIST fiyatları ortak anlık görüntüden, kripto fiyatları tarayıcı Binance akışından, iki piyasanın RSI hazırlığı ortak native işçiden. Gelişmiş Borsapy taraması ayrı, kullanıcının başlattığı sorgu. | İlk yanıtı saklanan son geçerli RSI ve fiyatla besle. İlk kez görülen satırları ayrı hazırla. CSV, filtre ve sıralamada durum ve kapsama sadık kal. |
+| `/chart` Grafik | Açılışta THYAO için 0 mum ve `₺0,00` göründü, sonra 1.000 Borsapy mumu ve fiyat geldi. Bu mumlarda hacim eksikti. Grafik listesinde 631 üyenin fiyatları son kayıt olarak görünebildi. | Yüklenirken fiyatı `—` göster. İlk grafik dilimi, eski sayfalar ve canlı mum ekleri ayrı olsun. Liste/önizleme/arayüz değişikliği hazır grafiği boşaltmasın. Hacim eksik, sıfır ve gerçek hacim ayrımı. |
+| `/alarms` Alarm merkezi | Sunucu motoru çalışıyor, bir sunucu listesi ve 0/631 güncel fiyat. Tanım ve olaylar sunucu kayıtlarından. Durum ve olay sorguları 5 sn, kural/listeler 15 sn. Olay başlığı hâlâ “saniyede bir” diyor. | Başlığı gerçek yenilemeyle eşleştir. Hazır, seans kapalı, veri bekliyor ve teslim durumlarını kural bazında göster. Olayları son kimlikten itibaren getir. |
+| `/alarms/legacy`, `/alarms/local` | Eski sunucu yüzeyinde kural ve tetik yok. Yerel yüzeyde kural yok, çalışma tarayıcıya bağlı. | Boş durumlar doğru kalsın. Mevcut eski kurallar erişilebilir olsun, ana alarm motoruyla karışmasın. |
+| `/research` Araştırma | Katalog 9 başlık/51 işlem gösterdi, bağlantılar sekmesi açıldı. TradingView, KAP, İş Yatırım, EVDS ve diğer kaynaklar işlem tipine göre değişiyor. | Katalog/ayarlar hızlı açılsın. Ağır işlemler yalnız açık kullanıcı isteğinde, iptal edilebilir ve kaynak/saat/son başarılı yanıt ile çalışsın. Her sağlayıcının hatası kendi panelinde kalsın. |
+| `/trades` İşlem geçmişi | Yönetici ekranı açıldı, seçili görünümde kayıt yok. Kaynak ana işlem kayıtları, middleware emirleri ayrı. | İlk sayfayı sınırlı kayıtla getir. Boş, yetkisiz ve başarısız sorgu ayrı. Gerçekleşmiş PnL ve canlı fiyat ayrı okunmalı. |
+| `/health` Sistem sağlığı | API/DB/servis sağlığı ile 0/631 fiyat güncelliği aynı anda görüldü. Sağlayıcı kartı seans dışında “İlk fiyat bekleniyor” dedi. | Servis, piyasa seansı, kaynağın son iletisi, hesap kapsamı ve iş kuyruğu ayrı. Son başarılı ölçüm, süre dağılımı ve hata nedenleri görünür olsun. |
+| `/ai` Manuel analiz | Ekran açıldı, geçmiş boş ve sonuç yalnız kullanıcı isteğinde hesaplanıyor. Canlı model çağrısı çalıştırılmadı. | Seçili sembolün veri zamanı ve girdiler görünür olsun. İstek sürerken ilerleme/iptal, süre sınırı, sağlayıcı/model hata ayrımı ve önceki sonuç. |
+| `/calendar` Takvim | Borsapy/Doviz.com tablosu yüklendi. 5 dk ekran yenilemesi, kaynak 1 saat önbellek uyarısı ve doğrulanmamış olay saat dilimi bildiriliyor. | Son başarılı yanıtı koru. Yanıt alma saati ile kaynak olay saati ayrı kalsın. Tarih/ülke sorguları ve sunucu önbelleği aynı sonucu paylaşsın. |
+| `/settings`, `/login` | Ayarlar canlı oturum ve tarayıcı tercihlerini gösterdi. `/login` HTML 200. Bazı özel ekranlarda mevcut oturum tarayıcıda okunana kadar giriş uyarısı göründü. | Oturum okunuyor, oturum açık ve oturum yok ayrı durum olsun. Çıkışta özel veri ve akış temizliği sürsün. Piyasa hazırlığı oturum açmayı geciktirmesin. |
+| `/signals`, `/tradingview` | Canlı HTTPS `/alarms` ve `/ai` yönlendirmelerini doğruladı. | Uyumluluk yollarını ve güvenli oturum dönüşünü kabul listesinde tut. |
+
+İnceleme yönetici oturumunda olağan sayfa okumalarını ve salt okunur sunucu
+ölçümünü kapsar. 51 araştırma işleminin her birini, ücretli AI çağrısını,
+gerçek emir/Telegram teslimini ve açık seans boyunca 631 sembolü kapsamaz.
+
+### Uygulama sırası ve kabul koşulları
+
+- [ ] **Aşama 4.1 — Takipçide ilk açılış ve son geçerli değer.** Önce ölçüm ekle.
+  İlk HTTP yanıtı, ilk fiyat, ilk sayısal RSI, ilk kullanılabilir tablo ve
+  tamamlanan hücre oranı ayrı süreler olsun. Mevcut hazır son mum sonucunu ve
+  fiyatı, kapsam anahtarıyla ilk okumada geri ver. Yenileme, boş/geçici hata
+  yanıtıyla başka kapsamın satırını veya eldeki geçerli satırı ezmesin.
+  Sürüm, kaynak, oluşma/alınma zamanı ve tazelik alanlarını ekle. Ekran canlı,
+  son mum, gecikmeli, seans kapalı, yetersiz geçmiş, zaman aşımı ve koruma
+  durumlarını ayırsın. Gerçekte kapanışı doğrulanmış mumlar `son kapanış`
+  olarak gösterilsin. Yeni ve hazırlanmamış sayfada ilk yenilemeler kısa ve
+  sınırlı olsun. Okuma aralığını kısaltmak yeni sağlayıcı işi açmasın. Aktif
+  tarayıcı beklemesi bittiğinde talep kendiliğinden düşsün. Kabulde varsayılan
+  25 × 16, filtreli liste, 2. sayfa, BIST/kripto ve iki sekme denensin. Hazır
+  kayıt olan kapsamda ilk anlamlı veri hedefi p95 ≤ 2 sn. Ölçüm, gezinmeden
+  ilk geçerli tablonun çizilmesine kadar sürer. Şu anki `ready`
+  sınırı canlı filtre ve alarm için korunsun. Kapanış verisiyle filtre istenirse
+  ayrı ve açık bir veri modu olsun. [Takipçi testleri](../tests/test_rsi_tracker_live.py).
+  **Uygulama hazır.** Süreli canlı talep ve görüntüleme kaydı ayrıldı. Son
+  geçerli fiyat ve mum sonucu, kaynak hesabı nesli aynıyken en çok 100 sembol
+  ve 24 saatlik süreç içi kayıt üzerinden gösterilir. Kapanış etiketi yalnız
+  native sonraki mumla kapanışı doğrulanan değerde kullanılır. Hazırlıkta en
+  çok ilk 60 saniye boyunca 10 sn arayla kontrol edilir, sonra normal 120 sn
+  aralığına döner. Aynı kapsamın kontrolü sağlayıcı işi açmaz. RSI isteği
+  8 sn sonra zaman aşımına girer. Ekran ve CSV son kayıt ile canlı sonucu
+  ayırır. Tarayıcı `rapot.rsi.*` ölçümleri ilk başarılı yanıtı, ilk fiyatı,
+  ilk sayısal RSI'ı, ilk kullanılabilir tabloyu ve kapsama oranını kaydeder.
+  Yayın kabulü ve gerçek p95 ölçümü ayrı izlenir.
+- [ ] **Aşama 4.2 — Ekrandan bağımsız hazırlık ve kalıcılık.** Kapsamla silinen
+  canlı RSI başlangıç durumunu, ekrana sunulan son geçerli çıktıdan ayır.
+  İzinli kaynaklarla son kapanış/RSI ve gerekirse kompakt hesap başlangıcı
+  için mevcut sunucu veritabanı imkânlarını değerlendir. Önce 25 sembollük
+  pilot, sonra kullanıcının listesi ve ölçüm desteklerse bütün evren.
+  `piyasa + sembol + periyot + kaynak + formül/sürüm + mum sınırı` ile kayıt
+  tanımla. Tutma kotası, idempotent ve toplu yazım, yeni/eski revizyon sırası,
+  bölünme/temettü düzeltmesi ve yedek/geri dönüş kabul edilsin. 631 × 16
+  arşiv çağrısını her açılışta tekrar etme. Arka planda kapalı mum ve eksik
+  aralık tamamlaması paylaşılsın. BIST seans kapalıyken yeni işlem beklemeden
+  son kapanış okunabilsin. Kullanılabilir geçmişi olan pilotta tarayıcı kapalı
+  >150 sn, yeni oturum ve API yeniden başlatması sonrası ilk tablo p95 ≤ 3 sn
+  hedefini ayrı doğrula. Kaynak verisi olmayan hücre gerekçesiyle dönsün.
+- [ ] **Aşama 5 — Ortak fiyat/mum akışı ve grafik.** Ana sayfa, Takipçi ve
+  Grafik için ortak sağlayıcı adaptörleri, kaynak zamanları ve ilk anlık
+  görüntü. İlk adım mevcut okunabilir veriye, sonraki adım ölçüm gerekçesi
+  varsa seçime göre artımlı yayın. Tek yönlü bildirim için SSE ve mevcut
+  oturumlu WebSocket'i bağlantı sayısı, destek ve yeniden bağlanma açısından
+  karşılaştır. Düşük frekanslı ekranlarda kontrollü sorgu yeterli olabilir.
+  Sıralı olay ve boşlukta yeniden anlık görüntü ile toparlanma. Binance Spot
+  kriptoda önce resmî REST geçmişi ve WebSocket. Sağlayıcının verdiği temel
+  mumlardan uzun periyot üretilecekse UTC/seans sınırı, eksik mum, kurumsal
+  işlem, hacim ve mevcut 16 periyodun örnek eşitliği ayrı kabul edilir.
+  [Binance Spot akışları](https://developers.binance.com/en/docs/catalog/core-trading-spot-trading/api/ws-streams/~),
+  [SSE protokol davranışı](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events).
+- [ ] **Aşama 6 — Alarm, sağlık ve diğer ekranlar.** Sayfa tablosundaki işler:
+  önce alarm/sağlık, ardından araştırma/takvim/AI/işlemler/ayarlar. Aktif
+  dört alarmın koşulları ve bildirimleri korunur. Canlı değerlendirme yalnız
+  doğrulanmış taze olaydan beslenir. Son mum ve kapanış görüntüsü arayüz için
+  kalır. İlk veri p95 hedefleri ölçüme göre ekran bazında belirlenir. Alarm
+  motoru girdisi→olay yazımı, Telegram teslimi, sağlayıcı→sunucu ve
+  sunucu→sayfa gecikmesi ayrı ölçülür. Geçici hata, yetkisizlik ve boş sonuç
+  senaryoları ile oturum açma/çıkma masaüstü ve mobilde doğrulanır.
+- [ ] **Aşama 7 — BIST kaynağı ve işletim kapasitesi.** Mevcut akış, lisanslı
+  son kapanış/gecikmeli veri ve lisanslı canlı akışı aşağıdaki koşullarla
+  karşılaştır. Aşama 4.2'nin kaynak yetkisi doğrulaması ve sağlayıcı keşfi
+  Aşama 4.1'le paralel yürüyebilir. Aktif kaynağı değiştirmeden önce küçük
+  bir örneklemde gölge karşılaştırma, sonra tam BIST seansı boyunca kapsama,
+  kaynak yaşı, hatalar, alarm gecikmesi, CPU p95, kullanılabilir RAM, swap
+  I/O ve disk büyümesi. Mevcut 1 vCPU/957 MiB ölçümüyle, ancak darboğaz
+  sürerse daha büyük VPS ve ayrı veri işçisi seçeneklerini maliyetle
+  karşılaştır. Mevcut dört alarm, listeler, veritabanları ve koruma bütçesi
+  her yayın için regresyon kabulüne dahil. Ücretli sağlayıcı veya sunucu
+  değişikliği ayrı kullanıcı kararıdır.
+
+### Kaynak seçenekleri ve seçim ölçütü
+
+| Seçenek | Kullanım ve sınır |
+|---|---|
+| Mevcut Borsapy/TradingView | Kanıtı olan mevcut davranış ve sürüm karşılaştırması için referans. Oturum doğrulaması gerçek zamanlı BIST veri yetkisi sağlamaz. TradingView koşullarındaki otomatik toplama ve görüntüleme dışı kullanım sınırları nedeniyle, sunucuda kalıcı depolama, yeni otomatik hesap veya daha geniş veri talebi kaynak yetkisi doğrulanınca değerlendirilir. [TradingView koşulları](https://www.tradingview.com/policies/) |
+| Lisanslı BIST gün sonu/gecikmeli | İzinli fiyat ve OHLCV geçmişi hızlı ilk ekran ve yeniden başlatma için aday. Gün sonu ve gecikmeli veri açık etiketlenir. VeriStore ve yetkili dağıtıcılarla geçmiş kapsamı ve kullanım koşulları doğrulanır. [BIST veri yayını](https://www.borsaistanbul.com/veriler/veri-yayini), [tarihsel veriler](https://www.borsaistanbul.com/piyasa-verileri) |
+| Lisanslı BIST canlı | Matriks'in yayımlanmış REST/MQTT ve Stream Server seçenekleri ilk teknik aday. ForInvest, BIST'in listesinde ikinci aday. Rapot'a uygun ürün/API kapsamı teklifle netleşir. 631 pay ve pazar üyeliği, OHLCV/kurumsal işlemler, seans ve kaynak saati, geçmiş toplu alma, tekrar/boşluk giderme, saklama ve türetilmiş RSI/özel gösterge/özel ekran/alarm hakları ile toplam maliyet birlikte karşılaştırılır. [BIST dağıtıcı listesi](https://www.borsaistanbul.com/veriler/veri-yayini/veri-dagitici-kuruluslar), [Matriks servisleri](https://www.matriksdata.com/website/urunlerimiz/kurumsal-hizmet-ve-servisler/veri-ve-icerik-saglayici-servisler) |
+| Binance Spot, kripto | Fiyat ve resmî geçmiş/akış için bağımsız bir pilot. Yeniden bağlanma, veri boşluğu, Türkiye VPS erişimi, REST ağırlıkları ve mevcut TradingView/Binance RSI ile periyot eşliği ölçülür. [Binance Spot REST](https://developers.binance.com/en/docs/products/spot/rest-api) |
+
+Her adımda hedefli test, aynı sürümde üretim derlemesi ve bağımsız kabul kaydı.
+Ölçümler açık/kapalı seans, ilk/tekrar ziyaret ve kaynak kesintisini ayrı tutar.
+Yüzdeliklerle birlikte örnek sayısı, ölçüm penceresi ve başarısız sonuçlar yazılır.
+Bu incelemede üretim yapılandırması, alarm tanımları ve sağlayıcı ayarları
+değiştirilmedi. Sonraki oturumda **Aşama 4.1** ile başlanır.
 
 ## 25 Kasım — Web sitesi Aşama 1, 2 ve 3 iyileştirmeleri yayımlandı
 
@@ -1062,6 +1222,8 @@ ifadeleri, kaydın ait olduğu tarihteki sonucu anlatır.
   aynı kabul edilmez;** son üretim kimlikleri aşağıdadır.
 
 ## Sıradaki işler ve ertelenen kabul
+
+Güncel uygulama sırası için [26 Kasım veri akışı planına](#26-kasım--veri-akışı-incelemesi-ve-geliştirme-sırası) bak. İlk iş Aşama 4.1.
 
 P0–P3 geliştirme listesi ve arayüz UI-1/UI-2/UI-3 kapalıdır. 2 Ekim sunucu
 alarmları üretimdedir; 7 Ekim kullanıcı canlı piyasa testlerini yeniden seçti.
