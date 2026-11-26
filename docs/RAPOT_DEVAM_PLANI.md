@@ -1,10 +1,45 @@
 # Rapot Devam Planı
 
-**Güncel plan: 26 Kasım 2026.** Sıradaki iş aşağıdaki Aşama 4.1, Takipçi ilk açılışı.
+**Güncel plan: 26 Kasım 2026.** Aşama 4.1 üretimde. Sıradaki iş Aşama 4.2,
+ekrandan bağımsız hazırlık ve kalıcılık.
 
 ## 26 Kasım — Veri akışı incelemesi ve geliştirme sırası
 
-### Üretimde gözlenen durum
+### Aşama 4.1 üretim yayını
+
+API ve frontend `fbdbaa4a7261f83aa4394547ca6f88bc1d6d95fb`, **26 Kasım
+20:16:52 UTC / 23:16:52 TSİ** yayımlandı. **20:17:10 UTC** ayrı kabul geçti.
+Dört servis sağlıklı/restart0, dört etkin alarm, 402 olay, 15 tablo ve özel
+dosyalar korundu. Compose/current `21e39512`, middleware ve PostgreSQL
+kimlikleri aynı. Bağımsız yedek geri yüklemesi 1.126.400 bayt / 15 tablo ile
+geçti. Diskte yaklaşık 3,65 GiB boş alan vardı. Yayın kanıtı
+`acc66f481efd96898eac3037ed7dc195f217d0f3a5c9cafd7cd9cce42adb2df9`.
+
+2.487 Python testi / bir atlama, 335 frontend testi, standalone proxy ve aynı
+kaynakta beş CI işi geçti. Temiz API/frontend imajları ve 470 paketlik sıfır
+bulgulu npm denetimi doğrulandı. Bağımsız dış kabul 11 sayfa, 38 statik dosya,
+anonim erişim sınırları ve oturumlu RSI snapshot v2 kontrolünü kapsadı.
+[Kaynak CI](https://github.com/Rapto0/Rapot/actions/runs/45887838562),
+[temiz imaj yayını](https://github.com/Rapto0/Rapot/actions/runs/45887929458).
+
+Yerel tarayıcıda hazır 25 × 16 tablo dört açılışta 0,25–0,36 sn içinde
+göründü. Kayıtsız ikinci sayfanın bir sonraki kontrolü 10,2 sn içinde
+sonuç verdi. İki sembollük liste ve yalnız canlı değer alan filtre geçti.
+Bu ölçüm sentetik veridir. İlk üretim gözleminde soğuk BIST tablosu 0'dan
+23:17:59 TSİ yenilemesinde 3, 23:18:09'da 14 ve 23:18:30'da 32 sayısal
+hücreye çıktı. Tarayıcı gözlemi seans dışında ve API yeniden başlatıldıktan
+sonra yapıldı.
+
+**23:21:35 TSİ** tekrar girişinde, takipçi ekranından 176 saniye ayrıldıktan
+sonra 150 RSI kaydı ve son alınan fiyat **0,84 sn** içinde gösterildi.
+Canlı hazırlık durumu ayrıca görünüyordu. Aynı BIST kapsamı ikinci sekmede
+**0,77 sn** içinde 150 değer gösterdi. BIST Portföy seçimi veriyi korudu.
+İkinci sayfa ve Kripto ilk isteklerinde önceki BIST satırları taşınmadı.
+Bu iki seans dışı açılış örneği. Genel p95 ve tüm sayfaların hazır kapsamı
+için daha geniş ölçüm açık. API yeniden başlatması sonrası hazır veri
+kalıcılığı Aşama 4.2'nin kabul koşuludur.
+
+### Aşama 4.1 öncesi üretim gözlemi
 
 - **Takipçi, `/scanner`.** Kullanıcının 20:39 TSİ görüntüsünde BIST fiyatları
   son kayıt olarak vardı, 400 RSI hücresi hazırlanıyordu. Oturumlu tarayıcıda
@@ -76,7 +111,7 @@ gerçek emir/Telegram teslimini ve açık seans boyunca 631 sembolü kapsamaz.
 
 ### Uygulama sırası ve kabul koşulları
 
-- [ ] **Aşama 4.1 — Takipçide ilk açılış ve son geçerli değer.** Önce ölçüm ekle.
+- [x] **Aşama 4.1 — Takipçide ilk açılış ve son geçerli değer.** Önce ölçüm ekle.
   İlk HTTP yanıtı, ilk fiyat, ilk sayısal RSI, ilk kullanılabilir tablo ve
   tamamlanan hücre oranı ayrı süreler olsun. Mevcut hazır son mum sonucunu ve
   fiyatı, kapsam anahtarıyla ilk okumada geri ver. Yenileme, boş/geçici hata
@@ -101,7 +136,7 @@ gerçek emir/Telegram teslimini ve açık seans boyunca 631 sembolü kapsamaz.
   8 sn sonra zaman aşımına girer. Ekran ve CSV son kayıt ile canlı sonucu
   ayırır. Tarayıcı `rapot.rsi.*` ölçümleri ilk başarılı yanıtı, ilk fiyatı,
   ilk sayısal RSI'ı, ilk kullanılabilir tabloyu ve kapsama oranını kaydeder.
-  Yayın kabulü ve gerçek p95 ölçümü ayrı izlenir.
+  Yayın kabulü yukarıda kayıtlı. Geniş örneklemli p95 ölçümü açık.
 - [ ] **Aşama 4.2 — Ekrandan bağımsız hazırlık ve kalıcılık.** Kapsamla silinen
   canlı RSI başlangıç durumunu, ekrana sunulan son geçerli çıktıdan ayır.
   İzinli kaynaklarla son kapanış/RSI ve gerekirse kompakt hesap başlangıcı
@@ -159,8 +194,8 @@ gerçek emir/Telegram teslimini ve açık seans boyunca 631 sembolü kapsamaz.
 Her adımda hedefli test, aynı sürümde üretim derlemesi ve bağımsız kabul kaydı.
 Ölçümler açık/kapalı seans, ilk/tekrar ziyaret ve kaynak kesintisini ayrı tutar.
 Yüzdeliklerle birlikte örnek sayısı, ölçüm penceresi ve başarısız sonuçlar yazılır.
-Bu incelemede üretim yapılandırması, alarm tanımları ve sağlayıcı ayarları
-değiştirilmedi. Sonraki oturumda **Aşama 4.1** ile başlanır.
+İlk inceleme salt okunurdu. Aşama 4.1 yayını ve ayrı kabul yukarıda kayıtlı.
+Sonraki oturumda **Aşama 4.2** ile başlanır.
 
 ## 25 Kasım — Web sitesi Aşama 1, 2 ve 3 iyileştirmeleri yayımlandı
 
@@ -1223,7 +1258,7 @@ ifadeleri, kaydın ait olduğu tarihteki sonucu anlatır.
 
 ## Sıradaki işler ve ertelenen kabul
 
-Güncel uygulama sırası için [26 Kasım veri akışı planına](#26-kasım--veri-akışı-incelemesi-ve-geliştirme-sırası) bak. İlk iş Aşama 4.1.
+Güncel uygulama sırası için [26 Kasım veri akışı planına](#26-kasım--veri-akışı-incelemesi-ve-geliştirme-sırası) bak. Sıradaki iş Aşama 4.2.
 
 P0–P3 geliştirme listesi ve arayüz UI-1/UI-2/UI-3 kapalıdır. 2 Ekim sunucu
 alarmları üretimdedir; 7 Ekim kullanıcı canlı piyasa testlerini yeniden seçti.
