@@ -8,6 +8,10 @@ const compiled = ts.transpileModule(
   readFileSync(new URL('../src/lib/hooks/use-binance-ticker.ts', import.meta.url), 'utf8'),
   { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } },
 ).outputText;
+const shared = ts.transpileModule(
+  readFileSync(new URL('../src/lib/binance-ticker-feed.ts', import.meta.url), 'utf8'),
+  { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } },
+).outputText;
 const plain = value => JSON.parse(JSON.stringify(value));
 const quote = (s = 'BTCUSDT', c = '123.5') => ({ s, c, p: '0', P: '0', E: 1 });
 
@@ -18,7 +22,7 @@ function harness({ symbols = ['BTCUSDT'], options, online = true, failures = 0, 
   let updates = 0;
   let props = { symbols, options };
   let effects = [];
-  const slots = [];
+  let slots = [];
   const timers = new Map();
   const sockets = [];
   const attempts = [];
@@ -30,25 +34,21 @@ function harness({ symbols = ['BTCUSDT'], options, online = true, failures = 0, 
     return slots[index].value;
   };
   const hooks = {
-    useState(initial) {
-      const index = position++;
-      if (!slots[index]) slots[index] = { value: typeof initial === 'function' ? initial() : initial };
-      return [slots[index].value, value => {
-        updates++;
-        slots[index].value = typeof value === 'function' ? value(slots[index].value) : value;
-      }];
-    },
+    createContext: () => ({}),
+    useContext: () => feed,
     useMemo: memo,
-    useCallback: (callback, deps) => memo(() => callback, deps),
-    useRef: initial => memo(() => ({ current: initial }), []),
+    useSyncExternalStore(subscribe, getSnapshot) {
+      hooks.useEffect(() => subscribe(() => updates++), [subscribe]);
+      return getSnapshot();
+    },
     useEffect(effect, deps) {
       const index = position++;
       if (!slots[index] || different(slots[index].deps, deps)) {
         const previous = slots[index];
-        slots[index] = { deps, effect, cleanup: previous?.cleanup };
+        const slot = slots[index] = { deps, effect, cleanup: previous?.cleanup };
         effects.push(() => {
           previous?.cleanup?.();
-          slots[index].cleanup = effect();
+          slot.cleanup = effect();
         });
       }
     },
@@ -63,12 +63,15 @@ function harness({ symbols = ['BTCUSDT'], options, online = true, failures = 0, 
       this.url = url;
       this.readyState = 0;
       this.closeCount = 0;
+      this.commands = [];
       sockets.push(this);
     }
     open() { this.readyState = 1; this.onopen?.({}); }
     message(value) { this.onmessage?.({ data: typeof value === 'string' ? value : JSON.stringify(value) }); }
     error() { this.onerror?.({}); }
     close(code = 1000) { this.readyState = 3; this.closeCount++; this.onclose?.({ code }); }
+    send(raw) { this.commands.push(JSON.parse(raw)); }
+    ack(command = this.commands.at(-1)) { this.message({ id: command.id, result: null }); }
   }
   const window = {
     navigator: { onLine: online },
@@ -87,19 +90,32 @@ function harness({ symbols = ['BTCUSDT'], options, online = true, failures = 0, 
   const context = vm.createContext({
     exports: {}, window, WebSocket: Socket, Date: Clock,
     fetch: () => assert.fail('Ticker tests must never use the network'),
-    require(name) { assert.equal(name, 'react', 'Only fake React may be imported'); return hooks; },
+    require(name) {
+      if (name === 'react') return hooks;
+      assert.equal(name, '@/lib/binance-ticker-feed');
+      return transport;
+    },
   });
+  vm.runInContext(shared, context);
+  const transport = context.exports;
+  let feed = new transport.BinanceTickerFeed();
+  context.exports = {};
   vm.runInContext(compiled, context);
   const hook = context.exports[compatibility ? 'useBinanceTicker' : 'useBinanceTickerFeed'];
-  const render = (nextProps = props, commit = true) => {
-    props = nextProps;
+  const renderWithSlots = (views, values, commit) => {
+    slots = views;
     position = 0;
-    const result = hook(props.symbols, props.options);
+    const result = hook(values.symbols, values.options);
     if (!commit || !effects.length) return result;
     const scheduled = effects;
     effects = [];
     scheduled.forEach(effect => effect());
-    return render(props, false);
+    return renderWithSlots(views, values, false);
+  };
+  const main = [];
+  const render = (nextProps = props, commit = true) => {
+    props = nextProps;
+    return renderWithSlots(main, props, commit);
   };
   const h = {
     render, read: () => render(), sockets, attempts, timers, listeners,
@@ -123,9 +139,22 @@ function harness({ symbols = ['BTCUSDT'], options, online = true, failures = 0, 
       window.navigator.onLine = available;
       for (const callback of listeners.get(available ? 'online' : 'offline') ?? []) callback();
     },
-    unmount() { slots.forEach(slot => slot.cleanup?.()); },
+    attach(values) {
+      const views = [];
+      const read = () => renderWithSlots(views, values, true);
+      read();
+      return { read, release: () => views.forEach(slot => slot.cleanup?.()) };
+    },
+    unmount() { main.forEach(slot => slot.cleanup?.()); feed.reset(); },
+    newSession() {
+      this.unmount();
+      feed = new transport.BinanceTickerFeed();
+      return render();
+    },
     replayEffects() {
-      slots.forEach(slot => { if (slot.effect) { slot.cleanup?.(); slot.cleanup = slot.effect(); } });
+      main.forEach(slot => slot.cleanup?.());
+      feed.reset();
+      main.forEach(slot => { if (slot.effect) slot.cleanup = slot.effect(); });
     },
   };
   h.render();
@@ -339,7 +368,7 @@ test('manual reconnect cancels pending retry, including a saved callback already
   assert.equal(h.read().status, 'connected');
 });
 
-test('symbol changes hide removed prices immediately and ignore the previous socket and pending flush', () => {
+test('symbol changes hide removed prices immediately and update the open socket in paced batches', () => {
   const h = harness();
   h.latest().open();
   h.latest().message(quote());
@@ -351,12 +380,20 @@ test('symbol changes hide removed prices immediately and ignore the previous soc
   const firstRender = h.render({ symbols: ['ETHUSDT'] }, false);
   assert.deepEqual(plain(firstRender.prices), {});
   assert.deepEqual(plain(firstRender.receivedAtBySymbol), {});
-  assert.equal(firstRender.status, 'connecting');
+  assert.equal(firstRender.status, 'connected');
   h.read();
-  assert.equal(old.closeCount, 1);
+  assert.equal(old.closeCount, 0);
+  assert.equal(h.sockets.length, 1);
   lateMessage({ data: JSON.stringify(quote()) });
   lateFlush();
-  h.latest().open();
+  assert.deepEqual(old.commands.map(({ method, params }) => [method, params]), [['UNSUBSCRIBE', ['btcusdt@ticker']]]);
+  old.ack();
+  h.advance(399);
+  assert.equal(old.commands.length, 1);
+  h.advance(1);
+  assert.deepEqual(old.commands.at(-1).params, ['ethusdt@ticker']);
+  assert.equal(old.commands.at(-1).method, 'SUBSCRIBE');
+  old.ack();
   h.latest().message(quote('BTCUSDT'));
   h.latest().message(quote('ETHUSDT', '600'));
   h.advance(250);
@@ -378,6 +415,7 @@ test('paused compatibility hook retains the exact quote shape, honors 320ms batc
   const lateFlush = [...h.timers.values()][0].callback;
   const lateEvents = [old.onmessage, old.onclose];
   h.render({ symbols: ['BTCUSDT'], options: { paused: true, flushIntervalMs: 320 } });
+  assert.deepEqual(plain(h.read()), {});
   const writes = h.updates;
   lateEvents.forEach(callback => callback({ data: JSON.stringify(quote()), code: 1000 }));
   lateFlush();
@@ -473,4 +511,94 @@ test('invalid flush intervals remain bounded; the lower bound is 100ms', () => {
     assert.equal(h.read().prices.BTCUSDT.price, 123.5);
     h.unmount();
   }
+});
+
+test('two consumers share prices and one socket while keeping their own display intervals', () => {
+  const h = harness();
+  const socket = h.latest();
+  socket.open();
+  socket.message({ ...quote(), E: 1_700_000_000_000 });
+  h.advance(250);
+  const panel = h.attach({ symbols: ['BTCUSDT', 'ETHUSDT'], options: { flushIntervalMs: 120_000, firstFlushMs: 800 } });
+  assert.equal(h.sockets.length, 1);
+  assert.equal(panel.read().prices.BTCUSDT.price, 123.5);
+  assert.equal(panel.read().receivedAtBySymbol.BTCUSDT, 1_000_000);
+  assert.equal(panel.read().sourceTimeBySymbol.BTCUSDT, 1_700_000_000_000);
+  assert.equal(panel.read().liveBySymbol.BTCUSDT, true);
+  assert.deepEqual(socket.commands.at(-1).params, ['ethusdt@ticker']);
+  socket.ack();
+  socket.message({ ...quote('BTCUSDT', '99'), E: 1_699_999_999_999 });
+  h.advance(250);
+  assert.equal(h.read().prices.BTCUSDT.price, 123.5);
+  socket.message({ ...quote('BTCUSDT', '125'), E: 1_700_000_001_000 });
+  socket.message(quote('ETHUSDT', '2000'));
+  h.advance(250);
+  assert.equal(h.read().prices.BTCUSDT.price, 125);
+  assert.equal(panel.read().prices.BTCUSDT.price, 123.5);
+  h.advance(550);
+  assert.equal(panel.read().prices.ETHUSDT.price, 2000);
+  panel.release();
+  assert.equal(h.sockets.length, 1);
+  assert.deepEqual(socket.commands.at(-1).params, ['ethusdt@ticker']);
+  assert.equal(socket.commands.at(-1).method, 'UNSUBSCRIBE');
+});
+
+test('reconnection marks carried prices as stored, then recovers promptly; a new session has no prices', () => {
+  const h = harness({ options: { flushIntervalMs: 120_000, firstFlushMs: 800 } });
+  const socket = h.latest();
+  socket.open();
+  socket.message(quote());
+  h.advance(800);
+  socket.close();
+  assert.equal(h.read().prices.BTCUSDT.price, 123.5);
+  assert.equal(h.read().liveBySymbol.BTCUSDT, undefined);
+  h.advance(1000);
+  h.latest().open();
+  assert.equal(h.read().liveBySymbol.BTCUSDT, undefined);
+  h.latest().message(quote('BTCUSDT', '140'));
+  h.advance(800);
+  assert.equal(h.read().liveBySymbol.BTCUSDT, true);
+  assert.equal(h.read().prices.BTCUSDT.price, 140);
+  assert.deepEqual(plain(h.newSession().prices), {});
+  assert.equal(h.sockets.length, 3);
+});
+
+test('an unacknowledged membership update reconnects and restores the current union', () => {
+  const h = harness();
+  const socket = h.latest();
+  socket.open();
+  const panel = h.attach({ symbols: ['ETHUSDT'] });
+  const pending = socket.commands.at(-1);
+  socket.message({ id: pending.id + 1, result: null });
+  h.advance(7999);
+  assert.equal(h.sockets.length, 1);
+  h.advance(1);
+  assert.equal(panel.read().status, 'reconnecting');
+  h.advance(2000);
+  assert.equal(h.sockets.length, 2);
+  assert.match(h.latest().url, /btcusdt@ticker\/ethusdt@ticker/);
+  h.latest().open();
+  h.latest().message(quote('ETHUSDT', '124'));
+  h.advance(250);
+  assert.equal(panel.read().prices.ETHUSDT.price, 124);
+});
+
+test('short navigation reuses the connection and long idle stops it without carrying expired prices', () => {
+  const h = harness();
+  const socket = h.latest();
+  socket.open();
+  socket.message(quote());
+  h.advance(250);
+  h.render({ symbols: [] });
+  h.advance(500);
+  h.render({ symbols: ['BTCUSDT'] });
+  assert.equal(h.sockets.length, 1);
+  assert.equal(h.read().prices.BTCUSDT.price, 123.5);
+  h.render({ symbols: [] });
+  h.advance(1500);
+  assert.equal(socket.closeCount, 1);
+  h.advance(120_000);
+  h.render({ symbols: ['BTCUSDT'] });
+  assert.deepEqual(plain(h.read().prices), {});
+  assert.equal(h.sockets.length, 2);
 });

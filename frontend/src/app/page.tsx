@@ -115,11 +115,15 @@ export default function LandingPage() {
         key: item.id, label: item.label,
         value: live?.price ?? snapshot?.value,
         change: live?.change ?? snapshot?.change,
+        live: streaming ? crypto.liveBySymbol?.[item.feedSymbol] === true : undefined,
+        provider_time: streaming && crypto.sourceTimeBySymbol?.[item.feedSymbol]
+          ? new Date(crypto.sourceTimeBySymbol[item.feedSymbol]).toISOString() : snapshot?.provider_time,
         receivedAt: streaming ? crypto.receivedAtBySymbol[item.feedSymbol] : market.dataUpdatedAt,
       }
     })
     const notice = streaming ? describeTickerFeed({
       status: crypto.status, receivedAt: rows.map((row) => row.receivedAt),
+      liveCount: rows.filter((row) => row.live).length,
       now: clock.now, startedAt: clock.startedAt, total: rows.length,
     }) : describeMarketRequest({
       receivedAt: market.dataUpdatedAt, now: clock.now,

@@ -1,7 +1,27 @@
 # Rapot Devam Planı
 
 **Güncel plan: 27 Kasım 2026.** Ön yüzde Aşama 5.1, API'de Aşama 4.1
-üretimde. Aşama 4.2'nin kalıcı kayıt katmanı gerçek veri pilotunu bekliyor.
+üretimde. Aşama 5.2 ortak kripto fiyat akışı üzerinde çalışılıyor.
+Aşama 4.2'nin kalıcı kayıt katmanı gerçek veri pilotunu bekliyor.
+
+## 27 Kasım — Aşama 5.2 ortak Binance fiyat akışı
+
+- Ana Sayfa, Takipçi, Grafik ve grafik listeleri aynı Rapot oturumu ve
+  sekmesi içinde bir Binance Spot fiyat bağlantısını paylaşır. Görünür
+  semboller tekilleştirilir ve değişiklikler açık bağlantıda abonelik
+  farklarıyla uygulanır. Son ekran ayrıldıktan sonra bağlantı 1,5 saniye
+  tutulur ve fiyat izleyen ekran kalmadığında kapanır. Üyelik komutları
+  en erken 400 ms arayla gönderilir. Binance yanıtı alınamazsa bağlantı
+  artan aralıklarla toparlanır. [Binance Spot WebSocket kuralları](https://developers.binance.com/en/docs/products/spot/web-socket-streams).
+- Son fiyatlar en fazla iki dakikalık tarayıcı belleğinden tekrar
+  gösterilebilir. Sağlayıcı olay zamanı ve tarayıcı alım zamanı ayrı
+  okunur. Eski olay, daha yeni fiyatı geri almaz. Kopma sonrası son fiyat
+  **Son kayıt** olarak görünür. İlk yeni fiyat hızlı yansır, sonraki
+  fiyatlarda Takipçi'nin iki dakikalık tablo yenilemesi sürer. Yeni
+  oturumda bağlantı ve önceki kayıtlar temizlenir.
+- Grafik mumları kendi veri yolundan gelir. Ortak bağlantı sadece fiyat
+  ve 24 saatlik değişim taşır. Mum geçmişinin açılış dilimi ve grafik
+  güncellemelerinin taşınması Aşama 5.3 kapsamındadır.
 
 ## 27 Kasım — Aşama 5.1 ortak BIST fiyatı ve grafik açılışı
 
@@ -30,8 +50,7 @@ kanıtı `b457e09f107b03526a3160e2a723e0894fd44f38ddf3b079abab75ff9131f560`.
 - Fiyat paylaşımı tarayıcı belleğinde, aynı Rapot oturumunda çalışır.
   Farklı oturum, yeni sekme ve sayfa yeniden yüklemesi normal ilk sorguyla
   başlar. Mevcut sorgu aralıkları ve API'nin 50 sembol sınırı korunur.
-  Kripto fiyatlarının ortak bağlantısı, mum geçmişinin açılış dilimi ve
-  artımlı taşıma kararı Aşama 5'in sonraki işidir.
+  Kripto fiyatlarının ortak bağlantısı için Aşama 5.2 kaydına bak.
 - 337 ön yüz testi, üretim derlemesi ve standalone proxy geçti. Yerel
   tarayıcı senaryosunda, fiyat isteği örnek API'de altı saniye bekletilirken
   THYAO fiyatı Takipçi'ye aynı oturumda **0,29 sn** içinde geçti. Grafik
@@ -263,7 +282,8 @@ gerçek emir/Telegram teslimini ve açık seans boyunca 631 sembolü kapsamaz.
 - [ ] **Aşama 5 — Ortak fiyat/mum akışı ve grafik.** Ana sayfa, Takipçi ve
   Grafik için ortak sağlayıcı adaptörleri, kaynak zamanları ve ilk anlık
   görüntü. [Aşama 5.1 kaydı](#27-kasım--aşama-51-ortak-bist-fiyatı-ve-grafik-açılışı)
-  mevcut BIST fiyat okumalarını kapsar. Sonraki adım ölçüm gerekçesi
+  mevcut BIST fiyat okumalarını, [Aşama 5.2 kaydı](#27-kasım--aşama-52-ortak-binance-fiyat-akışı)
+  Binance fiyat aboneliklerini kapsar. Sonraki adım ölçüm gerekçesi
   varsa seçime göre artımlı yayın. Tek yönlü bildirim için SSE ve mevcut
   oturumlu WebSocket'i bağlantı sayısı, destek ve yeniden bağlanma açısından
   karşılaştır. Düşük frekanslı ekranlarda kontrollü sorgu yeterli olabilir.

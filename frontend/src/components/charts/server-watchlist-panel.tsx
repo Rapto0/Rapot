@@ -64,11 +64,13 @@ export function ServerWatchlistPanel({ symbol, market, onSelect }: {
                     const price = isBist ? quote?.value : tick?.price
                     const change = isBist ? quote?.change : tick?.change
                     const received = crypto.receivedAtBySymbol[row.symbol]
+                    const sourceTime = crypto.sourceTimeBySymbol?.[row.symbol]
                     const stale = isBist ? bist.isError || bist.isPaused || (quote?.state != null && quote.state !== "ok") || (bist.dataUpdatedAt > 0 && now - bist.dataUpdatedAt > 30_000)
-                        : crypto.status !== "connected" || !received || now - received > 60_000
+                        : crypto.status !== "connected" || !crypto.liveBySymbol?.[row.symbol] || !received || now - received > 60_000
                     const description = isBist ? quote?.message || "Borsapy · veri bekleniyor" : stale ? "Binance · güncel veri bekleniyor" : "Binance · USDT"
+                    const dataTime = isBist ? quote?.provider_time : sourceTime && new Date(sourceTime).toISOString()
                     return <button type="button" key={`${row.market_type}:${row.symbol}`} onClick={() => onSelect(row.symbol, row.market_type)} aria-pressed={symbol === row.symbol && market === row.market_type}
-                        title={`${row.symbol} · ${description}${isBist && quote?.provider_time ? ` · ${quote.provider_time}` : ""}`}
+                        title={`${row.symbol} · ${description}${dataTime ? ` · ${dataTime}` : ""}`}
                         className={cn("grid min-h-14 w-full grid-cols-[1.2fr_1fr_0.8fr] items-center gap-2 border-b border-border/30 px-3 py-2 text-left hover:bg-raised", symbol === row.symbol && market === row.market_type && "bg-raised")}>
                         <span className="min-w-0"><span className="block truncate text-xs font-semibold">{row.symbol}</span><span className="block truncate text-[10px] text-muted-foreground">{description}</span>{stale && price != null && <span className="block text-[10px] text-warning">Son kayıt · güncel olmayabilir</span>}</span>
                         <span className="min-w-0 break-all text-right font-mono text-xs tabular-nums">{numberLabel(price)}</span><span className={cn("text-right font-mono text-xs tabular-nums", change == null || !Number.isFinite(change) ? "text-muted-foreground" : change >= 0 ? "text-profit" : "text-loss")}>{numberLabel(change)}{change != null && Number.isFinite(change) ? "%" : ""}</span>

@@ -9,6 +9,7 @@ export interface MarketRow extends MarketSourceMetadata {
   value?: number
   change?: number
   receivedAt?: number
+  live?: boolean
 }
 
 export function MarketCategoryPanel({
@@ -90,7 +91,7 @@ export function MarketStrip({ row, now, streaming, loading }: {
         <p className="mt-2 text-[10px] text-muted-foreground">{loading ? "Veri bekleniyor" : "Veri yok"}</p>
       ) : streaming ? (
         <p className={cn("mt-2 text-[10px]", stale ? "text-amber-400" : "text-muted-foreground")}>
-          {stale ? "Akış gecikti · " : "Son alım: "}{receivedAge(row.receivedAt, now)}
+          {row.live === false ? "Son kayıt · " : stale ? "Akış gecikti · " : "Son alım: "}{receivedAge(row.receivedAt, now)}
         </p>
       ) : null}
       {row.source && <p className="mt-2 text-[10px] text-muted-foreground">{row.source}</p>}

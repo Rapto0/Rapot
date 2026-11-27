@@ -103,12 +103,13 @@ export function describeMarketRequest({
   }
 }
 
-export function describeTickerFeed({ status, receivedAt, now, total, startedAt = 0 }: {
+export function describeTickerFeed({ status, receivedAt, now, total, startedAt = 0, liveCount }: {
   status: "connecting" | "connected" | "reconnecting" | "offline" | "paused"
   receivedAt: Array<number | undefined>
   now: number
   total: number
   startedAt?: number
+  liveCount?: number
 }): FeedNotice {
   const available = receivedAt.filter((value): value is number => !!value)
   if (status === "reconnecting" || status === "offline" || status === "paused") return {
@@ -130,8 +131,13 @@ export function describeTickerFeed({ status, receivedAt, now, total, startedAt =
     label: "Akış gecikti", description: "Bazı fiyatlar için 30 saniyedir yeni veri alınmadı.",
     warning: true, loading: false,
   }
-  if (available.length < total) return {
-    label: "Eksik veri", description: `${total - available.length} enstrüman için veri bekleniyor.`,
+  if (liveCount === 0) return {
+    label: "Son kayıt", description: "Binance akışından yeni fiyat bekleniyor.",
+    warning: false, loading: true,
+  }
+  const live = liveCount ?? available.length
+  if (live < total) return {
+    label: "Eksik veri", description: `${total - live} enstrüman için veri bekleniyor.`,
     warning: true, loading: false,
   }
   return {

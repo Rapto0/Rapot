@@ -368,12 +368,13 @@ export function RsiTracker() {
                         const change = marketPrice == null ? null : bist ? quote?.change : tick?.change
                         const received = crypto.receivedAtBySymbol[symbol]
                         const stale = marketPrice == null || (bist ? quotes.isError || quotes.isPaused || (quote?.state !== undefined && quote.state !== "ok")
-                            : crypto.status !== "connected" || !received)
+                            : crypto.status !== "connected" || !crypto.liveBySymbol?.[symbol] || !received)
                         const rsiPriceTime = rsiSourceTime(rsiRow?.source_time)
                         const lastRsi = rsiStale || !trackerQuoteFresh(rsiRow?.source_time, observedAt)
                         const priceTime = marketPrice == null ? [rsiSourceTime(lastPrice?.source_time), lastPrice?.source].filter(Boolean).join(" · ")
                             : bist ? [quote?.provider_time, quote?.message].filter(Boolean).join(" · ")
-                            : received ? `Akış alımı ${clock.format(received)} TSİ` : undefined
+                            : [crypto.sourceTimeBySymbol?.[symbol] && `Kaynak ${clock.format(crypto.sourceTimeBySymbol[symbol])} TSİ`,
+                                received && `Akış alımı ${clock.format(received)} TSİ`].filter(Boolean).join(" · ")
                         return <tr key={`${market}:${symbol}`} className="group even:bg-raised/30 hover:bg-raised/70">
                             <th scope="row" className="sticky left-0 z-10 border-b border-r border-border bg-surface px-3 text-left group-hover:bg-raised">
                                 <div className="flex items-center justify-between gap-2">

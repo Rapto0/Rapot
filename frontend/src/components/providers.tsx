@@ -8,6 +8,8 @@ import { ApiError } from '@/lib/api/core';
 import { hydrateSession } from '@/lib/api/auth-api';
 import { RealtimeBridge } from '@/components/realtime-bridge';
 import { cleanupLegacyBrowserSettings } from '@/lib/browser-preferences';
+import { BinanceTickerFeed } from '@/lib/binance-ticker-feed';
+import { BinanceTickerContext } from '@/lib/hooks/use-binance-ticker';
 
 export function Providers({ children }: { children: React.ReactNode }) {
     useEffect(() => {
@@ -21,6 +23,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
 }
 
 function SessionProviders({ children }: { children: React.ReactNode }) {
+    const [ticker] = useState(() => new BinanceTickerFeed());
     const [queryClient] = useState(
         () =>
             new QueryClient({
@@ -37,16 +40,19 @@ function SessionProviders({ children }: { children: React.ReactNode }) {
     );
 
     useEffect(() => () => {
+        ticker.reset();
         void queryClient.cancelQueries();
         queryClient.clear();
-    }, [queryClient]);
+    }, [queryClient, ticker]);
 
     return (
         <QueryClientProvider client={queryClient}>
-            <RealtimeBridge />
-            <ToastProvider>
-                {children}
-            </ToastProvider>
+            <BinanceTickerContext.Provider value={ticker}>
+                <RealtimeBridge />
+                <ToastProvider>
+                    {children}
+                </ToastProvider>
+            </BinanceTickerContext.Provider>
         </QueryClientProvider>
     );
 }

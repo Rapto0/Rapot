@@ -11,7 +11,7 @@ import {
     fetchEconomicCalendar,
     fetchTicker,
 } from "@/lib/api/client"
-import { useBinanceTicker } from "@/lib/hooks/use-binance-ticker"
+import { useBinanceTickerFeed } from "@/lib/hooks/use-binance-ticker"
 import { useLastMarketQuote, useMarketSnapshot } from "@/lib/hooks/use-market-snapshot"
 import { useSession } from "@/lib/hooks/use-session"
 import { finiteNumber } from "@/lib/market-feed"
@@ -651,10 +651,11 @@ export function AdvancedChartPage({
     }, [watchlists, activeWatchlistId, showRightPanel, watchlistSource, marketType, symbol])
 
     // Live crypto prices for watchlist
-    const cryptoPrices = useBinanceTicker(watchlistCryptoSymbols, {
+    const cryptoFeed = useBinanceTickerFeed(watchlistCryptoSymbols, {
         paused: !canUseBorsapy,
         flushIntervalMs: 320,
     })
+    const cryptoPrices = cryptoFeed.prices
 
     const candles: Candle[] = useMemo(() => {
         if (!canUseBorsapy) return []
@@ -832,7 +833,13 @@ export function AdvancedChartPage({
     const prevPrice = candles.at(-2)?.close
     const lastBistPrice = useLastMarketQuote(useBorsapy && canUseBorsapy && candlePrice == null ? `${symbol.toUpperCase()}.IS` : "")
     const lastBistPriceTime = timeFormatters.timeFormatter(lastBistPrice?.provider_time)
-    const livePrice = (marketType === "Kripto" ? cryptoPrices[symbol]?.price : undefined) ?? candlePrice ?? lastBistPrice?.value
+    const cryptoSymbol = symbol.toUpperCase()
+    const cryptoPrice = marketType === "Kripto" ? cryptoPrices[cryptoSymbol]?.price : undefined
+    const cryptoTime = cryptoFeed.sourceTimeBySymbol[cryptoSymbol]
+    const cryptoPriceTime = cryptoTime ? timeFormatters.timeFormatter(cryptoTime / 1000) : ""
+    const cryptoReceivedAt = cryptoFeed.receivedAtBySymbol[cryptoSymbol]
+    const cryptoReceivedTime = cryptoReceivedAt ? timeFormatters.timeFormatter(cryptoReceivedAt / 1000) : ""
+    const livePrice = cryptoPrice ?? candlePrice ?? lastBistPrice?.value
     const priceChange = finiteNumber(candlePrice) && finiteNumber(prevPrice) && prevPrice > 0
         ? candlePrice - prevPrice : undefined
     const priceChangePercent = priceChange != null && prevPrice
@@ -1884,6 +1891,11 @@ export function AdvancedChartPage({
                             {lastBistPrice && <span className="text-xs text-muted-foreground"
                                 title={[lastBistPrice.source, lastBistPrice.message].filter(Boolean).join(" · ")}>
                                 Son kayıt{lastBistPriceTime && ` · ${lastBistPriceTime} TSİ`}
+                            </span>}
+                            {cryptoPrice != null && <span className="text-xs text-muted-foreground"
+                                title={cryptoReceivedTime ? `Tarayıcı alımı ${cryptoReceivedTime} UTC` : undefined}>
+                                {cryptoFeed.liveBySymbol[cryptoSymbol] ? "Binance" : "Binance · Son kayıt"}
+                                {cryptoPriceTime && ` · ${cryptoPriceTime} UTC`}
                             </span>}
                             {finiteNumber(priceChangePercent) && <div
                                 title={lastBistPrice ? "Günlük değişim" : "Mum değişimi"}

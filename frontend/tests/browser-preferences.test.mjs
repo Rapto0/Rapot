@@ -123,6 +123,7 @@ test('global Providers startup cleans old settings even when the settings page i
     '@/lib/hooks/use-session': { useSession: () => null }, '@/lib/api/core': {},
     '@/lib/api/auth-api': { hydrateSession: async () => { hydrated++; return false; } },
     '@/components/realtime-bridge': {}, '@/lib/browser-preferences': browserModule,
+    '@/lib/binance-ticker-feed': {}, '@/lib/hooks/use-binance-ticker': {},
   });
   provider.Providers({ children: null });
   effects.forEach((effect) => effect());
