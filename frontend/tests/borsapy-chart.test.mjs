@@ -8,7 +8,7 @@ import { QueryClient } from '@tanstack/react-query';
 import ts from 'typescript';
 
 function moduleUnderTest(file, imports = {}, globals = {}) {
-    const module = vm.createContext({ exports: {}, ...globals,
+    const testContext = vm.createContext({ exports: {}, ...globals,
         require(name) {
             assert.ok(Object.hasOwn(imports, name), `Unexpected import: ${name}`);
             return imports[name];
@@ -16,8 +16,8 @@ function moduleUnderTest(file, imports = {}, globals = {}) {
     });
     vm.runInContext(ts.transpileModule(readFileSync(new URL(file, import.meta.url), 'utf8'), {
         compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-    }).outputText, module);
-    return module.exports;
+    }).outputText, testContext);
+    return testContext.exports;
 }
 
 const compiled = ts.transpileModule(readFileSync(new URL('../src/lib/api/borsapy-chart-api.ts', import.meta.url), 'utf8'), {
@@ -177,7 +177,7 @@ test('opening chart starts the existing BIST stream first and scopes its lease t
     let state = '', nextId = 0, stream = { data: undefined, isError: false };
     const reads = [], timers = [], cleared = [], released = [];
     let options = [], effects = [];
-    const { useChartCandles } = moduleUnderTest('../src/lib/hooks/use-chart-candles.ts', {
+    const { useChartCandles: renderChartCandles } = moduleUnderTest('../src/lib/hooks/use-chart-candles.ts', {
         react: {
             useMemo: (factory) => factory(),
             useState: () => [state, (next) => { state = next; }],
@@ -204,7 +204,7 @@ test('opening chart starts the existing BIST stream first and scopes its lease t
     function select(symbol, market = 'BIST', timeframe = '1d', allowed = true, expiry = 100) {
         options = [];
         effects = [];
-        useChartCandles(symbol, market, timeframe, allowed, 'admin', expiry);
+        renderChartCandles(symbol, market, timeframe, allowed, 'admin', expiry);
         return { stream: options[0], history: options[1], mount: effects[0] };
     }
     const first = select('THYAO');
