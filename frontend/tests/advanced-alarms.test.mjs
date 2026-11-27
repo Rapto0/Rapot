@@ -18,6 +18,12 @@ const plain = value => JSON.parse(JSON.stringify(value));
 const form = load('../src/lib/advanced-alarm-form.ts');
 const listHelpers = load('../src/lib/server-watchlists.ts');
 const customPresets = load('../src/lib/custom-indicator-presets.ts');
+const alarmEventFeed = fetchAdvancedEvents => load('../src/lib/advanced-alarm-events.ts', {
+  '@/lib/api/advanced-alarms-api': { fetchAdvancedEvents },
+});
+const eventRow = (id, delivery_status = 'not_requested') => ({
+  id, delivery_status, rule_name: 'Örnek alarm', symbol: 'THYAO', value: 310,
+});
 
 test('advanced transport retains auth core, cancellation, revisions and escaped identifiers', async () => {
   const calls = [];
@@ -37,6 +43,62 @@ test('advanced transport retains auth core, cancellation, revisions and escaped 
   assert.equal(calls[2][1].signal, signal);
   assert.equal(calls[4][1].method, 'PUT');
   assert.equal(JSON.parse(calls[4][1].body).revision, 3);
+});
+
+test('the event feed starts at the newest 100 and advances from its last successful ID', async () => {
+  const signal = new AbortController().signal;
+  const requests = [];
+  const events = Array.from({ length: 100 }, (_, index) => eventRow(200 - index));
+  const replies = [
+    { events, next_after_id: 200, has_more: true },
+    { events: [], next_after_id: 200, has_more: false },
+    new Error('feed offline'),
+    { events: [eventRow(205), eventRow(209)], next_after_id: 209, has_more: false },
+    { events: [], next_after_id: 209, has_more: false },
+  ];
+  const { readAdvancedAlarmEventFeed: read } = alarmEventFeed(async (cursor, requestSignal) => {
+    requests.push(cursor);
+    assert.equal(requestSignal, signal);
+    const reply = replies.shift();
+    if (reply instanceof Error) throw reply;
+    return reply;
+  });
+  const snapshot = await read(undefined, signal, 0);
+  assert.equal(await read(snapshot, signal, 5000), snapshot);
+  await assert.rejects(read(snapshot, signal, 10_000), /feed offline/);
+  const updated = await read(snapshot, signal, 15_000);
+  assert.equal(updated.events.length, 100);
+  assert.deepEqual(Array.from(updated.events.slice(0, 3), event => event.id), [209, 205, 200]);
+  assert.equal(updated.events.at(-1).id, 103);
+  assert.equal(await read(updated, signal, 20_000), updated);
+  assert.deepEqual(requests, [undefined, 200, 200, 200, 209]);
+});
+
+test('delivery reconciliation refreshes old rows and recovery jumps to the newest page after a burst', async () => {
+  const signal = new AbortController().signal;
+  const requests = [];
+  const replies = [
+    { events: [eventRow(7, 'pending')], next_after_id: 7, has_more: false },
+    { events: [], next_after_id: 7, has_more: false },
+    { events: [eventRow(7, 'sent')], next_after_id: 7, has_more: false },
+    { events: [eventRow(8)], next_after_id: 107, has_more: true },
+    { events: [eventRow(199), eventRow(198)], next_after_id: 199, has_more: true },
+    { events: [], next_after_id: 0, has_more: false },
+  ];
+  const { readAdvancedAlarmEventFeed: read } = alarmEventFeed(async cursor => {
+    requests.push(cursor);
+    return replies.shift();
+  });
+  const snapshot = await read(undefined, signal, 0);
+  assert.equal(await read(snapshot, signal, 29_999), snapshot);
+  const delivered = await read(snapshot, signal, 30_000);
+  assert.equal(delivered.events[0].delivery_status, 'sent');
+  const caughtUp = await read(delivered, signal, 35_000);
+  assert.deepEqual(Array.from(caughtUp.events, event => event.id), [199, 198]);
+  const empty = await read(caughtUp, signal, 95_000);
+  assert.equal(empty.events.length, 0);
+  assert.equal(empty.nextAfterId, 0);
+  assert.deepEqual(requests, [undefined, 7, undefined, 7, undefined, undefined]);
 });
 
 test('minute alarms preserve compound multi-timeframe conditions and default Telegram off', () => {
@@ -84,14 +146,14 @@ test('large watchlist parsing never silently truncates or changes symbol identit
 const allElements = node => React.isValidElement(node) ? [node, ...React.Children.toArray(node.props.children).flatMap(allElements)] : [];
 const text = node => Array.isArray(node) ? node.map(text).join('') : React.isValidElement(node) ? text(node.props.children) : typeof node === 'string' || typeof node === 'number' ? String(node) : '';
 
-function harness({ allowed = true, ruleRows = [], listRows = [], localLists = [], searchParams = '', marketStatus = {}, symbolLoader = async () => ({ symbols: [] }) } = {}) {
-  const states = [], requests = [], queries = [];
+function harness({ allowed = true, ruleRows = [], listRows = [], localLists = [], searchParams = '', marketStatus = {}, eventQuery = { data: { events: [] } }, symbolLoader = async () => ({ symbols: [] }) } = {}) {
+  const states = [], requests = [], queries = [], invalidations = [];
   const effectDeps = [];
   let cursor = 0, effectCursor = 0, effects = [], dirty = false, tree;
   const runtime = { running: true, last_cycle_at: new Date().toISOString(), last_error: null, evaluation: { total: 3000, checked: 2500, ready: 2100, backlog: 500 }, market: { tracked_symbols: 600, fresh_symbols: 580, state: 'connected', ...marketStatus }, delivery: { pending: 4, sent: 10, failed: 0 }, telegram_configured: true };
   const queryData = {
     'advanced-alarms': { rules: ruleRows, usage: { price: 1000, technical: 1000, watchlist: 1000 }, runtime },
-    'advanced-alarm-status': runtime, 'advanced-alarm-events': { events: [] }, 'advanced-alarm-watchlists': { watchlists: listRows },
+    'advanced-alarm-status': runtime, 'advanced-alarm-watchlists': { watchlists: listRows },
   };
   const hooks = {
     useState(initial) { const index = cursor++; if (!(index in states)) states[index] = typeof initial === 'function' ? initial() : initial; return [states[index], next => { const value = typeof next === 'function' ? next(states[index]) : next; dirty ||= !Object.is(value, states[index]); states[index] = value; }]; },
@@ -101,21 +163,24 @@ function harness({ allowed = true, ruleRows = [], listRows = [], localLists = []
   const api = Object.fromEntries(['fetchAdvancedAlarms', 'fetchAdvancedAlarmStatus', 'fetchAdvancedEvents', 'fetchServerWatchlists', 'removeAdvancedAlarm', 'removeServerWatchlist', 'saveAdvancedAlarm', 'saveServerWatchlist'].map(name => [name, async (...args) => { requests.push({ name, args }); const result = { ...args[0], id: 'saved', revision: 1, category: args[0]?.category ?? 'price' }; if (name === 'saveServerWatchlist') queryData['advanced-alarm-watchlists'] = { watchlists: [...listRows, result] }; return result; }]));
   const componentModule = load('../src/components/alarms/advanced-alarm-center.tsx', {
     react: { ...React, ...hooks }, 'react/jsx-runtime': jsxRuntime, 'next/link': { default: 'a' },
-    '@tanstack/react-query': { useQuery(options) { queries.push(options); return { data: queryData[options.queryKey[0]], isError: false, isLoading: false, refetch: async () => ({}) }; } },
+    '@tanstack/react-query': {
+      useQuery(options) { queries.push(options); const key = options.queryKey[0]; return { data: queryData[key], isError: false, isLoading: false, refetch: async () => ({}), ...(key === 'advanced-alarm-events' && eventQuery) }; },
+      useQueryClient() { return { invalidateQueries: async options => invalidations.push(plain(options)) }; },
+    },
     'lucide-react': Object.fromEntries(['Activity', 'Bell', 'List', 'Pencil', 'Plus', 'RefreshCw', 'Trash2'].map(x => [x, 'svg'])),
     '@/components/ui/action-dialog': { ActionDialog: 'dialog' }, '@/components/ui/button': { Button: 'button' }, '@/components/ui/input': { Input: 'input' }, '@/components/ui/page-shell': { PageShell: 'main' }, '@/components/ui/select': { Select: 'select' },
     '@/components/alarms/condition-builder': { ConditionBuilder: 'condition-builder' },
     '@/lib/hooks/use-session': { useSession: () => allowed ? { user: { username: 'admin', is_admin: true }, expiresAt: 1000 } : null },
     '@/lib/api/core': { ApiError: class ApiError extends Error {} },
     '@/lib/api/client': Object.fromEntries(['fetchBistSymbols', 'fetchCryptoSymbols'].map(name => [name, async () => { requests.push({ name, args: [] }); return symbolLoader(name); }])),
-    '@/lib/api/advanced-alarms-api': api, '@/lib/advanced-alarm-form': form,
+    '@/lib/api/advanced-alarms-api': api, '@/lib/advanced-alarm-events': alarmEventFeed(api.fetchAdvancedEvents), '@/lib/advanced-alarm-form': form,
     '@/lib/server-watchlists': listHelpers,
     '@/lib/custom-indicator-presets': customPresets,
     '@/lib/watchlist-alarms': { loadStoredWatchlists: () => localLists, loadStoredScannerWatchlists: () => [] },
   }, { window: { location: { search: searchParams } } });
   function render() { let rounds = 0; do { assert.ok(++rounds < 10, 'Effects must settle'); cursor = 0; effectCursor = 0; effects = []; dirty = false; tree = componentModule.AdvancedAlarmCenter(); effects.forEach(effect => effect()); } while (dirty); return tree; }
   render();
-  return { render, requests, queries, elements: () => allElements(tree), text: () => text(tree) };
+  return { render, requests, queries, invalidations, elements: () => allElements(tree), text: () => text(tree) };
 }
 
 test('provider pause is visible outside collapsed details and does not alter saved alarms', () => {
@@ -246,7 +311,25 @@ test('UI reports measured backlog and quote coverage instead of claiming all dat
   const streamQueries = view.queries.filter(q => ['advanced-alarm-status', 'advanced-alarm-events'].includes(q.queryKey[0]));
   assert.ok(streamQueries.every(q => q.refetchInterval === 5000 && q.refetchIntervalInBackground === false));
   assert.ok(view.queries.every(q => q.refetchIntervalInBackground === false));
+  assert.match(view.text(), /5 saniyede bir kontrol/);
   assert.equal(view.requests.length, 0);
+});
+
+test('the event panel distinguishes the first error, an empty feed and a refresh error', () => {
+  const firstError = harness({ eventQuery: { isError: true } }).text();
+  assert.match(firstError, /Olaylar yüklenemedi/);
+  assert.doesNotMatch(firstError, /Henüz tetiklenen alarm yok/);
+  assert.match(harness().text(), /Henüz tetiklenen alarm yok/);
+
+  const retained = harness({ eventQuery: { isError: true, data: { events: [eventRow(7, 'sent')] } } }).text();
+  assert.match(retained, /Son başarılı kayıtlar gösteriliyor/);
+  assert.match(retained, /Telegram'a gönderildi · #7/);
+});
+
+test('manual event refresh invalidates only the active session feed', () => {
+  const view = harness();
+  view.elements().find(element => element.props['aria-label'] === 'Alarmları yenile').props.onClick();
+  assert.deepEqual(view.invalidations, [{ queryKey: ['advanced-alarm-events', 'admin', 1000], exact: true }]);
 });
 
 test('saving is explicit and never silently enables Telegram', async () => {

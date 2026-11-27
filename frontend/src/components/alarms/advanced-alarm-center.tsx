@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react"
 import Link from "next/link"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Activity, Bell, List, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react"
 import { ActionDialog } from "@/components/ui/action-dialog"
 import { Button } from "@/components/ui/button"
@@ -13,7 +13,8 @@ import { ConditionBuilder } from "@/components/alarms/condition-builder"
 import { useSession } from "@/lib/hooks/use-session"
 import { ApiError } from "@/lib/api/core"
 import { fetchBistSymbols, fetchCryptoSymbols } from "@/lib/api/client"
-import { fetchAdvancedAlarms, fetchAdvancedAlarmStatus, fetchAdvancedEvents, fetchServerWatchlists, removeAdvancedAlarm, removeServerWatchlist, saveAdvancedAlarm, saveServerWatchlist, type AdvancedAlarmRule, type AlarmCategory, type AlarmTimeframe, type ServerWatchlist } from "@/lib/api/advanced-alarms-api"
+import { fetchAdvancedAlarms, fetchAdvancedAlarmStatus, fetchServerWatchlists, removeAdvancedAlarm, removeServerWatchlist, saveAdvancedAlarm, saveServerWatchlist, type AdvancedAlarmRule, type AlarmCategory, type AlarmTimeframe, type ServerWatchlist } from "@/lib/api/advanced-alarms-api"
+import { ALARM_EVENT_POLL_MS, readAdvancedAlarmEventFeed, type AdvancedAlarmEventFeed } from "@/lib/advanced-alarm-events"
 import { CATEGORY_LABELS, CUSTOM_INDICATOR_LABELS, withIndicatorPreset, hasMixedCustomTechnical, conditionLabel, draftForWatchlist, draftFromAdvancedRule, emptyAdvancedDraft, mergeWatchlistSnapshot, parseAlarmSymbols, TIMEFRAME_LABELS, writeFromAdvancedDraft, type AdvancedDraft } from "@/lib/advanced-alarm-form"
 import { consumeCustomIndicatorPreset } from "@/lib/custom-indicator-presets"
 import { serverWatchlistHref } from "@/lib/server-watchlists"
@@ -42,9 +43,22 @@ export function AdvancedAlarmCenter() {
     const session = useSession()
     const allowed = Boolean(session?.user.is_admin && !session.user.disabled)
     const identity = [session?.user.username, session?.expiresAt]
+    const queryClient = useQueryClient()
+    const eventQueryKey = ["advanced-alarm-events", ...identity]
+    const refreshEvents = () => queryClient.invalidateQueries({ queryKey: eventQueryKey, exact: true })
     const rules = useQuery({ queryKey: ["advanced-alarms", ...identity], queryFn: ({ signal }) => fetchAdvancedAlarms(signal), enabled: allowed, refetchInterval: 15_000, refetchIntervalInBackground: false, retry: false })
     const status = useQuery({ queryKey: ["advanced-alarm-status", ...identity], queryFn: ({ signal }) => fetchAdvancedAlarmStatus(signal), enabled: allowed, refetchInterval: 5_000, refetchIntervalInBackground: false, retry: false })
-    const events = useQuery({ queryKey: ["advanced-alarm-events", ...identity], queryFn: ({ signal }) => fetchAdvancedEvents(undefined, signal), enabled: allowed, refetchInterval: 5_000, refetchIntervalInBackground: false, retry: false })
+    const events = useQuery({
+        queryKey: eventQueryKey,
+        queryFn: ({ client, queryKey, signal }) => {
+            const previous = client.getQueryState(queryKey)?.isInvalidated ? undefined : client.getQueryData<AdvancedAlarmEventFeed>(queryKey)
+            return readAdvancedAlarmEventFeed(previous, signal)
+        },
+        enabled: allowed,
+        refetchInterval: ALARM_EVENT_POLL_MS,
+        refetchIntervalInBackground: false,
+        retry: false,
+    })
     const watchlists = useQuery({ queryKey: ["advanced-alarm-watchlists", ...identity], queryFn: ({ signal }) => fetchServerWatchlists(signal), enabled: allowed, refetchInterval: 15_000, refetchIntervalInBackground: false, retry: false })
     const [category, setCategory] = useState<AlarmCategory>("price")
     const [search, setSearch] = useState("")
@@ -132,7 +146,7 @@ export function AdvancedAlarmCenter() {
     async function mutate(action: () => Promise<void>) {
         if (!allowed || pendingRef.current) return
         pendingRef.current = true; setPending(true); setError(""); setNotice("")
-        try { await action(); await Promise.all([rules.refetch(), status.refetch(), watchlists.refetch(), events.refetch()]) }
+        try { await action(); await Promise.all([rules.refetch(), status.refetch(), watchlists.refetch(), refreshEvents()]) }
         catch (cause) { setError(readableError(cause)) }
         finally { pendingRef.current = false; setPending(false) }
     }
@@ -274,7 +288,7 @@ export function AdvancedAlarmCenter() {
                 {selectedList && <section className="space-y-3 rounded border border-primary/30 bg-surface p-4" aria-label="Seçilen liste ayrıntısı"><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="break-words text-base font-semibold text-foreground">{selectedList.name}</h2><Button variant="ghost" size="sm" onClick={() => { setSelectedListId(""); setPage(0) }}>Liste filtresini kaldır</Button></div><p className="text-xs text-muted-foreground">{selectedList.symbols.filter(item => item.market_type === "BIST").length} BIST · {selectedList.symbols.filter(item => item.market_type === "Kripto").length} Binance USDT · {selectedRules.length} bağlı alarm. Her kural listedeki her sembole ayrı uygulanır.</p><div className="flex flex-wrap gap-2"><Button variant="outline" disabled={pending || !selectedList.symbols.length} onClick={() => newListAlarm(selectedList, "price")}>Fiyat koşulu ekle</Button><Button variant="outline" disabled={pending || !selectedList.symbols.length} onClick={() => newListAlarm(selectedList, "technical")}>Teknik koşul ekle</Button><Link href={serverWatchlistHref(selectedList.id, "chart")} className="inline-flex min-h-11 items-center px-2 text-xs text-primary underline">Bu listeyi grafikte aç</Link></div><details className="text-xs"><summary className="cursor-pointer">Liste üyeleri ({selectedList.symbols.length})</summary><p className="mt-2 max-h-36 overflow-y-auto break-words leading-relaxed text-muted-foreground">{selectedList.symbols.map(item => `${item.symbol} (${item.market_type})`).join(", ") || "Liste boş."}</p></details></section>}
                 {selectedListId && !selectedList && !watchlists.isLoading && <p role="status" className="text-sm">Seçilen liste artık bulunamıyor. <button className="underline" onClick={() => setSelectedListId("")}>Liste filtresini kaldır</button></p>}
                 <p className="text-xs leading-relaxed text-muted-foreground">Kota sunucu genelinde her kategoride 1.000 kuraldır; duraklatılanlar da sayılır. Gösterilen kullanım hesabınıza aittir. Bir liste alarmı bir kural sayılır, ancak üye sayısı kadar ayrı kontrol gerektirir. 3.000 kuralın her sembolde aynı saniyede kontrolü garanti edilmez.</p>
-                <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex flex-wrap gap-2" aria-label="Alarm türleri">{(Object.keys(CATEGORY_LABELS) as AlarmCategory[]).map(key => <Button key={key} variant={category === key ? "default" : "outline"} aria-pressed={category === key} onClick={() => { setCategory(key); setPage(0) }}>{CATEGORY_LABELS[key]} <span className="ml-2 tabular-nums">{statistic(rules.data?.usage?.[key])} / 1.000</span></Button>)}</div><div className="flex gap-2"><Button variant="outline" aria-label="Alarmları yenile" disabled={pending} onClick={() => void Promise.all([rules.refetch(), status.refetch(), events.refetch()])}><RefreshCw className="h-4 w-4" /></Button><Button disabled={pending} onClick={() => openEditor()}><Plus className="mr-2 h-4 w-4" />Yeni alarm</Button></div></div>
+                <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex flex-wrap gap-2" aria-label="Alarm türleri">{(Object.keys(CATEGORY_LABELS) as AlarmCategory[]).map(key => <Button key={key} variant={category === key ? "default" : "outline"} aria-pressed={category === key} onClick={() => { setCategory(key); setPage(0) }}>{CATEGORY_LABELS[key]} <span className="ml-2 tabular-nums">{statistic(rules.data?.usage?.[key])} / 1.000</span></Button>)}</div><div className="flex gap-2"><Button variant="outline" aria-label="Alarmları yenile" disabled={pending} onClick={() => void Promise.all([rules.refetch(), status.refetch(), refreshEvents()])}><RefreshCw className="h-4 w-4" /></Button><Button disabled={pending} onClick={() => openEditor()}><Plus className="mr-2 h-4 w-4" />Yeni alarm</Button></div></div>
                 {draft && <section className="rounded border border-border bg-surface p-4 sm:p-5"><h2 ref={editorRef} tabIndex={-1} className="mb-4 text-base font-semibold text-foreground">{editing ? "Alarmı düzenle" : `Yeni ${CATEGORY_LABELS[draft.category].toLocaleLowerCase("tr-TR")} alarmı`}</h2><form onSubmit={save} className="space-y-4"><fieldset disabled={pending} className="space-y-4">
                     {draft.category !== "price" && <label className="block max-w-md space-y-1 text-sm"><span>Alarm hedefi</span><Select value={draft.category === "watchlist" ? "watchlist" : "technical"} onChange={e => setDraft({ ...draft, category: e.target.value === "watchlist" ? "watchlist" : "technical", scope: e.target.value === "watchlist" ? "watchlist" : "symbols", watchlist_id: e.target.value === "watchlist" ? draft.watchlist_id : null })}><option value="technical">Seçtiğim semboller</option><option value="watchlist">İzleme listesi</option></Select></label>}
                     <div className="grid gap-4 sm:grid-cols-2"><label className="space-y-1 text-sm"><span>Alarm adı</span><Input value={draft.name} maxLength={80} required onChange={e => change("name", e.target.value)} placeholder="Örn. RSI dönüş ve trend onayı" /></label><div className="rounded border border-border p-3 text-sm">Süre: <strong>Süresiz</strong><p className="mt-1 text-xs text-muted-foreground">Sen duraklatana veya silene kadar kayıtlı kalır.</p></div>
@@ -298,7 +312,25 @@ export function AdvancedAlarmCenter() {
                 {visible.map(rule => <article key={rule.id} className="space-y-2 rounded border border-border bg-surface p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0 flex-1"><h3 className="break-words text-sm font-semibold">{rule.name}</h3><p className="mt-1 break-words text-xs leading-relaxed text-muted-foreground">{conditionLabel(rule.condition)}</p></div><div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" disabled={pending} onClick={() => void mutate(async () => { await saveAdvancedAlarm({ ...writeFromAdvancedDraft(draftFromAdvancedRule(rule), rule.revision), enabled: !rule.enabled }, rule.id) })}>{rule.enabled ? "Duraklat" : "Etkinleştir"}</Button><Button variant="outline" size="icon" aria-label={`${rule.name}: düzenle`} disabled={pending} onClick={() => openEditor(rule)}><Pencil className="h-4 w-4" /></Button><Button variant="outline" size="icon" aria-label={`${rule.name}: sil`} disabled={pending} onClick={() => setDeleting({ kind: "rule", id: rule.id, name: rule.name })}><Trash2 className="h-4 w-4" /></Button></div></div><p className="break-words text-xs">{rule.scope === "all_bist" ? "Tüm BIST" : rule.scope === "watchlist" ? watchlists.data?.watchlists.find(list => list.id === rule.watchlist_id)?.name ?? "İzleme listesi" : rule.symbols.map(item => item.symbol).join(", ")} · {TIMEFRAME_LABELS[rule.timeframe] ?? rule.timeframe} · {rule.trigger === "intrabar" ? "Mum içinde" : "Mum kapanışında"} · Süresiz</p><p className="text-xs text-muted-foreground">{stateLabels[rule.state] ?? rule.state} · Son kontrol: {timeLabel(rule.last_checked_at)} · Son tetik: {timeLabel(rule.last_triggered_at)} · Telegram {rule.notify_telegram ? "açık" : "kapalı"}</p>{rule.last_error && <p className="text-xs text-loss">{rule.last_error}</p>}</article>)}
                 {filtered.length > 30 && <div className="flex items-center gap-3 text-xs"><Button variant="outline" disabled={safePage === 0} onClick={() => setPage(safePage - 1)}>Önceki</Button><span>{safePage + 1} / {Math.ceil(filtered.length / 30)} · {filtered.length} alarm</span><Button variant="outline" disabled={(safePage + 1) * 30 >= filtered.length} onClick={() => setPage(safePage + 1)}>Sonraki</Button></div>}
             </section>
-            <section className="space-y-3 rounded border border-border bg-surface p-4"><div className="flex flex-wrap items-center justify-between gap-2"><h2 className="text-sm font-semibold">Canlı alarm akışı</h2><span className="text-xs text-muted-foreground">Son 100 olay · Türkiye saati · saniyede bir yenilenir</span></div>{events.isError && <p role="alert" className="text-sm text-loss">Olay akışı yenilenemedi; son kayıtlar gösteriliyor.</p>}{events.isLoading && <p role="status" className="text-xs">Olaylar yükleniyor…</p>}{events.data?.events.length === 0 && <p className="text-sm text-muted-foreground">Henüz tetiklenen alarm yok.</p>}{[...(events.data?.events ?? [])].sort((a, b) => b.id - a.id).map(event => <article key={event.id} className="space-y-1 border-t border-border pt-3 text-xs"><div className="flex flex-wrap justify-between gap-2"><p className="font-medium">{event.rule_name} · {event.symbol}</p><p className="text-muted-foreground">{timeLabel(event.created_at)}</p></div><p>Değer: {typeof event.value === "number" && Number.isFinite(event.value) ? event.value.toLocaleString("tr-TR", { maximumFractionDigits: 5 }) : "—"} · {deliveryLabels[event.delivery_status] ?? event.delivery_status} · #{event.id}</p>{event.delivery_error && <p className="text-loss">{event.delivery_error}</p>}</article>)}</section>
+            <section className="space-y-3 rounded border border-border bg-surface p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h2 className="text-sm font-semibold">Canlı alarm akışı</h2>
+                    <span className="text-xs text-muted-foreground">Son 100 olay · Türkiye saati · {ALARM_EVENT_POLL_MS / 1_000} saniyede bir kontrol</span>
+                </div>
+                {events.isError && <p role="alert" className="text-sm text-loss">{events.data ? "Olay akışı yenilenemedi. Son başarılı kayıtlar gösteriliyor." : "Olaylar yüklenemedi."}</p>}
+                {events.isLoading && <p role="status" className="text-xs">Olaylar yükleniyor…</p>}
+                {!events.isError && events.data?.events.length === 0 && <p className="text-sm text-muted-foreground">Henüz tetiklenen alarm yok.</p>}
+                {events.data?.events.map(event => (
+                    <article key={event.id} className="space-y-1 border-t border-border pt-3 text-xs">
+                        <div className="flex flex-wrap justify-between gap-2">
+                            <p className="font-medium">{event.rule_name} · {event.symbol}</p>
+                            <p className="text-muted-foreground">{timeLabel(event.created_at)}</p>
+                        </div>
+                        <p>Değer: {typeof event.value === "number" && Number.isFinite(event.value) ? event.value.toLocaleString("tr-TR", { maximumFractionDigits: 5 }) : "—"} · {deliveryLabels[event.delivery_status] ?? event.delivery_status} · #{event.id}</p>
+                        {event.delivery_error && <p className="text-loss">{event.delivery_error}</p>}
+                    </article>
+                ))}
+            </section>
             <ActionDialog open={Boolean(deleting)} title={deleting?.kind === "watchlist" ? "İzleme listesini sil" : "Alarmı sil"} description={`${deleting?.name ?? ""} kaldırılacak.${deleting?.kind === "watchlist" ? " Bu listeye bağlı alarmlar duraklatılacak." : " Geçmiş olay kayıtları korunacak."}${error ? ` ${error}` : ""}`} variant="danger" confirmLabel="Sil" cancelLabel="Vazgeç" pending={pending} onConfirm={() => void remove()} onCancel={() => setDeleting(null)} />
         </>}
         <div className="flex flex-wrap gap-4 text-xs text-muted-foreground"><Link href="/alarms/legacy" className="underline">Önceki günlük sunucu alarmları</Link><Link href="/alarms/local" className="underline">Eski tarayıcı alarmları</Link><Link href="/chart" className="underline">Grafiğe dön</Link></div>
