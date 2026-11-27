@@ -1,10 +1,20 @@
 # Rapot Devam Planı
 
-**Güncel plan: 27 Kasım 2026.** Ön yüzde Aşama 5.1, API'de Aşama 4.1
-üretimde. Aşama 5.2 ortak kripto fiyat akışı üzerinde çalışılıyor.
-Aşama 4.2'nin kalıcı kayıt katmanı gerçek veri pilotunu bekliyor.
+**Güncel plan: 27 Kasım 2026.** Ön yüzde Aşama 5.2, API'de Aşama 4.1
+üretimde. Aşama 4.2'nin kalıcı kayıt katmanı gerçek veri pilotunu bekliyor.
 
 ## 27 Kasım — Aşama 5.2 ortak Binance fiyat akışı
+
+Ön yüz `e14f9432f64c6a43a80d6b03faa73b59eed510ec` **14:29:42 TSİ**
+yayımlandı. **14:29:48 TSİ** ayrı kabulde 10 sayfa, 36 statik dosya, beş
+anonim erişim sınırı ve yedi metin işareti geçti. API `fbdbaa4a`,
+Compose/current, middleware ve PostgreSQL aynı container'larda kaldı.
+Dört servis sağlıklı, yeniden başlatma sayaçları sıfır. Dört etkin alarm,
+413 olay ve 15 tablo korundu. 1.216.512 bayt taze yedek ayrı veritabanına
+geri yüklendi. Yayın sonrası yaklaşık 3,54 GiB boş disk vardı. Yayın
+kanıtı `025faba1692b97c23ba4783d20905c731a116322ebd486df92657a8ca7b69d44`.
+[Kaynak kontrolleri](https://github.com/Rapto0/Rapot/actions/runs/45988855858),
+[temiz imaj yayını](https://github.com/Rapto0/Rapot/actions/runs/45988885126).
 
 - Ana Sayfa, Takipçi, Grafik ve grafik listeleri aynı Rapot oturumu ve
   sekmesi içinde bir Binance Spot fiyat bağlantısını paylaşır. Görünür
@@ -13,8 +23,8 @@ Aşama 4.2'nin kalıcı kayıt katmanı gerçek veri pilotunu bekliyor.
   tutulur ve fiyat izleyen ekran kalmadığında kapanır. Üyelik komutları
   en erken 400 ms arayla gönderilir. Binance yanıtı alınamazsa bağlantı
   artan aralıklarla toparlanır. [Binance Spot WebSocket kuralları](https://developers.binance.com/en/docs/products/spot/web-socket-streams).
-- Son fiyatlar en fazla iki dakikalık tarayıcı belleğinden tekrar
-  gösterilebilir. Sağlayıcı olay zamanı ve tarayıcı alım zamanı ayrı
+- Son iki dakikada alınan fiyatlar tarayıcı belleğinden yeni ekrana
+  taşınabilir. Sağlayıcı olay zamanı ve tarayıcı alım zamanı ayrı
   okunur. Eski olay, daha yeni fiyatı geri almaz. Kopma sonrası son fiyat
   **Son kayıt** olarak görünür. İlk yeni fiyat hızlı yansır, sonraki
   fiyatlarda Takipçi'nin iki dakikalık tablo yenilemesi sürer. Yeni
@@ -22,6 +32,16 @@ Aşama 4.2'nin kalıcı kayıt katmanı gerçek veri pilotunu bekliyor.
 - Grafik mumları kendi veri yolundan gelir. Ortak bağlantı sadece fiyat
   ve 24 saatlik değişim taşır. Mum geçmişinin açılış dilimi ve grafik
   güncellemelerinin taşınması Aşama 5.3 kapsamındadır.
+- 341 ön yüz testi, üretim derlemesi, standalone proxy ve beş GitHub
+  kontrolü geçti. Yerel Rapot tarayıcı senaryosunda, gerçek Binance
+  fiyatıyla BTCUSDT Takipçi'de **0,38 sn** içinde göründü. Binance'in
+  gerçek tekli ve birleşik bağlantılarında abonelik ekleme ve çıkarma
+  yanıtları ayrı doğrulandı.
+- 14:30 TSİ canlı tarayıcı örneğinde Ana Sayfa 4/4 kripto fiyatı
+  gösterdi. Takipçi BTCUSDT fiyatını **Son kayıt** olarak gösterdi ve
+  kaynak ile tarayıcı alım zamanını ayrı yazdı. BTCUSDT Grafiği, mum
+  sayısı 0 iken fiyatı ve Binance olay saatini gösterdi. Bu gözlem
+  ilk açılış sürelerinin p95 ölçümünü kapsamıyor.
 
 ## 27 Kasım — Aşama 5.1 ortak BIST fiyatı ve grafik açılışı
 
