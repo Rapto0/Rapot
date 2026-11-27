@@ -1,11 +1,21 @@
 # Rapot Devam Planı
 
-**Güncel plan: 27 Kasım 2026.** Ön yüzde Aşama 5.2, API'de Aşama 4.1
-üretimde. Aşama 5.3'te Grafik'in ilk mumları ve ekrandaki güncelleme
-yolu iyileştiriliyor. Aşama 4.2'nin kalıcı kayıt katmanı gerçek veri
-pilotunu bekliyor.
+**27 Kasım 2026.** Ön yüzde Aşama 5.3, API'de Aşama 4.1 üretimde.
+Aşama 4.2'nin kalıcı RSI kayıt katmanı gerçek veri pilotunu bekliyor.
 
 ## 27 Kasım — Aşama 5.3 ilk grafik mumları ve artımlı çizim
+
+Ön yüz `a2daecd173a374247269feccc9e32363d394aa1a` **21:04:48 TSİ**
+yayımlandı. **21:04:53 TSİ** bağımsız kabulde 10 sayfa, 36 statik dosya,
+sekiz metin işareti, beş anonim erişim sınırı ve özel 404 geçti. API
+`fbdbaa4a`, Compose/current, middleware ve PostgreSQL mevcut container'larda
+kaldı. Dört servis sağlıklı ve yeniden başlatma sayaçları sıfırdı. Dört
+etkin alarm, 418 olay ve 15 tablo korundu. Taze 1.134.592 bayt yedek ayrı
+veritabanına başarıyla geri yüklendi. Kabulde yaklaşık 3,43 GiB boş disk
+vardı. Yayın ve kabul kanıtı
+`d313bbdc2453cb7af476c03a99ef62e86cee050f8fc1ae1114908d5df604c978`.
+[Kaynak kontrolleri](https://github.com/Rapto0/Rapot/actions/runs/46045150648),
+[temiz imaj yayını](https://github.com/Rapto0/Rapot/actions/runs/46045189195).
 
 - BIST Grafik, seçili sembol ve periyot için mevcut mum akışını açılışta
   hemen başlatır. Akış hazır olduğunda en fazla 160 mum önden çizilir.
@@ -27,6 +37,16 @@ pilotunu bekliyor.
   Kriptoda soğuk açılış geçmişi mevcut 1.000 mumluk API çağrısıyla başlar.
   Ayrı sağlayıcı uçları veya yeni bir WebSocket/SSE protokolü için geçiş
   kararı ölçümle değerlendirilebilir.
+- 344 ön yüz testi, lint, tip kontrolü, üretim derlemesi, standalone proxy
+  ve beş GitHub kontrolü geçti. 470 paketlik npm denetiminde bulgu yoktu.
+  Yerel tarayıcıda uzun geçmiş yanıtı bekletilirken 160 mum çizildi ve
+  gösterge yükleme durumu göründü. Yanıt bırakıldığında aynı grafik
+  1.000 muma geçti. Görünür tarih aralığı ve tam ekran davranışı regresyon
+  testlerinde doğrulandı.
+- Yayın sonrası seans dışı yönetici oturumunda THYAO günlük grafiğinde
+  1.000 mum, 314,00 kapanış ve eksik hacim için `—` görüldü. İlk 160
+  mumun çizimi kontrollü yerel senaryoda gözlendi. Seans içi ilk mum ve tam
+  geçmiş açılış sürelerinin p95 değerleri henüz ölçülmedi.
 
 ## 27 Kasım — Aşama 5.2 ortak Binance fiyat akışı
 
