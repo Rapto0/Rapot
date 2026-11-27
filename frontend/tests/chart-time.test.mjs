@@ -153,9 +153,12 @@ function mainChartLifecycleHarness() {
   const effects = findNodes(chartAst, node => ts.isCallExpression(node) && node.expression.getText(chartAst) === 'useEffect');
   const visibility = effects.find(node => node.arguments[0].getText(chartAst).includes('showMainTimeScaleRef.current = showMainTimeScale'));
   const creation = effects.find(node => node.arguments[0].getText(chartAst).includes('const candlestickSeries = chart.addSeries'));
-  assert.ok(visibility && creation);
+  const resize = effects.find(node => node.arguments[0].getText(chartAst).includes('isFullscreenRef.current = isFullscreen'));
+  assert.ok(visibility && creation && resize);
   const charts = [];
   const previousDependencies = [];
+  const cleanups = [];
+  const resizeListeners = new Set();
   const pending = [];
   let effectIndex = 0;
   let fits = 0;
@@ -164,13 +167,17 @@ function mainChartLifecycleHarness() {
   const context = vm.createContext({
     exports: {}, chartInstance, seriesInstance, showMainTimeScaleRef: { current: true },
     chartContainerRef: { current: { clientWidth: 900 } }, markersInstance: { current: null },
-    timeFormattersRef: { current: istanbul }, isFullscreen: false, chartColors: {},
+    timeFormattersRef: { current: istanbul }, isFullscreenRef: { current: false }, chartColors: {},
+    plottedPriceRef: { current: null },
     setChartReady() {}, syncIndicatorPanesToMainRange() {}, requestOverlayProjectionRefresh() {},
-    window: { innerHeight: 900, addEventListener() {}, removeEventListener() {} },
+    window: { innerHeight: 900, addEventListener(_name, handler) { resizeListeners.add(handler); },
+      removeEventListener(_name, handler) { resizeListeners.delete(handler); } },
     useEffect(callback, dependencies) {
       const index = effectIndex++;
       const previous = previousDependencies[index];
-      if (!previous || dependencies.some((value, i) => !Object.is(value, previous[i]))) pending.push(callback);
+      if (!previous || dependencies.some((value, i) => !Object.is(value, previous[i]))) {
+        pending.push(() => { cleanups[index]?.(); cleanups[index] = callback(); });
+      }
       previousDependencies[index] = dependencies;
     },
     require(name) {
@@ -182,7 +189,9 @@ function mainChartLifecycleHarness() {
             options, removed: false, range: { from: 12, to: 34 },
             addSeries() { return { data: [], setData(data) { this.data = data; } }; },
             applyOptions(next) {
-              for (const [key, value] of Object.entries(next)) this.options[key] = { ...this.options[key], ...value };
+              for (const [key, value] of Object.entries(next)) {
+                this.options[key] = value && typeof value === 'object' ? { ...this.options[key], ...value } : value;
+              }
             },
             remove() { this.removed = true; }, subscribeCrosshairMove() {},
             timeScale() {
@@ -197,17 +206,20 @@ function mainChartLifecycleHarness() {
     },
   });
   // Execute the real component effects with React-style dependency scheduling.
-  vm.runInContext(transpile(`exports.render = (showMainTimeScale) => {
+  vm.runInContext(transpile(`exports.render = (showMainTimeScale, isFullscreen) => {
     ${visibility.getText(chartAst)};
+    ${resize.getText(chartAst)};
     ${creation.getText(chartAst)};
   };`), context);
   return {
     charts, chartInstance, seriesInstance, get fits() { return fits; },
-    render(visible) {
+    render(visible, fullscreen = false) {
       effectIndex = 0;
-      context.exports.render(visible);
+      context.exports.render(visible, fullscreen);
       while (pending.length) pending.shift()();
     },
+    unmount() { cleanups.forEach(cleanup => cleanup?.()); },
+    listenerCount: () => resizeListeners.size,
     flush: () => new Promise(resolve => setImmediate(resolve)),
   };
 }
@@ -244,4 +256,19 @@ test('a pane opened while the chart module loads uses the latest axis visibility
   assert.equal(harness.charts.length, 1);
   assert.equal(harness.chartInstance.current.options.timeScale.visible, false);
   assert.equal(harness.chartInstance.current.options.rightPriceScale.scaleMargins.bottom, 0.2);
+});
+
+test('fullscreen resizes the existing price series and unmount releases its listener', async () => {
+  const harness = mainChartLifecycleHarness();
+  harness.render(true);
+  await harness.flush();
+  const chart = harness.chartInstance.current;
+  harness.render(true, true);
+  assert.equal(harness.chartInstance.current, chart);
+  assert.equal(chart.options.height, 780);
+  assert.equal(harness.fits, 0);
+  assert.equal(harness.listenerCount(), 1);
+  harness.unmount();
+  assert.equal(chart.removed, true);
+  assert.equal(harness.listenerCount(), 0);
 });

@@ -7,6 +7,19 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient } from '@tanstack/react-query';
 import ts from 'typescript';
 
+function moduleUnderTest(file, imports = {}, globals = {}) {
+    const module = vm.createContext({ exports: {}, ...globals,
+        require(name) {
+            assert.ok(Object.hasOwn(imports, name), `Unexpected import: ${name}`);
+            return imports[name];
+        },
+    });
+    vm.runInContext(ts.transpileModule(readFileSync(new URL(file, import.meta.url), 'utf8'), {
+        compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+    }).outputText, module);
+    return module.exports;
+}
+
 const compiled = ts.transpileModule(readFileSync(new URL('../src/lib/api/borsapy-chart-api.ts', import.meta.url), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText;
@@ -158,4 +171,101 @@ test('both error presentations preserve retry and disable it during refresh', ()
         assert.equal(findButton(fetching).props.disabled, true);
         assert.match(renderToStaticMarkup(fetching), /Yenileniyor/);
     }
+});
+
+test('opening chart starts the existing BIST stream first and scopes its lease to the selection', async () => {
+    let state = '', nextId = 0, stream = { data: undefined, isError: false };
+    const reads = [], timers = [], cleared = [], released = [];
+    let options = [], effects = [];
+    const { useChartCandles } = moduleUnderTest('../src/lib/hooks/use-chart-candles.ts', {
+        react: {
+            useMemo: (factory) => factory(),
+            useState: () => [state, (next) => { state = next; }],
+            useEffect: (fn) => effects.push(fn),
+        },
+        '@tanstack/react-query': { useQuery: (opts) => {
+            options.push(opts);
+            return opts.queryKey[0] === 'borsapy-chart-stream' ? stream : {};
+        } },
+        '@/lib/api/market-api': { fetchCandles: (...args) => reads.push(args) },
+        '@/lib/api/borsapy-chart-api': {
+            BORSAPY_INTERVALS: api.BORSAPY_INTERVALS,
+            fetchBorsapyCandles: (...args) => reads.push(args),
+            fetchBorsapyChartSnapshot: (...args) => reads.push(args),
+            releaseBorsapyChart: async (...args) => { released.push(args); },
+        },
+    }, {
+        crypto: { randomUUID: () => `test-lease-${++nextId}` },
+        window: {
+            setTimeout: (action, delay) => { timers.push({ action, delay }); return timers.length; },
+            clearTimeout: (id) => cleared.push(id),
+        },
+    });
+    function select(symbol, market = 'BIST', timeframe = '1d', allowed = true, expiry = 100) {
+        options = [];
+        effects = [];
+        useChartCandles(symbol, market, timeframe, allowed, 'admin', expiry);
+        return { stream: options[0], history: options[1], mount: effects[0] };
+    }
+    const first = select('THYAO');
+    assert.equal(first.stream.enabled, true);
+    assert.equal(first.history.enabled, false);
+    const unmount = first.mount();
+    assert.equal(timers[0].delay, 900);
+    await first.stream.queryFn({ signal: 'first' });
+    const second = select('GARAN');
+    await second.stream.queryFn({ signal: 'second' });
+    unmount();
+    assert.deepEqual(cleared, [1]);
+    assert.deepEqual(released, [['THYAO', '1d', 'test-lease-1']]);
+    assert.deepEqual(reads.slice(0, 2), [
+        ['THYAO', '1d', 'first', 'test-lease-1'], ['GARAN', '1d', 'second', 'test-lease-2'],
+    ]);
+    second.mount();
+    timers[1].action();
+    assert.equal(select('GARAN').history.enabled, true);
+    assert.equal(select('GARAN', 'BIST', '1d', true, 101).history.enabled, false);
+    stream = { data: { candles: [{}] }, isError: false };
+    const ready = select('ASELS');
+    assert.equal(ready.history.enabled, true);
+    await ready.history.queryFn({ signal: 'history' });
+    assert.deepEqual(reads.at(-1), ['ASELS', '1d', 'history']);
+    stream = { data: undefined, isError: true };
+    assert.equal(select('TUPRS').history.enabled, true);
+    assert.equal(select('THYAO', 'BIST', '1d', false).history.enabled, false);
+    assert.equal(select('THYAO', 'BIST', '2h').stream.enabled, false);
+    const crypto = select('BTCUSDT', 'Kripto');
+    assert.equal(crypto.stream.enabled, false);
+    assert.equal(crypto.history.enabled, true);
+    await crypto.history.queryFn({ signal: 'crypto' });
+    assert.deepEqual(plain(reads.at(-1)), ['BTCUSDT', 'Kripto', '1d', 1000, { signal: 'crypto' }]);
+});
+
+test('price series appends live bars, restores time range on backfill, and clears changed selections', () => {
+    const { paintPriceBars } = moduleUnderTest('../src/lib/chart-price-series.ts');
+    const calls = [];
+    const series = { setData: (bars) => calls.push(['set', bars]), update: (bar) => calls.push(['update', bar]) };
+    const window = { from: 2, to: 3 };
+    const scale = {
+        fitContent: () => calls.push(['fit']),
+        getVisibleRange: () => window,
+        setVisibleRange: (range) => calls.push(['range', range]),
+    };
+    const opening = [candle(2), candle(3)];
+    paintPriceBars(series, scale, [], opening, false);
+    assert.deepEqual(calls.splice(0), [['set', opening], ['fit']]);
+    const live = [candle(2), candle(3, 12), candle(4)];
+    paintPriceBars(series, scale, opening, live, true);
+    assert.deepEqual(calls.splice(0), [['update', live[1]], ['update', live[2]]]);
+    paintPriceBars(series, scale, live, live.slice(), true);
+    assert.deepEqual(calls.splice(0), []);
+    const full = [candle(1), ...live];
+    paintPriceBars(series, scale, live, full, true);
+    assert.deepEqual(calls.splice(0), [['set', full], ['range', window]]);
+    const corrected = [candle(1), candle(2, 12), ...live.slice(1)];
+    paintPriceBars(series, scale, full, corrected, true);
+    assert.deepEqual(calls.splice(0), [['set', corrected], ['range', window]]);
+    const empty = [];
+    paintPriceBars(series, scale, corrected, empty, false);
+    assert.deepEqual(calls, [['set', empty]]);
 });

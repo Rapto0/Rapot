@@ -6,6 +6,7 @@ export const BORSAPY_INTERVALS = new Set(['1m', '5m', '15m', '30m', '1h', '4h', 
 export interface BorsapyChartSnapshot {
     state: string;
     message: string;
+    source?: string;
     candles: Array<{ time?: number; timestamp?: number; open: number; high: number; low: number; close: number; volume?: number | null }>;
     volume_quality?: VolumeQuality;
     quote: { timestamp?: number; last?: number } | null;

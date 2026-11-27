@@ -1,7 +1,32 @@
 # Rapot Devam Planı
 
 **Güncel plan: 27 Kasım 2026.** Ön yüzde Aşama 5.2, API'de Aşama 4.1
-üretimde. Aşama 4.2'nin kalıcı kayıt katmanı gerçek veri pilotunu bekliyor.
+üretimde. Aşama 5.3'te Grafik'in ilk mumları ve ekrandaki güncelleme
+yolu iyileştiriliyor. Aşama 4.2'nin kalıcı kayıt katmanı gerçek veri
+pilotunu bekliyor.
+
+## 27 Kasım — Aşama 5.3 ilk grafik mumları ve artımlı çizim
+
+- BIST Grafik, seçili sembol ve periyot için mevcut mum akışını açılışta
+  hemen başlatır. Akış hazır olduğunda en fazla 160 mum önden çizilir.
+  1.000 mumluk mevcut geçmiş sorgusu akıştan ilk mumlar, akış hatası veya
+  900 ms süre sınırıyla başlar. Geçmiş isteği aynı uçtan ve aynı sayıyla
+  sürer. Akış ve geçmiş yükleme durumları ekranda ayrı görünür.
+- Geçmiş geldiğinde eski mumlar zaman damgasına göre birleştirilir.
+  Görünür tarih aralığı korunur. Tam geçmiş gelene kadar kısa dilimden
+  teknik gösterge hesaplanmaz. Geçmiş çağrısı hata verirse varsa ekrandaki
+  mumlar kalır ve yeniden deneme görünür. Farklı seçim önceki grafiğin mum,
+  işaret ve gösterge çıktısını taşımaz.
+- BIST ve kripto grafikleri son mum değişikliklerini ve yeni mumları
+  seri üzerinde günceller. Eski mum düzeltmesi, geçmiş ekleme ve seçim
+  değişimi güvenli bir seri değişimi kullanır. Tam ekran mevcut grafiği
+  yeniden boyutlandırır. Eksik mum hacmi `—`, gerçek sıfır `0` olarak
+  görünür. [Lightweight Charts seri API'si](https://tradingview.github.io/lightweight-charts/docs/api/interfaces/ISeriesApi),
+  [zaman aralığı API'si](https://tradingview.github.io/lightweight-charts/docs/api/interfaces/ITimeScaleApi).
+- Bu adım çizimi hızlandırmak için mevcut Grafik uçlarını kullanır.
+  Kriptoda soğuk açılış geçmişi mevcut 1.000 mumluk API çağrısıyla başlar.
+  Ayrı sağlayıcı uçları veya yeni bir WebSocket/SSE protokolü için geçiş
+  kararı ölçümle değerlendirilebilir.
 
 ## 27 Kasım — Aşama 5.2 ortak Binance fiyat akışı
 
@@ -30,8 +55,8 @@ kanıtı `025faba1692b97c23ba4783d20905c731a116322ebd486df92657a8ca7b69d44`.
   fiyatlarda Takipçi'nin iki dakikalık tablo yenilemesi sürer. Yeni
   oturumda bağlantı ve önceki kayıtlar temizlenir.
 - Grafik mumları kendi veri yolundan gelir. Ortak bağlantı sadece fiyat
-  ve 24 saatlik değişim taşır. Mum geçmişinin açılış dilimi ve grafik
-  güncellemelerinin taşınması Aşama 5.3 kapsamındadır.
+  ve 24 saatlik değişim taşır. İlk mum dilimi ve artımlı çizim için
+  Aşama 5.3 kaydına bak.
 - 341 ön yüz testi, üretim derlemesi, standalone proxy ve beş GitHub
   kontrolü geçti. Yerel Rapot tarayıcı senaryosunda, gerçek Binance
   fiyatıyla BTCUSDT Takipçi'de **0,38 sn** içinde göründü. Binance'in
@@ -303,7 +328,8 @@ gerçek emir/Telegram teslimini ve açık seans boyunca 631 sembolü kapsamaz.
   Grafik için ortak sağlayıcı adaptörleri, kaynak zamanları ve ilk anlık
   görüntü. [Aşama 5.1 kaydı](#27-kasım--aşama-51-ortak-bist-fiyatı-ve-grafik-açılışı)
   mevcut BIST fiyat okumalarını, [Aşama 5.2 kaydı](#27-kasım--aşama-52-ortak-binance-fiyat-akışı)
-  Binance fiyat aboneliklerini kapsar. Sonraki adım ölçüm gerekçesi
+  Binance fiyat aboneliklerini ve [Aşama 5.3 kaydı](#27-kasım--aşama-53-ilk-grafik-mumları-ve-artımlı-çizim)
+  Grafik açılışını ve artımlı çizimi kapsar. Sonraki adım ölçüm gerekçesi
   varsa seçime göre artımlı yayın. Tek yönlü bildirim için SSE ve mevcut
   oturumlu WebSocket'i bağlantı sayısı, destek ve yeniden bağlanma açısından
   karşılaştır. Düşük frekanslı ekranlarda kontrollü sorgu yeterli olabilir.

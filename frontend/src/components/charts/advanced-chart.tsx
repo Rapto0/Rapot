@@ -4,19 +4,21 @@ import { useEffect, useRef, useState, useCallback, useMemo } from "react"
 import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useQuery } from "@tanstack/react-query"
+import type { ISeriesApi, Time } from "lightweight-charts"
 import {
-    fetchCandles,
     fetchBistSymbols,
     fetchCryptoSymbols,
     fetchEconomicCalendar,
     fetchTicker,
 } from "@/lib/api/client"
 import { useBinanceTickerFeed } from "@/lib/hooks/use-binance-ticker"
+import { useChartCandles } from "@/lib/hooks/use-chart-candles"
 import { useLastMarketQuote, useMarketSnapshot } from "@/lib/hooks/use-market-snapshot"
 import { useSession } from "@/lib/hooks/use-session"
 import { finiteNumber } from "@/lib/market-feed"
 import { MarketDataStatus } from "@/components/market-data-status"
-import { BORSAPY_INTERVALS, borsapyVolumeWarning, fetchBorsapyCandles, fetchBorsapyChartSnapshot, mergeBorsapyCandles, releaseBorsapyChart } from "@/lib/api/borsapy-chart-api"
+import { BORSAPY_INTERVALS, borsapyVolumeWarning, mergeBorsapyCandles } from "@/lib/api/borsapy-chart-api"
+import { paintPriceBars, type PriceBar } from "@/lib/chart-price-series"
 import { ServerWatchlistPanel } from "./server-watchlist-panel"
 import { ChartDataError, hasDisplayableCandles } from "./chart-data-error"
 import { chartTimeZone, createChartTimeFormatters } from "@/lib/chart-time"
@@ -90,7 +92,6 @@ import {
     buildMarkerHash,
     buildUtilityCalendarItems,
     chartColors,
-    deduplicateByTime,
     formatTime,
     getDefaultActiveIndicators,
     getTimeframeStepSeconds,
@@ -125,6 +126,12 @@ const IndicatorPane = dynamic(
     { ssr: false }
 )
 
+const EMPTY_CANDLES: Candle[] = []
+const EMPTY_WORKER_RESULT: WorkerComputationState = {
+    requestId: 0, computeMs: 0, panes: {}, overlays: { combo: [], hunter: [] },
+}
+const INITIAL_BIST_CANDLES = 160
+
 interface ChartPageProps {
     initialSymbol?: string
     initialMarket?: MarketType
@@ -150,12 +157,12 @@ export function AdvancedChartPage({
     const session = useSession()
     const useBorsapy = marketType === "BIST"
     const canUseBorsapy = Boolean(session?.user.is_admin && !session.user.disabled)
-    const chartSubscriber = useRef("")
     const bistTimeframes = useBorsapy ? BORSAPY_INTERVALS : BIST_ALLOWED_TIMEFRAMES
     const [showSymbolSearch, setShowSymbolSearch] = useState(false)
     const [showTimeframeMenu, setShowTimeframeMenu] = useState(false)
     const [searchQuery, setSearchQuery] = useState("")
     const [isFullscreen, setIsFullscreen] = useState(false)
+    const isFullscreenRef = useRef(isFullscreen)
     const [showRightPanel, setShowRightPanel] = useState(showWatchlist)
     const [watchlists, setWatchlists] = useState<WatchlistModel[]>(() => DEFAULT_WATCHLISTS)
     const [activeWatchlistId, setActiveWatchlistId] = useState<string>(DEFAULT_WATCHLISTS[0]?.id || "")
@@ -187,19 +194,15 @@ export function AdvancedChartPage({
 
     // Crosshair data
     const [crosshairData, setCrosshairData] = useState<{
+        scope: string
         time: unknown
         open: number
         high: number
         low: number
         close: number
-        volume: number
+        volume: number | null
     } | null>(null)
-    const [workerComputationState, setWorkerComputationState] = useState<WorkerComputationState>({
-        requestId: 0,
-        computeMs: 0,
-        panes: {},
-        overlays: { combo: [], hunter: [] },
-    })
+    const [workerResult, setWorkerResult] = useState<(WorkerComputationState & { scope: string }) | null>(null)
 
     // Refs
     const chartContainerRef = useRef<HTMLDivElement>(null)
@@ -209,11 +212,10 @@ export function AdvancedChartPage({
     const lastCrosshairUnixRef = useRef<number | null>(null)
     const activeToolRef = useRef<'none' | 'drawing'>('none')
     const lastMarkersHashRef = useRef<string>("")
-    const lastCandleHashRef = useRef<string>("")
+    const plottedPriceRef = useRef<{
+        series: ISeriesApi<"Candlestick">; scope: string; bars: PriceBar[]; volumes: Map<number, number | null>
+    } | null>(null)
     const fullscreenContainerRef = useRef<HTMLDivElement>(null)
-    const isInitialLoadRef = useRef<boolean>(true)
-    const lastSymbolRef = useRef<string>(initialSymbol)
-    const lastTimeframeRef = useRef<string>("1d")
     const lastRouteSelectionRef = useRef<{ symbol: string; market: MarketType }>({
         symbol: initialSymbol.trim().toUpperCase(),
         market: initialMarket,
@@ -223,6 +225,7 @@ export function AdvancedChartPage({
     const hasProjectedDrawingsRef = useRef(false)
     const indicatorWorkerRef = useRef<Worker | null>(null)
     const latestWorkerRequestIdRef = useRef(0)
+    const latestWorkerScopeRef = useRef("")
     const pendingWorkerDispatchTimerRef = useRef<number | null>(null)
     const perfLogRef = useRef<Record<string, number>>({})
 
@@ -530,40 +533,16 @@ export function AdvancedChartPage({
         }
     }, [activeIndicators, indicatorStateHydrated])
 
-    // Fetch candle data
+    const { history, stream: chartStream, streamEnabled, historySupported, scope: chartScope } =
+        useChartCandles(symbol, marketType, timeframe, canUseBorsapy, session?.user.username, session?.expiresAt)
     const {
         data: candlesResponse,
-        isLoading: isCandlesLoading,
         isError: isCandlesError,
         error: candlesError,
         isFetching: isCandlesFetching,
         refetch: refetchCandles,
-    } = useQuery({
-        queryKey: ['chart-candles', symbol, marketType, timeframe, useBorsapy ? 'borsapy' : 'binance', session?.user.username, session?.expiresAt],
-        queryFn: ({ signal }) => useBorsapy ? fetchBorsapyCandles(symbol, timeframe, signal) : fetchCandles(symbol, marketType, timeframe, 1000, { signal }),
-        enabled: canUseBorsapy && (!useBorsapy || BORSAPY_INTERVALS.has(timeframe)),
-        refetchInterval: 60000,
-        retry: false,
-    })
-
-    const streamEnabled = useBorsapy && canUseBorsapy && BORSAPY_INTERVALS.has(timeframe) && Boolean(candlesResponse)
-    const chartStream = useQuery({
-        queryKey: ['borsapy-chart-stream', symbol, timeframe, session?.user.username, session?.expiresAt],
-        queryFn: ({ signal }) => {
-            chartSubscriber.current ||= crypto.randomUUID()
-            return fetchBorsapyChartSnapshot(symbol, timeframe, signal, chartSubscriber.current)
-        },
-        enabled: streamEnabled,
-        refetchInterval: 1000,
-        retry: false,
-    })
-
-    useEffect(() => {
-        if (!streamEnabled) return
-        return () => {
-            if (chartSubscriber.current) void releaseBorsapyChart(symbol, timeframe, chartSubscriber.current).catch(() => { /* lease expires if disconnected */ })
-        }
-    }, [streamEnabled, symbol, timeframe])
+    } = history
+    const isCandlesLoading = historySupported && history.isPending
 
     const candlesErrorMessage =
         candlesError instanceof Error ? candlesError.message : "Grafik verisi alinamadi."
@@ -657,12 +636,15 @@ export function AdvancedChartPage({
     })
     const cryptoPrices = cryptoFeed.prices
 
+    const hasFullHistory = useMemo(() => hasDisplayableCandles(candlesResponse?.candles ?? EMPTY_CANDLES), [candlesResponse?.candles])
     const candles: Candle[] = useMemo(() => {
-        if (!canUseBorsapy) return []
-        const rawCandles = useBorsapy && candlesResponse
-            ? mergeBorsapyCandles(candlesResponse.candles, chartStream.data?.candles ?? [])
-            : candlesResponse?.candles || []
-        if (rawCandles.length === 0) return []
+        if (!historySupported) return EMPTY_CANDLES
+        const historyCandles = hasFullHistory ? candlesResponse?.candles ?? EMPTY_CANDLES : EMPTY_CANDLES
+        const merged = streamEnabled
+            ? mergeBorsapyCandles(historyCandles, chartStream.data?.candles ?? [])
+            : historyCandles
+        const rawCandles = streamEnabled && !hasFullHistory ? merged.slice(-INITIAL_BIST_CANDLES) : merged
+        if (rawCandles.length === 0) return EMPTY_CANDLES
 
         const deduped = new Map<number, Candle>()
         for (const candle of rawCandles) {
@@ -673,20 +655,17 @@ export function AdvancedChartPage({
         return Array.from(deduped.entries())
             .sort((a, b) => a[0] - b[0])
             .map((entry) => entry[1])
-    }, [candlesResponse, chartStream.data?.candles, useBorsapy, canUseBorsapy])
+    }, [historySupported, hasFullHistory, candlesResponse?.candles, streamEnabled, chartStream.data?.candles])
     // Query keys include symbol, market, timeframe and session; only this selection's
     // merged history/stream may keep a failed refresh from covering the chart.
     const hasChartCandles = useMemo(() => hasDisplayableCandles(candles), [candles])
+    const previewOnly = hasChartCandles && !hasFullHistory
+    const calculationCandles = hasFullHistory ? candles : EMPTY_CANDLES
+    const workerComputationState = hasFullHistory && workerResult?.scope === chartScope
+        ? workerResult : EMPTY_WORKER_RESULT
     const volumeWarning = useBorsapy && hasChartCandles
         ? borsapyVolumeWarning(candlesResponse?.volume_quality, chartStream.data?.volume_quality) : null
-    const dataSource = candlesResponse?.source || "loading"
-
-    const candlesSignature = useMemo(() => {
-        if (candles.length === 0) return "empty"
-        const first = candles[0]
-        const last = candles[candles.length - 1]
-        return `${candles.length}:${first.time}:${first.open}:${first.high}:${first.low}:${first.close}:${last.time}:${last.open}:${last.high}:${last.low}:${last.close}`
-    }, [candles])
+    const dataSource = previewOnly ? chartStream.data?.source || "TradingView / Borsapy" : candlesResponse?.source || "loading"
 
     const signalsSignature = useMemo(() => {
         if (!showSignals || signals.length === 0) return "signals-off"
@@ -763,10 +742,11 @@ export function AdvancedChartPage({
             if (!message || message.type !== "compute-indicators-result") {
                 return
             }
-            if (message.requestId < latestWorkerRequestIdRef.current) {
+            if (message.requestId !== latestWorkerRequestIdRef.current) {
                 return
             }
-            setWorkerComputationState({
+            setWorkerResult({
+                scope: latestWorkerScopeRef.current,
                 requestId: message.requestId,
                 computeMs: message.computeMs,
                 panes: message.panes,
@@ -803,17 +783,17 @@ export function AdvancedChartPage({
             pendingWorkerDispatchTimerRef.current = null
         }
 
+        const requestId = ++latestWorkerRequestIdRef.current
+        latestWorkerScopeRef.current = chartScope
+        if (!calculationCandles.length) return
         pendingWorkerDispatchTimerRef.current = window.setTimeout(() => {
             const worker = indicatorWorkerRef.current
             if (!worker) return
 
-            const requestId = latestWorkerRequestIdRef.current + 1
-            latestWorkerRequestIdRef.current = requestId
-
             const message: IndicatorWorkerComputeRequest = {
                 type: "compute-indicators",
                 requestId,
-                candles,
+                candles: calculationCandles,
                 indicators: workerIndicators,
             }
             worker.postMessage(message)
@@ -825,7 +805,7 @@ export function AdvancedChartPage({
                 pendingWorkerDispatchTimerRef.current = null
             }
         }
-    }, [candles, candlesSignature, workerIndicators, workerIndicatorSignature])
+    }, [calculationCandles, chartScope, workerIndicators, workerIndicatorSignature])
 
     // Calculate price info
     const candleClose = candles.at(-1)?.close
@@ -847,7 +827,8 @@ export function AdvancedChartPage({
     const isPositive = (priceChangePercent ?? 0) >= 0
 
     // OHLCV display data
-    const displayOHLCV = crosshairData || (candles.length > 0 ? candles[candles.length - 1] : null)
+    const currentCrosshair = crosshairData?.scope === chartScope ? crosshairData : null
+    const displayOHLCV = currentCrosshair ?? candles.at(-1)
 
     const visibleOverlayIndicators = useMemo(
         () => activeIndicators.filter(ind => ind.meta.isOverlay && ind.visible),
@@ -859,7 +840,7 @@ export function AdvancedChartPage({
         [activeIndicators]
     )
 
-    const showMainTimeScale = visiblePanelIndicators.length === 0
+    const showMainTimeScale = !hasFullHistory || visiblePanelIndicators.length === 0
     const showMainTimeScaleRef = useRef(showMainTimeScale)
 
     // Adding a pane only moves the time axis; keep the populated main series and zoom.
@@ -899,26 +880,24 @@ export function AdvancedChartPage({
         })
     }, [timeFormatters])
 
+    useEffect(() => {
+        isFullscreenRef.current = isFullscreen
+        if (chartContainerRef.current) chartInstance.current?.applyOptions({
+            width: chartContainerRef.current.clientWidth,
+            height: isFullscreen ? window.innerHeight - 120 : 500,
+        })
+    }, [isFullscreen])
+
     // Create/update chart
     useEffect(() => {
-        if (!chartContainerRef.current) return
+        const container = chartContainerRef.current
+        if (!container) return
+        let disposed = false
+        let cleanup: (() => void) | undefined
 
         import("lightweight-charts").then(({ createChart, ColorType, CrosshairMode, CandlestickSeries }) => {
-            if (!chartContainerRef.current) return
-
-            // Destroy existing chart
-            if (chartInstance.current) {
-                chartInstance.current.remove()
-                chartInstance.current = null
-                seriesInstance.current = null
-                markersInstance.current = null
-                setChartReady(false)
-            }
-
-            const containerWidth = chartContainerRef.current.clientWidth
-            const containerHeight = isFullscreen ? window.innerHeight - 120 : 500
-
-            const chart = createChart(chartContainerRef.current, {
+            if (disposed) return
+            const chart = createChart(container, {
                 layout: {
                     background: { type: ColorType.Solid, color: chartColors.background },
                     textColor: chartColors.text,
@@ -928,8 +907,8 @@ export function AdvancedChartPage({
                     vertLines: { color: chartColors.grid },
                     horzLines: { color: chartColors.grid },
                 },
-                width: containerWidth,
-                height: containerHeight,
+                width: container.clientWidth,
+                height: isFullscreenRef.current ? window.innerHeight - 120 : 500,
                 rightPriceScale: {
                     borderColor: chartColors.grid,
                     // Keep main price labels away from the indicator pane border.
@@ -1014,14 +993,16 @@ export function AdvancedChartPage({
                 setHoveredUnixTime((prev) => (prev === hoverUnix ? prev : hoverUnix))
 
                 const candleData = param.seriesData.get(candlestickSeries)
-                if (candleData && 'open' in candleData) {
+                const plotted = plottedPriceRef.current
+                if (plotted && candleData && 'open' in candleData) {
                     setCrosshairData({
+                        scope: plotted.scope,
                         time: param.time,
                         open: candleData.open,
                         high: candleData.high,
                         low: candleData.low,
                         close: candleData.close,
-                        volume: 0,
+                        volume: plotted.volumes.get(hoverUnix) ?? null,
                     })
                 } else {
                     setCrosshairData(null)
@@ -1045,17 +1026,14 @@ export function AdvancedChartPage({
 
             // Handle resize
             const handleResize = () => {
-                if (chartContainerRef.current && chartInstance.current) {
-                    const newHeight = isFullscreen ? window.innerHeight - 120 : 500
-                    chartInstance.current.applyOptions({
-                        width: chartContainerRef.current.clientWidth,
-                        height: newHeight,
-                    })
-                }
+                chart.applyOptions({
+                    width: container.clientWidth,
+                    height: isFullscreenRef.current ? window.innerHeight - 120 : 500,
+                })
             }
             window.addEventListener("resize", handleResize)
 
-            return () => {
+            cleanup = () => {
                 chart.timeScale().unsubscribeVisibleLogicalRangeChange(handleVisibleRangeChange)
                 window.removeEventListener("resize", handleResize)
                 // Clean up markers primitive
@@ -1067,41 +1045,56 @@ export function AdvancedChartPage({
                     }
                     markersInstance.current = null
                 }
+                chart.remove()
+                chartInstance.current = null
+                seriesInstance.current = null
+                plottedPriceRef.current = null
             }
         })
-    }, [isFullscreen, requestOverlayProjectionRefresh, syncIndicatorPanesToMainRange])
+        return () => {
+            disposed = true
+            cleanup?.()
+        }
+    }, [requestOverlayProjectionRefresh, syncIndicatorPanesToMainRange])
 
-    // Update chart data
+    // Paint prices independently of marker and indicator preparation.
     useEffect(() => {
-        if (!chartReady || candles.length === 0 || !seriesInstance.current) return
+        const series = seriesInstance.current as ISeriesApi<"Candlestick"> | null
+        const chart = chartInstance.current
+        if (!chartReady || !series || !chart) return
         const updateStart = performance.now()
+        const previous = plottedPriceRef.current
+        const sameSelection = previous?.series === series && previous.scope === chartScope
+        if (!sameSelection) {
+            markersInstance.current?.detach()
+            markersInstance.current = null
+            lastMarkersHashRef.current = ""
+            lastCrosshairUnixRef.current = null
+        }
+        const bars = candles.map(({ time, open, high, low, close }) => ({
+            time: formatTime(time) as Time, open, high, low, close,
+        }))
+        paintPriceBars(series, chart.timeScale(), previous?.bars ?? [], bars, sameSelection)
+        plottedPriceRef.current = { series, scope: chartScope, bars,
+            volumes: new Map(candles.map(candle => [parseChartTimeToUnix(candle.time), candle.volume])) }
+        syncIndicatorPanesToMainRange()
+        requestOverlayProjectionRefresh()
+        logPerf("main-chart-update", {
+            ms: Number((performance.now() - updateStart).toFixed(2)),
+            candles: bars.length,
+        })
+    }, [chartReady, chartScope, candles, logPerf, requestOverlayProjectionRefresh, syncIndicatorPanesToMainRange])
+
+    useEffect(() => {
+        const series = seriesInstance.current
+        if (!chartReady || !candles.length || !series) return
+        let cancelled = false
 
         // Dynamic import for v5 markers API
         import("lightweight-charts").then(({ createSeriesMarkers }) => {
-            if (!seriesInstance.current) return
-
-            const rawCandleData = candles.map((item) => ({
-                time: formatTime(item.time),
-                open: item.open,
-                high: item.high,
-                low: item.low,
-                close: item.close,
-            }))
-
-            // Deduplicate and sort data
-            const candleData = deduplicateByTime(rawCandleData)
-            const firstCandle = candleData[0]
-            const lastCandle = candleData[candleData.length - 1]
-            const nextCandleHash = firstCandle && lastCandle
-                ? `${candleData.length}:${firstCandle.time}:${firstCandle.open}:${firstCandle.high}:${firstCandle.low}:${firstCandle.close}:${lastCandle.time}:${lastCandle.open}:${lastCandle.high}:${lastCandle.low}:${lastCandle.close}`
-                : "0"
+            if (cancelled || seriesInstance.current !== series || plottedPriceRef.current?.scope !== chartScope) return
 
             try {
-                if (nextCandleHash !== lastCandleHashRef.current) {
-                    seriesInstance.current.setData(candleData)
-                    lastCandleHashRef.current = nextCandleHash
-                }
-
                 // Add signal markers (including Combo/Hunter overlays)
                 const shouldSkipHeavyMarkerOps = activeToolRef.current !== "none"
                 if (!shouldSkipHeavyMarkerOps) {
@@ -1193,31 +1186,12 @@ export function AdvancedChartPage({
                     }
                 }
 
-                // Only fit content on initial load or when symbol/timeframe changes
-                // This preserves user's zoom/pan position during data refreshes
-                const symbolChanged = lastSymbolRef.current !== symbol
-                const timeframeChanged = lastTimeframeRef.current !== timeframe
-
-                if (isInitialLoadRef.current || symbolChanged || timeframeChanged) {
-                    chartInstance.current?.timeScale().fitContent()
-                    isInitialLoadRef.current = false
-                    lastSymbolRef.current = symbol
-                    lastTimeframeRef.current = timeframe
-                }
-                syncIndicatorPanesToMainRange()
-                requestOverlayProjectionRefresh()
-                logPerf("main-chart-update", {
-                    ms: Number((performance.now() - updateStart).toFixed(2)),
-                    candles: candleData.length,
-                    workerRequestId: workerComputationState.requestId,
-                    comboSignals: workerComputationState.overlays.combo.length,
-                    hunterSignals: workerComputationState.overlays.hunter.length,
-                })
             } catch (e) {
                 console.error("Chart update error:", e)
             }
         })
-    }, [candles, signals, showSignals, activeIndicators, chartReady, symbol, timeframe, candlesSignature, signalsSignature, markerIndicatorSignature, activeTool, requestOverlayProjectionRefresh, workerComputationState.requestId, workerOverlaySignature, workerComputationState.overlays.combo, workerComputationState.overlays.hunter, logPerf, syncIndicatorPanesToMainRange])
+        return () => { cancelled = true }
+    }, [candles.length, signals, showSignals, activeIndicators, chartReady, chartScope, signalsSignature, markerIndicatorSignature, activeTool, workerComputationState.requestId, workerOverlaySignature, workerComputationState.overlays.combo, workerComputationState.overlays.hunter])
 
     // Add indicator
     const addIndicator = useCallback((indicatorId: string) => {
@@ -2076,10 +2050,15 @@ export function AdvancedChartPage({
                                 <span className="text-muted-foreground text-xs uppercase">Kapanış</span>
                                 <span className={cn("font-medium mono-numbers", displayOHLCV.close >= displayOHLCV.open ? "text-profit" : "text-loss")}>{displayOHLCV.close.toFixed(2)}</span>
                             </div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-muted-foreground text-xs uppercase">Hacim</span>
+                                <span className="font-medium mono-numbers">{finiteNumber(displayOHLCV.volume)
+                                    ? displayOHLCV.volume.toLocaleString("tr-TR", { maximumFractionDigits: 2 }) : "—"}</span>
+                            </div>
                         </div>
                         <div className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
                             <Clock className="h-3 w-3" />
-                            <span>{crosshairData ? timeFormatters.timeFormatter(crosshairData.time) : 'Son Mum'}</span>
+                            <span>{currentCrosshair ? timeFormatters.timeFormatter(currentCrosshair.time) : 'Son Mum'}</span>
                         </div>
                     </div>
                 )}
@@ -2088,6 +2067,11 @@ export function AdvancedChartPage({
                     <ChartDataError mode="refresh" message={candlesErrorMessage}
                         fetching={isCandlesFetching} onRetry={() => void refetchCandles()} />
                 )}
+                {previewOnly && !isCandlesError && <p role="status" className="border-b border-border px-4 py-2 text-xs text-muted-foreground">
+                    {history.isPending || isCandlesFetching
+                        ? "Son mumlar gösteriliyor · Gösterge geçmişi yükleniyor"
+                        : "Son mumlar gösteriliyor · Gösterge geçmişi bulunamadı"}
+                </p>}
 
                 {/* Chart Area */}
                 <div className={cn("relative flex-1 min-h-[320px] overflow-hidden", visiblePanelIndicators.length > 0 && "mb-3")}>
@@ -2163,11 +2147,11 @@ export function AdvancedChartPage({
                 </div>
 
                 {/* Indicator Panels */}
-                {visiblePanelIndicators.map((ind, index) => (
+                {hasFullHistory && visiblePanelIndicators.map((ind, index) => (
                     <IndicatorPane
                         key={ind.id}
                         indicator={ind}
-                        candles={candles}
+                        candles={calculationCandles}
                         precomputedSeries={workerComputationState.panes[ind.id] || null}
                         onRemove={() => {
                             removeIndicator(ind.id)
