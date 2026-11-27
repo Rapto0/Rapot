@@ -40,6 +40,7 @@ from api.runtime.realtime_bootstrap import (  # noqa: E402
     stop_realtime_services as runtime_stop_realtime_services,
 )
 from api.runtime.server_alarms import start_server_alarms, stop_server_alarms
+from api.runtime.tracker_history import tracker_history_runtime
 from logger import get_logger  # noqa: E402
 from settings import settings  # noqa: E402
 from strategy_inspector import (  # noqa: E402
@@ -86,7 +87,8 @@ async def lifespan(app: FastAPI):
         raise
 
     try:
-        yield
+        async with tracker_history_runtime(app, settings):
+            yield
     finally:
         try:
             try:

@@ -1,7 +1,77 @@
 # Rapot Devam Planı
 
-**Güncel plan: 26 Kasım 2026.** Aşama 4.1 üretimde. Sıradaki iş Aşama 4.2,
-ekrandan bağımsız hazırlık ve kalıcılık.
+**Güncel plan: 27 Kasım 2026.** Aşama 4.1 üretimde. Aşama 4.2'nin kalıcı
+kayıt katmanı geliştirildi. BIST kapanış verisini saklama ve RSI hesaplama
+izni olan bir kaynak paketi bulunmadığı için gerçek veri pilotu bekliyor.
+
+## 27 Kasım — Aşama 4.2 kapanış hazırlığı ve kalıcılık
+
+### Tamamlanan yerel geliştirme
+
+- İzinli kaynağın teslim ettiği kapalı mumlardan Wilder RSI(14) ve ham
+  kapanış çıkarılır. API'nin arka plan işçisi dosyayı 30 saniyede bir
+  tarayıcı veya açık takipçi oturumu gerektirmeden kontrol eder. Yeniden
+  başlatmada geçerli kayıtlar ilk istekten önce okunur. Takipçi sayısal
+  değerleri, veri ve alım zamanını ve kaynağı gösterir. Kapanışlar alarm
+  girdisine veya güncel RSI koşullarına dahil edilmez.
+- Ayrı SQLite dosyası en fazla 25 sembol × 16 periyot saklar. Ham mumlar
+  bu dosyaya yazılmaz. Bir işlemde kaydedilen revizyon, eski mum sınırı olan
+  girdiye ve bozuk toplu dosyaya karşı son geçerli özeti korur. Aynı mumdaki
+  sağlayıcı düzeltmesi daha yüksek revizyonla alınır. Fiyat sütununda yalnız
+  ham kapanış kullanılır. Kapanış bilgisi son başarılı alımdan itibaren yedi
+  gün yedek değer olarak gösterilir. Ekrandaki mum kapanış saati ayrı kalır.
+- Örnek veri testinde 400 kapanış RSI kaydı, girdi dosyası kaldırıldıktan
+  sonra yeni süreç durumu ve bağımsız SQLite geri yüklemesi üzerinden
+  okunabildi. 400 serilik özet 128 KiB sınırının altında kaldı. Geçersiz
+  paket, eski revizyon, farklı kaynak ve piyasa, eksik kripto mum aralığı,
+  canlı değer önceliği ve yetkili ilk API okuması kontrol edildi. Gerçek BIST
+  kapsamı ve tarayıcı açılış p95'i henüz ölçülmedi. 62 hedefli Python testi,
+  336 frontend testi, üretim derlemesi ve standalone proxy kontrolü geçti.
+
+### Kaynak izni ve pilotun açılması
+
+Kullanıcı, bu kapsamda bir BIST veri paketi bulunmadığını doğruladı. Borsa
+İstanbul ve TradingView'in yayımladığı koşullar, mevcut abonelik üzerinden
+sunucuda veri saklama ve arka plan hesaplama iznini doğrulamıyor. Binance
+Spot teknik uçları ve herkese açık arşiv ayrı ayrı incelendi. Arşivin
+yayımlanmış koşullarında üretim kullanımı doğrulanmadığından kriptoya da
+aynı yazılı izin kontrolü uygulanır.
+[BIST kullanım koşulları](https://borsaistanbul.com/telif-hakki-ve-cekince-ihbari),
+[BIST veri lisanslama](https://www.borsaistanbul.com/sss/veri-dagitim-ve-endeks-lisanslama),
+[TradingView koşulları](https://www.tradingview.com/policies/),
+[Binance arşiv koşulları](https://github.com/binance/binance-public-data/blob/master/TERMS_AND_CONDITIONS.md).
+
+1. Yetkili dağıtıcıdan izin ve örnek paket doğrulanır. İzin, özel Rapot
+   sunucusunda kalıcı OHLCV saklama, yeniden hesaplanmış RSI gösterme ve
+   yedek saklamayı kapsar. Önce gün sonu veya gecikmeli veri fiyatlandırılır.
+   16 periyodun doğrudan sağlanması veya izinli temel mumlardan üretilebilmesi,
+   seans sınırı, eksik aralık, kurumsal işlem düzeltmesi ve kapsam örnek paketle
+   kontrol edilir. Ücretli paket kullanıcı kararına bağlıdır.
+   [Yetkili veri dağıtıcıları](https://www.borsaistanbul.com/veriler/veri-yayini/veri-dagitici-kuruluslar).
+2. Kaynak ayarı varsayılan olarak boştur. Onaylı pilotta
+   `RSI_TRACKER_HISTORY_SOURCE` dosya başlığıyla aynı kısa kaynak kodu,
+   `RSI_TRACKER_HISTORY_SYMBOLS` ise en fazla 25 üyeli
+   `BIST:THYAO,BIST:GARAN` biçiminde bir liste olur. Onaylı veri teslimi,
+   fiyat önbelleği dizinindeki `rsi-tracker-input.jsonl` dosyasını atomik
+   olarak değiştirir. İlk JSON satırı `version=1`, `source` ve artan
+   `revision` taşır. Seri satırları `market`, `symbol`, `period`,
+   `adjustment` (`raw`, `split`, `total_return`), `complete=true` ve en
+   fazla 240 sıralı `[başlangıç, kapanış, fiyat]` mumu taşır. Zamanlar UTC
+   Unix saniyesidir. Dosya sınırı 400 seri ve 6 MiB'dir. Kaynak izinleri ve
+   gerçek mum paketleri Git dışında kalır.
+3. `rsi-tracker-closed.sqlite3` SQLite yedekleme API'siyle ayrı alınır ve
+   bağımsız kopyada bütünlük ve ilk okuma doğrulanır. Pilot kabulü gerçek
+   değer/formül eşliği, tarayıcının 150 saniyeden uzun kapalı kalması, yeni
+   oturum ve API yeniden başlatmasında ilk tablo p95 ≤ 3 sn, fiyat ve RSI
+   zamanları, kaynak kesintisi ve dört etkin alarmın kontrolünü kapsar.
+   Geri dönüşte kaynak ayarı boş bırakılarak pilot okuması ve işçisi
+   kapatılır. Ana veritabanı, fiyat önbelleği ve alarm verileri pilot
+   dosyasından bağımsızdır.
+
+27 Kasım 13:14 TSİ seans içi salt okunur kontrolde üretimde Aşama 4.1,
+dört sağlıklı servis, yaklaşık 3,8 GiB boş disk, 260 MiB kullanılabilir
+RAM ve 341 MiB swap kullanımı görüldü. Bu tek ölçüm kapasite kararı için
+yeterli değildir. Üretimde Aşama 4.2 etkinleştirilmedi.
 
 ## 26 Kasım — Veri akışı incelemesi ve geliştirme sırası
 
@@ -195,7 +265,8 @@ Her adımda hedefli test, aynı sürümde üretim derlemesi ve bağımsız kabul
 Ölçümler açık/kapalı seans, ilk/tekrar ziyaret ve kaynak kesintisini ayrı tutar.
 Yüzdeliklerle birlikte örnek sayısı, ölçüm penceresi ve başarısız sonuçlar yazılır.
 İlk inceleme salt okunurdu. Aşama 4.1 yayını ve ayrı kabul yukarıda kayıtlı.
-Sonraki oturumda **Aşama 4.2** ile başlanır.
+Aşama 4.2 için yerel geliştirme ve gerçek pilotun açık koşulları 27 Kasım
+kaydında yer alır.
 
 ## 25 Kasım — Web sitesi Aşama 1, 2 ve 3 iyileştirmeleri yayımlandı
 
@@ -1258,7 +1329,8 @@ ifadeleri, kaydın ait olduğu tarihteki sonucu anlatır.
 
 ## Sıradaki işler ve ertelenen kabul
 
-Güncel uygulama sırası için [26 Kasım veri akışı planına](#26-kasım--veri-akışı-incelemesi-ve-geliştirme-sırası) bak. Sıradaki iş Aşama 4.2.
+Güncel uygulama sırası için [26 Kasım veri akışı planına](#26-kasım--veri-akışı-incelemesi-ve-geliştirme-sırası) ve
+[27 Kasım Aşama 4.2 kaydına](#27-kasım--aşama-42-kapanış-hazırlığı-ve-kalıcılık) bak.
 
 P0–P3 geliştirme listesi ve arayüz UI-1/UI-2/UI-3 kapalıdır. 2 Ekim sunucu
 alarmları üretimdedir; 7 Ekim kullanıcı canlı piyasa testlerini yeniden seçti.

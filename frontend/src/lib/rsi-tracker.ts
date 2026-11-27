@@ -77,11 +77,14 @@ export interface RsiCell {
     value: number | null
     bar_time: number | null
     received_at?: number
-    last?: { value: number; bar_time: number; received_at: number; kind: "closed" | "candle" }
+    last?: { value: number; bar_time: number; bar_end?: number; received_at: number; kind: "closed" | "candle"; source?: string }
+    closed_status?: "insufficient"
+    closed_source?: string
 }
 
 export interface RsiSnapshot {
     snapshot_version?: number
+    closed_source?: string
     source: "borsapy_tradingview" | "tradingview_binance"
     length: number
     observed_at: number
@@ -89,7 +92,7 @@ export interface RsiSnapshot {
         source_time: number | null
         price: number | null
         session_ended?: boolean
-        last_price?: { value: number; source_time: number; received_at: number }
+        last_price?: { value: number; source_time: number; received_at: number; source?: string; kind?: "closed" }
         cells: Partial<Record<RsiTimeframe, RsiCell>>
     }>
 }
@@ -121,6 +124,7 @@ export function rsiDisplayStatus(cell: RsiCell | undefined, expired: boolean): s
         const label = cell.last.kind === "closed" ? "Son kapanış" : "Son mum kaydı"
         return `${label} · ${RSI_CELL_STATUS[status]}`
     }
+    if (cell?.closed_status === "insufficient" && status === "waiting") return "Kapanış geçmişi yetersiz · Veri hazırlanıyor"
     return expired && status === "ready" ? "Son alınan RSI" : RSI_CELL_STATUS[status]
 }
 
@@ -327,7 +331,7 @@ export function buildTrackerCsv(
         market === "BIST" ? "Son Fiyat (TRY)" : "Son Fiyat (USDT)",
         "Değişim (%)",
         ...periods.map(period => `RSI ${period}`),
-        ...periods.flatMap(period => [`RSI ${period} Durum`, `RSI ${period} Veri Zamanı`]),
+        ...periods.flatMap(period => [`RSI ${period} Durum`, `RSI ${period} Veri Zamanı`, `RSI ${period} Kaynak`]),
     ]
     const lines = [headers.map(csvEscape).join(",")]
     for (const symbol of symbols) {
@@ -343,9 +347,10 @@ export function buildTrackerCsv(
             }),
             ...periods.flatMap(period => {
                 const cell = rsiRow?.cells[period]
-                const timestamp = cell?.last?.bar_time ?? (cell?.status === "ready" || cell?.status === "stale"
+                const timestamp = cell?.last?.bar_end ?? cell?.last?.bar_time ?? (cell?.status === "ready" || cell?.status === "stale"
                     ? rsiRow?.source_time : cell?.bar_time)
-                return [rsiDisplayStatus(cell, expired || !trackerQuoteFresh(rsiRow?.source_time, observedAt)), rsiSourceTime(timestamp) ?? ""]
+                return [rsiDisplayStatus(cell, expired || !trackerQuoteFresh(rsiRow?.source_time, observedAt)),
+                    rsiSourceTime(timestamp) ?? "", cell?.last?.source ?? cell?.closed_source ?? snapshot?.source ?? ""]
             }),
         ]
         lines.push(cells.map(csvEscape).join(","))

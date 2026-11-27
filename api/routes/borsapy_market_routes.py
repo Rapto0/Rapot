@@ -50,12 +50,14 @@ def rsi_tracker(
         symbol not in share_universe().symbols for symbol in payload.symbols
     ):
         raise HTTPException(422, "Sembol BIST pay listesinde bulunmuyor.")
-    return get_advanced_market_data().custom.tracker_snapshot(
+    snapshot = get_advanced_market_data().custom.tracker_snapshot(
         (user.username, payload.view),
         payload.market,
         payload.symbols,
         payload.periods,
     )
+    history = getattr(request.app.state, "rsi_tracker_history", None)
+    return history.enrich(snapshot, payload.market) if history else snapshot
 
 
 def _call(method, *args):

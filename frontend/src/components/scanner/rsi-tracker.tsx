@@ -371,7 +371,7 @@ export function RsiTracker() {
                             : crypto.status !== "connected" || !received)
                         const rsiPriceTime = rsiSourceTime(rsiRow?.source_time)
                         const lastRsi = rsiStale || !trackerQuoteFresh(rsiRow?.source_time, observedAt)
-                        const priceTime = marketPrice == null ? rsiSourceTime(lastPrice?.source_time)
+                        const priceTime = marketPrice == null ? [rsiSourceTime(lastPrice?.source_time), lastPrice?.source].filter(Boolean).join(" · ")
                             : bist ? [quote?.provider_time, quote?.message].filter(Boolean).join(" · ")
                             : received ? `Akış alımı ${clock.format(received)} TSİ` : undefined
                         return <tr key={`${market}:${symbol}`} className="group even:bg-raised/30 hover:bg-raised/70">
@@ -381,21 +381,22 @@ export function RsiTracker() {
                                     <Link href={trackerAlarmHref(symbol, market)} className="inline-flex min-h-9 items-center rounded border border-border/70 px-1.5 text-[10px] font-normal text-muted-foreground hover:bg-background hover:text-foreground" aria-label={`${symbol} için alarm taslağı oluştur`} title="Sunucu alarmı taslağı">Alarm</Link>
                                 </div>
                             </th>
-                            <td className="border-b border-border px-3 py-2 text-right" title={priceTime ?? undefined}><span className="block font-mono text-sm tabular-nums">{trackerNumber(price)}</span>{price != null && stale && <span className="block text-[10px] text-neutral">Son kayıt</span>}</td>
+                            <td className="border-b border-border px-3 py-2 text-right" title={priceTime || undefined}><span className="block font-mono text-sm tabular-nums">{trackerNumber(price)}</span>{price != null && stale && <span className="block text-[10px] text-neutral">{marketPrice == null && lastPrice?.kind === "closed" ? "Son kapanış" : "Son kayıt"}</span>}</td>
                             <td className={cn("border-b border-border px-4 py-3 text-right font-mono tabular-nums", change == null || !Number.isFinite(change) ? "text-muted-foreground" : change >= 0 ? "text-profit" : "text-loss")}>{trackerNumber(change)}{change != null && Number.isFinite(change) ? "%" : ""}</td>
                             {shownColumns.map(item => {
                                 const cell = rsiRow?.cells[item.id]
                                 const cellStatus = rsiDisplayStatus(cell, lastRsi)
-                                const timestamp = cell?.last ? rsiSourceTime(cell.last.bar_time)
+                                const timestamp = cell?.last ? rsiSourceTime(cell.last.bar_end ?? cell.last.bar_time)
                                     : cell?.status === "ready" || cell?.status === "stale" ? rsiPriceTime : rsiSourceTime(cell?.bar_time)
                                 const acquired = rsiSourceTime(cell?.last?.received_at ?? cell?.received_at)
+                                const cellSource = cell?.last?.source ?? cell?.closed_source
                                 const value = rsiDisplayValue(cell)?.toLocaleString("tr-TR", { maximumFractionDigits: 2 }) ?? "—"
                                 const priceLabel = (cell?.status === "ready" || cell?.status === "stale") && rsiRow?.price != null
                                     ? `Hesaplanan fiyat ${trackerNumber(rsiRow.price)}` : null
                                 const tint = cell?.status === "ready" && !lastRsi && cell.value != null
                                     ? cell.value <= 30 ? "bg-sky-500/12 text-sky-200" : cell.value >= 70 ? "bg-amber-500/12 text-amber-200" : "text-foreground"
                                     : "text-muted-foreground"
-                                return <td key={item.id} className={cn("border-b border-l border-border/60 px-3 py-2 text-right", tint)} title={[cellStatus, timestamp && `Veri ${timestamp} TSİ`, acquired && `Alım ${acquired} TSİ`, priceLabel].filter(Boolean).join(" · ")}>
+                                return <td key={item.id} className={cn("border-b border-l border-border/60 px-3 py-2 text-right", tint)} title={[cellStatus, timestamp && `Veri ${timestamp} TSİ`, acquired && `Alım ${acquired} TSİ`, cellSource && `Kaynak ${cellSource}`, priceLabel].filter(Boolean).join(" · ")}>
                                     <span className="block font-mono text-sm tabular-nums">{value}</span>
                                     <span className={cell?.status === "ready" && !lastRsi ? "sr-only" : "block text-[10px] leading-tight"}>{cellStatus}</span>
                                 </td>
@@ -408,6 +409,7 @@ export function RsiTracker() {
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border p-4"><p className="text-[11px] text-muted-foreground">{visible.matched ? `${visible.page * TRACKER_PAGE_SIZE + 1}–${Math.min((visible.page + 1) * TRACKER_PAGE_SIZE, visible.matched)} / ${visible.matched}` : "0 sembol"} · Sayfa başına {TRACKER_PAGE_SIZE} sembol</p><nav aria-label="Takipçi sayfaları" className="flex items-center gap-3"><button type="button" className={control} disabled={visible.page === 0} onClick={() => setPage(visible.page - 1)}>Önceki</button><span className="font-mono text-xs">{visible.page + 1} / {visible.pages}</span><button type="button" className={control} disabled={visible.page + 1 >= visible.pages} onClick={() => setPage(visible.page + 1)}>Sonraki</button></nav></div>
         <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-border px-4 py-2 text-[11px] text-muted-foreground">
             <span>RSI kaynağı · {market === "BIST" ? "Borsapy / BIST" : "TradingView / Binance"}</span>
+            {rsi.data?.closed_source && <span>Kapanış kaynağı · {rsi.data.closed_source}</span>}
             <span className="text-sky-300">RSI ≤ 30</span><span className="text-amber-300">RSI ≥ 70</span>
         </div>
     </section>

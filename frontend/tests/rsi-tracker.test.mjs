@@ -314,3 +314,22 @@ test('last records survive a timeout with labels and never satisfy a live filter
   assert.equal(model.trackerResultRows(['PAY00'], snapshot, [{ period: '1D', min: '', max: '30' }], null, true, 1794651001).length, 0);
   assert.match(model.buildTrackerCsv(['PAY00'], 'BIST', {}, snapshot, ['1D']), /23\.00,Son kapanış/);
 });
+
+test('persisted closes identify their source in the tracker and export', () => {
+  const source = 'licensed-fixture';
+  const barEnd = 1794651000;
+  const row = { source_time: null, price: null,
+    last_price: { value: 42, source_time: barEnd, received_at: barEnd + 1, kind: 'closed', source },
+    cells: { '1D': { value: null, status: 'waiting',
+      last: { value: 23, bar_time: 1794614400, bar_end: barEnd, received_at: barEnd + 1, kind: 'closed', source } },
+    '2D': { value: null, status: 'waiting', closed_status: 'insufficient', closed_source: source } } };
+  const snapshot = { rows: { PAY00: row }, closed_source: source };
+  const tree = tracker({ rsiRows: snapshot.rows, rsiQuery: { data: snapshot } }).render();
+  assert.match(text(tree), /42Son kapanış/);
+  assert.match(text(tree), /Kapanış geçmişi yetersiz/);
+  assert.match(text(tree), /Kapanış kaynağı · licensed-fixture/);
+  assert.ok(nodes(tree).some(node => node.type === 'td' && node.props.title?.includes('Kaynak licensed-fixture')));
+  const csv = model.buildTrackerCsv(['PAY00'], 'BIST', {}, snapshot, ['1D']);
+  assert.match(csv, /RSI 1D Kaynak/);
+  assert.ok(csv.includes(`23.00,Son kapanış · Veri hazırlanıyor,${model.rsiSourceTime(barEnd)},${source}`));
+});

@@ -46,6 +46,12 @@ class Settings(BaseSettings):
     advanced_alarm_eval_budget_seconds: float = Field(0.2, ge=0.02, le=0.5)
     advanced_alarm_eval_batch: int = Field(5000, ge=100, le=5000)
     advanced_alarm_state_cache: int = Field(15000, ge=1000, le=20000)
+    rsi_tracker_history_source: str = Field(
+        "", description="Authorized closed-candle feed identifier"
+    )
+    rsi_tracker_history_symbols: str = Field(
+        "", description="Tracker history pilot market:symbol pairs"
+    )
     borsapy_credentials_path: str | None = Field(
         None, description="Encrypted borsapy credentials file; defaults beside the main database"
     )
