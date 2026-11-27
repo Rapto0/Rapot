@@ -1,7 +1,41 @@
 # Rapot Devam Planı
 
-**27 Kasım 2026.** Ön yüzde Aşama 5.3, API'de Aşama 4.1 üretimde.
+**27 Kasım 2026.** Ön yüzde Aşama 6.1, API'de Aşama 4.1 üretimde.
 Aşama 4.2'nin kalıcı RSI kayıt katmanı gerçek veri pilotunu bekliyor.
+
+## 27 Kasım — Aşama 6.1 Alarm Merkezi olay akışı
+
+Ön yüz `376a53a94d7b0bb78b3b8edecd9ee9943ab0b6fc` **21:31:28 TSİ**
+yayımlandı. **21:31:34 TSİ** bağımsız kabulde 10 sayfa, 36 statik dosya,
+dokuz metin işareti, olay sorgusu dahil altı anonim erişim sınırı ve özel
+404 geçti. API `fbdbaa4a`, Compose/current, middleware ve PostgreSQL mevcut
+container'larda kaldı. Dört servis sağlıklı, yeniden başlatma sayaçları
+sıfırdı. Dört etkin alarm, 418 olay ve 15 tablo korundu. Taze 1.134.592
+baytlık yedek ayrı veritabanına başarıyla geri yüklendi. Kabulde yaklaşık
+3,33 GiB boş disk vardı. Yayın ve kabul kanıtı
+`b800d42b8aeeb338b4bdf08677ecd6482175cf7cc6f7a6bac6b2a8b8399a5053`.
+[Kaynak kontrolleri](https://github.com/Rapto0/Rapot/actions/runs/46048369049),
+[temiz imaj yayını](https://github.com/Rapto0/Rapot/actions/runs/46048411097).
+
+- Açık Alarm Merkezi ilk okumada en yeni 100 olayı alır. Beş saniyelik
+  kontroller son alınan olay kimliğinden ilerler. Yeni kayıtlar tekrar
+  etmeden en yeni 100'e eklenir. Bir kontrolde 100'den fazla yeni olay
+  varsa ekran güncel 100 kaydı tekrar alır. Geçici hatada son başarılı
+  liste görünür. İlk yükleme hatası ile geçerli boş liste ayrı görünür.
+- Son 100 kayıt normalde 60 saniyelik, listede bekleyen teslim varsa
+  30 saniyelik aralıkla tekrar okunur. Kullanıcı yenilediğinde veya kural
+  ya da liste değişikliği kaydettiğinde tam liste hemen alınır. Böylece
+  önceki olayın Telegram teslim durumu ekrana yansır.
+- 348 ön yüz ve 57 hedefli arka uç testi, lint, tip kontrolü, üretim
+  derlemesi, standalone proxy ve beş GitHub kontrolü geçti. 470 paketlik
+  npm denetiminde bulgu yoktu. Yerel tarayıcıda yeni örnek olay eski kaydı
+  koruyarak eklendi ve yenilemede eski kaydın örnek teslim durumu
+  **Telegram'a gönderildi** olarak değişti.
+- Canlı yönetici ekranında 100 olay ve doğru beş saniye metni görüldü.
+  Sunucu erişim kaydında **21:31:51 TSİ** açılış gövdesi **48.211 bayt**,
+  **21:31:56 TSİ** yeni olay olmayan kontrol gövdesi **50 bayt** oldu.
+  Bu örnek aktarılan yanıt boyutunu ölçer. Canlı tetik ve Telegram teslim
+  gecikmesi bu örnekte ölçülmedi.
 
 ## 27 Kasım — Aşama 5.3 ilk grafik mumları ve artımlı çizim
 
@@ -363,8 +397,11 @@ gerçek emir/Telegram teslimini ve açık seans boyunca 631 sembolü kapsamaz.
   önce alarm/sağlık, ardından araştırma/takvim/AI/işlemler/ayarlar. Aktif
   dört alarmın koşulları ve bildirimleri korunur. Canlı değerlendirme yalnız
   doğrulanmış taze olaydan beslenir. Son mum ve kapanış görüntüsü arayüz için
-  kalır. İlk veri p95 hedefleri ölçüme göre ekran bazında belirlenir. Alarm
-  motoru girdisi→olay yazımı, Telegram teslimi, sağlayıcı→sunucu ve
+  kalır. [Aşama 6.1 kaydı](#27-kasım--aşama-61-alarm-merkezi-olay-akışı)
+  olay akışının yayını ve ölçümünü kapsar. Sıradaki adım alarm kuralı bazında
+  hazır kapsamı ve bekleme nedenini, Sistem Sağlığı'nda ise son başarılı
+  ölçümü görünür kılmaktır. İlk veri p95 hedefleri ölçüme göre ekran bazında
+  belirlenir. Alarm motoru girdisi→olay yazımı, Telegram teslimi, sağlayıcı→sunucu ve
   sunucu→sayfa gecikmesi ayrı ölçülür. Geçici hata, yetkisizlik ve boş sonuç
   senaryoları ile oturum açma/çıkma masaüstü ve mobilde doğrulanır.
 - [ ] **Aşama 7 — BIST kaynağı ve işletim kapasitesi.** Mevcut akış, lisanslı
