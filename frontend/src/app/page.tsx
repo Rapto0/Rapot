@@ -124,6 +124,7 @@ export default function LandingPage() {
     }) : describeMarketRequest({
       receivedAt: market.dataUpdatedAt, now: clock.now,
       available: rows.filter((row) => row.value !== undefined).length, total: rows.length,
+      carried: !!market.data && !market.dataUpdatedAt,
       isError: market.isError, isFetching: market.isFetching, isPaused: market.fetchStatus === "paused",
     })
     return { ...category, rows, notice, streaming }

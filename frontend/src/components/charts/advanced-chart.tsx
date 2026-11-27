@@ -9,11 +9,12 @@ import {
     fetchBistSymbols,
     fetchCryptoSymbols,
     fetchEconomicCalendar,
-    fetchGlobalIndices,
     fetchTicker,
 } from "@/lib/api/client"
 import { useBinanceTicker } from "@/lib/hooks/use-binance-ticker"
+import { useLastMarketQuote, useMarketSnapshot } from "@/lib/hooks/use-market-snapshot"
 import { useSession } from "@/lib/hooks/use-session"
+import { finiteNumber } from "@/lib/market-feed"
 import { MarketDataStatus } from "@/components/market-data-status"
 import { BORSAPY_INTERVALS, borsapyVolumeWarning, fetchBorsapyCandles, fetchBorsapyChartSnapshot, mergeBorsapyCandles, releaseBorsapyChart } from "@/lib/api/borsapy-chart-api"
 import { ServerWatchlistPanel } from "./server-watchlist-panel"
@@ -605,13 +606,8 @@ export function AdvancedChartPage({
         return Array.from(set).slice(0, 50)
     }, [watchlists, activeWatchlistId])
 
-    const { data: activeWatchlistBistQuotes, refetch: refetchActiveWatchlistBistQuotes } = useQuery({
-        queryKey: ['watchlist-active-bist-quotes', session?.user.username, session?.expiresAt, ...activeWatchlistBistSymbolsForQuery],
-        queryFn: ({ signal }) => fetchGlobalIndices(activeWatchlistBistSymbolsForQuery, { signal }),
-        enabled: canUseBorsapy && showRightPanel && watchlistSource === "local" && activeWatchlistBistSymbolsForQuery.length > 0,
-        refetchInterval: 10000,
-        staleTime: 10_000,
-    })
+    const { data: activeWatchlistBistQuotes, refetch: refetchActiveWatchlistBistQuotes } =
+        useMarketSnapshot(canUseBorsapy && showRightPanel && watchlistSource === "local" ? activeWatchlistBistSymbolsForQuery : [])
 
     const utilityCalendarRange = useMemo(() => {
         const now = new Date()
@@ -831,16 +827,17 @@ export function AdvancedChartPage({
     }, [candles, candlesSignature, workerIndicators, workerIndicatorSignature])
 
     // Calculate price info
-    const currentPrice = candles.length > 0 ? candles[candles.length - 1].close : 0
-    const prevPrice = candles.length > 1 ? candles[candles.length - 2].close : currentPrice
-    const priceChange = currentPrice - prevPrice
-    const priceChangePercent = prevPrice > 0 ? (priceChange / prevPrice) * 100 : 0
-    const isPositive = priceChange >= 0
-
-    // Live price for crypto
-    const livePrice = marketType === "Kripto" && cryptoPrices[symbol]
-        ? cryptoPrices[symbol].price
-        : currentPrice
+    const candleClose = candles.at(-1)?.close
+    const candlePrice = finiteNumber(candleClose) ? candleClose : undefined
+    const prevPrice = candles.at(-2)?.close
+    const lastBistPrice = useLastMarketQuote(useBorsapy && canUseBorsapy && candlePrice == null ? `${symbol.toUpperCase()}.IS` : "")
+    const lastBistPriceTime = timeFormatters.timeFormatter(lastBistPrice?.provider_time)
+    const livePrice = (marketType === "Kripto" ? cryptoPrices[symbol]?.price : undefined) ?? candlePrice ?? lastBistPrice?.value
+    const priceChange = finiteNumber(candlePrice) && finiteNumber(prevPrice) && prevPrice > 0
+        ? candlePrice - prevPrice : undefined
+    const priceChangePercent = priceChange != null && prevPrice
+        ? (priceChange / prevPrice) * 100 : lastBistPrice?.change
+    const isPositive = (priceChangePercent ?? 0) >= 0
 
     // OHLCV display data
     const displayOHLCV = crosshairData || (candles.length > 0 ? candles[candles.length - 1] : null)
@@ -1367,16 +1364,13 @@ export function AdvancedChartPage({
             map.set(ticker.symbol.toUpperCase(), quote)
             map.set(ticker.name.toUpperCase(), quote)
         }
-        for (const quote of activeWatchlistBistQuotes || []) {
-            const raw = (quote.symbol || "").toUpperCase()
+        for (const [raw, quote] of Object.entries(activeWatchlistBistQuotes ?? {})) {
             const normalized = raw.endsWith(".IS") ? raw.slice(0, -3) : raw
             const payload = {
                 status: quote.message || quote.source || "Borsapy / TradingView",
                 providerTime: quote.provider_time,
-                priceText: typeof quote.regularMarketPrice === "number"
-                    ? quote.regularMarketPrice.toFixed(2)
-                    : "---",
-                change: quote.regularMarketChangePercent ?? Number.NaN,
+                priceText: quote.value?.toFixed(2) ?? "---",
+                change: quote.change ?? Number.NaN,
             }
             if (raw) map.set(raw, payload)
             if (normalized) map.set(normalized, payload)
@@ -1883,14 +1877,21 @@ export function AdvancedChartPage({
                         {/* Price Info */}
                         <div className="flex flex-col">
                             <span className="text-2xl font-bold mono-numbers">
-                                {marketType === "Kripto" ? "$" : "₺"}
-                                {livePrice.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: marketType === "Kripto" ? 4 : 2 })}
+                                {finiteNumber(livePrice)
+                                    ? `${marketType === "Kripto" ? "$" : "₺"}${livePrice.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: marketType === "Kripto" ? 4 : 2 })}`
+                                    : "—"}
                             </span>
-                            <div className={cn("flex items-center gap-1.5 text-sm", isPositive ? "text-profit" : "text-loss")}>
+                            {lastBistPrice && <span className="text-xs text-muted-foreground"
+                                title={[lastBistPrice.source, lastBistPrice.message].filter(Boolean).join(" · ")}>
+                                Son kayıt{lastBistPriceTime && ` · ${lastBistPriceTime} TSİ`}
+                            </span>}
+                            {finiteNumber(priceChangePercent) && <div
+                                title={lastBistPrice ? "Günlük değişim" : "Mum değişimi"}
+                                className={cn("flex items-center gap-1.5 text-sm", isPositive ? "text-profit" : "text-loss")}>
                                 {isPositive ? <TrendingUp className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-                                <span className="font-medium mono-numbers">{isPositive ? "+" : ""}{priceChange.toFixed(2)}</span>
+                                {priceChange != null && <span className="font-medium mono-numbers">{isPositive ? "+" : ""}{priceChange.toFixed(2)}</span>}
                                 <span className="mono-numbers">({isPositive ? "+" : ""}{priceChangePercent.toFixed(2)}%)</span>
-                            </div>
+                            </div>}
                         </div>
                     </div>
 

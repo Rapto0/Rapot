@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useQuery } from "@tanstack/react-query"
 import { fetchServerWatchlists } from "@/lib/api/advanced-alarms-api"
-import { fetchGlobalIndices } from "@/lib/api/client"
 import { useBinanceTickerFeed } from "@/lib/hooks/use-binance-ticker"
+import { useMarketSnapshot } from "@/lib/hooks/use-market-snapshot"
 import { useSession } from "@/lib/hooks/use-session"
 import { serverWatchlistHref, serverWatchlistPage } from "@/lib/server-watchlists"
 import { cn } from "@/lib/utils"
@@ -36,12 +36,8 @@ export function ServerWatchlistPanel({ symbol, market, onSelect }: {
     }, [])
     const selected = selectedId ? lists.data?.watchlists.find(list => list.id === selectedId) : lists.data?.watchlists[0]
     const visible = useMemo(() => serverWatchlistPage(selected?.symbols ?? [], page), [selected, page])
-    const bist = useQuery({ queryKey: ["server-watchlist-quotes", ...identity, ...visible.bist],
-        queryFn: ({ signal }) => fetchGlobalIndices(visible.bist, { signal }),
-        enabled: allowed && visible.bist.length > 0, refetchInterval: 10_000, staleTime: 10_000,
-        gcTime: 60_000, retry: false })
+    const bist = useMarketSnapshot(allowed ? visible.bist : [])
     const crypto = useBinanceTickerFeed(visible.crypto, { paused: !allowed, flushIntervalMs: 500 })
-    const bistQuotes = useMemo(() => new Map((bist.data ?? []).map(quote => [quote.symbol.replace(/\.IS$/, ""), quote])), [bist.data])
 
     if (!allowed) return <div className="p-4 text-sm"><p>Sunucu listeleri için yönetici girişi gerekir.</p><Link href="/login?next=%2Fchart" className="mt-3 inline-flex min-h-11 items-center text-primary underline">Giriş yap</Link></div>
     return <section className="flex min-h-0 min-w-0 flex-1 flex-col" aria-label="Sunucu izleme listesi">
@@ -62,13 +58,13 @@ export function ServerWatchlistPanel({ symbol, market, onSelect }: {
             <div className="max-h-[32rem] min-h-0 flex-1 overflow-y-auto">
                 {!visible.rows.length && <p className="p-4 text-xs text-muted-foreground">Liste boş. Üye eklemek için listeyi yönetin.</p>}
                 {visible.rows.map(row => {
-                    const quote = bistQuotes.get(row.symbol)
+                    const quote = bist.data?.[`${row.symbol}.IS`]
                     const tick = crypto.prices[row.symbol]
                     const isBist = row.market_type === "BIST"
-                    const price = isBist ? quote?.regularMarketPrice : tick?.price
-                    const change = isBist ? quote?.regularMarketChangePercent : tick?.change
+                    const price = isBist ? quote?.value : tick?.price
+                    const change = isBist ? quote?.change : tick?.change
                     const received = crypto.receivedAtBySymbol[row.symbol]
-                    const stale = isBist ? bist.isError || (quote?.state != null && quote.state !== "ok") || (bist.dataUpdatedAt > 0 && now - bist.dataUpdatedAt > 30_000)
+                    const stale = isBist ? bist.isError || bist.isPaused || (quote?.state != null && quote.state !== "ok") || (bist.dataUpdatedAt > 0 && now - bist.dataUpdatedAt > 30_000)
                         : crypto.status !== "connected" || !received || now - received > 60_000
                     const description = isBist ? quote?.message || "Borsapy · veri bekleniyor" : stale ? "Binance · güncel veri bekleniyor" : "Binance · USDT"
                     return <button type="button" key={`${row.market_type}:${row.symbol}`} onClick={() => onSelect(row.symbol, row.market_type)} aria-pressed={symbol === row.symbol && market === row.market_type}

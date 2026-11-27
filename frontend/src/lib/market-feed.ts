@@ -58,7 +58,7 @@ export function isFeedStale(receivedAt: number | undefined, now: number): boolea
 }
 
 export function describeMarketRequest({
-  receivedAt, now, available, total, isError, isFetching, isPaused,
+  receivedAt, now, available, total, isError, isFetching, isPaused, carried = false,
 }: {
   receivedAt: number
   now: number
@@ -67,6 +67,7 @@ export function describeMarketRequest({
   isError: boolean
   isFetching: boolean
   isPaused: boolean
+  carried?: boolean
 }): FeedNotice {
   const previous = available > 0 ? "Son alınan fiyatlar gösteriliyor." : "Fiyatlar alınamadı."
   if (isPaused) return {
@@ -76,6 +77,10 @@ export function describeMarketRequest({
   if (isError) return {
     label: "Yenilenemedi", description: `${previous} Yeniden deneyebilirsiniz.`,
     warning: true, loading: isFetching,
+  }
+  if (carried && available > 0) return {
+    label: "Son kayıt", description: "Bu oturumda alınan fiyatlar gösteriliyor. Güncel yanıt bekleniyor.",
+    warning: false, loading: isFetching,
   }
   if (!receivedAt) return {
     label: "Yükleniyor", description: "Piyasa özeti alınıyor.", warning: false, loading: true,

@@ -351,15 +351,18 @@ test('pagination visits all mixed symbols without silent truncation or unbounded
   assert.equal(listHelpers.serverWatchlistPage([], -5).page, 0);
 });
 
-function serverPanelHarness({ allowed = true, listRows = [mixedList], quotes = [], failed = false } = {}) {
+function serverPanelHarness({ allowed = true, listRows = [mixedList], quotes = {}, failed = false } = {}) {
   const states = [], queries = [], requests = [], streams = [], selections = [];
   let cursor = 0, tree;
   const hooks = { useEffect() {}, useMemo(fn) { return fn(); }, useState(initial) { const index = cursor++; if (!(index in states)) states[index] = typeof initial === 'function' ? initial() : initial; return [states[index], value => { states[index] = typeof value === 'function' ? value(states[index]) : value; }]; } };
   const panel = load('../src/components/charts/server-watchlist-panel.tsx', {
     react: { ...React, ...hooks }, 'react/jsx-runtime': jsxRuntime, 'next/link': { default: 'a' },
-    '@tanstack/react-query': { useQuery(options) { queries.push(options); return { data: options.queryKey[0] === 'advanced-alarm-watchlists' ? { watchlists: listRows } : quotes, isError: options.queryKey[0] === 'server-watchlist-quotes' && failed, isLoading: false, dataUpdatedAt: Date.now(), refetch() {} }; } },
+    '@tanstack/react-query': { useQuery(options) { queries.push(options); return { data: { watchlists: listRows }, isLoading: false, refetch() {} }; } },
     '@/lib/api/advanced-alarms-api': { fetchServerWatchlists() { throw new Error('Unexpected automatic execution'); } },
-    '@/lib/api/client': { fetchGlobalIndices: async (symbols, options) => { requests.push({ symbols, options }); return []; } },
+    '@/lib/hooks/use-market-snapshot': { useMarketSnapshot(symbols) {
+      queries.push({ enabled: symbols.length > 0, queryFn({ signal }) { requests.push({ symbols, signal }); } });
+      return { data: quotes, isError: failed, dataUpdatedAt: Date.now(), refetch() {} };
+    } },
     '@/lib/hooks/use-binance-ticker': { useBinanceTickerFeed(symbols, options) { streams.push({ symbols: plain(symbols), options }); return { prices: {}, receivedAtBySymbol: {}, status: 'connecting', reconnect() {} }; } },
     '@/lib/hooks/use-session': { useSession: () => allowed ? { user: { username: 'admin', is_admin: true }, expiresAt: 1000 } : null },
     '@/lib/server-watchlists': listHelpers, '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') },
@@ -377,7 +380,7 @@ test('chart server panel queries only the visible page and links the selected se
   const signal = new AbortController().signal;
   await query.queryFn({ signal });
   assert.equal(view.requests[0].symbols.length, 50);
-  assert.equal(view.requests[0].options.signal, signal);
+  assert.equal(view.requests[0].signal, signal);
   view.elements().find(e => e.type === 'button' && text(e) === 'Sonraki').props.onClick(); view.render();
   query = view.queries.at(-1); await query.queryFn({ signal });
   assert.equal(view.requests[1].symbols.length, 11);
@@ -392,7 +395,7 @@ test('chart server panel hides private lists when logged out and preserves unkno
   assert.ok(anonymous.queries.every(query => query.enabled === false));
   assert.ok(anonymous.streams.every(stream => stream.options.paused));
   assert.doesNotMatch(anonymous.text(), /Karma liste|THYAO|BTCUSDT/);
-  const view = serverPanelHarness({ failed: true, quotes: [{ symbol: 'THYAO.IS', regularMarketPrice: 10, regularMarketChangePercent: null, message: 'Son veri' }] });
+  const view = serverPanelHarness({ failed: true, quotes: { 'THYAO.IS': { value: 10, message: 'Son veri' } } });
   assert.match(view.text(), /Son kayıt · güncel olmayabilir/);
   assert.match(view.text(), /BTCUSDT/);
   assert.doesNotMatch(view.text(), /BTC\/USD|0%/);

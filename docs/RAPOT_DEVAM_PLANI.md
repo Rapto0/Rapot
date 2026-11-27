@@ -1,8 +1,27 @@
 # Rapot Devam Planı
 
 **Güncel plan: 27 Kasım 2026.** Aşama 4.1 üretimde. Aşama 4.2'nin kalıcı
-kayıt katmanı geliştirildi. BIST kapanış verisini saklama ve RSI hesaplama
-izni olan bir kaynak paketi bulunmadığı için gerçek veri pilotu bekliyor.
+kayıt katmanı gerçek veri pilotunu bekliyor. Kullanıcının devam talimatıyla
+Aşama 5.1'de mevcut BIST fiyatlarının ekranlar arasında paylaşımına geçildi.
+
+## 27 Kasım — Aşama 5.1 ortak BIST fiyatı ve grafik açılışı
+
+- Ana Sayfa, Takipçi ve Grafik'teki yerel/sunucu listeleri aynı mevcut
+  fiyat API'sini ve tarayıcıdaki ortak oturum sorgusunu kullanır. Sembol
+  sırası ve ekranın yenileme aralığı sorgu kimliğini değiştirmez. Farklı
+  kapsamlarda son iki dakikada alınan ortak sembollerin fiyatı, sağlayıcı
+  zamanı ve kaynak bilgisiyle **Son kayıt** olarak yeniden kullanılabilir.
+  Yeni yanıt aynı sembol için fiyat vermediyse eski değer başka ekrandan
+  geri getirilmez.
+- Grafik başlığı mumlar hazırlanırken aynı oturumdaki son BIST fiyatını
+  gösterir. Elde fiyat yoksa fiyat `—` görünür ve değişim yüzdesi gizlenir.
+  Mumlar gelince başlık kendi mum kapanışına döner. Fiyat önizlemesi mum
+  grafiğini veya gösterge hesabını beslemez.
+- Fiyat paylaşımı tarayıcı belleğinde, aynı Rapot oturumunda çalışır.
+  Farklı oturum, yeni sekme ve sayfa yeniden yüklemesi normal ilk sorguyla
+  başlar. Mevcut sorgu aralıkları ve API'nin 50 sembol sınırı korunur.
+  Kripto fiyatlarının ortak bağlantısı, mum geçmişinin açılış dilimi ve
+  artımlı taşıma kararı Aşama 5'in sonraki işidir.
 
 ## 27 Kasım — Aşama 4.2 kapanış hazırlığı ve kalıcılık
 
@@ -222,7 +241,8 @@ gerçek emir/Telegram teslimini ve açık seans boyunca 631 sembolü kapsamaz.
   hedefini ayrı doğrula. Kaynak verisi olmayan hücre gerekçesiyle dönsün.
 - [ ] **Aşama 5 — Ortak fiyat/mum akışı ve grafik.** Ana sayfa, Takipçi ve
   Grafik için ortak sağlayıcı adaptörleri, kaynak zamanları ve ilk anlık
-  görüntü. İlk adım mevcut okunabilir veriye, sonraki adım ölçüm gerekçesi
+  görüntü. [Aşama 5.1 kaydı](#27-kasım--aşama-51-ortak-bist-fiyatı-ve-grafik-açılışı)
+  mevcut BIST fiyat okumalarını kapsar. Sonraki adım ölçüm gerekçesi
   varsa seçime göre artımlı yayın. Tek yönlü bildirim için SSE ve mevcut
   oturumlu WebSocket'i bağlantı sayısı, destek ve yeniden bağlanma açısından
   karşılaştır. Düşük frekanslı ekranlarda kontrollü sorgu yeterli olabilir.

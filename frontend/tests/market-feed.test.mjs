@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import * as React from 'react';
 import * as jsxRuntime from 'react/jsx-runtime';
 import { renderToStaticMarkup } from 'react-dom/server';
+import { QueryClient, QueryObserver } from '@tanstack/react-query';
 import ts from 'typescript';
 
 function load(path, imports = {}, globals = {}) {
@@ -284,12 +285,15 @@ test('streaming strips mark stale receipts and categories expose named status an
   assert.match(html, /disabled=""/);
 });
 
-function hookHarness(fetchImplementation) {
+function hookHarness(fetchImplementation, {
+  client = new QueryClient(),
+  session = { user: { username: 'admin', is_admin: true }, expiresAt: 123 },
+} = {}) {
   const timers = new Map(), cleared = [], calls = [];
   let nextTimer = 0, options;
   const hook = load('../src/lib/hooks/use-market-snapshot.ts', {
-    './use-private-market': { usePrivateMarket: () => ({ allowed: true, sessionKey: 'admin:123' }) },
-    '@tanstack/react-query': { useQuery(value) { options = value; return { query: 'sentinel' }; } },
+    './use-session': { useSession: () => session },
+    '@tanstack/react-query': { useQuery(value) { options = value; return { query: 'sentinel' }; }, useQueryClient: () => client },
     '@/lib/market-feed': feed,
     '@/lib/api/client': {
       fetchGlobalIndices(symbols, request) {
@@ -314,7 +318,7 @@ function hookHarness(fetchImplementation) {
       listeners.delete(callback); controller.signal.removeEventListener(type, callback);
     },
   };
-  return { hook, calls, timers, cleared, listeners, signal, controller, get options() { return options; } };
+  return { hook, client, calls, timers, cleared, listeners, signal, controller, get options() { return options; } };
 }
 
 function pendingUntilAbort(signal) {
@@ -416,6 +420,44 @@ test('query integration polls every ten seconds without retries and links the qu
   h.controller.abort();
   await rejected;
   assertCleaned(h);
+});
+
+test('same-session snapshots share symbols across pages, retain source time, and still refresh', async () => {
+  const tracker = hookHarness(async () => { throw new Error('HTTP 503'); });
+  const { client } = tracker;
+  const now = Date.now();
+  const key = (scope, user = 'admin:123') => ['private-market-snapshot', user, scope];
+  const thyao = { value: 296, change: 0, state: 'ok', source: 'BIST', provider_time: '2026-11-27T10:01:00Z' };
+  client.setQueryData(key(['ASELS.IS', 'THYAO.IS']), { 'ASELS.IS': { value: 70 }, 'THYAO.IS': thyao }, { updatedAt: now - 6_000 });
+  client.setQueryData(key(['ASELS.IS']), {}, { updatedAt: now - 4_000 });
+  client.setQueryData(key(['TUPRS.IS']), { 'TUPRS.IS': { value: 44 } }, { updatedAt: now - 121_000 });
+  client.setQueryData(key(['GARAN.IS'], 'other:123'), { 'GARAN.IS': { value: 42 } }, { updatedAt: now });
+  client.setQueryData(key(['AKBNK.IS']), { 'AKBNK.IS': { value: 8 } }, { updatedAt: 0 });
+  const symbols = ['THYAO.IS', 'asels.is', 'GARAN.IS', ' TUPRS.IS ', 'THYAO.IS', 'AKBNK.IS'];
+  tracker.hook.useMarketSnapshot(symbols, 120_000);
+  assert.equal(tracker.calls.length, 0);
+  const initial = plain(tracker.options.initialData());
+  assert.deepEqual(Object.keys(initial), ['THYAO.IS']);
+  assert.deepEqual(initial['THYAO.IS'], { ...thyao, state: 'stale', message: 'Bu oturumda alınan son fiyat' });
+  assert.equal(tracker.options.initialDataUpdatedAt, 0);
+  assert.equal(tracker.options.refetchInterval, 120_000);
+  tracker.hook.useMarketSnapshot([...symbols].reverse(), 10_000);
+  assert.deepEqual(plain(tracker.options.queryKey), key(['AKBNK.IS', 'ASELS.IS', 'GARAN.IS', 'THYAO.IS', 'TUPRS.IS']));
+  assert.deepEqual(plain(tracker.hook.useLastMarketQuote('THYAO.IS')), initial['THYAO.IS']);
+  const guest = hookHarness(() => assert.fail('Unexpected guest request'), { client, session: null });
+  guest.hook.useMarketSnapshot(symbols);
+  assert.equal(guest.options.enabled, false);
+  assert.equal(guest.options.initialData(), undefined);
+  assert.equal(guest.hook.useLastMarketQuote('THYAO.IS'), undefined);
+
+  const observer = new QueryObserver(client, tracker.options);
+  assert.deepEqual(plain(observer.getCurrentResult().data), initial);
+  const afterError = await observer.refetch();
+  assert.equal(afterError.isError, true);
+  assert.equal(afterError.dataUpdatedAt, 0);
+  assert.deepEqual(plain(afterError.data), initial);
+  assert.equal(tracker.calls.length, 1);
+  observer.destroy();
 });
 
 test('the market API forwards the cancellation signal and repeated symbol query parameters', async () => {
