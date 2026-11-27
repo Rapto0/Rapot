@@ -1,10 +1,20 @@
 # Rapot Devam Planı
 
-**Güncel plan: 27 Kasım 2026.** Aşama 4.1 üretimde. Aşama 4.2'nin kalıcı
-kayıt katmanı gerçek veri pilotunu bekliyor. Kullanıcının devam talimatıyla
-Aşama 5.1'de mevcut BIST fiyatlarının ekranlar arasında paylaşımına geçildi.
+**Güncel plan: 27 Kasım 2026.** Ön yüzde Aşama 5.1, API'de Aşama 4.1
+üretimde. Aşama 4.2'nin kalıcı kayıt katmanı gerçek veri pilotunu bekliyor.
 
 ## 27 Kasım — Aşama 5.1 ortak BIST fiyatı ve grafik açılışı
+
+Ön yüz `927d36ae461d2c9865ec20659b16966ad87e6a80` **13:53:54 TSİ**
+yayımlandı. **13:54:00 TSİ** ayrı kabulde 10 sayfa, 36 statik dosya, beş
+anonim erişim sınırı ve altı metin işareti geçti. API `fbdbaa4a`,
+Compose/current, middleware ve PostgreSQL aynı container'larda kaldı.
+Dört servis sağlıklı, yeniden başlatma sayaçları sıfır. Dört etkin alarm,
+412 olay ve 15 tablo korundu. 1.224.704 bayt taze yedek ayrı veritabanına
+geri yüklendi. Yayın sonrası yaklaşık 3,63 GiB boş disk vardı. Yayın
+kanıtı `b457e09f107b03526a3160e2a723e0894fd44f38ddf3b079abab75ff9131f560`.
+[Kaynak kontrolleri](https://github.com/Rapto0/Rapot/actions/runs/45983867170),
+[temiz imaj yayını](https://github.com/Rapto0/Rapot/actions/runs/45984365552).
 
 - Ana Sayfa, Takipçi ve Grafik'teki yerel/sunucu listeleri aynı mevcut
   fiyat API'sini ve tarayıcıdaki ortak oturum sorgusunu kullanır. Sembol
@@ -22,6 +32,17 @@ Aşama 5.1'de mevcut BIST fiyatlarının ekranlar arasında paylaşımına geçi
   başlar. Mevcut sorgu aralıkları ve API'nin 50 sembol sınırı korunur.
   Kripto fiyatlarının ortak bağlantısı, mum geçmişinin açılış dilimi ve
   artımlı taşıma kararı Aşama 5'in sonraki işidir.
+- 337 ön yüz testi, üretim derlemesi ve standalone proxy geçti. Yerel
+  tarayıcı senaryosunda, fiyat isteği örnek API'de altı saniye bekletilirken
+  THYAO fiyatı Takipçi'ye aynı oturumda **0,29 sn** içinde geçti. Grafik
+  beklerken paylaşılan fiyatı ve sağlayıcı saatini gösterdi. Yeni sekmede
+  `—` görüldü ve örnek mumlar gelince başlık mum kapanışına döndü.
+  Bu tek yerel ölçümdür.
+- Canlı oturumda 13:54 TSİ örneğinde Ana Sayfa 4/4 BIST fiyatı gösterdi.
+  THYAO grafiği mum beklerken `₺314,00` ve 13:54 TSİ sağlayıcı zamanını,
+  1.000 mum hazır olduğunda `₺314,50` mum kapanışını gösterdi.
+  Mum hacmi için mevcut eksik veri uyarısı göründü. Canlı fiyat gecikmesi
+  ve açılış sürelerinin yüzdelikleri bu örnekle ölçülmedi.
 
 ## 27 Kasım — Aşama 4.2 kapanış hazırlığı ve kalıcılık
 
