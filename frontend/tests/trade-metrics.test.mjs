@@ -83,7 +83,9 @@ function renderTrades(rawTrades, rawStats = undefined, session = adminSession) {
       ['TableHeader', 'thead'], ['TableRow', 'tr'],
     ]),
     '@/lib/hooks/use-session': { useSession: () => session },
+    '@/lib/api/core': { ApiError: class ApiError extends Error {} },
     '@/lib/hooks/use-trades': {
+      TRADE_HISTORY_LIMIT: 100,
       useTrades: () => ({ data: rawTrades.map(normalizers.transformTrade), isLoading: false, isError: false }),
       useTradeStats: () => ({ data: rawStats === undefined ? undefined : tradeStats(rawStats, session).data }),
     },

@@ -23,6 +23,42 @@ test('private market and calendar requests stop before HTTP when the session is 
     assert.equal(client.calls.length, 1);
 });
 
+test('the request deadline covers a slow response body even when a caller supplies an abort signal', async () => {
+    const client = createClient();
+    const caller = new AbortController();
+    let startBody;
+    const bodyStarted = new Promise(resolve => { startBody = resolve; });
+    client.respond((_url, { signal }) => ({
+        ok: true, status: 200,
+        json: () => new Promise((_resolve, reject) => {
+            signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+            startBody();
+        }),
+    }));
+    const request = client.core.fetchApi('/api/health', { signal: caller.signal });
+    const rejected = assert.rejects(request, error => error.status === 408);
+    await bodyStarted;
+    client.expire();
+    await rejected;
+    assert.equal(caller.signal.aborted, false);
+});
+
+test('caller cancellation remains an abort and an unsuccessful session probe settles bootstrap', async () => {
+    const client = createClient();
+    const caller = new AbortController();
+    client.respond((_url, { signal }) => new Promise((_resolve, reject) => {
+        signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+    }));
+    const pending = client.core.fetchApi('/api/health', { signal: caller.signal });
+    caller.abort();
+    await assert.rejects(pending, error => error.name === 'AbortError');
+    assert.equal(client.session.getSessionChecked(), false);
+    client.respond(() => Response.json({ authenticated: false }));
+    assert.equal(await client.auth.hydrateSession(), false);
+    assert.equal(client.session.getSessionChecked(), true);
+    assert.equal(client.session.getSession(), null);
+});
+
 // Run the real TS modules in memory with an offline fetch implementation.
 function createClient(apiBase = '/api', healthBase = '/health-api') {
     const modules = new Map();

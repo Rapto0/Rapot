@@ -165,6 +165,7 @@ test('changing market updates the example without guessing from or overwriting t
 test('landing page uses the search component and clear heading hierarchy without a seconds claim', () => {
   const model = load('../src/lib/market-feed.ts');
   const category = load('../src/components/dashboard/market-category.tsx', {
+    '@/lib/bist-session': load('../src/lib/bist-session.ts'),
     'react/jsx-runtime': jsxRuntime, 'lucide-react': icons,
     '@/lib/market-feed': model,
     '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') },

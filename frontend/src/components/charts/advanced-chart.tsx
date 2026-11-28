@@ -14,7 +14,7 @@ import {
 import { useBinanceTickerFeed } from "@/lib/hooks/use-binance-ticker"
 import { useChartCandles } from "@/lib/hooks/use-chart-candles"
 import { useLastMarketQuote, useMarketSnapshot } from "@/lib/hooks/use-market-snapshot"
-import { useSession } from "@/lib/hooks/use-session"
+import { useSession, useSessionChecked } from "@/lib/hooks/use-session"
 import { finiteNumber } from "@/lib/market-feed"
 import { MarketDataStatus } from "@/components/market-data-status"
 import { BORSAPY_INTERVALS, borsapyVolumeWarning, mergeBorsapyCandles } from "@/lib/api/borsapy-chart-api"
@@ -155,6 +155,7 @@ export function AdvancedChartPage({
     const timeFormattersRef = useRef(timeFormatters)
     const [timeframe, setTimeframe] = useState("1d")
     const session = useSession()
+    const sessionChecked = useSessionChecked()
     const useBorsapy = marketType === "BIST"
     const canUseBorsapy = Boolean(session?.user.is_admin && !session.user.disabled)
     const bistTimeframes = useBorsapy ? BORSAPY_INTERVALS : BIST_ALLOWED_TIMEFRAMES
@@ -1885,7 +1886,7 @@ export function AdvancedChartPage({
                     <div className="flex flex-wrap items-center gap-3">
                         {marketType === "BIST" && <span className="text-xs text-muted-foreground">Borsapy / TradingView</span>}
                         <span className="rounded border border-border px-2 py-1 text-xs text-muted-foreground">{timeFormatters.label}</span>
-                        {useBorsapy && <Link className="text-xs text-primary underline" href={canUseBorsapy ? "/research?tab=connection" : "/login?next=%2Fchart"}>{canUseBorsapy ? "Hesap bağlantısı" : "Grafik için yönetici girişi"}</Link>}
+                        {useBorsapy && sessionChecked && <Link className="text-xs text-primary underline" href={canUseBorsapy ? "/research?tab=connection" : "/login?next=%2Fchart"}>{canUseBorsapy ? "Hesap bağlantısı" : "Grafik için yönetici girişi"}</Link>}
                         {/* Quick Timeframes */}
                         <div className="flex items-center bg-muted/30 rounded-sm p-1">
                             {availableQuickTimeframes.map((tf) => (
@@ -2172,7 +2173,7 @@ export function AdvancedChartPage({
                 {volumeWarning && <p role="status" className="shrink-0 border-t border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-300">{volumeWarning}</p>}
                 <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-4 py-2 border-t border-border/30 text-xs text-muted-foreground">
                     <div className="flex flex-wrap items-center gap-4">
-                        <span className="flex items-center gap-1.5">{useBorsapy
+                        <span className="flex items-center gap-1.5">{!sessionChecked ? "Oturum kontrol ediliyor…" : useBorsapy
                             ? !canUseBorsapy ? "Yönetici girişi gerekli" : chartStream.isError ? "Akış alınamadı · son mumlar gösteriliyor" : chartStream.data?.message || "TradingView akışı bekleniyor"
                             : isCandlesError ? hasChartCandles ? "Yenileme başarısız · son mumlar gösteriliyor" : "Veri alınamadı" : isCandlesFetching ? "Güncelleniyor" : "Periyodik veri"}</span>
                         <span>{candles.length} mum</span>

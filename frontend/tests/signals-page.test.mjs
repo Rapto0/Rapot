@@ -61,10 +61,12 @@ test('dashboard keeps previous list rows on refresh failure but clearly marks th
   nodes(h.tree).find(node => node.type === 'button').props.onClick(); assert.deepEqual(h.calls, ['refresh']);
 });
 
-function aiHarness() {
+function aiHarness(respond = async () => ({ inspection: { timeframes: [] }, structured_analysis: { error_code: 'generation_error' } })) {
   const state = hooks(), calls = [];
-  const component = load('../src/components/ai/ai-terminal.tsx', { ...primitives, react: state.react, 'lucide-react': icons,
-    '@/lib/api/client': { fetchAIAnalysis: async params => { calls.push(params); return { inspection: { timeframes: [] } }; } },
+  const requestRef = { current: null };
+  const component = load('../src/components/ai/ai-terminal.tsx', { ...primitives, react: { ...state.react, useRef: () => requestRef }, 'lucide-react': icons,
+    '@/lib/api/client': { fetchAIAnalysis: async (params, signal) => { calls.push(params); return respond(signal); } },
+    '@/lib/api/core': { ApiError: class ApiError extends Error {} },
     '@/lib/hooks/use-analyses': { useRecentAnalyses: () => ({ data: [], refetch() {} }) },
     '@/components/indicators/strategy-inspector-panel': { StrategyInspectorPanel: 'indicator-inspector' },
     '@/lib/hooks/use-private-market': { usePrivateMarket: () => ({ allowed: true, sessionKey: 'admin:123' }) },
@@ -82,8 +84,25 @@ test('manual AI retains COMBO/HUNTER and timeframe inputs; only explicit analysi
   assert.deepEqual(JSON.parse(JSON.stringify(h.calls)), [{ symbol: 'GARAN', strategy: 'COMBO', market_type: 'BIST', timeframe: '1W' }]);
 });
 
+test('cancelling manual AI aborts the browser request and ignores its late model response', async () => {
+  let signal, complete;
+  const h = aiHarness(requestSignal => { signal = requestSignal; return new Promise(resolve => { complete = resolve; }); });
+  let tree = h.render();
+  nodes(tree).find(node => node.props['aria-label'] === 'Analiz sembolü').props.onChange({ target: { value: 'THYAO' } });
+  tree = h.render();
+  const pending = nodes(tree).find(node => node.type === 'button' && text(node).includes('AI Yorumla')).props.onClick();
+  tree = h.render();
+  nodes(tree).find(node => node.type === 'button' && text(node).includes('Beklemeyi iptal et')).props.onClick();
+  assert.equal(signal.aborted, true);
+  complete({ structured_analysis: { error_code: 'generation_error' }, inspection: { timeframes: [] } });
+  await pending;
+  assert.match(text(h.render()), /Analiz sonucunu bekleme iptal edildi/);
+  assert.doesNotMatch(text(h.render()), /AI modeli kullanılabilir/);
+});
+
 test('manual AI guest page does not mount private query or calculation components', () => {
   const component = load('../src/components/ai/ai-terminal.tsx', { ...primitives, react: React, 'lucide-react': icons,
+    '@/lib/api/core': { ApiError: class ApiError extends Error {} },
     '@/lib/api/client': {}, '@/lib/hooks/use-analyses': { useRecentAnalyses() { throw Error('private query mounted'); } },
     '@/components/indicators/strategy-inspector-panel': { StrategyInspectorPanel() { throw Error('calculator mounted'); } },
     '@/lib/hooks/use-private-market': { usePrivateMarket: () => ({ allowed: false, sessionKey: 'guest' }) },

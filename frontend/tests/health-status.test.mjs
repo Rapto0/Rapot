@@ -121,6 +121,7 @@ function renderHealth(health, alarms, session = admin, onQuery = () => {}) {
     '@/components/ui/page-shell': { PageShell: ({ children, actions, title }) => React.createElement('main', null, title, actions, children) },
     '@/components/ui/kpi-ribbon': { KpiRibbon: ({ items }) => React.createElement('section', null, ...items.map(item => React.createElement('span', { key: item.label }, item.label + ':' + item.value))) },
     '@/components/ui/button': { Button: 'button' },
+    '@/components/dashboard/bist-session-status': { BistSessionStatus: () => null },
     '@/components/ui/input': { Input: 'input' },
   });
   return renderToStaticMarkup(React.createElement(page.default));

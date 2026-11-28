@@ -16,7 +16,8 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { useSession } from "@/lib/hooks/use-session"
-import { useTrades, useTradeStats } from "@/lib/hooks/use-trades"
+import { TRADE_HISTORY_LIMIT, useTrades, useTradeStats } from "@/lib/hooks/use-trades"
+import { ApiError } from "@/lib/api/core"
 import { formatDate, cn } from "@/lib/utils"
 import { formatMetric, formatMetricPercent, formatTradePrice, metricTextClass, metricTone } from "@/lib/metric-display"
 import { EmptyState } from "@/components/shared/error-boundary"
@@ -36,10 +37,12 @@ export default function TradesPage() {
   const allowed = Boolean(session?.user.is_admin && !session.user.disabled)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
 
-  const { data: trades, isLoading, isError, refetch, isFetching } = useTrades({ status: statusFilter })
-  const { data: stats } = useTradeStats()
+  const { data: trades, isLoading, isError, error, refetch, isFetching, dataUpdatedAt } = useTrades({ status: statusFilter })
+  const statsQuery = useTradeStats()
+  const stats = statsQuery.data
 
-  const rows = trades ?? []
+  const accessDenied = error instanceof ApiError && (error.status === 401 || error.status === 403)
+  const rows = accessDenied ? [] : trades ?? []
 
   const ribbon = useMemo(() => {
     return {
@@ -50,7 +53,7 @@ export default function TradesPage() {
     }
   }, [stats])
 
-  if (!allowed) {
+  if (!allowed || accessDenied) {
     return (
       <PageShell
         label="İşlemler"
@@ -59,7 +62,7 @@ export default function TradesPage() {
       >
         <section className="space-y-3 border border-border bg-surface p-5">
           <p className="text-sm text-muted-foreground">
-            {session ? "İşlem geçmişi için yönetici yetkisi gerekiyor." : "İşlem geçmişini görmek için yönetici hesabınızla giriş yapın."}
+            {session && !(error instanceof ApiError && error.status === 401) ? "İşlem geçmişi için yönetici yetkisi gerekiyor." : "İşlem geçmişini görmek için yönetici hesabınızla giriş yapın."}
           </p>
           <Link href="/login?next=%2Ftrades" className="inline-flex min-h-11 items-center rounded-sm border border-border px-4 text-sm hover:bg-raised">
             Giriş yap
@@ -75,7 +78,7 @@ export default function TradesPage() {
       title="İşlem geçmişi"
       description="PnL yalnız kapanmış işlemler için kayıtlıdır. Toplam, işlemlerin kendi para birimlerini toplar; döviz dönüşümü içermez."
       actions={
-        <Button type="button" variant="outline" size="sm" className="min-h-11 gap-1.5" onClick={() => refetch()} disabled={isFetching}>
+        <Button type="button" variant="outline" size="sm" className="min-h-11 gap-1.5" onClick={() => void Promise.all([refetch(), statsQuery.refetch()])} disabled={isFetching || statsQuery.isFetching}>
           <RefreshCw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />
           Yenile
         </Button>
@@ -97,6 +100,7 @@ export default function TradesPage() {
           },
         ]}
       />
+      {statsQuery.isError && <p role="status" className="text-xs text-warning">İşlem özeti yenilenemedi.</p>}
 
       <section className="border border-border bg-surface p-3">
         <FilterChips
@@ -108,8 +112,9 @@ export default function TradesPage() {
       </section>
 
       <section className="border border-border bg-surface">
-        <div className="border-b border-border px-3 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-3 py-2">
           <span className="label-uppercase">Kayıtlar</span>
+          {dataUpdatedAt > 0 && <span className="text-xs text-muted-foreground">En yeni {TRADE_HISTORY_LIMIT} kayıt · Son alım {new Date(dataUpdatedAt).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" })}</span>}
         </div>
 
         <Table>
@@ -119,7 +124,7 @@ export default function TradesPage() {
               <TableHead>Piyasa</TableHead>
               <TableHead>Yön</TableHead>
               <TableHead className="text-right">Giriş</TableHead>
-              <TableHead className="text-right">Güncel</TableHead>
+              <TableHead className="text-right">Canlı fiyat</TableHead>
               <TableHead className="text-right">Miktar</TableHead>
               <TableHead className="text-right">Gerçekleşmiş PnL</TableHead>
               <TableHead>Durum</TableHead>
@@ -138,7 +143,7 @@ export default function TradesPage() {
             {isError ? (
               <TableRow>
                 <TableCell colSpan={9} className="py-8 text-center text-xs text-loss">
-                  İşlem listesi yüklenemedi.
+                  {trades ? "İşlem listesi yenilenemedi. Son başarılı kayıtlar gösteriliyor." : "İşlem listesi yüklenemedi."}
                 </TableCell>
               </TableRow>
             ) : null}
@@ -151,9 +156,7 @@ export default function TradesPage() {
               </TableRow>
             ) : null}
 
-            {!isLoading &&
-              !isError &&
-              rows.map((trade) => (
+            {rows.map((trade) => (
                 <TableRow key={trade.id} className="hover:bg-raised">
                   <TableCell className="font-semibold text-foreground">{trade.symbol}</TableCell>
                   <TableCell>

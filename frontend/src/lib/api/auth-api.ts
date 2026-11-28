@@ -1,10 +1,13 @@
 import {
     clearSession,
     getSessionGeneration,
+    markSessionChecked,
     setSession,
     type AuthUser,
 } from '../auth/session';
 import { API_BASE_URL, ApiError, fetchApi } from './core';
+
+const SESSION_CHECK_TIMEOUT_MS = 8_000;
 
 interface SessionStatusResponse {
     authenticated: boolean;
@@ -41,7 +44,7 @@ export async function signIn(username: string, password: string): Promise<void> 
 export async function hydrateSession(): Promise<boolean> {
     const generationBefore = getSessionGeneration();
     try {
-        const result = await fetchApi<SessionStatusResponse>(`${API_BASE_URL}/auth/session`);
+        const result = await fetchApi<SessionStatusResponse>(`${API_BASE_URL}/auth/session`, { timeoutMs: SESSION_CHECK_TIMEOUT_MS });
         if (getSessionGeneration() !== generationBefore) {
             return false;
         }
@@ -61,6 +64,8 @@ export async function hydrateSession(): Promise<boolean> {
         return false;
     } catch {
         return false;
+    } finally {
+        markSessionChecked();
     }
 }
 

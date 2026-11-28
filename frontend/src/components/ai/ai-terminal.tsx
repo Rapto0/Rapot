@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Brain, Loader2, RefreshCw } from "lucide-react"
 
 import {
@@ -15,12 +15,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn, getTimeAgo } from "@/lib/utils"
 import { usePrivateMarket } from "@/lib/hooks/use-private-market"
+import { ApiError } from "@/lib/api/core"
 
 type MarketType = "AUTO" | "BIST" | "Kripto"
 type StrategyType = "COMBO" | "HUNTER"
 type TimeframeType = "ALL" | "1D" | "1W" | "2W" | "3W" | "1M"
-
-const EMPTY_RESULT: StructuredAIAnalysisResponse | null = null
 
 export function AITerminal() {
   const { allowed, sessionKey } = usePrivateMarket()
@@ -34,9 +33,12 @@ function ManualAITerminal() {
   const [marketType, setMarketType] = useState<MarketType>("AUTO")
   const [strategy, setStrategy] = useState<StrategyType>("HUNTER")
   const [timeframe, setTimeframe] = useState<TimeframeType>("ALL")
-  const [result, setResult] = useState<StructuredAIAnalysisResponse | null>(EMPTY_RESULT)
+  const [result, setResult] = useState<StructuredAIAnalysisResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const request = useRef<AbortController | null>(null)
+  useEffect(() => () => request.current?.abort(), [])
 
   const recentAnalysesQuery = useRecentAnalyses(16)
 
@@ -52,30 +54,52 @@ function ManualAITerminal() {
 
   const runAnalysis = async () => {
     const normalizedSymbol = symbol.trim().toUpperCase()
-    if (!allowed || isLoading) return
+    if (!allowed || request.current) return
     if (!normalizedSymbol) {
       setError("Sembol girin.")
       return
     }
 
+    const controller = new AbortController()
+    request.current = controller
     setIsLoading(true)
     setError(null)
+    setNotice(null)
     try {
       const analysis = await fetchAIAnalysis({
         symbol: normalizedSymbol,
         market_type: marketType,
         strategy,
         timeframe,
-      })
-      setResult(analysis)
+      }, controller.signal)
+      if (request.current === controller && !controller.signal.aborted) {
+        const modelError = analysis.structured_analysis.error_code
+        if (modelError) {
+          setError(modelError === "timeout" ? "AI modeli zamanında yanıt vermedi." : "AI modeli kullanılabilir bir sonuç üretemedi.")
+        } else {
+          setResult(analysis)
+        }
+      }
     } catch (analysisError) {
-      setResult(null)
-      setError(
-        analysisError instanceof Error ? analysisError.message : "AI analizi alınamadı."
-      )
+      if (request.current === controller && !controller.signal.aborted) {
+        const message = analysisError instanceof Error ? analysisError.message : "AI analizi alınamadı."
+        if (analysisError instanceof ApiError && analysisError.status === 408) setError("Analiz isteği zaman aşımına uğradı.")
+        else if (analysisError instanceof ApiError && analysisError.status === 400) setError(`Teknik veri veya istek doğrulanamadı. ${message}`)
+        else setError(message)
+      }
     } finally {
-      setIsLoading(false)
+      if (request.current === controller) {
+        request.current = null
+        if (!controller.signal.aborted) setIsLoading(false)
+      }
     }
+  }
+
+  const cancelAnalysis = () => {
+    request.current?.abort()
+    request.current = null
+    setIsLoading(false)
+    setNotice("Analiz sonucunu bekleme iptal edildi.")
   }
 
   const loadAnalysisContext = (analysis: AIAnalysis) => {
@@ -88,6 +112,7 @@ function ManualAITerminal() {
   const structured = result?.structured_analysis ?? null
   const inspectionRows = result?.inspection.timeframes ?? []
   const isRefreshing = recentAnalysesQuery.isFetching
+  const recent = (recentAnalysesQuery.data ?? []).filter(analysis => analysis.signalId === null)
 
   return (
     <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-3 p-3">
@@ -200,13 +225,18 @@ function ManualAITerminal() {
             </div>
           </section>
 
+          {isLoading && <div role="status" className="flex flex-wrap items-center justify-between gap-2 border border-border bg-surface px-3 py-2 text-xs">
+            <p>{result ? "Analiz hazırlanıyor. Önceki sonuç aşağıda gösteriliyor." : "Veri ve model yanıtı bekleniyor…"}</p>
+            <Button type="button" variant="outline" size="sm" onClick={cancelAnalysis}>Beklemeyi iptal et</Button>
+          </div>}
+          {notice && <p role="status" className="text-xs text-muted-foreground">{notice}</p>}
           {error ? (
-            <section className="border border-[rgba(239,68,68,0.35)] bg-surface px-3 py-3 text-xs text-loss">
-              {error}
+            <section role="alert" className="border border-[rgba(239,68,68,0.35)] bg-surface px-3 py-3 text-xs text-loss">
+              {error}{result && " Önceki analiz aşağıda gösteriliyor."}
             </section>
           ) : null}
 
-          {!result && !error ? (
+          {!result && !error && !isLoading ? (
             <section className="border border-dashed border-border bg-surface px-4 py-12">
               <div className="label-uppercase">Hazır</div>
               <div className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
@@ -237,8 +267,8 @@ function ManualAITerminal() {
                     </div>
                     <div className="text-right text-[10px] text-muted-foreground">
                       <div>{result.symbol} / {result.market_type}</div>
-                      <div>{timeframeLabel(result.timeframe)}</div>
-                      <div>{getTimeAgo(result.updated_at)}</div>
+                      <div>{result.strategy} · {timeframeLabel(result.timeframe)}</div>
+                      <div>Analiz zamanı {new Date(result.updated_at).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" })}</div>
                     </div>
                   </div>
 
@@ -301,14 +331,15 @@ function ManualAITerminal() {
               <span className="label-uppercase">Manuel analizler</span>
             </div>
             <div className="max-h-[420px] overflow-auto">
+              {recentAnalysesQuery.isError && <p role="alert" className="px-3 py-2 text-xs text-loss">Analiz geçmişi yenilenemedi.</p>}
               {recentAnalysesQuery.isLoading ? (
                 <div className="px-3 py-6 text-center text-xs text-muted-foreground">Yükleniyor...</div>
-              ) : (recentAnalysesQuery.data?.length ?? 0) === 0 ? (
+              ) : recent.length === 0 && !recentAnalysesQuery.isError ? (
                 <div className="px-3 py-6 text-center text-xs text-muted-foreground">
                   Henüz manuel analiz kaydı yok.
                 </div>
               ) : (
-                (recentAnalysesQuery.data ?? []).filter(analysis => analysis.signalId === null).map((analysis) => (
+                recent.map((analysis) => (
                   <button
                     key={analysis.id}
                     type="button"

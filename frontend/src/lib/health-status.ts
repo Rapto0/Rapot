@@ -44,6 +44,10 @@ function optionalCount(value: unknown): number | null {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
 
+function optionalDuration(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
 export function deriveAlarmRuntime(query: StatusQuery<AdvancedAlarmStatus>, now = Date.now()) {
   const data = usable(query) ? query.data : undefined;
   const lastCycle = typeof data?.last_cycle_at === 'string' ? Date.parse(data.last_cycle_at) : NaN;
@@ -68,6 +72,9 @@ export function deriveAlarmRuntime(query: StatusQuery<AdvancedAlarmStatus>, now 
     marketState: typeof market?.state === 'string' ? market.state : null,
     freshSymbols: optionalCount(market?.fresh_symbols ?? market?.ready_symbols),
     trackedSymbols: optionalCount(market?.tracked_symbols ?? market?.symbol_count),
+    quoteAge: optionalDuration(market?.quote_age_seconds),
+    sourceAge: optionalDuration(market?.source_age_seconds),
+    lastCycleDuration: optionalDuration(data?.evaluation?.cycle_ms),
     nativeStreamsConnected: optionalCount(custom?.native_streams_connected),
     nativeRegistered: optionalCount(custom?.native_subscriptions_registered),
     nativeCapacity: optionalCount(custom?.native_physical_capacity),

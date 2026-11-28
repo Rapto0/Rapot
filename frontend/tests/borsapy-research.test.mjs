@@ -379,3 +379,23 @@ test('portfolio editor preserves case-sensitive FX aliases and renders editable 
   component.find(node => node.type === 'input' && node.props.value === 'gram-altin').props.onChange({ target: { value: 'ons-altin' } });
   assert.equal(JSON.parse(next)[0].symbol, 'ons-altin');
 });
+
+test('research refresh keeps the successful result for the current inputs and clears it when the query changes', async () => {
+  let attempts = 0;
+  const panel = harness('../src/components/research/operation-panel.tsx', 'OperationPanel', {
+    '@/lib/api/borsapy-api': { async runResearchQuery() {
+      attempts += 1;
+      if (attempts > 1) throw Error('Sağlayıcı yanıt vermedi');
+      return { source: 'Örnek kaynak', as_of: '2026-11-28T08:00:00Z', summary: { marker: 'KORUNAN_SONUÇ' } };
+    } },
+    './research-chart': {}, './result-table': { ResultTable: () => null }, './value-chart': { ValueChart: () => null }, './research-utils': utils,
+  }, {}, { operation: { id: 'quotes', label: 'Fiyat', description: '', source: 'Örnek kaynak', view: 'table', fields: [{ name: 'symbol', label: 'Sembol', type: 'text', required: true }] }, initialParams: { symbol: 'THYAO' }, onSaved() {}, onConnection() {} });
+  const submit = async () => { await panel.find(node => node.type === 'form').props.onSubmit({ preventDefault() {} }); panel.render(); };
+  await submit();
+  await submit();
+  assert.match(text(panel.tree()), /Son başarılı sorgu sonucu aşağıda gösteriliyor/);
+  assert.match(text(panel.tree()), /KORUNAN_SONUÇ/);
+  panel.find(node => node.props.name === 'symbol').props.onChange({ target: { value: 'GARAN' } });
+  panel.render();
+  assert.doesNotMatch(text(panel.tree()), /KORUNAN_SONUÇ|Sağlayıcı yanıt vermedi/);
+});

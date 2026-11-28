@@ -13,6 +13,7 @@ export interface AuthSession {
 // Session metadata lives only in memory; the actual browser session credential is an HttpOnly cookie.
 let session: AuthSession | null = null;
 let sessionGeneration = 0;
+let sessionChecked = false;
 let expiryTimer: ReturnType<typeof setTimeout> | undefined;
 const listeners = new Set<() => void>();
 
@@ -24,6 +25,16 @@ export function getSessionGeneration(): number {
     return sessionGeneration;
 }
 
+export function getSessionChecked(): boolean {
+    return sessionChecked;
+}
+
+export function markSessionChecked(): void {
+    if (sessionChecked) return;
+    sessionChecked = true;
+    listeners.forEach((listener) => listener());
+}
+
 export function subscribeSession(listener: () => void): () => void {
     listeners.add(listener);
     return () => { listeners.delete(listener); };
@@ -33,6 +44,7 @@ export function setSession(next: AuthSession | null): void {
     if (expiryTimer !== undefined) clearTimeout(expiryTimer);
     expiryTimer = undefined;
     sessionGeneration += 1;
+    sessionChecked = true;
     session = next && next.expiresAt > Date.now() ? next : null;
     if (session) {
         expiryTimer = setTimeout(() => setSession(null), session.expiresAt - Date.now());

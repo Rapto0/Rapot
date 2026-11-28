@@ -9,7 +9,7 @@ export function load(relative, imports = {}, suffix = '') {
   const code = ts.transpileModule(readFileSync(new URL(relative, import.meta.url), 'utf8') + suffix, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
-  const context = vm.createContext({ exports: {}, URLSearchParams, require(name) {
+  const context = vm.createContext({ exports: {}, URLSearchParams, AbortController, require(name) {
     const values = { 'react/jsx-runtime': jsxRuntime, ...imports };
     assert.ok(Object.hasOwn(values, name), `Unexpected import: ${name}`); return values[name];
   } });

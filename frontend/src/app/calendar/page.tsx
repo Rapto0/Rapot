@@ -62,7 +62,7 @@ function CalendarWorkspace({ sessionKey }: { sessionKey: string }) {
     return () => clearInterval(timer)
   }, [])
   const { fromDate, toDate } = resolveCalendarRange(today, windowPreset)
-  const countryParam = countries.join(",")
+  const countryParam = [...countries].sort().join(",")
   const query = useQuery({
     queryKey: ["calendar-page", sessionKey, fromDate, toDate, countryParam],
     queryFn: ({ signal }) => fetchEconomicCalendar({ from_date: fromDate, to_date: toDate, country: countryParam }, { signal }),
@@ -76,6 +76,7 @@ function CalendarWorkspace({ sessionKey }: { sessionKey: string }) {
       if (current.length >= 3) return current
       return [...current, code]
     })
+    setSelectedDate("all")
     setSelectedCountry("all")
   }
   const events = useMemo(() => mapCalendarEvents(query.data?.events ?? []), [query.data])
@@ -100,6 +101,7 @@ function CalendarWorkspace({ sessionKey }: { sessionKey: string }) {
           <RefreshCw aria-hidden="true" className={cn("h-3.5 w-3.5", query.isFetching && "animate-spin")} />{query.isFetching ? "Yenileniyor…" : "Yenile"}
         </Button>
       </div>
+      {query.dataUpdatedAt > 0 && <p className="text-xs text-muted-foreground">Tarayıcının son başarılı sorgusu <time dateTime={new Date(query.dataUpdatedAt).toISOString()}>{new Date(query.dataUpdatedAt).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" })}</time> (İstanbul)</p>}
       <p className="text-xs text-muted-foreground">Sağlayıcı veriyi 1 saat önbellekte tutabilir. 5 dakikalık otomatik yenileme veya Yenile düğmesi yeni veri geldiği anlamına gelmez.</p>
       <p className="text-xs text-muted-foreground">Olay saatleri kaynaktaki haliyle gösterilir; saat dilimi doğrulanmadığı için İstanbul veya UTC saatine çevrilmez.</p>
       {metadata?.state === "stale" && <p role="status" className="text-xs text-warning">Kaynak yenilenemedi; önceki yanıt gösteriliyor. Alınma zamanını kontrol edin.</p>}
@@ -136,8 +138,8 @@ function CalendarWorkspace({ sessionKey }: { sessionKey: string }) {
       <FilterChips label="Etki" options={IMPACT_OPTIONS} value={selectedImpact} onChange={setSelectedImpact} />
       <FilterChips label="Bölge" options={countryOptions} value={selectedCountry} onChange={setSelectedCountry} />
     </section>
-    {query.isError && <p role="alert" className="border border-border p-4 text-sm text-loss">Takvim alınamadı. {query.error instanceof Error ? query.error.message : "Daha sonra yeniden deneyin."}</p>}
-    {query.isLoading ? <p role="status" className="p-6 text-center text-sm text-muted-foreground">Takvim yükleniyor…</p> : visible.length === 0 ? <p className="border border-border p-6 text-center text-sm text-muted-foreground">{query.isError ? "Gösterilebilecek takvim yanıtı yok." : "Bu filtrelerde yayımlanmış kayıt bulunamadı. Bu sonuç kesin olarak olay olmadığı anlamına gelmez."}</p> :
+    {query.isError && <p role="alert" className="border border-border p-4 text-sm text-loss">{query.data ? "Takvim yenilenemedi. Bu kapsamın son başarılı yanıtı gösteriliyor." : "Takvim alınamadı."} {query.error instanceof Error ? query.error.message : "Daha sonra yeniden deneyin."}</p>}
+    {query.isLoading ? <p role="status" className="p-6 text-center text-sm text-muted-foreground">Takvim yükleniyor…</p> : visible.length === 0 ? <p className="border border-border p-6 text-center text-sm text-muted-foreground">{query.isError && !query.data ? "Gösterilebilecek takvim yanıtı yok." : "Bu filtrelerde yayımlanmış kayıt bulunamadı."}</p> :
       <div className="overflow-x-auto border border-border bg-surface">
         <table className="w-full min-w-[760px] text-left text-xs">
           <thead className="border-b border-border text-muted-foreground"><tr>{["Tarih / kaynak saati", "Bölge", "Etki", "Olay", "Güncel", "Tahmin", "Önceki"].map(label => <th key={label} scope="col" className="p-3 font-normal">{label}</th>)}</tr></thead>

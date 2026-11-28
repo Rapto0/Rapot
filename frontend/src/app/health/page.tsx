@@ -11,6 +11,7 @@ import { useSession } from "@/lib/hooks/use-session"
 import { cn } from "@/lib/utils"
 import { PageShell } from "@/components/ui/page-shell"
 import { KpiRibbon } from "@/components/ui/kpi-ribbon"
+import { BistSessionStatus } from "@/components/dashboard/bist-session-status"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
@@ -38,6 +39,9 @@ const MARKET_STATE_LABELS: Record<string, string> = {
 
 const formatCount = (value: number | null | undefined) =>
   typeof value === "number" && Number.isFinite(value) ? value.toLocaleString("tr-TR") : "—"
+
+const formatDuration = (value: number | null | undefined, unit: string) =>
+  value == null ? "—" : `${value.toLocaleString("tr-TR", { maximumFractionDigits: 2 })} ${unit}`
 
 function MeasurementTime({ value }: { value?: number | null }) {
   if (value == null) return <>Henüz yok</>
@@ -163,6 +167,18 @@ export default function HealthPage() {
             </dd>
           </div>
           <div>
+            <dt className="text-muted-foreground">BIST seans takvimi</dt>
+            <dd className="mt-1"><BistSessionStatus /></dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Son fiyat alımının yaşı</dt>
+            <dd className="mono-numbers mt-1">{formatDuration(alarms.quoteAge, "sn")}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Kaynak zamanının yaşı</dt>
+            <dd className="mono-numbers mt-1">{formatDuration(alarms.sourceAge, "sn")}</dd>
+          </div>
+          <div>
             <dt className="text-muted-foreground">Güncel / izlenen sembol</dt>
             <dd className="mono-numbers mt-1">{formatCount(alarms.freshSymbols)} / {formatCount(alarms.trackedSymbols)}</dd>
           </div>
@@ -200,6 +216,7 @@ export default function HealthPage() {
         <dl className="grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
           <div><dt className="text-muted-foreground">Son başarılı alarm durumu sorgusu</dt><dd><MeasurementTime value={alarms.lastMeasuredAt} /></dd></div>
           <div><dt className="text-muted-foreground">Son kontrol turu</dt><dd>{alarms.lastCycle === null ? "—" : new Date(alarms.lastCycle).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" })}</dd></div>
+          <div><dt className="text-muted-foreground">Son kontrol turunun süresi</dt><dd>{formatDuration(alarms.lastCycleDuration, "ms")}</dd></div>
           <div><dt className="text-muted-foreground">Bekleyen bildirim</dt><dd>{alarms.pendingDeliveries ?? "—"}</dd></div>
           <div><dt className="text-muted-foreground">Telegram bağlantısı</dt><dd>{alarms.telegramConfigured === null ? "Bilinmiyor" : alarms.telegramConfigured ? "Tanımlı" : "Tanımlı değil"}</dd></div>
         </dl>

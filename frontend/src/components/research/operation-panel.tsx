@@ -50,7 +50,12 @@ export function OperationPanel({ operation, initialParams, onSaved, onConnection
     const request = useRef<AbortController | null>(null)
     const form = useRef<HTMLFormElement>(null)
     useEffect(() => () => request.current?.abort(), [])
-    function changeDraft(name: string, value: string) { setDraft(current => changeResearchParam(operation.fields, current, name, value)); setResult(null) }
+    function changeDraft(name: string, value: string) {
+        setDraft(current => changeResearchParam(operation.fields, current, name, value))
+        setResult(null)
+        setError("")
+        setNotice("")
+    }
     function params() {
         const parsed = researchParams(operation.fields, draft)
         if (operation.fields.some(field => field.name === "positions")) {
@@ -67,7 +72,7 @@ export function OperationPanel({ operation, initialParams, onSaved, onConnection
         try { payload = params() } catch (cause) { setError(cause instanceof Error ? cause.message : "Alanları kontrol edin."); return }
         const controller = new AbortController()
         request.current = controller
-        setPending(true); setError(""); setNotice(""); setResult(null)
+        setPending(true); setError(""); setNotice("")
         try {
             const next = await runResearchQuery(operation.id, payload, controller.signal)
             if (!controller.signal.aborted) { setResult(next); setResultKey(key => key + 1) }
@@ -108,9 +113,9 @@ export function OperationPanel({ operation, initialParams, onSaved, onConnection
             </form>
             <div className="mt-5 flex flex-wrap items-end gap-2 border-t border-border pt-4"><label className="flex-1 space-y-1 text-xs text-muted-foreground"><span>Bu ayarları daha sonra kullan</span><Input className="min-h-11" aria-label="Kaydedilecek araştırmanın adı" value={name} onChange={event => setName(event.target.value)} maxLength={80} placeholder="Ör. Temettü araştırmam" disabled={pending} /></label><Button className="min-h-11" type="button" variant="outline" disabled={pending} onClick={() => void save()}><Save aria-hidden="true" />Ayarları kaydet</Button></div>
         </section>
-        {error && <p role="alert" className="border border-loss/40 bg-loss/5 p-4 text-sm text-loss">{error}</p>}
+        {error && <p role="alert" className="border border-loss/40 bg-loss/5 p-4 text-sm text-loss">{error}{result && " Son başarılı sorgu sonucu aşağıda gösteriliyor."}</p>}
         {notice && <p role="status" className="border border-border bg-surface p-3 text-sm">{notice}</p>}
-        {pending && <div role="status" className="animate-pulse border border-border bg-surface p-6 text-sm text-muted-foreground">Sağlayıcı yanıtı bekleniyor…</div>}
+        {pending && <div role="status" className="border border-border bg-surface p-4 text-sm text-muted-foreground">{result ? "Yanıt bekleniyor. Son başarılı sorgu sonucu gösteriliyor." : "Sağlayıcı yanıtı bekleniyor…"}</div>}
         {!result && !pending && !error && <div className="border border-dashed border-border p-8 text-center"><p className="text-sm text-muted-foreground">Alanları seçip sorguyu çalıştırın.</p><p className="mt-2 text-xs text-muted-foreground">Sonuçlar kaynağı ve alınma zamanı ile burada gösterilir.</p></div>}
         {result && <div key={resultKey} className="space-y-4">
             <div className="flex flex-wrap gap-x-5 gap-y-2 border border-border bg-surface p-3 text-xs text-muted-foreground"><span>Kaynak: {result.source}</span><span>Alınma: {researchDate(result.as_of)} (Türkiye)</span><span>Canlı piyasa kabulü doğrulanmadı</span></div>

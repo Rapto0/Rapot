@@ -235,11 +235,24 @@ test('a connected feed without valid prices stops indefinite loading after thirt
   assert.equal(stale.warning, true);
 });
 
+const sessionCalendar = load('../src/lib/bist-session.ts');
 const category = load('../src/components/dashboard/market-category.tsx', {
   'react/jsx-runtime': jsxRuntime,
   'lucide-react': { RefreshCw: () => null, AlertCircle: () => null },
   '@/lib/market-feed': feed,
+  '@/lib/bist-session': sessionCalendar,
   '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') },
+});
+
+test('BIST display schedule distinguishes weekends, official holidays, half days and unverified years', () => {
+  const label = value => sessionCalendar.bistSessionLabel(Date.parse(value));
+  assert.match(label('2026-11-28T08:00:00Z'), /Hafta sonu/);
+  assert.match(label('2026-10-29T08:00:00Z'), /Resmî tatil/);
+  assert.match(label('2026-10-28T09:59:00Z'), /Yarım gün/);
+  assert.match(label('2026-10-28T10:00:00Z'), /kapalı/);
+  assert.match(label('2026-11-30T06:39:00Z'), /kapalı/);
+  assert.match(label('2026-11-30T06:40:00Z'), /Planlı seans/);
+  assert.match(label('2027-01-04T08:00:00Z'), /Güncel seans takvimi bekleniyor/);
 });
 function strip(row, props = {}) {
   return renderToStaticMarkup(React.createElement(category.MarketStrip, {

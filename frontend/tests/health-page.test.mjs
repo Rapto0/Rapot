@@ -21,6 +21,7 @@ function health(allowed, response = {}, connectionData = undefined, providerQuer
     '@/lib/health-status': healthStatus,
     '@/lib/hooks/use-health': { useApiHealth: () => ({ apiState: 'unknown', label: 'Bilinmiyor' }), useAlarmRuntimeHealth: () => ({ label: 'Doğrulanamadı', lastCycle: null, telegramConfigured: null }) },
     '@/components/ui/kpi-ribbon': { KpiRibbon: () => null },
+    '@/components/dashboard/bist-session-status': { BistSessionStatus: () => 'Seans kapalı' },
     '@/components/ui/input': { Input: 'input' },
   });
   return { html: renderToStaticMarkup(React.createElement(page.default)), queries, requests };

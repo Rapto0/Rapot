@@ -2,6 +2,7 @@ import { RefreshCw, AlertCircle } from "lucide-react"
 import { finiteNumber, isFeedStale, receivedAge, type FeedNotice } from "@/lib/market-feed"
 import { cn } from "@/lib/utils"
 import type { MarketSourceMetadata } from "@/lib/api/types"
+import { bistSessionLabel } from "@/lib/bist-session"
 
 export interface MarketRow extends MarketSourceMetadata {
   key: string
@@ -33,6 +34,7 @@ export function MarketCategoryPanel({
         <div>
           <h2 id={`${id}-heading`} className="label-uppercase">{label}</h2>
           <p className="mt-1 text-[10px] text-muted-foreground">{description}</p>
+          <p className="mt-1 text-[10px] text-muted-foreground">{id === "bist" ? bistSessionLabel(now) : streaming ? "Spot piyasa · 7/24" : "İşlem saatleri ürüne göre değişir"}</p>
         </div>
         <span className="mono-numbers text-[10px] text-muted-foreground">{available}/{rows.length} fiyat</span>
       </div>

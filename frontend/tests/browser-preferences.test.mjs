@@ -39,6 +39,25 @@ function fakeStorage(initial = {}) {
   };
 }
 
+test('protected pages wait for the cookie session check while public pages render', () => {
+  let path = '/calendar';
+  let checked = false;
+  const { MainContent } = load('../src/components/layout/main-content.tsx', {
+    'react/jsx-runtime': jsxRuntime,
+    'next/navigation': { usePathname: () => path },
+    '@/lib/hooks/use-session': { useSessionChecked: () => checked },
+  });
+  const render = () => renderToStaticMarkup(React.createElement(MainContent, null, 'ROUTE_CONTENT'));
+  assert.match(render(), /Oturum kontrol ediliyor/);
+  assert.doesNotMatch(render(), /ROUTE_CONTENT/);
+  checked = true;
+  assert.match(render(), /ROUTE_CONTENT/);
+  assert.doesNotMatch(render(), /Oturum kontrol ediliyor/);
+  checked = false;
+  path = '/';
+  assert.match(render(), /ROUTE_CONTENT/);
+});
+
 const { cleanupLegacyBrowserSettings } = load('../src/lib/browser-preferences.ts');
 const unsafeValues = {
   telegramChatId: 'private-chat', telegramToken: 'private-telegram',

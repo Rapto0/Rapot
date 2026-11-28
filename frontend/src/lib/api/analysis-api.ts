@@ -22,7 +22,7 @@ export async function fetchAnalysis(id: number): Promise<ApiAIAnalysis> {
     return fetchApi<ApiAIAnalysis>(`${API_BASE_URL}/analyses/${id}`);
 }
 
-export async function fetchAIAnalysis(params: AIAnalysisParams): Promise<StructuredAIAnalysisResponse> {
+export async function fetchAIAnalysis(params: AIAnalysisParams, signal?: AbortSignal): Promise<StructuredAIAnalysisResponse> {
     const searchParams = new URLSearchParams();
     searchParams.set('symbol', params.symbol);
     if (params.market_type && params.market_type !== 'AUTO') {
@@ -36,6 +36,6 @@ export async function fetchAIAnalysis(params: AIAnalysisParams): Promise<Structu
     }
 
     return fetchApi<StructuredAIAnalysisResponse>(
-        `${API_BASE_URL}/market/analysis?${searchParams.toString()}`
+        `${API_BASE_URL}/market/analysis?${searchParams.toString()}`, { signal }
     );
 }

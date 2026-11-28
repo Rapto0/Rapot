@@ -81,7 +81,7 @@ function extractDetailMessage(payload: unknown): string | null {
 
 export async function fetchApi<T>(
     url: string,
-    options: RequestInit = {}
+    { timeoutMs = DEFAULT_API_TIMEOUT_MS, ...options }: RequestInit & { timeoutMs?: number } = {}
 ): Promise<T> {
     const headers = new Headers(options.headers);
     if (!headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
@@ -105,66 +105,60 @@ export async function fetchApi<T>(
         if (csrfToken) headers.set('X-CSRF-Token', csrfToken);
     }
 
-    let controller: AbortController | null = null;
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    const callerSignal = options.signal;
+    const controller = typeof AbortController === 'function' ? new AbortController() : null;
+    const signal = controller?.signal ?? callerSignal;
+    const forwardAbort = () => controller?.abort(callerSignal?.reason);
+    if (controller && callerSignal?.aborted) forwardAbort();
+    else if (controller) callerSignal?.addEventListener('abort', forwardAbort, { once: true });
     let timedOut = false;
-    let signal = options.signal;
-    if (!signal && typeof AbortController === 'function') {
-        controller = new AbortController();
-        signal = controller.signal;
-        timeoutId = setTimeout(() => {
-            timedOut = true;
-            controller?.abort();
-        }, DEFAULT_API_TIMEOUT_MS);
-    }
+    const timeoutId = controller ? setTimeout(() => {
+        if (controller.signal.aborted) return;
+        timedOut = true;
+        controller.abort();
+    }, timeoutMs) : null;
 
-    let response: Response;
     try {
-        response = await fetch(url, {
+        const response = await fetch(url, {
             ...options,
             headers,
             signal,
             credentials: options.credentials ?? (coreApi ? 'same-origin' : undefined),
             cache: options.cache ?? 'no-store',
         });
-    } catch (error) {
-        if (timedOut) {
-            throw new ApiError('İstek zaman aşımına uğradı. Lütfen tekrar deneyin.', 408);
+        if (!response.ok) {
+            if (response.status === 401) {
+                if (token && headers.get('Authorization') === `Bearer ${token}`) {
+                    clearSession(token);
+                } else if (coreApi && activeSession && generation !== null && !headers.has('Authorization')) {
+                    clearSession(generation);
+                }
+            }
+            let message = response.status === 401 ? 'Bu işlem için giriş yapın.'
+                : response.status === 403 ? 'Bu işlem için yetkiniz bulunmuyor.'
+                    : response.status === 429 ? 'İstek sınırına ulaşıldı. Biraz sonra tekrar deneyin.'
+                        : `API error: ${response.statusText}`;
+            if (DETAIL_STATUSES.has(response.status)) {
+                try {
+                    const detail = extractDetailMessage(await response.json());
+                    if (detail) message = detail;
+                } catch (error) {
+                    if (signal?.aborted) throw error;
+                }
+            }
+            throw new ApiError(message, response.status);
         }
+        try {
+            return await response.json() as T;
+        } catch (error) {
+            if (signal?.aborted) throw error;
+            throw new ApiError('Invalid JSON response', response.status);
+        }
+    } catch (error) {
+        if (timedOut) throw new ApiError('İstek zaman aşımına uğradı. Lütfen tekrar deneyin.', 408);
         throw error;
     } finally {
         if (timeoutId !== null) clearTimeout(timeoutId);
-    }
-
-    if (!response.ok) {
-        if (response.status === 401) {
-            if (token && headers.get('Authorization') === `Bearer ${token}`) {
-                clearSession(token);
-            } else if (coreApi && activeSession && generation !== null && !headers.has('Authorization')) {
-                clearSession(generation);
-            }
-        }
-        let message = response.status === 401 ? 'Bu işlem için giriş yapın.'
-            : response.status === 403 ? 'Bu işlem için yetkiniz bulunmuyor.'
-                : response.status === 429 ? 'İstek sınırına ulaşıldı. Biraz sonra tekrar deneyin.'
-                    : `API error: ${response.statusText}`;
-        if (DETAIL_STATUSES.has(response.status)) {
-            try {
-                const payload: unknown = await response.json();
-                const detail = extractDetailMessage(payload);
-                if (detail) message = detail;
-            } catch { /* Keep the bounded HTTP status message if JSON detail is unavailable. */ }
-        }
-        throw new ApiError(
-            message,
-            response.status
-        );
-    }
-
-    try {
-        const payload: unknown = await response.json();
-        return payload as T;
-    } catch {
-        throw new ApiError('Invalid JSON response', response.status);
+        if (controller) callerSignal?.removeEventListener('abort', forwardAbort);
     }
 }

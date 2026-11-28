@@ -171,6 +171,7 @@ function harness({ allowed = true, ruleRows = [], listRows = [], localLists = []
     'lucide-react': Object.fromEntries(['Activity', 'Bell', 'List', 'Pencil', 'Plus', 'RefreshCw', 'Trash2'].map(x => [x, 'svg'])),
     '@/components/ui/action-dialog': { ActionDialog: 'dialog' }, '@/components/ui/button': { Button: 'button' }, '@/components/ui/input': { Input: 'input' }, '@/components/ui/page-shell': { PageShell: 'main' }, '@/components/ui/select': { Select: 'select' },
     '@/components/alarms/condition-builder': { ConditionBuilder: 'condition-builder' },
+    '@/components/dashboard/bist-session-status': { BistSessionStatus: () => null },
     '@/lib/hooks/use-session': { useSession: () => allowed ? { user: { username: 'admin', is_admin: true }, expiresAt: 1000 } : null },
     '@/lib/api/core': { ApiError: class ApiError extends Error {} },
     '@/lib/api/client': Object.fromEntries(['fetchBistSymbols', 'fetchCryptoSymbols'].map(name => [name, async () => { requests.push({ name, args: [] }); return symbolLoader(name); }])),
@@ -341,11 +342,14 @@ test('rule cards show measured coverage, waiting reasons and a distinct paused o
   };
   function render(overrides) {
     const row = { ...rule, ...overrides };
-    const view = harness({ ruleRows: [row] });
+    const view = harness({ ruleRows: [row], eventQuery: { data: { events: [
+      { ...eventRow(9, 'sent'), rule_id: 'rule' }, { ...eventRow(8, 'pending'), rule_id: 'rule' },
+    ] } } });
     return renderToStaticMarkup(view.elements().find(element => element.props.rule === row));
   }
   assert.match(render({}), /Veri bekleniyor.*0 \/ 3 hazır · 2 kontrol edildi.*Son bekleme nedeni.*taze fiyat bekleniyor/);
   assert.doesNotMatch(render({}), /Kontrol sorunu/);
+  assert.match(render({}), /Görünen son olay · Telegram&#x27;a gönderildi/);
   assert.match(render({ ready_this_tick: 1 }), /Veri kısmen hazır.*1 \/ 3 hazır · 2 kontrol edildi/);
   assert.match(render({ ready_this_tick: 3, checked_this_tick: 3, last_error: null }), /Veri hazır.*3 \/ 3 hazır/);
   assert.match(render({ enabled: false }), /Duraklatıldı/);

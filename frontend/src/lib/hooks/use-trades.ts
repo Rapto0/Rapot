@@ -3,6 +3,7 @@ import { fetchStats, fetchTrades, transformStats, transformTrade, type TradesPar
 import { useSession } from './use-session';
 
 export type Trade = ReturnType<typeof transformTrade>;
+export const TRADE_HISTORY_LIMIT = 100;
 
 interface UseTradesOptions {
     status?: 'all' | 'OPEN' | 'CLOSED' | 'CANCELLED';
@@ -16,13 +17,13 @@ function useTradesAccess() {
 }
 
 // Fetch persisted trade records; valuation data is not part of this endpoint.
-async function fetchTradesData(options: UseTradesOptions = {}): Promise<Trade[]> {
+async function fetchTradesData(options: UseTradesOptions = {}, signal?: AbortSignal): Promise<Trade[]> {
     const { status } = options;
 
-    const params: TradesParams = { limit: 100 };
+    const params: TradesParams = { limit: TRADE_HISTORY_LIMIT };
     if (status && status !== 'all') params.status = status;
 
-    const apiTrades = await fetchTrades(params);
+    const apiTrades = await fetchTrades(params, signal);
     return apiTrades.map(transformTrade);
 }
 
@@ -32,7 +33,7 @@ export function useTrades(options: UseTradesOptions = {}) {
 
     return useQuery({
         queryKey: ['trades', sessionKey, status],
-        queryFn: () => fetchTradesData({ status }),
+        queryFn: ({ signal }) => fetchTradesData({ status }, signal),
         enabled: allowed,
         retry: false,
     });
@@ -51,7 +52,7 @@ export function useTradeStats() {
 
     return useQuery({
         queryKey: ['trades', 'stats', sessionKey],
-        queryFn: fetchStats,
+        queryFn: ({ signal }) => fetchStats(signal),
         enabled: allowed,
         retry: false,
         select: (stats) => {

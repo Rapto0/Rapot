@@ -3,12 +3,14 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { signOut } from '@/lib/api/auth-api';
-import { useSession } from '@/lib/hooks/use-session';
+import { useSession, useSessionChecked } from '@/lib/hooks/use-session';
 
 export function SessionControls() {
     const session = useSession();
+    const checked = useSessionChecked();
     const pathname = usePathname();
     const className = 'inline-flex min-h-11 items-center border border-border px-3 text-xs hover:bg-raised md:min-h-8 md:px-2';
+    if (!checked && !session) return null;
     if (!session) {
         return <Link className={className} href={`/login?next=${encodeURIComponent(pathname)}`}>Giriş yap</Link>;
     }
