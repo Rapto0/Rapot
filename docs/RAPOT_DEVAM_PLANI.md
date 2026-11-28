@@ -1,7 +1,80 @@
 # Rapot Devam Planı
 
-**28 Kasım 2026.** Ön yüzde Aşama 6.2, API'de Aşama 4.1 üretimde.
-Aşama 4.2'nin kalıcı RSI kayıt katmanı gerçek veri pilotunu bekliyor.
+**28 Kasım 2026.** Birleşik ekran ve veri akışı sürümü üretimde. Aşama 5
+ve 6'nın ekran geliştirmeleri tamamlandı. API'de Aşama 4.1 çalışıyor.
+Kalıcı RSI pilotu izinli kaynağı, tam seans ölçümleri açık BIST seansını bekliyor.
+
+## 28 Kasım — Birleşik ekran, veri akışı ve sunucu kontrolü
+
+Ön yüz `d99c6774a1b4b533ed36aa46a7fd1dfd52386efb` **11:58:31 TSİ**
+yayımlandı. **11:58:37 TSİ** bağımsız kabulde 13 sayfa, 41 statik dosya,
+16 metin işareti, sekiz anonim 401, iki 307 yönlendirmesi ve özel 404 geçti.
+API `fbdbaa4a`, Compose/current, middleware ve PostgreSQL mevcut container'larda
+kaldı. Dört servis sağlıklı ve yeniden başlatma sayaçları sıfırdı. Dört etkin
+alarm, 418 olay ve 15 tablo korundu. Taze 1.134.592 baytlık yedek bağımsız
+veritabanına geri yüklendi. Kabulde 3,12 GiB boş disk vardı. Yayın ve kabul kanıtı
+`c76169275252c583bebf37f5c89cc23e79fd2d6704a2e3e7a87ffda59739972c`.
+[Kaynak kontrolleri](https://github.com/Rapto0/Rapot/actions/runs/46127384353),
+[temiz imaj yayını](https://github.com/Rapto0/Rapot/actions/runs/46127402664).
+
+| Ekran | Yayınlanan değişiklik ve kabul |
+|---|---|
+| Ana Sayfa, Alarm Merkezi, Sistem Sağlığı | BIST planlı seansı ile sağlayıcı akış durumu ayrı gösterilir. 2026 resmî tatil ve yarım günleri kaynak takvime göre ele alınır. Sonraki yılların doğrulanmamış hafta içi takvimi bekleme durumunda kalır. Alarm kartı görünen son olayın teslimini gösterir. Sağlıkta kaynak saati yaşı, son fiyat alım yaşı ve kontrol turunun süresi ayrı görünür. |
+| Araştırma | Aynı girdilerle yeniden çalıştırılan sorgu sürerken ya da hata verdiğinde son başarılı sonuç kalır. Girdiler değişince önceki kapsam kaldırılır. Ağır sorgular mevcut çalıştır düğmesiyle başlar. |
+| Takvim | Aynı ülkeler, seçim sırasından bağımsız tek sorgu anahtarı kullanır. Aynı kapsamın son başarılı yanıtı ağ hatasında korunur. Tarayıcı ve sunucu alım saati ile kaynağın yayımladığı olay saati ayrı görünür. |
+| AI | Elle başlatılan istek ilerleme ve bekleme iptali gösterir. Teknik veri ve model hataları ayrılır. Önceki başarılı çıktı kendi sembol, strateji, periyot ve analiz saatiyle kalır. İptal tarayıcının beklemesini durdurur. |
+| İşlem Geçmişi | İlk istek en çok 100 işlem getirir. Özet ve liste birlikte yenilenir. Yetkisizlik, boş kapsam ve yenileme hatası ayrı görünür. Geçici hatada kayıtlar korunur. Gerçekleşmiş PnL ile canlı fiyat sütunları ayrıdır. |
+| Giriş, Ayarlar ve Grafik | Özel ekranlar çerez kontrolü sırasında yükleme durumu gösterir. Grafik sembolü ilk HTML'de görünür. Açık oturum aynı kökene ait dönüş adresini kullanır. Çıkış özel sonuçları ve sorgu önbelleğini temizler. |
+| Eski alarmlar ve bağlantılar | `/alarms/legacy` ve `/alarms/local` açıldı. `/signals` → `/alarms` ve `/tradingview` → `/ai` yönlendirmeleri tekrar doğrulandı. |
+
+Ortak API zaman aşımı, çağıranın iptal sinyali ve yanıt gövdesiyle birlikte
+çalışır. Başlangıçtaki çerez kontrolü için ayrı 8 saniye sınırı vardır. 356
+ön yüz ve 70 hedefli Python testi, üretim derlemesi, standalone proxy,
+beş GitHub işi ve 470 paketlik sıfır bulgulu npm denetimi geçti. Deneme
+tarayıcısında Araştırma, Takvim ve İşlem Geçmişi kesintide son kayıtlarını
+korudu. AI beklemesi iptal edilince önceki çıktı kaldı. 390 px mobil denemede
+çıkış özel sonucu kaldırdı, giriş aynı ekrana döndü. Sağlayıcı/model hata
+denemeleri yerel örnek yanıtlarla yapıldı.
+
+Canlı tarayıcı BIST için **Seans kapalı · Hafta sonu** durumunu ve yeni
+sağlık alanlarını gösterdi. Takipçi ilk gözlemde 400 RSI hücresini hazırlıyor
+olarak gösterdi. Sonraki gözlemde **394/400 sayısal**, bunun 384'ü son
+kayıt olarak görünüyordu. Yenilenmesi beklenen hücreler ayrıca sayıldı.
+THYAO grafiğinde ilk 160 mum göründü. 1.000 mumluk geçmiş bu kısa gözlem
+penceresinde tamamlanmadı. Oturum açıkken `/login?next=%2Ftrades` bağlantısı
+İşlem Geçmişi'ne güvenli dönüşü gösterdi. Dış HTTPS ölçümünde 13 sayfa için
+üçer örneğin medyanı **0,282–0,365 sn** arasında kaldı. Ölçüm ilk HTTP
+başlıklarına kadar olan süreyi kapsar. İlk kullanılabilir veri ve tam seans
+gecikmeleri açık kabul kalemleridir.
+
+### Lisans, kapasite ve DigitalOcean uyarıları
+
+- Aşama 4.2'nin izinli kapanış kaynağına yönelik yerel testleri tekrar geçti.
+  Gerçek pilot için sunucuda mum saklamaya ve RSI türetmeye izin veren bir
+  kaynak gerekiyor. Borsa İstanbul gün sonu/gecikmeli veri ve DataStore
+  kanallarını yayımlıyor. TradingView'in yayımladığı kapsam otomatik toplama
+  ve ekran dışı kullanımı sınırlıyor. [Borsa İstanbul veri yayını](https://www.borsaistanbul.com/veriler/veri-yayini),
+  [DataStore](https://www.borsaistanbul.com/veriler/gecmise-donuk-veri-satisi),
+  [TradingView koşulları](https://www.tradingview.com/policies/).
+- Aşama 5'te fiyat için mevcut Binance WebSocket ve BIST ortak sorgusu,
+  olay akışı için kimlikten itibaren sorgu kullanılıyor. Seçilen düzenin
+  değiştirilmesi açık seans kapsama ve gecikme ölçümüne bağlı. SSE tek yönlü
+  akışta adaydır. [Binance Spot WebSocket](https://developers.binance.com/en/docs/products/spot/web-socket-streams),
+  [SSE protokolü](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events).
+- Aşama 7'nin **11:46 TSİ** kapalı seans örneğinde 1 vCPU üzerinde 3 saniyelik
+  10 aralıkta CPU %8,31–64,77, kullanılabilir bellek 245,7–249,1 MiB oldu.
+  Swap kullanımı 415,7 MiB ve 30 saniyede 65 sayfa giriş, 923 sayfa çıkış
+  vardı. VPS boyutu kararı tam seans örneğini bekliyor. Planlı BIST saatleri
+  ve tatiller için [Pay Piyasası işlem saatleri](https://www.borsaistanbul.com/en/trading-hours),
+  [2026 tatil tablosu](https://www.borsaistanbul.com/files/pay-piyasasi-2026-yili-tatil-tablosu.pdf).
+- DigitalOcean bülteni ve NGINX, OpenJDK, PHP uyarıları incelendi. Ubuntu
+  22.04 ana sisteminde ve çalışan dört Rapot container'ında PHP/Java komutu
+  bulunmadı. Çalışan NGINX dosyası, kurulu Ubuntu `1.18.0-6ubuntu14.24`
+  paketiyle eşleşti. Ubuntu iki HTTP/2 CVE'sini `.23` ile düzeltti. NGINX
+  yapılandırması geçerliydi ve HTTP/2 dinleyicisi yoktu. Bu dört ileti için
+  Rapot sunucusunda ek işlem gerekmiyor. [Ubuntu NGINX duyurusu](https://ubuntu.com/security/notices/USN-9159-1),
+  [Ubuntu OpenJDK duyurusu](https://ubuntu.com/security/notices/USN-9158-1),
+  [PHP sürüm duyuruları](https://news-web.php.net/php.announce/start/500).
 
 ## 28 Kasım — Aşama 6.2 Alarm durumu ve sağlık ölçümleri
 
@@ -411,7 +484,7 @@ gerçek emir/Telegram teslimini ve açık seans boyunca 631 sembolü kapsamaz.
   son kapanış okunabilsin. Kullanılabilir geçmişi olan pilotta tarayıcı kapalı
   >150 sn, yeni oturum ve API yeniden başlatması sonrası ilk tablo p95 ≤ 3 sn
   hedefini ayrı doğrula. Kaynak verisi olmayan hücre gerekçesiyle dönsün.
-- [ ] **Aşama 5 — Ortak fiyat/mum akışı ve grafik.** Ana sayfa, Takipçi ve
+- [x] **Aşama 5 — Ortak fiyat/mum akışı ve grafik uygulaması.** Ana sayfa, Takipçi ve
   Grafik için ortak sağlayıcı adaptörleri, kaynak zamanları ve ilk anlık
   görüntü. [Aşama 5.1 kaydı](#27-kasım--aşama-51-ortak-bist-fiyatı-ve-grafik-açılışı)
   mevcut BIST fiyat okumalarını, [Aşama 5.2 kaydı](#27-kasım--aşama-52-ortak-binance-fiyat-akışı)
@@ -426,19 +499,18 @@ gerçek emir/Telegram teslimini ve açık seans boyunca 631 sembolü kapsamaz.
   işlem, hacim ve mevcut 16 periyodun örnek eşitliği ayrı kabul edilir.
   [Binance Spot akışları](https://developers.binance.com/en/docs/catalog/core-trading-spot-trading/api/ws-streams/~),
   [SSE protokol davranışı](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events).
-- [ ] **Aşama 6 — Alarm, sağlık ve diğer ekranlar.** Sayfa tablosundaki işler:
+- [x] **Aşama 6 — Alarm, sağlık ve diğer ekranların uygulaması.** Sayfa tablosundaki işler:
   önce alarm/sağlık, ardından araştırma/takvim/AI/işlemler/ayarlar. Aktif
   dört alarmın koşulları ve bildirimleri korunur. Canlı değerlendirme yalnız
   doğrulanmış taze olaydan beslenir. Son mum ve kapanış görüntüsü arayüz için
   kalır. [Aşama 6.1 kaydı](#27-kasım--aşama-61-alarm-merkezi-olay-akışı)
   olay akışını, [Aşama 6.2 kaydı](#28-kasım--aşama-62-alarm-durumu-ve-sağlık-ölçümleri)
   alarm kuralı hazırlığını ve Sistem Sağlığı ölçüm saatlerini kapsar.
-  Sıradaki adım Araştırma'da aynı sorgunun son başarılı sonucunu korumak ve
-  yenileme hatasını işlem panelinde göstermek. İlk veri p95 hedefleri ekran
-  bazında belirlenir. Alarm motoru girdisi→olay yazımı, Telegram teslimi,
-  sağlayıcı→sunucu ve sunucu→sayfa gecikmesi ayrı ölçülür. Geçici hata,
-  yetkisizlik ve boş sonuç senaryoları ile oturum açma/çıkma masaüstü ve
-  mobilde doğrulanır.
+  [Birleşik yayın](#28-kasım--birleşik-ekran-veri-akışı-ve-sunucu-kontrolü)
+  diğer ekranları ve geçici hata, boş sonuç, oturum açma/çıkma kontrollerini
+  kapsar. Açık kabul, ekran bazında ilk veri p95'i ve alarm motoru girdisi→olay
+  yazımı, Telegram teslimi, sağlayıcı→sunucu ve sunucu→sayfa gecikmelerini
+  açık seansta ayrı ölçmektir.
 - [ ] **Aşama 7 — BIST kaynağı ve işletim kapasitesi.** Mevcut akış, lisanslı
   son kapanış/gecikmeli veri ve lisanslı canlı akışı aşağıdaki koşullarla
   karşılaştır. Aşama 4.2'nin kaynak yetkisi doğrulaması ve sağlayıcı keşfi
