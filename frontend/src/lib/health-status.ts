@@ -3,6 +3,7 @@ import type { AdvancedAlarmStatus } from './api/advanced-alarms-api';
 
 interface StatusQuery<T> {
   data?: T;
+  dataUpdatedAt?: number;
   isLoading: boolean;
   isError: boolean;
   isFetching: boolean;
@@ -11,6 +12,12 @@ interface StatusQuery<T> {
 
 function usable<T>(query: StatusQuery<T>) {
   return !query.isError && !query.isLoading && !query.isFetching && !query.isStale;
+}
+
+export function lastHealthMeasurementAt(query: Pick<StatusQuery<unknown>, 'data' | 'dataUpdatedAt'>) {
+  const time = query.dataUpdatedAt;
+  return query.data != null && typeof time === 'number' && Number.isSafeInteger(time)
+    && time > 0 && Number.isFinite(new Date(time).getTime()) ? time : null;
 }
 
 /** A reachable API, an alarm worker and fresh market data are separate facts. */
@@ -25,6 +32,7 @@ export function deriveApiHealth(query: StatusQuery<ApiHealth>) {
     apiState,
     label: { connected: 'Bağlı', error: 'Doğrulanamadı', loading: 'Yükleniyor', unknown: 'Bilinmiyor' }[apiState],
     tone: apiState === 'connected' ? 'profit' as const : apiState === 'error' ? 'loss' as const : 'neutral' as const,
+    lastMeasuredAt: lastHealthMeasurementAt(query),
     uptime: confirmed && Number.isFinite(data.uptime_seconds) && data.uptime_seconds >= 0
       && typeof data.uptime_human === 'string' ? data.uptime_human : '—',
     database: data?.database === 'connected' ? 'Bağlı' : data?.database === 'error' ? 'Hata' : 'Bilinmiyor',
@@ -53,6 +61,7 @@ export function deriveAlarmRuntime(query: StatusQuery<AdvancedAlarmStatus>, now 
     state,
     label: { loading: 'Yükleniyor', unknown: 'Doğrulanamadı', error: 'Kontrol hatası', stopped: 'Durduruldu', running: 'Çalışıyor', starting: 'İlk kontrol bekleniyor' }[state],
     tone: state === 'running' ? 'profit' as const : state === 'error' || state === 'stopped' ? 'loss' as const : 'neutral' as const,
+    lastMeasuredAt: lastHealthMeasurementAt(query),
     lastCycle: data && Number.isFinite(lastCycle) ? lastCycle : null,
     telegramConfigured: typeof data?.telegram_configured === 'boolean' ? data.telegram_configured : null,
     pendingDeliveries: optionalCount(data?.delivery?.pending),

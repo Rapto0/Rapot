@@ -4,18 +4,21 @@ import * as React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { load, primitives } from './view-harness.mjs';
 
-function health(allowed, response = {}, connectionData = undefined) {
+const healthStatus = load('../src/lib/health-status.ts');
+
+function health(allowed, response = {}, connectionData = undefined, providerQuery = {}) {
   const queries = [], requests = [];
   const page = load('../src/app/health/page.tsx', { ...primitives,
     react: React,
     '@/lib/hooks/use-session': { useSession: () => allowed ? { user: { username: 'admin', is_admin: true }, expiresAt: 123 } : null },
     '@tanstack/react-query': { useQuery: options => {
       queries.push(options);
-      if (options.queryKey[0] === 'health-provider-connection') return { data: connectionData, isError: false };
+      if (options.queryKey[0] === 'health-provider-connection') return { data: connectionData, isError: false, ...providerQuery };
       return { data: [], ...response };
     } },
     '@/lib/api/client': { fetchLogs: n => requests.push(['logs', n]) },
     '@/lib/api/borsapy-api': { fetchResearchConnection: signal => requests.push(['connection', signal]) },
+    '@/lib/health-status': healthStatus,
     '@/lib/hooks/use-health': { useApiHealth: () => ({ apiState: 'unknown', label: 'Bilinmiyor' }), useAlarmRuntimeHealth: () => ({ label: 'Doğrulanamadı', lastCycle: null, telegramConfigured: null }) },
     '@/components/ui/kpi-ribbon': { KpiRibbon: () => null },
     '@/components/ui/input': { Input: 'input' },
@@ -44,4 +47,14 @@ test('anonymous health hides previously cached private log rows and disables que
   assert.ok(h.queries.every(q => q.enabled === false));
   assert.doesNotMatch(h.html, /PRIVATE_SENTINEL/); assert.match(h.html, /Giriş yap/);
   assert.deepEqual(h.requests, []);
+});
+
+test('a provider refresh failure labels the last successful report and does not show an unconfirmed healthy badge', () => {
+  const measuredAt = '2026-11-28T08:00:00.000Z';
+  const h = health(true, {}, { authenticated: true }, { isError: true, dataUpdatedAt: Date.parse(measuredAt) });
+  assert.match(h.html, /Yenileme başarısız/);
+  assert.match(h.html, /Son alınan sağlayıcı durumu <time dateTime="2026-11-28T08:00:00.000Z">/);
+  assert.match(h.html, /son başarılı sorgudan gösteriliyor/);
+  assert.doesNotMatch(h.html, /Hesap koruması engelsiz/);
+  assert.match(health(true, {}, undefined, { isError: true }).html, /Son alınan sağlayıcı durumu Henüz yok/);
 });

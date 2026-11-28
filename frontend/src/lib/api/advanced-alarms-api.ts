@@ -33,6 +33,9 @@ export interface AdvancedAlarmRule extends AdvancedAlarmWrite {
     last_triggered_at: string | null
     last_checked_at?: string | null
     last_error?: string | null
+    checked_this_tick?: number
+    ready_this_tick?: number
+    total_symbols?: number
 }
 export interface ServerWatchlist {
     id: string

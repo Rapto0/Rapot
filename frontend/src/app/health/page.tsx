@@ -6,6 +6,7 @@ import Link from "next/link"
 import { fetchLogs } from "@/lib/api/client"
 import { fetchResearchConnection } from "@/lib/api/borsapy-api"
 import { useApiHealth, useAlarmRuntimeHealth } from "@/lib/hooks/use-health"
+import { lastHealthMeasurementAt } from "@/lib/health-status"
 import { useSession } from "@/lib/hooks/use-session"
 import { cn } from "@/lib/utils"
 import { PageShell } from "@/components/ui/page-shell"
@@ -37,6 +38,12 @@ const MARKET_STATE_LABELS: Record<string, string> = {
 
 const formatCount = (value: number | null | undefined) =>
   typeof value === "number" && Number.isFinite(value) ? value.toLocaleString("tr-TR") : "—"
+
+function MeasurementTime({ value }: { value?: number | null }) {
+  if (value == null) return <>Henüz yok</>
+  const date = new Date(value)
+  return <time dateTime={date.toISOString()}>{date.toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" })}</time>
+}
 
 export default function HealthPage() {
   const health = useApiHealth()
@@ -92,6 +99,8 @@ export default function HealthPage() {
   </PageShell>
 
   const protection = connection.data?.provider_protection
+  const providerMeasuredAt = lastHealthMeasurementAt(connection)
+  const providerVerified = !connection.isError && Boolean(connection.data?.authenticated)
 
   return (
     <PageShell
@@ -112,14 +121,19 @@ export default function HealthPage() {
           { label: "API çalışma süresi", value: health.uptime },
         ]}
       />
+      <p className="text-xs text-muted-foreground">Son başarılı API sorgusu <MeasurementTime value={health.lastMeasuredAt} /></p>
 
       <section className="space-y-3 border border-border bg-surface p-4" aria-labelledby="provider-protection-heading">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 id="provider-protection-heading" className="text-sm font-semibold text-foreground">Sağlayıcı, hesap koruması ve akış bütçesi</h2>
-          <span className={cn("signal-badge", protection?.blocked ? "signal-sell" : connection.data?.authenticated ? "signal-buy" : "signal-neutral")}>
-            {protection?.blocked ? "Koruma etkin (duraklatıldı)" : connection.data?.authenticated ? "Hesap koruması engelsiz" : connection.isError ? "Doğrulanamadı" : "Durum bekleniyor"}
+          <span className={cn("signal-badge", protection?.blocked ? "signal-sell" : providerVerified ? "signal-buy" : "signal-neutral")}>
+            {connection.isError ? connection.data ? "Yenileme başarısız" : "Doğrulanamadı" : protection?.blocked ? "Koruma etkin (duraklatıldı)" : providerVerified ? "Hesap koruması engelsiz" : "Durum bekleniyor"}
           </span>
         </div>
+        <p className="text-xs text-muted-foreground">Son alınan sağlayıcı durumu <MeasurementTime value={providerMeasuredAt} /></p>
+        {connection.isError && connection.data && (
+          <p role="status" className="text-xs text-warning">Bağlantı ve hesap koruması bilgileri son başarılı sorgudan gösteriliyor.</p>
+        )}
         {protection?.blocked && (
           <p role="alert" className="border border-loss/40 bg-loss/5 p-3 text-xs text-loss">
             TradingView hesap koruması tetiklendi ({protection.reason || "kısıtlama"}). Otomatik sağlayıcı erişimi duraklatıldı; alarm ayarları korunur.
@@ -183,7 +197,8 @@ export default function HealthPage() {
           <span className={cn("signal-badge", alarms.tone === "profit" ? "signal-buy" : alarms.tone === "loss" ? "signal-sell" : "signal-neutral")}>{alarms.label}</span>
         </div>
         <p className="text-xs text-muted-foreground">API bağlantısı ve alarm motoru ayrı kontrol edilir. Motorun çalışması, bütün fiyatların güncel veya bütün kuralların kontrol edilmiş olduğu anlamına gelmez.</p>
-        <dl className="grid gap-2 text-xs sm:grid-cols-3">
+        <dl className="grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
+          <div><dt className="text-muted-foreground">Son başarılı alarm durumu sorgusu</dt><dd><MeasurementTime value={alarms.lastMeasuredAt} /></dd></div>
           <div><dt className="text-muted-foreground">Son kontrol turu</dt><dd>{alarms.lastCycle === null ? "—" : new Date(alarms.lastCycle).toLocaleString("tr-TR", { timeZone: "Europe/Istanbul" })}</dd></div>
           <div><dt className="text-muted-foreground">Bekleyen bildirim</dt><dd>{alarms.pendingDeliveries ?? "—"}</dd></div>
           <div><dt className="text-muted-foreground">Telegram bağlantısı</dt><dd>{alarms.telegramConfigured === null ? "Bilinmiyor" : alarms.telegramConfigured ? "Tanımlı" : "Tanımlı değil"}</dd></div>

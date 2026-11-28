@@ -27,6 +27,33 @@ const readableError = (error: unknown) => error instanceof ApiError && error.sta
 const statistic = (value: unknown) => typeof value === "number" && Number.isFinite(value) ? value.toLocaleString("tr-TR") : "—"
 type WatchlistDraft = { name: string; bist: string; crypto: string; id?: string; revision?: number }
 
+function RuleRuntimeStatus({ rule }: { rule: AdvancedAlarmRule }) {
+    const { checked_this_tick: checked, ready_this_tick: ready, total_symbols: total } = rule
+    const hasCoverage = rule.enabled && typeof checked === "number" && typeof ready === "number"
+        && typeof total === "number" && [checked, ready, total].every(Number.isSafeInteger)
+        && ready >= 0 && ready <= checked && checked <= total
+    let label = rule.enabled ? stateLabels[rule.state] ?? "Durum doğrulanamadı" : stateLabels.paused
+    if (rule.enabled && rule.state === "pending" && !rule.last_checked_at) label = "İlk kontrol bekleniyor"
+    if (hasCoverage) {
+        if (total === 0) label = "İzlenecek sembol yok"
+        else if (checked === 0) label = "Son turda kontrol bekliyor"
+        else if (ready === total) label = "Veri hazır"
+        else if (ready > 0) label = "Veri kısmen hazır"
+        else label = "Veri bekleniyor"
+    }
+
+    return <div className="space-y-1 text-xs">
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <strong>{label}</strong>
+            {hasCoverage && <span className="tabular-nums text-muted-foreground">Son turda {statistic(ready)} / {statistic(total)} hazır · {statistic(checked)} kontrol edildi</span>}
+        </p>
+        {rule.last_error && <p className="break-words text-muted-foreground">
+            {hasCoverage && checked > ready ? "Son bekleme nedeni" : "Durum ayrıntısı"}: {rule.last_error}
+        </p>}
+        <p className="text-muted-foreground">Son kontrol: {timeLabel(rule.last_checked_at)} · Son tetik: {timeLabel(rule.last_triggered_at)} · Telegram {rule.notify_telegram ? "açık" : "kapalı"}</p>
+    </div>
+}
+
 function AlarmServiceStatus({ isError, hasRuntime, running, lastError, lastCycleAt }: { isError: boolean; hasRuntime: boolean; running?: boolean; lastError?: string | null; lastCycleAt?: string | null }) {
     const [now, setNow] = useState(0)
     useEffect(() => {
@@ -271,7 +298,7 @@ export function AdvancedAlarmCenter() {
                 {typeof market.message === "string" && <p className="mt-3 text-muted-foreground">{market.message}</p>}
                 <p className="mt-3 leading-relaxed text-muted-foreground">Standart mum okuyucusu sonraki gerçek mumu bekleyebilir. Özel göstergeler native periyot ve seans sınırlarını koruyarak canlı fiyat olaylarını sırayla işler; bağlantı kesintisi ve kuyruk taşması veri devamlılığını sıfırlar. Bildirimin ulaşma süresi veri kaynağına, sunucu yüküne ve Telegram’a da bağlıdır.</p>
             </details>
-            {(error || rules.isError || status.isError || runtime?.last_error) && <p role="alert" className="rounded border border-loss/40 bg-loss/5 p-3 text-sm">{error || (rules.isError ? readableError(rules.error) : status.isError ? "Canlı durum yenilenemedi; son kayıtlar güncel olmayabilir." : runtime?.last_error)}</p>}
+            {(error || rules.isError || status.isError || runtime?.last_error) && <p role="alert" className="rounded border border-loss/40 bg-loss/5 p-3 text-sm">{error || (rules.isError ? rules.data ? "Alarm kuralları yenilenemedi. Son alınan kayıtlar gösteriliyor." : readableError(rules.error) : status.isError ? "Canlı durum yenilenemedi; son kayıtlar güncel olmayabilir." : runtime?.last_error)}</p>}
             {notice && <p role="status" className="rounded border border-border bg-surface p-3 text-sm">{notice}</p>}
             <section id="watchlists" className="space-y-4 rounded border border-border bg-surface p-4">
                 <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-sm font-semibold text-foreground"><List className="mr-2 inline h-4 w-4" />Sunucudaki izleme listeleri ({watchlists.data?.watchlists.length ?? "—"})</h2><Button variant="outline" size="sm" disabled={pending} onClick={() => setWatchlistDraft({ name: "", bist: "", crypto: "" })}>Yeni liste</Button></div>
@@ -309,7 +336,7 @@ export function AdvancedAlarmCenter() {
                 <label className="block max-w-md text-sm"><span className="sr-only">Kayıtlı alarmlarda ara</span><Input placeholder="Alarm adı veya sembol ara…" value={search} onChange={e => { setSearch(e.target.value); setPage(0) }} /></label>
                 {rules.isLoading && <p role="status">Alarmlar yükleniyor…</p>}
                 {!rules.isLoading && !visible.length && <div className="rounded border border-dashed border-border p-8 text-center"><Bell className="mx-auto mb-3 h-6 w-6 text-muted-foreground" /><p className="text-sm">{search ? "Aramana uyan alarm bulunamadı." : "Bu türde henüz alarm yok."}</p><p className="mt-2 text-xs text-muted-foreground">Koşullarını seçip sunucuya kaydet; takibi buradan izle.</p></div>}
-                {visible.map(rule => <article key={rule.id} className="space-y-2 rounded border border-border bg-surface p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0 flex-1"><h3 className="break-words text-sm font-semibold">{rule.name}</h3><p className="mt-1 break-words text-xs leading-relaxed text-muted-foreground">{conditionLabel(rule.condition)}</p></div><div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" disabled={pending} onClick={() => void mutate(async () => { await saveAdvancedAlarm({ ...writeFromAdvancedDraft(draftFromAdvancedRule(rule), rule.revision), enabled: !rule.enabled }, rule.id) })}>{rule.enabled ? "Duraklat" : "Etkinleştir"}</Button><Button variant="outline" size="icon" aria-label={`${rule.name}: düzenle`} disabled={pending} onClick={() => openEditor(rule)}><Pencil className="h-4 w-4" /></Button><Button variant="outline" size="icon" aria-label={`${rule.name}: sil`} disabled={pending} onClick={() => setDeleting({ kind: "rule", id: rule.id, name: rule.name })}><Trash2 className="h-4 w-4" /></Button></div></div><p className="break-words text-xs">{rule.scope === "all_bist" ? "Tüm BIST" : rule.scope === "watchlist" ? watchlists.data?.watchlists.find(list => list.id === rule.watchlist_id)?.name ?? "İzleme listesi" : rule.symbols.map(item => item.symbol).join(", ")} · {TIMEFRAME_LABELS[rule.timeframe] ?? rule.timeframe} · {rule.trigger === "intrabar" ? "Mum içinde" : "Mum kapanışında"} · Süresiz</p><p className="text-xs text-muted-foreground">{stateLabels[rule.state] ?? rule.state} · Son kontrol: {timeLabel(rule.last_checked_at)} · Son tetik: {timeLabel(rule.last_triggered_at)} · Telegram {rule.notify_telegram ? "açık" : "kapalı"}</p>{rule.last_error && <p className="text-xs text-loss">{rule.last_error}</p>}</article>)}
+                {visible.map(rule => <article key={rule.id} className="space-y-2 rounded border border-border bg-surface p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0 flex-1"><h3 className="break-words text-sm font-semibold">{rule.name}</h3><p className="mt-1 break-words text-xs leading-relaxed text-muted-foreground">{conditionLabel(rule.condition)}</p></div><div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" disabled={pending} onClick={() => void mutate(async () => { await saveAdvancedAlarm({ ...writeFromAdvancedDraft(draftFromAdvancedRule(rule), rule.revision), enabled: !rule.enabled }, rule.id) })}>{rule.enabled ? "Duraklat" : "Etkinleştir"}</Button><Button variant="outline" size="icon" aria-label={`${rule.name}: düzenle`} disabled={pending} onClick={() => openEditor(rule)}><Pencil className="h-4 w-4" /></Button><Button variant="outline" size="icon" aria-label={`${rule.name}: sil`} disabled={pending} onClick={() => setDeleting({ kind: "rule", id: rule.id, name: rule.name })}><Trash2 className="h-4 w-4" /></Button></div></div><p className="break-words text-xs">{rule.scope === "all_bist" ? "Tüm BIST" : rule.scope === "watchlist" ? watchlists.data?.watchlists.find(list => list.id === rule.watchlist_id)?.name ?? "İzleme listesi" : rule.symbols.map(item => item.symbol).join(", ")} · {TIMEFRAME_LABELS[rule.timeframe] ?? rule.timeframe} · {rule.trigger === "intrabar" ? "Mum içinde" : "Mum kapanışında"} · Süresiz</p><RuleRuntimeStatus rule={rule} /></article>)}
                 {filtered.length > 30 && <div className="flex items-center gap-3 text-xs"><Button variant="outline" disabled={safePage === 0} onClick={() => setPage(safePage - 1)}>Önceki</Button><span>{safePage + 1} / {Math.ceil(filtered.length / 30)} · {filtered.length} alarm</span><Button variant="outline" disabled={(safePage + 1) * 30 >= filtered.length} onClick={() => setPage(safePage + 1)}>Sonraki</Button></div>}
             </section>
             <section className="space-y-3 rounded border border-border bg-surface p-4">

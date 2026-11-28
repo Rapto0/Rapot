@@ -24,7 +24,7 @@ const { deriveApiHealth, deriveAlarmRuntime } = healthModel;
 const now = Date.parse('2026-10-12T12:00:00Z');
 const api = { status: 'healthy', database: 'connected', realtime: 'running', uptime_seconds: 3600, uptime_human: '1h', timestamp: '2026-10-12T12:00:00Z' };
 const runtime = { running: true, last_cycle_at: '2026-10-12T11:59:59Z', last_error: null, telegram_configured: true, delivery: { pending: 0 } };
-const query = { data: api, isLoading: false, isError: false, isFetching: false, isStale: false };
+const query = { data: api, dataUpdatedAt: now, isLoading: false, isError: false, isFetching: false, isStale: false };
 const admin = { user: { username: 'admin', is_admin: true, disabled: false }, expiresAt: 1000 };
 
 test('only explicit current API database and realtime health imply a connection', () => {
@@ -42,7 +42,10 @@ test('failed, stale or in-progress refresh never shows an older API response as 
     assert.notEqual(health.apiState, 'connected');
     assert.notEqual(health.tone, 'profit');
     assert.equal(health.uptime, '—');
+    assert.equal(health.lastMeasuredAt, now);
   }
+  assert.equal(deriveApiHealth({ ...query, data: undefined }).lastMeasuredAt, null);
+  assert.equal(deriveApiHealth({ ...query, dataUpdatedAt: 0 }).lastMeasuredAt, null);
 });
 
 test('alarm health requires a recent completed cycle and does not infer market freshness', () => {
@@ -68,6 +71,8 @@ test('alarm errors and API health remain independent; stale runtime counts are h
     assert.notEqual(health.state, 'running');
     assert.equal(health.pendingDeliveries, null);
     assert.equal(health.telegramConfigured, null);
+    assert.equal(health.lastMeasuredAt, now);
+    assert.equal(health.lastCycle, null);
   }
 });
 
@@ -109,6 +114,7 @@ function renderHealth(health, alarms, session = admin, onQuery = () => {}) {
     react: React, 'react/jsx-runtime': jsxRuntime, 'next/link': { default: 'a' },
     '@tanstack/react-query': { useQuery: options => { onQuery(options); return { data: options.queryKey[0] === 'logs' ? [] : undefined, isLoading: false, isError: false }; } },
     '@/lib/api/client': {}, '@/lib/api/borsapy-api': { fetchResearchConnection: () => {} },
+    '@/lib/health-status': healthModel,
     '@/lib/hooks/use-health': { useApiHealth: () => health, useAlarmRuntimeHealth: () => alarms },
     '@/lib/hooks/use-session': { useSession: () => session },
     '@/lib/utils': { cn: (...values) => values.filter(Boolean).join(' ') },
@@ -124,6 +130,8 @@ test('health page keeps API connected while the alarm worker is stopped and pres
   const html = renderHealth(deriveApiHealth(query), deriveAlarmRuntime({ ...query, data: { ...runtime, running: false } }, now));
   assert.ok(html.includes('API:Bağlı'));
   assert.ok(html.includes('Durduruldu'));
+  assert.match(html, /Son başarılı API sorgusu <time dateTime="2026-10-12T12:00:00.000Z">/);
+  assert.match(html, /Son başarılı alarm durumu sorgusu<\/dt><dd><time dateTime="2026-10-12T12:00:00.000Z">/);
   assert.ok(html.includes('Telegram yalnız kendi alarmınızda'));
   assert.ok(html.includes('href="/alarms"'));
   assert.ok(!html.includes('Tarama arşivi'));

@@ -4,6 +4,7 @@ import test from 'node:test';
 import vm from 'node:vm';
 import * as React from 'react';
 import * as jsxRuntime from 'react/jsx-runtime';
+import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 
 function load(path, imports = {}, globals = {}) {
@@ -330,6 +331,27 @@ test('manual event refresh invalidates only the active session feed', () => {
   const view = harness();
   view.elements().find(element => element.props['aria-label'] === 'Alarmları yenile').props.onClick();
   assert.deepEqual(view.invalidations, [{ queryKey: ['advanced-alarm-events', 'admin', 1000], exact: true }]);
+});
+
+test('rule cards show measured coverage, waiting reasons and a distinct paused or unmeasured state', () => {
+  const rule = {
+    ...form.writeFromAdvancedDraft({ ...form.emptyAdvancedDraft('price'), name: 'Fiyat kuralı', bist: 'THYAO' }),
+    id: 'rule', enabled: true, state: 'error', total_symbols: 3, checked_this_tick: 2, ready_this_tick: 0,
+    last_checked_at: '2026-11-28T08:00:00Z', last_error: 'Veri eski; taze fiyat bekleniyor.',
+  };
+  function render(overrides) {
+    const row = { ...rule, ...overrides };
+    const view = harness({ ruleRows: [row] });
+    return renderToStaticMarkup(view.elements().find(element => element.props.rule === row));
+  }
+  assert.match(render({}), /Veri bekleniyor.*0 \/ 3 hazır · 2 kontrol edildi.*Son bekleme nedeni.*taze fiyat bekleniyor/);
+  assert.doesNotMatch(render({}), /Kontrol sorunu/);
+  assert.match(render({ ready_this_tick: 1 }), /Veri kısmen hazır.*1 \/ 3 hazır · 2 kontrol edildi/);
+  assert.match(render({ ready_this_tick: 3, checked_this_tick: 3, last_error: null }), /Veri hazır.*3 \/ 3 hazır/);
+  assert.match(render({ enabled: false }), /Duraklatıldı/);
+  assert.doesNotMatch(render({ enabled: false }), /Son turda|Son bekleme nedeni/);
+  assert.match(render({ state: 'pending', total_symbols: undefined, last_checked_at: null, last_error: null }), /İlk kontrol bekleniyor/);
+  assert.doesNotMatch(render({ ready_this_tick: 3 }), /Son turda|Veri hazır/);
 });
 
 test('saving is explicit and never silently enables Telegram', async () => {
