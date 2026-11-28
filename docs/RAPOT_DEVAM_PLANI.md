@@ -1,7 +1,40 @@
 # Rapot Devam Planı
 
-**27 Kasım 2026.** Ön yüzde Aşama 6.1, API'de Aşama 4.1 üretimde.
+**28 Kasım 2026.** Ön yüzde Aşama 6.2, API'de Aşama 4.1 üretimde.
 Aşama 4.2'nin kalıcı RSI kayıt katmanı gerçek veri pilotunu bekliyor.
+
+## 28 Kasım — Aşama 6.2 Alarm durumu ve sağlık ölçümleri
+
+Ön yüz `200017b1352c51275b6ef8ecc820038baca02814` **11:29:12 TSİ**
+yayımlandı. **11:29:18 TSİ** bağımsız kabulde 10 sayfa, 36 statik dosya,
+11 metin işareti, altı anonim erişim sınırı ve özel 404 geçti. API `fbdbaa4a`,
+Compose/current, middleware ve PostgreSQL mevcut container'larda kaldı.
+Dört servis sağlıklı ve yeniden başlatma sayaçları sıfırdı. Dört etkin alarm,
+418 olay ve 15 tablo korundu. Taze 1.134.592 baytlık yedek ayrı veritabanına
+başarıyla geri yüklendi. Kabulde yaklaşık 3,22 GiB boş disk vardı. Yayın ve
+kabul kanıtı `5c52baa16404af9f3be4216c1dfc509f8d2595add9c4fc16841d943aec56861b`.
+[Kaynak kontrolleri](https://github.com/Rapto0/Rapot/actions/runs/46124730581),
+[temiz imaj yayını](https://github.com/Rapto0/Rapot/actions/runs/46124769932).
+
+- Alarm kartı, kural için son kontrol turunda hazır olan, kontrol edilen ve
+  kapsamdaki toplam sembol sayısını gösterir. Hazır, kısmen hazır, veri
+  bekleniyor, ilk kontrol bekleniyor ve duraklatıldı durumları görünür.
+  Bekleme nedeni, son turda sunucunun verisini hazır bulmadığı son sembolün
+  kaydından gelir.
+- Sistem Sağlığı, API, sağlayıcı ve alarm durumu sorgularının son başarılı
+  yanıt saatini Türkiye saatiyle ayrı gösterir. Alarm motorunun kontrol turu
+  saati ayrı kalır. Başarısız sağlayıcı yenilemesinde önceki yanıt ve saati
+  görünür, ekran yenileme hatasını belirtir.
+- 350 ön yüz ve 57 hedefli arka uç testi, lint, tip kontrolü, üretim
+  derlemesi, standalone proxy ve beş GitHub kontrolü geçti. 470 paketlik
+  npm denetiminde bulgu yoktu. Yerel tarayıcı 390 px genişlikte iki ekranı
+  da yatay taşma olmadan gösterdi. Örnek sağlayıcı sorgusu 503 döndüğünde
+  önceki başarılı sorgunun saatinin korunduğu doğrulandı.
+- Canlı yönetici gözleminde dört izleme listesi alarmının her birinde
+  **0/631 hazır, 631 kontrol edildi** görüldü. İki kural için ilk canlı
+  fiyat gözlemi, iki kural için standart RSI'ın canlı native verisi
+  bekleniyordu. **11:29:52 TSİ** Sistem Sağlığı gözleminde son başarılı
+  API, sağlayıcı ve alarm durumu yanıt saatlerinin üçü de görünüyordu.
 
 ## 27 Kasım — Aşama 6.1 Alarm Merkezi olay akışı
 
@@ -398,12 +431,14 @@ gerçek emir/Telegram teslimini ve açık seans boyunca 631 sembolü kapsamaz.
   dört alarmın koşulları ve bildirimleri korunur. Canlı değerlendirme yalnız
   doğrulanmış taze olaydan beslenir. Son mum ve kapanış görüntüsü arayüz için
   kalır. [Aşama 6.1 kaydı](#27-kasım--aşama-61-alarm-merkezi-olay-akışı)
-  olay akışının yayını ve ölçümünü kapsar. Sıradaki adım alarm kuralı bazında
-  hazır kapsamı ve bekleme nedenini, Sistem Sağlığı'nda ise son başarılı
-  ölçümü görünür kılmaktır. İlk veri p95 hedefleri ölçüme göre ekran bazında
-  belirlenir. Alarm motoru girdisi→olay yazımı, Telegram teslimi, sağlayıcı→sunucu ve
-  sunucu→sayfa gecikmesi ayrı ölçülür. Geçici hata, yetkisizlik ve boş sonuç
-  senaryoları ile oturum açma/çıkma masaüstü ve mobilde doğrulanır.
+  olay akışını, [Aşama 6.2 kaydı](#28-kasım--aşama-62-alarm-durumu-ve-sağlık-ölçümleri)
+  alarm kuralı hazırlığını ve Sistem Sağlığı ölçüm saatlerini kapsar.
+  Sıradaki adım Araştırma'da aynı sorgunun son başarılı sonucunu korumak ve
+  yenileme hatasını işlem panelinde göstermek. İlk veri p95 hedefleri ekran
+  bazında belirlenir. Alarm motoru girdisi→olay yazımı, Telegram teslimi,
+  sağlayıcı→sunucu ve sunucu→sayfa gecikmesi ayrı ölçülür. Geçici hata,
+  yetkisizlik ve boş sonuç senaryoları ile oturum açma/çıkma masaüstü ve
+  mobilde doğrulanır.
 - [ ] **Aşama 7 — BIST kaynağı ve işletim kapasitesi.** Mevcut akış, lisanslı
   son kapanış/gecikmeli veri ve lisanslı canlı akışı aşağıdaki koşullarla
   karşılaştır. Aşama 4.2'nin kaynak yetkisi doğrulaması ve sağlayıcı keşfi
